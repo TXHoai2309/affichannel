@@ -1,6 +1,12 @@
 {
   "$schema": "https://turbo.build/schema.json",
   "ui": "tui",
+  "globalPassThroughEnv": [
+    "AUTH_BOOTSTRAP_CONFIRM",
+    "AUTH_BOOTSTRAP_EMAIL",
+    "AUTH_BOOTSTRAP_NAME",
+    "AUTH_BOOTSTRAP_PASSWORD"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
