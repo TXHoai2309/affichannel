@@ -85,9 +85,11 @@ Acceptance Criteria:
 - Direct URL, browser back/forward và refresh giữ đúng shell, route và active step.
 - Route chưa có business logic hiển thị skeleton/placeholder rõ ràng.
 
-US002 không tạo Project CRUD, business schema hoặc persistence StepStatus. Trạng
-thái `current` được suy ra từ route; persistence Project/ContentBrief/StepStatus
-thuộc US004.
+US002 không tạo Project CRUD, business schema hoặc persistence StepStatus. Slice
+này chỉ định nghĩa `ProjectStepKey`, `ProjectStepStatus` và persistence contract
+để US004 triển khai lưu trạng thái theo project. Từ US004, workflow current được
+lưu tại `Project.currentStepKey`; URL chỉ xác định bước đang được xem, còn
+`Project/ContentBrief/StepStatus` là persistence domain thực.
 
 ## 6. Slice 3 — Product
 
@@ -127,6 +129,12 @@ Tạo project → chọn product → khai báo brief → lưu → mở lại
 - Required field của brief được validate.
 - Project mở lại với workflow state hiện tại.
 - Dashboard ban đầu có thể hiển thị recent projects.
+
+Trạng thái AFF-US-004 (2026-08-11): đã triển khai vertical slice tạo/list/mở lại
+project. Để không chặn flow, slice có Product prerequisite tối thiểu (chọn hoặc tạo
+product trong form); Product management đầy đủ vẫn thuộc AFF-US-005. Tên project được
+phép trùng trong workspace. `currentStepKey` là workflow source of truth; các dòng
+`project_step_status` chỉ lưu `not_started`, `completed`, `needs_review` hoặc `blocked`.
 
 ## 9. Slice 6 — Structured Script
 

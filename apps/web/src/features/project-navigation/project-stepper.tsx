@@ -18,8 +18,10 @@ import {
 	getActiveProjectStepKey,
 	getProjectStepStatus,
 	getProjectStepStatusVariant,
+	type PersistedProjectStepStatus,
 	PROJECT_STEP_STATUS_LABELS,
 	PROJECT_STEPS,
+	type ProjectStepKey,
 } from "./project-steps";
 
 const STATUS_ICONS = {
@@ -30,7 +32,15 @@ const STATUS_ICONS = {
 	not_started: Circle,
 } as const;
 
-export default function ProjectStepper({ projectId }: { projectId: string }) {
+export default function ProjectStepper({
+	projectId,
+	currentStepKey = "fact-lock",
+	persistedStatuses = DEMO_PROJECT_STEP_STATUSES,
+}: {
+	projectId: string;
+	currentStepKey?: ProjectStepKey;
+	persistedStatuses?: Record<ProjectStepKey, PersistedProjectStepStatus>;
+}) {
 	const pathname = usePathname();
 	const activeStepKey = getActiveProjectStepKey(pathname, projectId);
 
@@ -43,8 +53,8 @@ export default function ProjectStepper({ projectId }: { projectId: string }) {
 				<div>
 					<p className="font-medium">Project steps</p>
 					<p className="mt-1 text-muted-foreground text-xs">
-						Trạng thái hiện tại được suy ra từ route; persistence thật sẽ nối ở
-						US004.
+						Trạng thái workflow được lưu theo từng dự án; route chỉ xác định
+						bước bạn đang xem.
 					</p>
 				</div>
 				<Badge variant="outline">7 bước</Badge>
@@ -75,8 +85,8 @@ export default function ProjectStepper({ projectId }: { projectId: string }) {
 				{PROJECT_STEPS.map((step) => {
 					const status = getProjectStepStatus(
 						step.key,
-						activeStepKey,
-						DEMO_PROJECT_STEP_STATUSES[step.key],
+						currentStepKey,
+						persistedStatuses[step.key],
 					);
 					const Icon = STATUS_ICONS[status];
 					const active = step.key === activeStepKey;

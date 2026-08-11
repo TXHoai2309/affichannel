@@ -24,10 +24,18 @@ Thứ tự ưu tiên:
 
 | Token | Giá trị | Mục đích |
 |---|---|---|
-| `navy-900` | `#17212B` | App frame, heading mạnh, primary text |
-| `cream-50` | `#F6F3EC` | Nền workspace chính |
-| `orange-500` | `#F2A541` | Primary action và active emphasis |
-| `green-600` | `#2F7D64` | Trạng thái hoàn thành và supported |
+| `blue-500` | `#1677F2` | Primary action và active navigation |
+| `blue-900` | `#122D58` | Heading, primary text và icon |
+| `blue-50` | `#F2F7FF` | Secondary surface và selected support state |
+| `white` | `#FFFFFF` | Card, sidebar và topbar surface |
+| `blue-100` | `#DCE9FB` | Border, divider và input |
+| `green-600` | `#1FA463` | Trạng thái hoàn thành / supported |
+| `orange-500` | `#F28C28` | Chi phí và cảnh báo cần chú ý |
+| `purple-500` | `#8667DF` | Phân nhóm phụ, không dùng cho primary action |
+
+Các giá trị trên được map vào token dùng chung trong
+`packages/ui/src/styles/globals.css`. Workspace dùng nền xanh rất nhạt
+`#F7FAFF`, surface dùng trắng, primary/active dùng blue và text dùng blue-900.
 
 ### Màu ngữ nghĩa
 
@@ -48,7 +56,8 @@ WCAG AA cho chữ thông thường.
 - Không dùng gradient tím-xanh.
 - Không dùng glow effect.
 - Không truyền đạt trạng thái chỉ bằng màu nền.
-- Không dùng orange làm warning; orange là màu hành động của sản phẩm.
+- Không dùng blue cho success/error; mỗi trạng thái phải có label hoặc icon đi kèm.
+- Không dùng orange hoặc purple làm màu primary; blue là màu hành động chính.
 
 ## 3. Typography
 
@@ -77,9 +86,27 @@ Chữ tiếng Việt, tên sản phẩm dài, giá, đơn vị và URL phải lu
 ### Chế độ chuẩn
 
 - Sidebar trái: module chính và project context.
-- Topbar: page context, trạng thái cloud/job và user menu.
-- Main content: title, mô tả ngắn, primary action rồi tới vùng làm việc.
+- Topbar: page context, trạng thái cloud/job và user menu. Page context gồm title
+  và mô tả in nghiêng, là page header duy nhất cho các route chuẩn.
+- Main content: primary action và vùng làm việc, không lặp lại title/mô tả đã có
+  ở topbar.
 - Global job indicator luôn hiện khi chuyển route.
+
+### Nội dung đầu trang
+
+- Chỉ giữ eyebrow khi nó truyền đạt dữ liệu thật như trạng thái, số lượng, thời
+  điểm hoặc bước tiếp theo; không dùng nhãn phân loại chung chung chỉ để trang
+  trí hoặc lặp lại title.
+- Ưu tiên title và mô tả trả lời được người dùng đang ở đâu, dữ liệu nào được
+  quản lý và họ nên làm gì tiếp theo.
+- Không dùng breadcrumb như một cell chỉ lặp title. Với route sâu, title project
+  và stepper cung cấp ngữ cảnh điều hướng; topbar vẫn giữ contract chung.
+- Mô tả trong contract topbar dùng italic để phân biệt với title và phải có thể
+  bị truncate an toàn trên màn hình hẹp.
+- Status badge phải phản ánh dữ liệu domain thật. Với màn hình chưa có logic,
+  dùng placeholder rõ phạm vi thay vì một badge status giả.
+- Dùng tiếng Việt nhất quán, trừ tên sản phẩm và thuật ngữ domain cần giữ nguyên
+  để chính xác.
 
 ### Creative mode
 

@@ -89,6 +89,11 @@ Không được:
 - Dùng timestamp UTC và currency field rõ ràng.
 - Ưu tiên archive/chuyển trạng thái khi có bản ghi phụ thuộc.
 - Thao tác nhiều bản ghi cần thành công cùng nhau phải dùng transaction thật.
+- Local `DATABASE_URL` và `DATABASE_URL_DIRECT` phải trỏ cùng một Neon project/branch.
+  Trước khi migrate, kiểm tra host/database đã được nạp; không để inherited shell env âm thầm
+  ghi đè `.env` của app.
+- Khi database đã có schema nhưng thiếu migration ledger, dừng để đối chiếu schema và ledger;
+  không chạy `db:push` hoặc tạo lại bảng để “sửa nhanh”.
 
 ## 8. Bảo mật và riêng tư
 
@@ -117,9 +122,28 @@ Không được:
 ## 10. Quy tắc triển khai UI
 
 - Tuân theo token và interaction pattern trong `docs/design-system.md`.
+- Light theme mặc định dùng nền trắng/xanh rất nhạt; blue là primary/active,
+  blue-900 là text chính, green/orange/purple chỉ dùng theo semantic token. Không
+  tự thêm gradient, glow hoặc đổi palette ngoài design system đã duyệt.
 - Làm loading, empty, validation, error, unauthorized và success ngay trong
   feature, không để thành cleanup sau.
 - Mỗi vùng chỉ có một primary action rõ ràng.
+- Header trang chỉ giữ title, mô tả ngắn và primary action khi chúng giúp người
+  dùng hiểu trạng thái hoặc quyết định bước tiếp theo. Không thêm eyebrow/label
+  chung chung như `Overview`, `Workflow` hoặc `Đang chuẩn bị` chỉ để lấp khoảng
+  trống hay lặp lại title.
+- Khi topbar là page header chính, nó phải dùng cùng một contract cho mọi route:
+  title và mô tả in nghiêng. Không lặp lại contract này ở main content, và không
+  thay bằng một breadcrumb cell chỉ có title.
+- Eyebrow, badge và metadata phải thể hiện dữ liệu thật: số lượng, trạng thái,
+  thời điểm hoặc ngữ cảnh cụ thể. Không dùng badge trạng thái cho cả một page
+  nếu chưa có trạng thái domain tương ứng.
+- Dùng tiếng Việt nhất quán cho copy giao diện; chỉ giữ thuật ngữ domain hoặc
+  tên sản phẩm tiếng Anh khi cần chính xác, ví dụ `Product Facts`.
+- Placeholder phải nói rõ phần nào đã sẵn sàng và phần nào chưa có, không giả
+  lập dữ liệu hoặc status sản phẩm/project chưa tồn tại.
+- Với Base UI, `Button` render thành `Link` phải đặt `nativeButton={false}`;
+  không lồng link và button vì sai semantics và tạo cảnh báo accessibility.
 - Không biểu diễn status chỉ bằng màu.
 - Test dấu tiếng Việt, label dài, giá, đơn vị và URL.
 - Shared primitive đặt trong `packages/ui`; feature composition đặt gần web

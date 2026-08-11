@@ -13,6 +13,7 @@ với các tài liệu tại đây.
 5. [Các quyết định kiến trúc](./decisions.md)
 6. [Tiến trình AI agent](./ai-progress.md)
 7. [Nhật ký thay đổi](./changelog.md)
+8. [Bàn giao AFF-US-004](./aff-us-004.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

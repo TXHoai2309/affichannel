@@ -12,15 +12,30 @@ import {
 	DrawerTrigger,
 } from "@affichannel/ui/components/drawer";
 import { Bell, BriefcaseBusiness, X } from "lucide-react";
+import { usePathname } from "next/navigation";
 import { toast } from "sonner";
+
+import { getAppTopbarContext } from "@/config/routes";
+
 import UserMenu from "../user-menu";
 import AppBreadcrumb from "./app-breadcrumb";
 
 export default function AppTopbar() {
-	return (
-		<header className="flex min-h-16 items-center justify-between gap-4 border-b bg-background px-4 py-3 lg:px-6">
-			<AppBreadcrumb />
+	const pathname = usePathname();
+	const pageContext = getAppTopbarContext(pathname);
+	const isProjectRoute = pathname.startsWith("/projects/");
 
+	return (
+		<header className="flex min-h-24 items-center justify-between gap-4 border-b bg-background px-4 py-3 lg:px-6">
+			<div className="min-w-0 flex-1 space-y-0.5">
+				<h1 className="truncate font-semibold text-lg tracking-tight">
+					{pageContext.title}
+				</h1>
+				<p className="truncate text-muted-foreground text-sm italic">
+					{pageContext.description}
+				</p>
+				{isProjectRoute ? <AppBreadcrumb /> : null}
+			</div>
 			<div className="flex items-center gap-2">
 				<Drawer>
 					<DrawerTrigger

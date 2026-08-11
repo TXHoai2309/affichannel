@@ -11,6 +11,7 @@
 		"test:e2e": "playwright test"
 	},
 	"dependencies": {
+		"@affichannel/core": "workspace:*",
 		"@affichannel/api": "workspace:*",
 		"@affichannel/auth": "workspace:*",
 		"@affichannel/env": "workspace:*",
@@ -36,12 +37,14 @@
 	},
 	"devDependencies": {
 		"@affichannel/config": "workspace:*",
+		"@affichannel/db": "workspace:*",
 		"@playwright/test": "^1.62.1",
 		"@tailwindcss/postcss": "catalog:",
 		"@tanstack/react-query-devtools": "^5.101.4",
 		"@types/node": "^20.19.43",
 		"@types/react": "catalog:",
 		"@types/react-dom": "catalog:",
+		"drizzle-orm": "^0.45.2",
 		"tailwindcss": "catalog:",
 		"typescript": "catalog:",
 		"vitest": "^4.1.10"

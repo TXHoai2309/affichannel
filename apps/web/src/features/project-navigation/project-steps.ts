@@ -1,11 +1,9 @@
-export type ProjectStepKey =
-	| "product"
-	| "content"
-	| "fact-lock"
-	| "voice"
-	| "video"
-	| "preview"
-	| "completed";
+import type {
+	PersistedProjectStepStatus,
+	ProjectStepKey,
+} from "@affichannel/core/project/project-types";
+
+export type { PersistedProjectStepStatus, ProjectStepKey };
 
 export type ProjectStepStatus =
 	| "completed"
@@ -13,8 +11,6 @@ export type ProjectStepStatus =
 	| "needs_review"
 	| "blocked"
 	| "not_started";
-
-export type PersistedProjectStepStatus = Exclude<ProjectStepStatus, "current">;
 
 export type ProjectStep = {
 	key: ProjectStepKey;
@@ -101,10 +97,10 @@ export function getActiveProjectStepKey(
 
 export function getProjectStepStatus(
 	stepKey: ProjectStepKey,
-	activeStepKey: ProjectStepKey,
+	currentStepKey: ProjectStepKey,
 	persistedStatus: PersistedProjectStepStatus,
 ): ProjectStepStatus {
-	return stepKey === activeStepKey ? "current" : persistedStatus;
+	return stepKey === currentStepKey ? "current" : persistedStatus;
 }
 
 export const PROJECT_STEP_STATUS_LABELS: Record<ProjectStepStatus, string> = {

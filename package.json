@@ -27,8 +27,11 @@
 	},
 	"dependencies": {
 		"@affichannel/auth": "workspace:*",
+		"@affichannel/core": "workspace:*",
+		"@affichannel/db": "workspace:*",
 		"@affichannel/env": "workspace:*",
 		"dotenv": "catalog:",
+		"drizzle-orm": "^0.45.2",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

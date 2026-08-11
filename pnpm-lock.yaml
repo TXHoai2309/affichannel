@@ -68,12 +68,21 @@ importers:
       '@affichannel/auth':
         specifier: workspace:*
         version: link:packages/auth
+      '@affichannel/core':
+        specifier: workspace:*
+        version: link:packages/core
+      '@affichannel/db':
+        specifier: workspace:*
+        version: link:packages/db
       '@affichannel/env':
         specifier: workspace:*
         version: link:packages/env
       dotenv:
         specifier: 'catalog:'
         version: 17.4.2
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@neondatabase/serverless@1.1.0)(kysely@0.29.4)
       zod:
         specifier: 'catalog:'
         version: 4.4.3
@@ -108,6 +117,9 @@ importers:
       '@affichannel/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@affichannel/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@affichannel/env':
         specifier: workspace:*
         version: link:../../packages/env
@@ -172,6 +184,9 @@ importers:
       '@affichannel/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@affichannel/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@playwright/test':
         specifier: ^1.62.1
         version: 1.62.1
@@ -190,6 +205,9 @@ importers:
       '@types/react-dom':
         specifier: 'catalog:'
         version: 19.2.4(@types/react@19.2.18)
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@neondatabase/serverless@1.1.0)(kysely@0.29.4)
       tailwindcss:
         specifier: 'catalog:'
         version: 4.3.3
@@ -205,6 +223,9 @@ importers:
       '@affichannel/auth':
         specifier: workspace:*
         version: link:../auth
+      '@affichannel/core':
+        specifier: workspace:*
+        version: link:../core
       '@affichannel/db':
         specifier: workspace:*
         version: link:../db
@@ -267,8 +288,24 @@ importers:
 
   packages/config: {}
 
+  packages/core:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@affichannel/config':
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+
   packages/db:
     dependencies:
+      '@affichannel/core':
+        specifier: workspace:*
+        version: link:../core
       '@affichannel/env':
         specifier: workspace:*
         version: link:../env

@@ -26,15 +26,25 @@ export type FeatureStatus = "available" | "skeleton";
 export type AppRoute = {
 	key: AppRouteKey;
 	label: string;
+	title: string;
+	description: string;
 	href: string;
 	icon: LucideIcon;
 	featureStatus: FeatureStatus;
+};
+
+export type AppTopbarContext = {
+	title: string;
+	description: string;
 };
 
 export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	dashboard: {
 		key: "dashboard",
 		label: "Dashboard",
+		title: "Tổng quan",
+		description:
+			"Theo dõi dự án, sản phẩm và các bước sản xuất affiliate từ đây.",
 		href: "/dashboard",
 		icon: LayoutDashboard,
 		featureStatus: "available",
@@ -42,6 +52,9 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	projects: {
 		key: "projects",
 		label: "Dự án",
+		title: "Dự án",
+		description:
+			"Theo dõi các chiến dịch affiliate từ sản phẩm đến nội dung hoàn chỉnh.",
 		href: "/projects",
 		icon: FolderKanban,
 		featureStatus: "skeleton",
@@ -49,6 +62,9 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	products: {
 		key: "products",
 		label: "Sản phẩm",
+		title: "Sản phẩm",
+		description:
+			"Quản lý sản phẩm, Product Facts và thông tin nguồn để tái sử dụng trong các dự án affiliate.",
 		href: "/products",
 		icon: PackageOpen,
 		featureStatus: "skeleton",
@@ -56,6 +72,8 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	media: {
 		key: "media",
 		label: "Media Library",
+		title: "Thư viện media",
+		description: "Quản lý media đã tải lên và asset được dùng trong video.",
 		href: "/media",
 		icon: Images,
 		featureStatus: "skeleton",
@@ -63,6 +81,9 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	analytics: {
 		key: "analytics",
 		label: "Analytics",
+		title: "Phân tích",
+		description:
+			"Theo dõi hiệu quả nội dung và chi phí khi dữ liệu workflow hoàn thiện.",
 		href: "/analytics",
 		icon: BarChart3,
 		featureStatus: "skeleton",
@@ -70,6 +91,9 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	usage: {
 		key: "usage",
 		label: "Chi phí & Usage",
+		title: "Chi phí & sử dụng",
+		description:
+			"Theo dõi usage, ước tính và chi phí provider trong các workflow có tính phí.",
 		href: "/usage",
 		icon: WalletCards,
 		featureStatus: "skeleton",
@@ -77,6 +101,9 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 	settings: {
 		key: "settings",
 		label: "Cài đặt",
+		title: "Cài đặt",
+		description:
+			"Thiết lập workspace và các mặc định tái sử dụng cho AffiChannel.",
 		href: "/settings",
 		icon: Settings2,
 		featureStatus: "skeleton",
@@ -99,6 +126,32 @@ export function getAppRouteFromPathname(
 	return APP_NAV_ITEMS.filter((route) =>
 		isAppRouteActive(pathname, route),
 	).sort((a, b) => b.href.length - a.href.length)[0];
+}
+
+export function getAppTopbarContext(pathname: string): AppTopbarContext {
+	if (pathname.startsWith("/projects/")) {
+		const [, , projectId] = pathname.split("/");
+		const project = getProjectFixture(projectId);
+
+		return {
+			title: project?.name ?? "Dự án",
+			description: project
+				? `Sản phẩm: ${project.productName}`
+				: "Theo dõi tiến độ và các bước sản xuất affiliate.",
+		};
+	}
+
+	const route = getAppRouteFromPathname(pathname);
+
+	return route
+		? {
+				title: route.title,
+				description: route.description,
+			}
+		: {
+				title: "Trang không tìm thấy",
+				description: "Kiểm tra lại đường dẫn hoặc quay về Dashboard.",
+			};
 }
 
 export type BreadcrumbItem = {

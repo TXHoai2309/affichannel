@@ -1,7 +1,7 @@
 # Tiến trình AI agent
 
 - Trạng thái: Đang hoạt động
-- Cập nhật lần cuối: 2026-08-10
+- Cập nhật lần cuối: 2026-08-11
 
 File này ghi lại công việc đáng kể do AI agent thực hiện. Đây không phải chain of
 thought hoặc bản sao terminal. Mỗi bản ghi chỉ tóm tắt mục tiêu, thay đổi, bằng
@@ -9,8 +9,43 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 ## Mục tiêu hiện tại
 
-Hoàn thiện vertical slice AFF-US-002 cho App Shell, route contract và project
-navigation trên nền auth của US001.
+Hoàn thiện AFF-US-004 cho luồng tạo Project và Content Brief trên nền App Shell và Auth.
+
+### 2026-08-11 — Triển khai AFF-US-004 Project + Content Brief
+
+Thay đổi:
+
+- Thêm shared domain package cho Project/Product validation, workflow contract và service.
+- Thêm workspace nội bộ, membership, Product tối thiểu, Project, ContentBrief và
+  ProjectStepStatus; migration `0001_orange_nocturne` và migration sửa check constraint
+  `0002_polite_invaders`.
+- Create Project dùng transaction để ghi project, brief và đủ bảy step status cùng lúc.
+- oRPC có product minimal list/create cùng project list/get/create/update/archive/updateWorkflow;
+  mọi access kiểm tra workspace membership ở server.
+- Thêm `/projects/new`, selector tạo nhanh product, validation/loading/error/empty state,
+  danh sách project thật và redirect/mở lại theo `currentStepKey` được lưu.
+
+Quyết định:
+
+- DEC-008: một internal workspace dùng chung, membership là lớp ownership;
+  `createdByUserId` chỉ audit. Chưa thêm organization/role administration.
+- Không unique tên project toàn cục hoặc theo workspace.
+- AFF-US-005 chưa được làm đầy đủ; only minimal Product prerequisite nằm trong US004 form.
+
+Kiểm tra:
+
+- `pnpm db:generate`, review migration và `pnpm db:migrate` đã chạy trên database app đang dùng.
+- `pnpm auth:bootstrap` đã đảm bảo membership của fixed account.
+- Database transaction smoke test tạo/đọc/kiểm tra 7 status rồi xóa đúng các record test: đạt.
+- `pnpm check-types`, `pnpm --filter web test` và `pnpm --filter web build`: đạt.
+- Playwright đạt 3 test public/auth; happy path navigation và US004 create bị skip cho đến khi
+  cấu hình `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`.
+
+Lưu ý môi trường:
+
+- `.env` hiện có `DATABASE_URL` và `DATABASE_URL_DIRECT` khác Neon project. Runtime/migration
+  dùng `DATABASE_URL` để giữ account/session hiện có; cần thay cả hai URL bằng cặp pooled/direct
+  của cùng một Neon project trước khi deploy hoặc chuyển database.
 
 ## Trạng thái project hiện tại
 
@@ -19,23 +54,22 @@ navigation trên nền auth của US001.
 - Next.js web, oRPC, Better Auth, Drizzle, Neon, shared UI, Turborepo và Biome đã
   được cấu hình.
 - `pnpm run check-types` đạt.
-- Auth schema đã được generate migration, review và apply vào Neon development;
-  business-domain schema vẫn chưa được thêm.
-- AFF-US-001 Auth session đã được triển khai; các feature nghiệp vụ AffiChannel
-  chưa được triển khai.
-- AFF-US-002 App Shell và Navigation đã được triển khai; chưa tạo business
-  Project schema hoặc persistence StepStatus.
+- Auth schema và business-domain schema US004 đã được generate migration, review và apply
+  vào Neon development.
+- AFF-US-001 Auth session, AFF-US-002 App Shell/Navigation và AFF-US-004 Project + Content
+  Brief đã được triển khai.
+- AFF-US-005 Product management đầy đủ, AFF-US-003 Dashboard dùng dữ liệu thật và các feature
+  production workflow vẫn chưa được triển khai.
 
 ## Hành động khuyến nghị tiếp theo
 
-1. Chốt `DEC-008` về mô hình ownership cho nhóm cố định.
-2. Bắt đầu Product schema/slice sau khi ownership được chấp nhận.
-3. Nối persistence Project/StepStatus ở US004.
+1. Làm AFF-US-003 Dashboard từ dữ liệu Project thật của US004.
+2. Mở AFF-US-005 để hoàn thiện Product management ngoài selector tối thiểu.
+3. Cấu hình `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD` để chạy happy-path browser test.
 
 ## Blocker và quyết định còn mở
 
 - `DEC-007`: media lưu local-first hay R2-first.
-- `DEC-008`: dùng chung internal group hay ownership riêng từng user.
 - Chưa chọn TTS provider trước khi test tiếng Việt đại diện.
 
 ## Nhật ký phiên làm việc
@@ -166,6 +200,125 @@ Tiếp theo:
 
 - Chốt DEC-008 trước khi bắt đầu Product schema; dùng E2E fixed account để chạy
   đầy đủ navigation flow.
+
+### 2026-08-11 — Tinh gọn nội dung đầu trang App Shell
+
+Mục tiêu:
+
+- Loại bỏ copy trang trí không giúp điều hướng hoặc ra quyết định trong US002.
+
+Thay đổi:
+
+- Dashboard dùng title và mô tả theo ngữ cảnh workspace; bỏ `Workspace overview`.
+- Trang Dự án bỏ `Workflow`, làm rõ mục đích danh sách và đổi entry point demo
+  thành dự án mẫu.
+- Placeholder bỏ badge `Đang chuẩn bị` ở đầu trang; mô tả rõ khung đã có và phần
+  nghiệp vụ còn chờ slice tương ứng.
+- Chuyển page context vào topbar với title và mô tả in nghiêng; bỏ header trùng
+  lặp trong main content và breadcrumb cell chỉ có title.
+- Bổ sung quy tắc copy header, badge status và semantics `Button`/`Link` vào
+  `AGENTS.md` và Design System để các agent áp dụng thống nhất.
+
+Kiểm tra:
+
+- `pnpm run check-types` đạt trên toàn bộ workspace.
+- Biome scope của các file TypeScript đã thay đổi đạt.
+- `pnpm --filter web test -- routes.test.ts` đạt 4 test, gồm mapping page context
+  cho route top-level và project.
+- Chưa kiểm tra trực quan trong browser; cần reload các route để review copy sau HMR.
+
+### 2026-08-11 — Hoàn thiện semantic breadcrumb và design baseline US002
+
+Mục tiêu:
+
+- Sửa các điểm còn lại của App Shell theo DEC-010 mà không mở rộng sang business
+  persistence của US004.
+
+Thay đổi:
+
+- `app-breadcrumb.tsx` dùng `Fragment` để `BreadcrumbSeparator` và
+  `BreadcrumbItem` là sibling `<li>` hợp lệ.
+- AppTopbar hiển thị breadcrumb cho nested project route để giữ context điều
+  hướng; top-level route không lặp breadcrumb chỉ có title.
+- Map global UI token sang `#17212B`, `#F6F3EC`, `#F2A541`, `#2F7D64`; primary
+  action và active sidebar dùng orange; sidebar dùng navy.
+- Map `--font-sans` và `--font-mono` sang biến Geist đang được load.
+- Đồng bộ roadmap rằng US002 chỉ cung cấp `ProjectStepKey`, status mapping và
+  persistence contract; lưu dữ liệu thật deferred sang US004 theo DEC-010.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt, 2 package typecheck thành công.
+- `pnpm --filter web build`: đạt; production build và TypeScript hoàn tất.
+- `pnpm --filter web test`: đạt 10/10 test.
+- `pnpm --filter web test:e2e`: 3 pass, 4 skipped; 4 test auth/navigation happy
+  path chưa chạy vì thiếu `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`.
+- `pnpm run check`: chưa đạt do 4 lỗi lint nền trong `packages/ui` và 2 warning
+  unused import ngoài phạm vi US002; các file US002 đã được format/check theo scope.
+- Browser visual screenshot chưa hoàn tất vì Browser plugin không có trong môi
+  trường và Playwright screenshot CLI thiếu executable headless riêng.
+
+Blocker:
+
+- Cần cung cấp fixed E2E account qua biến môi trường rồi chạy lại auth/navigation
+  happy path. US002 chưa đủ điều kiện Done khi blocker này còn tồn tại.
+
+Deferred:
+
+- Project, ContentBrief, ProjectStepStatus persistence và CRUD giữ lại cho US004.
+
+### 2026-08-11 — Khôi phục màu light theme như giao diện cũ
+
+Mục tiêu:
+
+- Giữ bố cục App Shell hiện tại nhưng khôi phục chính xác cảm giác trắng/xám nhẹ
+  của giao diện cũ theo phản hồi trực quan.
+
+Thay đổi:
+
+- Workspace, card, popover và sidebar dùng lại bộ token light cũ.
+- Active sidebar dùng `secondary` như trước; giữ `nativeButton={false}` và Geist là
+  các sửa kỹ thuật độc lập với màu sắc.
+- Cập nhật design system để light theme không còn mô tả nền Navy/Cream/Orange.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: đạt 10/10 test.
+- `pnpm --filter web build`: đạt.
+- HTTP smoke check `/dashboard`: trả về 200.
+- Chưa có browser visual screenshot trong môi trường này; cần reload `/dashboard`
+  và các route protected để review trực quan sau HMR.
+
+### 2026-08-11 — Áp dụng blue-white visual direction cho App Shell
+
+Mục tiêu:
+
+- Đồng bộ màu App Shell với visual reference xanh-trắng được duyệt, không mở rộng
+  sang dashboard metrics hoặc dữ liệu giả.
+
+Thay đổi:
+
+- Thêm token blue, blue-900, blue-soft, green, orange và purple trong shared CSS.
+- Đặt workspace ở `#F7FAFF`, surface ở trắng, primary/active navigation ở
+  `#1677F2`, text chính ở `#122D58`.
+- Đưa active sidebar về primary blue; giữ semantic màu phụ cho success, cost và
+  grouping, không dùng chúng làm primary action.
+- Cập nhật design system, changelog và AGENTS để tránh quay lại palette Navy/Cream
+  hoặc thêm gradient/glow ngoài reference.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: đạt 10/10 test.
+- `pnpm --filter web build`: đạt.
+- Scoped Biome check cho App Shell và route config: đạt.
+- HTTP smoke check `/login`: trả về 200.
+- `pnpm --filter web test:e2e`: 3 pass, 4 skipped vì chưa có fixed E2E account;
+  không phát hiện failure mới sau đổi màu.
+- Browser plugin không có trong môi trường; fallback Playwright/system Chrome đã
+  chụp được `/login` với palette mới. App Shell authenticated chưa chụp được vì
+  fixed E2E account chưa được cấu hình.
 
 ## Mẫu bản ghi
 

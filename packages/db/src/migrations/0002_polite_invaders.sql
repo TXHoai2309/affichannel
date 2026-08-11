@@ -1,0 +1,4 @@
+ALTER TABLE "project" DROP CONSTRAINT "project_current_step_key_check";--> statement-breakpoint
+ALTER TABLE "project_step_status" DROP CONSTRAINT "project_step_status_step_key_check";--> statement-breakpoint
+ALTER TABLE "project" ADD CONSTRAINT "project_current_step_key_check" CHECK ("project"."current_step_key" in ('product', 'content', 'fact-lock', 'voice', 'video', 'preview', 'completed'));--> statement-breakpoint
+ALTER TABLE "project_step_status" ADD CONSTRAINT "project_step_status_step_key_check" CHECK ("project_step_status"."step_key" in ('product', 'content', 'fact-lock', 'voice', 'video', 'preview', 'completed'));

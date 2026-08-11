@@ -161,25 +161,25 @@ Không bắt đầu media implementation trước khi chủ dự án chấp nh�
 
 ## DEC-008 — Mô hình ownership cho nhóm cố định
 
-- Trạng thái: Đề xuất
-- Ngày: 2026-08-10
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-11
 
 ### Bối cảnh
 
 Ứng dụng có hai hoặc ba tài khoản cố định, không cần organization/role nâng cao,
 nhưng vẫn phải kiểm tra quyền ở mức bản ghi.
 
-### Quyết định đề xuất
+### Quyết định
 
-Chọn một mô hình trước khi triển khai Product schema:
-
-1. mọi tài khoản cố định dùng chung một internal group scope; hoặc
-2. dữ liệu thuộc từng user và được chia sẻ rõ ràng.
+Mọi tài khoản cố định thuộc một internal workspace chung. Mỗi protected read/mutation
+xác định workspace từ `workspace_member` ở server; client không gửi workspace ID.
+`createdByUserId` lưu audit, không thay thế authorization. Chưa tạo organization, role,
+invitations hoặc administration UI trong MVP.
 
 ### Hệ quả
 
-Lựa chọn này ảnh hưởng mọi protected table và procedure, nên phải chốt trước
-Slice 2.
+Product và Project có `workspaceId`; mọi access phải lọc theo workspace. Đa workspace
+hoặc role nâng cao là migration/domain slice riêng sau MVP, không thêm dần trong feature UI.
 
 ## DEC-009 — Tài khoản cố định, không public signup trong MVP 0
 

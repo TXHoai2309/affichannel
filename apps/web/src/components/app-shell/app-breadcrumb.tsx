@@ -10,6 +10,7 @@ import {
 import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { Fragment } from "react";
 
 import { getBreadcrumbItems } from "@/config/routes";
 
@@ -21,19 +22,21 @@ export default function AppBreadcrumb() {
 		<Breadcrumb>
 			<BreadcrumbList>
 				{items.map((item, index) => (
-					<BreadcrumbItem key={`${item.label}-${item.href ?? "current"}`}>
+					<Fragment key={`${item.label}-${item.href ?? "current"}`}>
 						{index > 0 ? <BreadcrumbSeparator /> : null}
-						{item.current || !item.href ? (
-							<BreadcrumbPage>{item.label}</BreadcrumbPage>
-						) : (
-							<Link
-								className="transition-colors hover:text-foreground"
-								href={item.href as Route}
-							>
-								{item.label}
-							</Link>
-						)}
-					</BreadcrumbItem>
+						<BreadcrumbItem>
+							{item.current || !item.href ? (
+								<BreadcrumbPage>{item.label}</BreadcrumbPage>
+							) : (
+								<Link
+									className="transition-colors hover:text-foreground"
+									href={item.href as Route}
+								>
+									{item.label}
+								</Link>
+							)}
+						</BreadcrumbItem>
+					</Fragment>
 				))}
 			</BreadcrumbList>
 		</Breadcrumb>
