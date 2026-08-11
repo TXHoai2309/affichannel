@@ -63,11 +63,6 @@ export type ProjectRepository<TProject> = {
 		workspaceId: string;
 		projectId: string;
 	}): Promise<TProject | undefined>;
-	updateWorkflow(input: {
-		workspaceId: string;
-		projectId: string;
-		currentStepKey: ProjectStepKey;
-	}): Promise<TProject | undefined>;
 };
 
 export async function createProject<TProject>(

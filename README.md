@@ -51,11 +51,11 @@ Không chạy lệnh này với production database khi chưa được chủ d�
 pnpm run dev
 ```
 
-Mở [http://localhost:3001](http://localhost:3001).
+Mở [http://localhost:3002](http://localhost:3002).
 
 API reference trong development:
 
-[http://localhost:3001/api/rpc/api-reference](http://localhost:3001/api/rpc/api-reference)
+[http://localhost:3002/api/rpc/api-reference](http://localhost:3002/api/rpc/api-reference)
 
 API reference phải được tắt hoặc bảo vệ trước production.
 

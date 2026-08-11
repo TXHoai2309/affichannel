@@ -39,6 +39,12 @@ sử dụng Semantic Versioning.
 - Đổi light theme App Shell sang hệ xanh-trắng theo visual direction mới: blue
   cho primary/active, blue-900 cho text, và các màu green/orange/purple cho
   semantic state có kiểm soát.
+- Làm mềm hệ component theo hierarchy radius: control, menu và active navigation
+  được bo góc nhẹ; panel/card, dialog/drawer và form tạo project có surface mềm
+  hơn nhưng giữ nguyên palette xanh-trắng.
+- Hardening US004 trước merge: bỏ generic workflow mutation, sửa accessible label cho
+  ProductSelector/E2E, kiểm tra workspace trước fixture, dùng chung Zod validation và
+  dedupe server loader bằng `React.cache()`.
 
 ### Bảo mật
 
@@ -46,6 +52,8 @@ sử dụng Semantic Versioning.
   upload, chống SSRF và tách render khỏi Vercel Functions.
 - Khóa public signup trong US001; tài khoản cố định được bootstrap ngoài luồng
   public và session được kiểm tra ở server.
+- Không public API nhận `currentStepKey` tùy ý; workflow transition phải được triển khai
+  như business action có transaction cập nhật step hiện tại và bước tiếp theo cùng nhau.
 - Thêm protected App Shell cho US002 với route map tập trung, sidebar, topbar,
   breadcrumb, Job Center/notification entry point và ProjectStepper 7 bước.
 - Các route MVP chưa có business logic hiện skeleton; persistence Project/StepStatus

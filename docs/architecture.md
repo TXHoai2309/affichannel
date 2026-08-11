@@ -301,7 +301,7 @@ Trước khi hoàn thành một slice:
 
 ### Development local
 
-- Next.js tại port 3001.
+- Next.js tại port 3002.
 - Neon development database.
 - Có thể dùng local filesystem adapter cho thử nghiệm media ban đầu.
 - Local render worker khi bắt đầu render.

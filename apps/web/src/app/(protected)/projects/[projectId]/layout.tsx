@@ -1,16 +1,16 @@
-import { getProjectDetails } from "@affichannel/api/services/project-repository";
-import { getWorkspaceActor } from "@affichannel/api/services/workspace";
-import { auth } from "@affichannel/auth";
 import type {
 	PersistedProjectStepStatus,
 	ProjectStepKey,
 } from "@affichannel/core/project/project-types";
-import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
 import ProjectStepper from "@/features/project-navigation/project-stepper";
+import {
+	getCurrentWorkspaceActor,
+	getProjectForCurrentUser,
+} from "@/lib/project-loader";
 
 export default async function ProjectLayout({
 	children,
@@ -20,6 +20,12 @@ export default async function ProjectLayout({
 	params: Promise<{ projectId: string }>;
 }) {
 	const { projectId } = await params;
+	const actor = await getCurrentWorkspaceActor();
+
+	if (!actor) {
+		notFound();
+	}
+
 	const fixture = getProjectFixture(projectId);
 
 	if (fixture) {
@@ -34,13 +40,7 @@ export default async function ProjectLayout({
 		);
 	}
 
-	const session = await auth.api.getSession({ headers: await headers() });
-	const actor = session?.user
-		? await getWorkspaceActor(session.user.id)
-		: undefined;
-	const project = actor
-		? await getProjectDetails(actor.workspaceId, projectId)
-		: undefined;
+	const project = await getProjectForCurrentUser(projectId);
 
 	if (!project) {
 		notFound();

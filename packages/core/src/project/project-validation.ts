@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { productNameSchema } from "../product/validation";
-import { CONTENT_BRIEF_PLATFORMS, PROJECT_STEP_KEYS } from "./project-types";
+import { CONTENT_BRIEF_PLATFORMS } from "./project-types";
 
 export const projectNameSchema = z
 	.string()
@@ -46,11 +46,6 @@ export const updateProjectInputSchema = projectContentBriefFieldsSchema.extend({
 
 export const projectIdInputSchema = z.object({
 	id: projectIdSchema,
-});
-
-export const updateProjectWorkflowInputSchema = z.object({
-	id: projectIdSchema,
-	currentStepKey: z.enum(PROJECT_STEP_KEYS),
 });
 
 export function normalizeProjectName(name: string) {

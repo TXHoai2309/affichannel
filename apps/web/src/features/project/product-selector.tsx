@@ -5,6 +5,8 @@ import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
 import { useState } from "react";
 
+import { getProjectErrorMessage } from "./project-errors";
+
 export type ProductOption = {
 	id: string;
 	name: string;
@@ -48,9 +50,10 @@ export function ProductSelector({
 			setIsCreating(false);
 		} catch (creationError) {
 			setCreateError(
-				creationError instanceof Error
-					? creationError.message
-					: "Không thể tạo sản phẩm.",
+				getProjectErrorMessage(
+					creationError,
+					"Không thể tạo sản phẩm. Hãy thử lại.",
+				),
 			);
 		} finally {
 			setIsSubmitting(false);
@@ -58,9 +61,11 @@ export function ProductSelector({
 	}
 
 	return (
-		<div className="space-y-2">
+		<div className="flex flex-col gap-2">
 			<div className="flex items-center justify-between gap-3">
-				<Label htmlFor="productId">Sản phẩm</Label>
+				<Label htmlFor={isCreating ? "newProductName" : "productId"}>
+					{isCreating ? "Tên sản phẩm mới" : "Sản phẩm"}
+				</Label>
 				<Button
 					disabled={disabled || isSubmitting}
 					size="xs"
@@ -75,6 +80,8 @@ export function ProductSelector({
 			{isCreating ? (
 				<div className="flex gap-2">
 					<Input
+						aria-describedby={createError ? "newProductName-error" : undefined}
+						aria-invalid={Boolean(createError)}
 						disabled={disabled || isSubmitting}
 						id="newProductName"
 						maxLength={160}
@@ -95,7 +102,7 @@ export function ProductSelector({
 				<select
 					aria-describedby={error ? "productId-error" : undefined}
 					aria-invalid={Boolean(error)}
-					className="h-8 w-full border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
+					className="h-8 w-full rounded-lg border border-input bg-transparent px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50"
 					disabled={disabled}
 					id="productId"
 					value={value}
@@ -117,7 +124,9 @@ export function ProductSelector({
 				</p>
 			) : null}
 			{createError ? (
-				<p className="text-destructive text-xs">{createError}</p>
+				<p className="text-destructive text-xs" id="newProductName-error">
+					{createError}
+				</p>
 			) : null}
 		</div>
 	);

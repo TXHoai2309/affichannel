@@ -64,6 +64,12 @@ Không được:
 
 - Dùng oRPC cho typed query/mutation từ browser, polling và worker contract.
 - Validate mọi input bên ngoài tại server boundary bằng Zod hoặc schema chuẩn.
+- Với form client có domain schema dùng chung, gọi chính schema đó bằng `safeParse()` và
+  map issues; không copy lại required/min/max ở UI. Normalize dữ liệu rỗng (ví dụ mô tả
+  toàn dấu cách) trước khi gửi mutation.
+- Không expose mutation generic cho state machine/workflow. `currentStepKey` là source of
+  truth: transition phải là business action có transaction cập nhật step status và current
+  step nhất quán; nếu chưa có action thì giữ workflow read-only.
 - Trả typed error an toàn cho người dùng; không lộ stack trace, SQL, provider
   response hoặc secret.
 - Tắt hoặc bảo vệ OpenAPI reference trong production.
@@ -118,6 +124,9 @@ Không được:
   do được ghi nhận.
 - Khi làm Next.js, tuân theo `apps/web/AGENTS.md` và đọc tài liệu Next.js được cài
   đặt mà file đó chỉ dẫn trước khi dựa vào trí nhớ.
+- Với dữ liệu server được dùng ở nested layout/page, ưu tiên loader `React.cache()` theo
+  request để dedupe session, authorization và query; luôn authorize trước khi trả fixture
+  hoặc dữ liệu demo, và chỉ bật fixture ngoài production.
 
 ## 10. Quy tắc triển khai UI
 
@@ -142,9 +151,15 @@ Không được:
   tên sản phẩm tiếng Anh khi cần chính xác, ví dụ `Product Facts`.
 - Placeholder phải nói rõ phần nào đã sẵn sàng và phần nào chưa có, không giả
   lập dữ liệu hoặc status sản phẩm/project chưa tồn tại.
-- Với Base UI, `Button` render thành `Link` phải đặt `nativeButton={false}`;
-  không lồng link và button vì sai semantics và tạo cảnh báo accessibility.
-- Không biểu diễn status chỉ bằng màu.
+  - Với Base UI, `Button` render thành `Link` phải đặt `nativeButton={false}`;
+    không lồng link và button vì sai semantics và tạo cảnh báo accessibility.
+  - Giao diện mặc định phải tạo cảm giác mềm và dễ tiếp cận: dùng bo góc theo
+    hierarchy (control 8–10 px, panel/card 12–14 px, dialog/drawer 18 px) và
+    border/shadow nhẹ. Không dùng `rounded-none` cho button, input, select,
+    textarea, menu, card, empty state hoặc active navigation. Chỉ để góc vuông
+    cho divider, bảng dữ liệu dày đặc hoặc phần tử lồng bên trong một control đã
+    có khung bo góc.
+  - Không biểu diễn status chỉ bằng màu.
 - Test dấu tiếng Việt, label dài, giá, đơn vị và URL.
 - Shared primitive đặt trong `packages/ui`; feature composition đặt gần web
   feature.

@@ -7,7 +7,6 @@ import {
 	createProjectInputSchema,
 	projectIdInputSchema,
 	updateProjectInputSchema,
-	updateProjectWorkflowInputSchema,
 } from "@affichannel/core/project/project-validation";
 import { ORPCError } from "@orpc/server";
 
@@ -94,21 +93,5 @@ export const projectRouter = {
 			}
 
 			return archived;
-		}),
-	updateWorkflow: protectedProcedure
-		.input(updateProjectWorkflowInputSchema)
-		.handler(async ({ context, input }) => {
-			const actor = await requireWorkspaceActor(context.session.user.id);
-			const updated = await repository.updateWorkflow({
-				workspaceId: actor.workspaceId,
-				projectId: input.id,
-				currentStepKey: input.currentStepKey,
-			});
-
-			if (!updated) {
-				throw new ORPCError("NOT_FOUND");
-			}
-
-			return updated;
 		}),
 };

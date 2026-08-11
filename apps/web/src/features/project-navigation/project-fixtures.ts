@@ -15,5 +15,9 @@ export const DEMO_PROJECT: DemoProject = {
 };
 
 export function getProjectFixture(projectId: string) {
+	if (process.env.NODE_ENV === "production") {
+		return undefined;
+	}
+
 	return projectId === DEMO_PROJECT.id ? DEMO_PROJECT : undefined;
 }

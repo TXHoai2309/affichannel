@@ -1,6 +1,10 @@
 "use client";
 
 import { getProjectStepRoute } from "@affichannel/core/project/project-types";
+import {
+	type CreateProjectInput,
+	createProjectInputSchema,
+} from "@affichannel/core/project/project-validation";
 import { Button } from "@affichannel/ui/components/button";
 import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
@@ -13,6 +17,7 @@ import { type FormEvent, useState } from "react";
 import { orpc } from "@/utils/orpc";
 
 import { ProductSelector } from "./product-selector";
+import { getProjectErrorMessage } from "./project-errors";
 
 type ProjectFormValues = {
 	name: string;
@@ -35,8 +40,46 @@ const INITIAL_VALUES: ProjectFormValues = {
 type FieldName = keyof ProjectFormValues;
 type FieldErrors = Partial<Record<FieldName | "form", string>>;
 
-function getErrorMessage(error: unknown, fallback: string) {
-	return error instanceof Error && error.message ? error.message : fallback;
+const FIELD_ERROR_FALLBACKS: Partial<Record<FieldName, string>> = {
+	name: "Tên dự án là bắt buộc.",
+	productId: "Chọn hoặc tạo một sản phẩm.",
+	goal: "Mục tiêu là bắt buộc.",
+	durationSeconds: "Thời lượng cần nằm trong khoảng 15–180 giây.",
+	angle: "Góc tiếp cận là bắt buộc.",
+};
+
+function parseProjectForm(values: ProjectFormValues) {
+	const result = createProjectInputSchema.safeParse({
+		name: values.name,
+		productId: values.productId,
+		platform: "tiktok",
+		goal: values.goal,
+		durationSeconds: Number(values.durationSeconds),
+		angle: values.angle,
+		description: values.description.trim() || undefined,
+	});
+
+	if (result.success) {
+		return { data: result.data as CreateProjectInput, errors: {} };
+	}
+
+	const errors: FieldErrors = {};
+	for (const issue of result.error.issues) {
+		const field = issue.path[0];
+		if (typeof field !== "string" || !(field in FIELD_ERROR_FALLBACKS)) {
+			continue;
+		}
+
+		const fieldName = field as FieldName;
+		const fallback = FIELD_ERROR_FALLBACKS[fieldName];
+		if (fallback) {
+			errors[fieldName] = issue.message.startsWith("Invalid input")
+				? fallback
+				: issue.message;
+		}
+	}
+
+	return { errors };
 }
 
 export function ProjectForm() {
@@ -64,59 +107,31 @@ export function ProjectForm() {
 		await products.refetch();
 	}
 
-	function validate() {
-		const nextErrors: FieldErrors = {};
-		const durationSeconds = Number(values.durationSeconds);
-
-		if (!values.name.trim()) nextErrors.name = "Tên dự án là bắt buộc.";
-		if (!values.productId) nextErrors.productId = "Chọn hoặc tạo một sản phẩm.";
-		if (!values.goal.trim()) nextErrors.goal = "Mục tiêu là bắt buộc.";
-		if (!values.angle.trim()) nextErrors.angle = "Góc tiếp cận là bắt buộc.";
-		if (
-			!Number.isInteger(durationSeconds) ||
-			durationSeconds < 15 ||
-			durationSeconds > 180
-		) {
-			nextErrors.durationSeconds =
-				"Thời lượng cần nằm trong khoảng 15–180 giây.";
-		}
-
-		return nextErrors;
-	}
-
 	function submit(event: FormEvent<HTMLFormElement>) {
 		event.preventDefault();
-		const nextErrors = validate();
+		const parsed = parseProjectForm(values);
 
-		if (Object.keys(nextErrors).length > 0) {
-			setErrors(nextErrors);
+		if (!parsed.data) {
+			setErrors(parsed.errors);
 			return;
 		}
 
-		createProject.mutate(
-			{
-				name: values.name,
-				productId: values.productId,
-				platform: "tiktok",
-				goal: values.goal,
-				durationSeconds: Number(values.durationSeconds),
-				angle: values.angle,
-				description: values.description || undefined,
+		createProject.mutate(parsed.data, {
+			onSuccess: (project) => {
+				router.push(
+					getProjectStepRoute(project.id, project.currentStepKey) as Route,
+				);
+				router.refresh();
 			},
-			{
-				onSuccess: (project) => {
-					router.push(
-						getProjectStepRoute(project.id, project.currentStepKey) as Route,
-					);
-					router.refresh();
-				},
-				onError: (error) => {
-					setErrors({
-						form: getErrorMessage(error, "Không thể tạo dự án. Hãy thử lại."),
-					});
-				},
+			onError: (error) => {
+				setErrors({
+					form: getProjectErrorMessage(
+						error,
+						"Không thể tạo dự án. Hãy thử lại.",
+					),
+				});
 			},
-		);
+		});
 	}
 
 	const isSubmitting = createProject.isPending || createProduct.isPending;
@@ -242,7 +257,10 @@ export function ProjectForm() {
 
 			{products.isError ? (
 				<p className="text-destructive text-sm">
-					{getErrorMessage(products.error, "Không thể tải danh sách sản phẩm.")}
+					{getProjectErrorMessage(
+						products.error,
+						"Không thể tải danh sách sản phẩm.",
+					)}
 				</p>
 			) : null}
 			{errors.form ? (

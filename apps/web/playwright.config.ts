@@ -9,14 +9,14 @@ export default defineConfig({
 	fullyParallel: true,
 	reporter: process.env.CI ? "line" : "list",
 	use: {
-		baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3001",
+		baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3002",
 		trace: "retain-on-failure",
 	},
 	webServer: process.env.E2E_BASE_URL
 		? undefined
 		: {
 				command: "pnpm dev",
-				url: "http://localhost:3001",
+				url: "http://localhost:3002",
 				reuseExistingServer: !process.env.CI,
 				timeout: 120_000,
 			},

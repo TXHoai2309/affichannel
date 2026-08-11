@@ -77,8 +77,13 @@ Chữ tiếng Việt, tên sản phẩm dài, giá, đơn vị và URL phải lu
 - Khoảng cách thường dùng: 8, 12, 16, 24 và 32 px.
 - Chiều cao control chuẩn: 40 px.
 - Chiều cao control compact: 32 px.
-- Card radius: 10–12 px.
+- Control chuẩn: radius 10 px; control compact: radius 8 px.
+- Card và panel: radius 12–14 px; dialog/drawer: 18 px.
 - Border của panel phải nhẹ và có chức năng.
+- Giao diện cần mềm và dễ tiếp cận, không tạo một lưới ô vuông cứng: phối hợp
+  bo góc theo hierarchy, border nhẹ và shadow rất tiết chế. Không dùng
+  `rounded-none` cho surface hay control chuẩn; góc vuông chỉ dành cho divider,
+  bảng dữ liệu dày đặc hoặc content lồng bên trong một khung đã bo góc.
 - Không đặt đoạn văn dài trong card hẹp.
 
 ## 5. Application shell

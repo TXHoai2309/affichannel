@@ -20,8 +20,10 @@ Thay đổi:
   ProjectStepStatus; migration `0001_orange_nocturne` và migration sửa check constraint
   `0002_polite_invaders`.
 - Create Project dùng transaction để ghi project, brief và đủ bảy step status cùng lúc.
-- oRPC có product minimal list/create cùng project list/get/create/update/archive/updateWorkflow;
-  mọi access kiểm tra workspace membership ở server.
+- oRPC có product minimal list/create cùng project list/get/create/update/archive;
+  mọi access kiểm tra workspace membership ở server. Workflow mutation chưa public
+  trong US004 vì `currentStepKey` là source of truth và transition phải là business action
+  transaction đầy đủ.
 - Thêm `/projects/new`, selector tạo nhanh product, validation/loading/error/empty state,
   danh sách project thật và redirect/mở lại theo `currentStepKey` được lưu.
 
@@ -41,11 +43,54 @@ Kiểm tra:
 - Playwright đạt 3 test public/auth; happy path navigation và US004 create bị skip cho đến khi
   cấu hình `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`.
 
+### 2026-08-11 — Hardening review trước merge AFF-US-004
+
+Thay đổi:
+
+- Gỡ endpoint `updateWorkflow` generic và contract repository tương ứng; không cho client
+  gửi thẳng `currentStepKey` để bỏ qua các step status.
+- Sửa ProductSelector dùng label có liên kết thật với input tạo sản phẩm mới; E2E dùng
+  accessible locator `getByLabel("Tên sản phẩm mới")`.
+- Workspace authorization được kiểm tra trước demo fixture; fixture `demo` chỉ còn tồn tại
+  ngoài production.
+- Form tạo project dùng trực tiếp `createProjectInputSchema.safeParse()`, normalize
+  description toàn dấu cách thành `undefined` và map lỗi API sang thông báo tiếng Việt.
+- Dùng `React.cache()` cho session, workspace actor và project loader để tránh query lặp
+  trong cùng request ở nested layout/page.
+
+Kiểm tra sẽ chạy sau khi hoàn tất thay đổi: `pnpm check-types`, unit test, build và E2E
+US004 khi có fixed credentials.
+
 Lưu ý môi trường:
 
 - `.env` hiện có `DATABASE_URL` và `DATABASE_URL_DIRECT` khác Neon project. Runtime/migration
   dùng `DATABASE_URL` để giữ account/session hiện có; cần thay cả hai URL bằng cặp pooled/direct
   của cùng một Neon project trước khi deploy hoặc chuyển database.
+
+### 2026-08-11 — Làm mềm hình học giao diện App Shell
+
+Mục tiêu:
+
+- Loại bỏ cảm giác ô vuông cứng ở form, control và điều hướng mà không đổi
+  palette xanh-trắng hoặc bố cục đã được duyệt.
+
+Thay đổi:
+
+- Shared Button, Input, Textarea, Card, Empty state, menu, overlay và feedback
+  component dùng hierarchy bo góc thống nhất.
+- Form tạo project, select sản phẩm, project list và active sidebar được bo góc
+  nhẹ, bổ sung border/shadow tiết chế cho panel form.
+- Bổ sung quy tắc UI mềm trong `AGENTS.md` và Design System; chỉ dùng góc vuông
+  cho divider, bảng dày đặc hoặc phần tử lồng trong control đã có khung.
+
+Kiểm tra:
+
+- `pnpm exec biome check` trên 18 file UI đã thay đổi: đạt.
+- `pnpm check-types`, `pnpm --filter web test` (14/14) và
+  `pnpm --filter web build`: đạt.
+- Playwright smoke `/login`: đạt và đã chụp rendered control. Không thể chụp
+  `/projects/new` vì phiên Chrome hiện có không thể dùng lại trong Playwright và
+  chưa có `E2E_AUTH_EMAIL` / `E2E_AUTH_PASSWORD`.
 
 ## Trạng thái project hiện tại
 

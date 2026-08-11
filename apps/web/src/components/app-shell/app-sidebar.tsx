@@ -25,7 +25,10 @@ export default function AppSidebar() {
 				</p>
 			</div>
 
-			<nav aria-label="Điều hướng chính" className="flex-1 space-y-1 p-3">
+			<nav
+				aria-label="Điều hướng chính"
+				className="flex flex-1 flex-col gap-1.5 p-3"
+			>
 				{APP_NAV_ITEMS.map((route) => {
 					const Icon = route.icon;
 					const active = isAppRouteActive(pathname, route);
@@ -42,8 +45,8 @@ export default function AppSidebar() {
 							}
 							variant={active ? "default" : "ghost"}
 							className={cn(
-								"h-10 w-full justify-start gap-3 px-3 text-sm",
-								active && "font-semibold",
+								"h-10 w-full justify-start gap-3 rounded-xl px-3 text-sm",
+								active && "font-semibold shadow-sm",
 							)}
 						>
 							<Icon aria-hidden="true" />

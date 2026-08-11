@@ -28,7 +28,7 @@ test.describe("AFF-US-004 project creation", () => {
 			await page.goto("/projects/new");
 
 			await page.getByRole("button", { name: "Tạo sản phẩm" }).click();
-			await page.getByLabel("newProductName").fill(productName);
+			await page.getByLabel("Tên sản phẩm mới").fill(productName);
 			await page.getByRole("button", { name: "Tạo", exact: true }).click();
 
 			await page.getByLabel("Tên dự án").fill(projectName);

@@ -23,12 +23,12 @@ export function ProjectList() {
 	const projects = useQuery(orpc.project.list.queryOptions());
 
 	if (projects.isLoading) {
-		return <div className="h-32 animate-pulse border bg-muted/30" />;
+		return <div className="h-32 animate-pulse rounded-xl border bg-muted/30" />;
 	}
 
 	if (projects.isError) {
 		return (
-			<div className="border border-destructive/40 p-5 text-destructive text-sm">
+			<div className="rounded-xl border border-destructive/40 p-5 text-destructive text-sm">
 				Không thể tải dự án. Hãy tải lại trang để thử lại.
 			</div>
 		);
@@ -53,7 +53,7 @@ export function ProjectList() {
 	}
 
 	return (
-		<div className="divide-y border bg-card">
+		<div className="divide-y overflow-hidden rounded-xl border bg-card">
 			{projects.data.map((project) => {
 				const currentStep = getProjectStep(project.currentStepKey);
 

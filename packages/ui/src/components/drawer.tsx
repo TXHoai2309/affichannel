@@ -36,7 +36,7 @@ function DrawerPopup({ className, ...props }: DrawerPrimitive.Popup.Props) {
 		<DrawerPrimitive.Popup
 			data-slot="drawer-popup"
 			className={cn(
-				"fixed top-0 right-0 z-50 flex h-full w-[min(24rem,calc(100%-1rem))] flex-col border-l bg-background p-6 shadow-lg outline-none data-closed:translate-x-full data-open:translate-x-0",
+				"fixed top-0 right-0 z-50 flex h-full w-[min(24rem,calc(100%-1rem))] flex-col rounded-l-2xl border-l bg-background p-6 shadow-lg outline-none data-closed:translate-x-full data-open:translate-x-0",
 				className,
 			)}
 			{...props}

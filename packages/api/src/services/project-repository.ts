@@ -289,25 +289,6 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 				includeArchived: true,
 			});
 		},
-		async updateWorkflow({ workspaceId, projectId, currentStepKey }) {
-			const [updatedProject] = await db
-				.update(project)
-				.set({ currentStepKey, updatedAt: new Date() })
-				.where(
-					and(
-						eq(project.id, projectId),
-						eq(project.workspaceId, workspaceId),
-						isNull(project.archivedAt),
-					),
-				)
-				.returning({ id: project.id });
-
-			if (!updatedProject) {
-				return undefined;
-			}
-
-			return findProjectDetails({ workspaceId, projectId });
-		},
 	};
 }
 

@@ -47,7 +47,6 @@ describe("project domain contract", () => {
 			listProjects: async () => [],
 			updateProjectBundle: async () => undefined,
 			archiveProject: async () => undefined,
-			updateWorkflow: async () => undefined,
 		};
 
 		await expect(
