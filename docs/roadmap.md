@@ -67,7 +67,29 @@ Acceptance Criteria:
 
 Không bao gồm social login, organization/role và account administration UI.
 
-## 5. Slice 2 — Product
+## 5. Slice 2 — App Shell và Navigation
+
+Backlog liên quan: `AFF-US-002`.
+
+```text
+Đăng nhập → protected app shell → mở project demo → chuyển 7 bước → back/forward/refresh
+```
+
+Acceptance Criteria:
+
+- App dùng chung sidebar, topbar và breadcrumb trong protected layout.
+- Sidebar có Dashboard, Dự án, Sản phẩm, Media Library, Analytics, Chi phí & Usage
+  và Cài đặt.
+- Topbar có breadcrumb, Job Center entry point, notification entry point và profile.
+- ProjectStepper có 7 bước và 5 trạng thái hiển thị bằng chữ/icon, không chỉ bằng màu.
+- Direct URL, browser back/forward và refresh giữ đúng shell, route và active step.
+- Route chưa có business logic hiển thị skeleton/placeholder rõ ràng.
+
+US002 không tạo Project CRUD, business schema hoặc persistence StepStatus. Trạng
+thái `current` được suy ra từ route; persistence Project/ContentBrief/StepStatus
+thuộc US004.
+
+## 6. Slice 3 — Product
 
 Backlog liên quan: `AFF-US-005`.
 
@@ -80,7 +102,7 @@ Mở Products → tạo product → sửa product → archive product
 - List/detail có loading, empty, error và unauthorized.
 - Product có dependency được archive thay vì xóa cứng.
 
-## 6. Slice 3 — Product Facts
+## 7. Slice 4 — Product Facts
 
 Backlog liên quan: `AFF-US-006` và `AFF-US-007`.
 
@@ -93,7 +115,7 @@ Mở product → thêm fact có nguồn → kiểm tra freshness → sửa/archi
 - Fact hết hạn/thay đổi chuyển sang review rõ ràng.
 - Thay đổi fact có thể vô hiệu Fact Lock run phụ thuộc sau này.
 
-## 7. Slice 4 — Project và Content Brief
+## 8. Slice 5 — Project và Content Brief
 
 Backlog liên quan: `AFF-US-004`.
 
@@ -106,7 +128,7 @@ Tạo project → chọn product → khai báo brief → lưu → mở lại
 - Project mở lại với workflow state hiện tại.
 - Dashboard ban đầu có thể hiển thị recent projects.
 
-## 8. Slice 5 — Structured Script
+## 9. Slice 6 — Structured Script
 
 Backlog liên quan: `AFF-US-008` và `AFF-US-009`.
 
@@ -126,7 +148,7 @@ Thứ tự triển khai:
 - Provider output không hợp schema không được ghi đè draft hợp lệ.
 - Mỗi lần lưu/chỉnh sửa tạo script version nhận diện được.
 
-## 9. Slice 6 — Fact Lock
+## 10. Slice 7 — Fact Lock
 
 Backlog dự kiến: `AFF-US-010`; phải sửa khoảng trống ID hiện có trước triển khai.
 
@@ -137,7 +159,7 @@ Chạy kiểm tra → xem claim → liên kết bằng chứng → xử lý revi
 Acceptance Criteria tuân theo `product-spec.md`. TTS và Render bị khóa nếu
 version hiện tại chưa có run đạt.
 
-## 10. Slice 7 — Voice và media
+## 11. Slice 8 — Voice và media
 
 Backlog liên quan: `AFF-US-011` đến `AFF-US-014`.
 
@@ -146,7 +168,7 @@ Backlog liên quan: `AFF-US-011` đến `AFF-US-014`.
 - Upload và validate media thật.
 - Gắn media và voice vào scene có thứ tự.
 
-## 11. Slice 8 — Preview và render
+## 12. Slice 9 — Preview và render
 
 Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
 
@@ -158,7 +180,7 @@ Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
 
 MVP 0 hoàn thành khi slice này đạt end-to-end.
 
-## 12. Slice sau MVP
+## 13. Slice sau MVP
 
 Sau khi có dữ liệu sử dụng thực tế:
 
@@ -168,7 +190,7 @@ Sau khi có dữ liệu sử dụng thực tế:
 4. Analytics mô tả và hiệu quả chi phí.
 5. Một Video AI provider có kiểm soát.
 
-## 13. Backlog trì hoãn
+## 14. Backlog trì hoãn
 
 - Routing fallback nhiều provider.
 - Premium Video AI adapter.
@@ -177,7 +199,7 @@ Sau khi có dữ liệu sử dụng thực tế:
 - Mobile editing nâng cao.
 - Quản trị team/workspace.
 
-## 14. Definition of Done của một slice
+## 15. Definition of Done của một slice
 
 - Acceptance Criteria đã demo đạt.
 - Domain invariant được thực thi ở server.

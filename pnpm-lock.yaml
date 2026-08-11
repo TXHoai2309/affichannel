@@ -65,6 +65,9 @@ importers:
 
   .:
     dependencies:
+      '@affichannel/auth':
+        specifier: workspace:*
+        version: link:packages/auth
       '@affichannel/env':
         specifier: workspace:*
         version: link:packages/env

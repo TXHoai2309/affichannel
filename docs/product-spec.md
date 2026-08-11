@@ -173,6 +173,13 @@ Semantic matching hoặc LLM có thể đề xuất fact liên quan. Hệ thốn
 
 ## 9. Các màn hình chính
 
+US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,
+Dự án, Sản phẩm, Media Library, Analytics, Chi phí & Usage và Cài đặt. Các entry
+point chưa có business logic vẫn phải có route, breadcrumb, loading/skeleton và
+trạng thái placeholder rõ ràng; App Shell không được được xem là Product CRUD.
+Project dùng stepper 7 bước: Sản phẩm, Nội dung, Fact Lock, Giọng đọc, Dựng video,
+Preview & Render và Hoàn thành.
+
 ### Màn hình MVP 0
 
 1. Đăng nhập bằng tài khoản thành viên cố định được bootstrap ngoài luồng public.

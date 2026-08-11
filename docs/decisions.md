@@ -207,3 +207,27 @@ password, email verification, 2FA, organization và role nằm ngoài US001.
 
 Acceptance Criteria của Slice 1 dùng fixed-account bootstrap thay cho đăng ký mở.
 Mọi thay đổi ownership/group vẫn phải chốt trước Product schema theo DEC-008.
+
+## DEC-010 — App Shell trước persistence Project
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-10
+
+### Bối cảnh
+
+US002 cần route, sidebar, topbar và ProjectStepper để các màn hình sau có cùng
+context. Backlog ban đầu đồng thời yêu cầu lưu StepStatus, trong khi US004 đã
+được giao thiết kế Project, ContentBrief và StepStatus.
+
+### Quyết định
+
+US002 triển khai App Shell, route contract, fixture project và mapping trạng thái
+step. Không tạo Project CRUD, business schema hoặc persistence StepStatus ở slice
+này. Trạng thái `current` được suy ra từ route; các trạng thái domain còn lại sẽ
+được lưu cùng Project ở US004.
+
+### Hệ quả
+
+US004 phải cung cấp contract persistence tương thích với `ProjectStepKey` và
+`PersistedProjectStepStatus`. Fixture/demo route của US002 chỉ là navigation
+scaffold, không được xem là business data.

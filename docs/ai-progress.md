@@ -9,8 +9,8 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 ## Mục tiêu hiện tại
 
-Hoàn thiện vertical slice AFF-US-001 cho đăng nhập, session và bảo vệ dữ liệu
-thành viên cố định.
+Hoàn thiện vertical slice AFF-US-002 cho App Shell, route contract và project
+navigation trên nền auth của US001.
 
 ## Trạng thái project hiện tại
 
@@ -23,12 +23,14 @@ thành viên cố định.
   business-domain schema vẫn chưa được thêm.
 - AFF-US-001 Auth session đã được triển khai; các feature nghiệp vụ AffiChannel
   chưa được triển khai.
+- AFF-US-002 App Shell và Navigation đã được triển khai; chưa tạo business
+  Project schema hoặc persistence StepStatus.
 
 ## Hành động khuyến nghị tiếp theo
 
-1. Cấu hình test account riêng và chạy happy path E2E login/logout.
-2. Xử lý `DEC-008` về mô hình ownership cho nhóm cố định.
-3. Bắt đầu Slice 2 Product sau khi ownership được chấp nhận.
+1. Chốt `DEC-008` về mô hình ownership cho nhóm cố định.
+2. Bắt đầu Product schema/slice sau khi ownership được chấp nhận.
+3. Nối persistence Project/StepStatus ở US004.
 
 ## Blocker và quyết định còn mở
 
@@ -128,6 +130,42 @@ Quyết định:
 Tiếp theo:
 
 - Cấu hình test account và chạy happy path E2E; sau đó xử lý DEC-008 trước Slice 2.
+
+### 2026-08-10 — Triển khai AFF-US-002 App Shell và Navigation
+
+Mục tiêu:
+
+- Tạo protected app shell dùng chung và contract điều hướng cho các slice sau.
+
+Thay đổi:
+
+- Chuyển các protected route vào layout dùng chung với AppSidebar, AppTopbar và
+  breadcrumb từ route config tập trung.
+- Thêm skeleton route cho Dashboard, Dự án, Sản phẩm, Media Library, Analytics,
+  Chi phí & Usage và Cài đặt.
+- Thêm project fixture/demo với ProjectStepper 7 bước và 5 trạng thái; `current`
+  được suy ra từ URL, chưa persist vào database.
+- Bổ sung Badge, Breadcrumb, Dialog và Drawer primitive trong `packages/ui`;
+  Job Center/notification mới là entry point placeholder.
+- Cập nhật roadmap, design system, DEC-010 và changelog để tách US002 khỏi
+  persistence Project/StepStatus của US004.
+
+Kiểm tra:
+
+- `pnpm run check-types` đạt.
+- `pnpm --filter web test` đạt 9 test.
+- Playwright auth/navigation chưa chạy happy path nếu thiếu `E2E_AUTH_*`; các
+  test unauthenticated, public signup và invalid credentials đạt.
+- `pnpm --filter web build` đạt; Next nhận diện toàn bộ protected routes và Proxy.
+
+Quyết định:
+
+- DEC-010 — App Shell trước persistence Project.
+
+Tiếp theo:
+
+- Chốt DEC-008 trước khi bắt đầu Product schema; dùng E2E fixed account để chạy
+  đầy đủ navigation flow.
 
 ## Mẫu bản ghi
 

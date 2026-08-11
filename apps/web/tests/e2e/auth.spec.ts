@@ -11,6 +11,9 @@ test.describe("AFF-US-001 authentication", () => {
 		await page.goto("/dashboard");
 
 		await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
+
+		await page.goto("/projects/demo/fact-lock");
+		await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
 	});
 
 	test("does not expose public sign-up", async ({ page, request }) => {
@@ -33,7 +36,10 @@ test.describe("AFF-US-001 authentication", () => {
 		await page.goto("/login");
 		await page.getByLabel("Email").fill("invalid@example.invalid");
 		await page.getByLabel("Mật khẩu").fill("NotARealPassword123!");
-		await page.locator("form").getByRole("button", { name: "Đăng nhập" }).click();
+		await page
+			.locator("form")
+			.getByRole("button", { name: "Đăng nhập" })
+			.click();
 
 		await expect(page.locator("p[role=alert]")).toHaveText(
 			"Email hoặc mật khẩu không đúng.",
@@ -52,7 +58,10 @@ test.describe("AFF-US-001 authentication", () => {
 		await page.goto("/login");
 		await page.getByLabel("Email").fill(fixedAccountEmail as string);
 		await page.getByLabel("Mật khẩu").fill(fixedAccountPassword as string);
-		await page.locator("form").getByRole("button", { name: "Đăng nhập" }).click();
+		await page
+			.locator("form")
+			.getByRole("button", { name: "Đăng nhập" })
+			.click();
 
 		await expect(page).toHaveURL(/\/dashboard/);
 		await page.reload();

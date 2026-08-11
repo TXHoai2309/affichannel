@@ -99,16 +99,18 @@ authoring ưu tiên desktop; mobile cần đọc được nhưng chưa cần edi
 
 ## 6. Điều hướng
 
-Navigation của MVP 0:
+App Shell của US002 có các entry point ổn định:
 
 - Dashboard
-- Products
-- Projects
-- Settings
+- Dự án
+- Sản phẩm
+- Media Library
+- Analytics
+- Chi phí & Usage
+- Cài đặt
 
-Script và Video workspace được mở từ project. Không hiển thị module top-level
-trống khi chưa sử dụng được. Giai đoạn sau mới thêm Calendar, Content Library và
-Analytics.
+Các module chưa có business logic hiển thị skeleton/placeholder rõ ràng. Script,
+Fact Lock, Voice, Video, Preview và Completed được mở trong project stepper.
 
 ## 7. Quy ước component
 
