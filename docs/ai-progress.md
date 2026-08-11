@@ -419,6 +419,34 @@ Kiểm tra:
   chụp được `/login` với palette mới. App Shell authenticated chưa chụp được vì
   fixed E2E account chưa được cấu hình.
 
+### 2026-08-11 — AFF-US-003 Dashboard polish theo review
+
+Mục tiêu:
+
+- Đóng các lỗi UI/UX nhỏ còn lại trước khi review lại US003, không thay đổi read model
+  backend đã được phê duyệt.
+
+Thay đổi:
+
+- Warning hiển thị theo severity và mở `targetUrl` tới màn hình xử lý.
+- Đưa action tạo dự án vào `CardAction` để không lệch grid header.
+- Đổi copy kỹ thuật sang ngôn ngữ người dùng, dùng chung helper relative time và sửa
+  skeleton theo layout summary → recent projects → activity/warnings.
+- Suppress global error toast cho Dashboard vì trang đã có inline error/retry.
+
+Kiểm tra:
+
+- `pnpm check-types`: đạt.
+- `pnpm --filter web test`: 16/16 đạt.
+- `pnpm --filter web test:e2e`: 3 pass, 5 skipped do thiếu fixed E2E account.
+- Biome scoped cho Dashboard: đạt.
+- Playwright/system Chrome: `/dashboard` redirect đúng `/login`, không có console error.
+
+Blocker:
+
+- Cần cấu hình `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`, sau đó chạy lại authenticated E2E
+  với mục tiêu `0 skipped` trước khi đánh dấu US003 Done.
+
 ## Mẫu bản ghi
 
 ```text

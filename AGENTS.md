@@ -146,6 +146,13 @@ Không được:
   feature, không để thành cleanup sau.
 - Dashboard aggregate phải có loading skeleton, empty state theo từng vùng, lỗi generic và
   retry gọi lại query thật; không hiện raw `error.message` hoặc số liệu giả để lấp khoảng trống.
+- Warning trên Dashboard phải dùng `targetUrl` để điều hướng tới màn hình xử lý; `severity`
+  phải được thể hiện bằng màu/icon phù hợp, không chỉ nằm trong API contract.
+- Action ở `CardHeader` phải dùng `CardAction` khi header dùng grid; không dùng riêng
+  `flex-row` để ép layout của component đang là `display: grid`.
+- Các danh sách thời gian trên Dashboard phải dùng chung một helper relative time để không
+  lệch cách hiển thị giữa Recent Projects và Recent Activity. Query đã có lỗi inline phải
+  đánh dấu metadata để không bật thêm global toast trùng lặp.
 - Mỗi vùng chỉ có một primary action rõ ràng.
 - Header trang chỉ giữ title, mô tả ngắn và primary action khi chúng giúp người
   dùng hiểu trạng thái hoặc quyết định bước tiếp theo. Không thêm eyebrow/label

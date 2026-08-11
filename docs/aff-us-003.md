@@ -1,6 +1,6 @@
 # AFF-US-003 — Dashboard Overview
 
-- Trạng thái: Đã triển khai code, cần QA authenticated bằng fixed E2E account.
+- Trạng thái: Đã triển khai và polish; còn QA authenticated bằng fixed E2E account.
 - Cập nhật: 2026-08-11
 - Mục tiêu: biến Dashboard debug thành read-only operational Dashboard từ Project data thật.
 
@@ -28,6 +28,11 @@
 - Thay Dashboard debug bằng summary cards, recent projects, activity, warnings và cost state.
 - Có loading skeleton, empty state, generic error/retry và route-level error boundary.
 - Recent project link dùng `targetUrl` derive từ `getProjectStepRoute(projectId, currentStepKey)`.
+- Warning dùng `targetUrl` để mở màn hình xử lý và hiển thị khác nhau theo `severity`.
+- Action tạo project dùng `CardAction`; copy Dashboard hướng người dùng hơn và relative time
+  dùng chung cho project/activity.
+- Loading skeleton phản ánh đúng thứ tự summary → recent projects → activity/warnings; lỗi
+  Dashboard inline không bật thêm global toast.
 - Query error toàn app không còn hiển thị raw server error message ra toast.
 
 ## Kiểm tra
@@ -39,6 +44,8 @@
 - `pnpm --filter web build`: đạt.
 - Biome scoped cho Dashboard/API/test: đạt.
 - Playwright: 3 pass, 5 skipped vì chưa có `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`.
+- Playwright/system Chrome smoke `/dashboard`: redirect đúng về `/login`, nội dung có ý nghĩa,
+  không có console error; chưa thể chụp Dashboard authenticated khi thiếu fixed account.
 
 ## Blocker QA
 

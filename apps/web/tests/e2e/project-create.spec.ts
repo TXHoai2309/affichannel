@@ -93,9 +93,7 @@ test.describe("AFF-US-004 project creation", () => {
 			await expect(
 				page.getByRole("heading", { name: "Tổng quan nhanh" }),
 			).toBeVisible();
-			await page
-				.getByRole("link", { name: `Mở project ${projectName}` })
-				.click();
+			await page.getByRole("link", { name: `Mở dự án ${projectName}` }).click();
 			await expect(page).toHaveURL(
 				new RegExp(`/projects/${projectId}/product$`),
 			);

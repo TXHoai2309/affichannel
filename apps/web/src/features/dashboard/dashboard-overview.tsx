@@ -26,6 +26,7 @@ const VND_FORMATTER = new Intl.NumberFormat("vi-VN", {
 export default function DashboardOverview() {
 	const overviewQuery = useQuery(
 		orpc.dashboard.getOverview.queryOptions({
+			meta: { suppressGlobalErrorToast: true },
 			staleTime: 30_000,
 		}),
 	);
@@ -41,13 +42,16 @@ export default function DashboardOverview() {
 	const { summary, cost } = overviewQuery.data;
 
 	return (
-		<div className="space-y-6">
-			<section aria-labelledby="dashboard-summary-title" className="space-y-1">
+		<div className="flex flex-col gap-6">
+			<section
+				aria-labelledby="dashboard-summary-title"
+				className="flex flex-col gap-1"
+			>
 				<h2 className="font-semibold text-lg" id="dashboard-summary-title">
 					Tổng quan nhanh
 				</h2>
 				<p className="text-muted-foreground text-sm">
-					Theo dõi project và bước sản xuất affiliate từ một nơi.
+					Theo dõi dự án và tiến trình sản xuất nội dung tại một nơi.
 				</p>
 			</section>
 
@@ -56,30 +60,30 @@ export default function DashboardOverview() {
 				className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
 			>
 				<SummaryCard
-					detail="Project chưa hoàn thành"
+					detail="Dự án chưa hoàn thành"
 					icon={FolderKanban}
 					label="Dự án đang làm"
 					tone="blue"
 					value={summary.activeProjects}
 				/>
 				<SummaryCard
-					detail="Video module chưa kết nối"
+					detail="Chưa có video hoàn thành"
 					icon={Clapperboard}
 					label="Video hoàn thành"
 					tone="purple"
 					value={summary.completedVideos}
 				/>
 				<SummaryCard
-					detail="Usage chưa có dữ liệu"
+					detail="Chưa ghi nhận chi phí"
 					icon={CircleDollarSign}
 					label="Chi phí tháng"
 					tone="orange"
 					value={VND_FORMATTER.format(cost.currentMonth)}
 				/>
 				<SummaryCard
-					detail="Job backend chưa kết nối"
+					detail="Không có tác vụ đang xử lý"
 					icon={LoaderCircle}
-					label="Job đang xử lý"
+					label="Tác vụ đang xử lý"
 					tone="green"
 					value={summary.processingJobs}
 				/>

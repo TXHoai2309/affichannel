@@ -8,29 +8,7 @@ import {
 import { PencilLine, Plus } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-
-function formatRelativeTime(value: string) {
-	const elapsedSeconds = Math.round(
-		(new Date(value).getTime() - Date.now()) / 1_000,
-	);
-	const formatter = new Intl.RelativeTimeFormat("vi", { numeric: "auto" });
-
-	if (Math.abs(elapsedSeconds) < 60) {
-		return formatter.format(elapsedSeconds, "second");
-	}
-
-	const elapsedMinutes = Math.round(elapsedSeconds / 60);
-	if (Math.abs(elapsedMinutes) < 60) {
-		return formatter.format(elapsedMinutes, "minute");
-	}
-
-	const elapsedHours = Math.round(elapsedMinutes / 60);
-	if (Math.abs(elapsedHours) < 24) {
-		return formatter.format(elapsedHours, "hour");
-	}
-
-	return formatter.format(Math.round(elapsedHours / 24), "day");
-}
+import { formatRelativeTime } from "./format-relative-time";
 
 export default function RecentActivity({
 	activities,
@@ -48,7 +26,7 @@ export default function RecentActivity({
 						Chưa có hoạt động nào.
 					</p>
 				) : (
-					<ul className="space-y-1">
+					<ul className="flex flex-col gap-1">
 						{activities.map((activity) => {
 							const Icon =
 								activity.type === "project_created" ? Plus : PencilLine;

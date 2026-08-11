@@ -9,6 +9,10 @@ export function createQueryClient() {
 	return new QueryClient({
 		queryCache: new QueryCache({
 			onError: (error, query) => {
+				if (query.meta?.suppressGlobalErrorToast) {
+					return;
+				}
+
 				void error;
 				toast.error("Không thể tải dữ liệu", {
 					description: "Vui lòng thử lại hoặc quay lại sau.",

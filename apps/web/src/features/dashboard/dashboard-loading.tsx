@@ -2,8 +2,12 @@ import { Skeleton } from "@affichannel/ui/components/skeleton";
 
 export default function DashboardLoading() {
 	return (
-		<div aria-label="Đang tải Dashboard" className="space-y-6" role="status">
-			<div className="space-y-2">
+		<div
+			aria-label="Đang tải Dashboard"
+			className="flex flex-col gap-6"
+			role="status"
+		>
+			<div className="flex flex-col gap-2">
 				<Skeleton className="h-6 w-44" />
 				<Skeleton className="h-4 w-72 max-w-full" />
 			</div>
@@ -12,9 +16,10 @@ export default function DashboardLoading() {
 					<Skeleton className="h-36 rounded-2xl" key={index} />
 				))}
 			</div>
-			<div className="grid gap-5 xl:grid-cols-[minmax(0,1.45fr)_minmax(18rem,0.8fr)]">
-				<Skeleton className="h-80 rounded-2xl" />
-				<Skeleton className="h-80 rounded-2xl" />
+			<Skeleton className="h-80 rounded-2xl" />
+			<div className="grid gap-5 xl:grid-cols-2">
+				<Skeleton className="h-72 rounded-2xl" />
+				<Skeleton className="h-72 rounded-2xl" />
 			</div>
 		</div>
 	);

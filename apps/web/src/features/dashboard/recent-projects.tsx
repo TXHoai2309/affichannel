@@ -6,6 +6,7 @@ import { Badge } from "@affichannel/ui/components/badge";
 import { Button } from "@affichannel/ui/components/button";
 import {
 	Card,
+	CardAction,
 	CardContent,
 	CardHeader,
 	CardTitle,
@@ -14,6 +15,7 @@ import { ArrowRight, FolderPlus } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 import { getProjectStep } from "@/features/project-navigation/project-steps";
+import { formatRelativeTime } from "./format-relative-time";
 
 const STATUS_LABELS: Record<DashboardProjectStatus, string> = {
 	in_progress: "Đang làm",
@@ -32,26 +34,13 @@ const STATUS_VARIANTS: Record<
 	blocked: "destructive",
 };
 
-function formatRelativeTime(value: string) {
-	const elapsedMinutes = Math.round(
-		(new Date(value).getTime() - Date.now()) / 60_000,
-	);
-	const formatter = new Intl.RelativeTimeFormat("vi", { numeric: "auto" });
-
-	if (Math.abs(elapsedMinutes) < 60) {
-		return formatter.format(elapsedMinutes, "minute");
-	}
-
-	return formatter.format(Math.round(elapsedMinutes / 60), "hour");
-}
-
 function ProjectRow({ project }: { project: DashboardRecentProject }) {
 	const stepLabel =
 		getProjectStep(project.currentStepKey)?.label ?? "Chưa xác định";
 
 	return (
 		<Link
-			aria-label={`Mở project ${project.name}`}
+			aria-label={`Mở dự án ${project.name}`}
 			className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 border-affi-blue-border/60 border-t px-5 py-4 transition-colors hover:bg-affi-blue-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:grid-cols-[minmax(0,1.5fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,1fr)_auto] md:gap-4"
 			href={project.targetUrl as Route}
 		>
@@ -103,22 +92,24 @@ export default function RecentProjects({
 }) {
 	return (
 		<Card className="rounded-2xl border border-affi-blue-border/80 shadow-sm">
-			<CardHeader className="flex-row items-center justify-between gap-4 border-affi-blue-border/70 border-b px-5 py-4">
+			<CardHeader className="border-affi-blue-border/70 border-b px-5 py-4">
 				<div>
 					<CardTitle className="text-base">Dự án gần đây</CardTitle>
 					<p className="mt-1 text-muted-foreground text-xs">
-						Mở project để tiếp tục tại bước đang làm.
+						Mở dự án để tiếp tục tại bước đang làm.
 					</p>
 				</div>
-				<Button
-					nativeButton={false}
-					render={<Link href="/projects/new" />}
-					size="sm"
-					variant="outline"
-				>
-					<FolderPlus aria-hidden="true" />
-					<span className="hidden sm:inline">Tạo dự án</span>
-				</Button>
+				<CardAction>
+					<Button
+						nativeButton={false}
+						render={<Link href="/projects/new" />}
+						size="sm"
+						variant="outline"
+					>
+						<FolderPlus aria-hidden="true" />
+						<span className="hidden sm:inline">Tạo dự án</span>
+					</Button>
+				</CardAction>
 			</CardHeader>
 			<CardContent className="p-0">
 				{projects.length === 0 ? (
