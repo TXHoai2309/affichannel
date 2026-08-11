@@ -9,9 +9,6 @@ import {
 	WalletCards,
 } from "lucide-react";
 
-import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
-import { getProjectStep } from "@/features/project-navigation/project-steps";
-
 export type AppRouteKey =
 	| "dashboard"
 	| "projects"
@@ -31,11 +28,6 @@ export type AppRoute = {
 	href: string;
 	icon: LucideIcon;
 	featureStatus: FeatureStatus;
-};
-
-export type AppTopbarContext = {
-	title: string;
-	description: string;
 };
 
 export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
@@ -126,65 +118,4 @@ export function getAppRouteFromPathname(
 	return APP_NAV_ITEMS.filter((route) =>
 		isAppRouteActive(pathname, route),
 	).sort((a, b) => b.href.length - a.href.length)[0];
-}
-
-export function getAppTopbarContext(pathname: string): AppTopbarContext {
-	if (pathname.startsWith("/projects/")) {
-		const [, , projectId] = pathname.split("/");
-		const project = getProjectFixture(projectId);
-
-		return {
-			title: project?.name ?? "Dự án",
-			description: project
-				? `Sản phẩm: ${project.productName}`
-				: "Theo dõi tiến độ và các bước sản xuất affiliate.",
-		};
-	}
-
-	const route = getAppRouteFromPathname(pathname);
-
-	return route
-		? {
-				title: route.title,
-				description: route.description,
-			}
-		: {
-				title: "Trang không tìm thấy",
-				description: "Kiểm tra lại đường dẫn hoặc quay về Dashboard.",
-			};
-}
-
-export type BreadcrumbItem = {
-	label: string;
-	href?: string;
-	current?: boolean;
-};
-
-export function getBreadcrumbItems(pathname: string): BreadcrumbItem[] {
-	if (pathname.startsWith("/projects/")) {
-		const [, , projectId, stepKey] = pathname.split("/");
-		const items: BreadcrumbItem[] = [
-			{ label: APP_ROUTES.projects.label, href: APP_ROUTES.projects.href },
-			{
-				label: getProjectFixture(projectId)?.name ?? "Dự án",
-				href: `/projects/${projectId}`,
-			},
-		];
-
-		if (stepKey) {
-			items.push({
-				label: getProjectStep(stepKey)?.label ?? "Bước project",
-				current: true,
-			});
-		} else {
-			items[items.length - 1].current = true;
-		}
-
-		return items;
-	}
-
-	const route = getAppRouteFromPathname(pathname);
-	return route
-		? [{ label: route.label, href: route.href, current: true }]
-		: [{ label: "Trang không tìm thấy", current: true }];
 }

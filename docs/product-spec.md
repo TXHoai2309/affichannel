@@ -249,7 +249,9 @@ không được là lớp kiểm soát duy nhất.
 
 - File render của MVP 0 lưu local hay upload R2 ngay.
 - TTS provider nào vượt qua kiểm thử phát âm tiếng Việt.
-- Mô hình ownership chính xác cho nhóm cố định hai đến ba người.
 - Nhóm Product Fact nào cần quy tắc đối chiếu deterministic đầu tiên.
 Các quyết định mở phải được xử lý trong `decisions.md` trước khi việc triển khai
 trở nên khó thay đổi.
+
+Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
+`workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

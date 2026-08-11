@@ -22,7 +22,7 @@ export default function UserMenu() {
 	const [isSigningOut, setIsSigningOut] = useState(false);
 
 	if (isPending) {
-		return <Skeleton className="h-9 w-24" />;
+		return <Skeleton className="h-9 w-28 rounded-full" />;
 	}
 
 	if (!session) {
@@ -35,8 +35,15 @@ export default function UserMenu() {
 
 	return (
 		<DropdownMenu>
-			<DropdownMenuTrigger render={<Button variant="outline" />}>
-				{session.user.name}
+			<DropdownMenuTrigger
+				render={
+					<Button
+						className="h-9 rounded-full border-affi-blue-border bg-affi-blue-soft px-3 text-affi-blue text-xs hover:bg-affi-blue-soft/80"
+						variant="outline"
+					/>
+				}
+			>
+				Account Owner
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="bg-card">
 				<DropdownMenuGroup>

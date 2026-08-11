@@ -91,8 +91,8 @@ Chữ tiếng Việt, tên sản phẩm dài, giá, đơn vị và URL phải lu
 ### Chế độ chuẩn
 
 - Sidebar trái: module chính và project context.
-- Topbar: page context, trạng thái cloud/job và user menu. Page context gồm title
-  và mô tả in nghiêng, là page header duy nhất cho các route chuẩn.
+- Topbar: panel trắng bo tròn chứa title ngắn theo route, notification và user menu.
+  Không render mô tả dài hoặc breadcrumb chung ở đầu route.
 - Main content: primary action và vùng làm việc, không lặp lại title/mô tả đã có
   ở topbar.
 - Global job indicator luôn hiện khi chuyển route.
@@ -104,10 +104,8 @@ Chữ tiếng Việt, tên sản phẩm dài, giá, đơn vị và URL phải lu
   trí hoặc lặp lại title.
 - Ưu tiên title và mô tả trả lời được người dùng đang ở đâu, dữ liệu nào được
   quản lý và họ nên làm gì tiếp theo.
-- Không dùng breadcrumb như một cell chỉ lặp title. Với route sâu, title project
-  và stepper cung cấp ngữ cảnh điều hướng; topbar vẫn giữ contract chung.
-- Mô tả trong contract topbar dùng italic để phân biệt với title và phải có thể
-  bị truncate an toàn trên màn hình hẹp.
+- Không dùng breadcrumb như một cell chỉ lặp title. Với route sâu, sidebar và
+  ProjectStepper cung cấp ngữ cảnh điều hướng.
 - Status badge phải phản ánh dữ liệu domain thật. Với màn hình chưa có logic,
   dùng placeholder rõ phạm vi thay vì một badge status giả.
 - Dùng tiếng Việt nhất quán, trừ tên sản phẩm và thuật ngữ domain cần giữ nguyên

@@ -233,8 +233,8 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 			return listProjectDetails(workspaceId);
 		},
 		async updateProjectBundle({ actor, input }) {
-			await db.transaction(async (transaction) => {
-				await transaction
+			const didUpdate = await db.transaction(async (transaction) => {
+				const [updatedProject] = await transaction
 					.update(project)
 					.set({
 						name: input.name,
@@ -246,7 +246,12 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 							eq(project.id, input.id),
 							eq(project.workspaceId, actor.workspaceId),
 						),
-					);
+					)
+					.returning({ id: project.id });
+
+				if (!updatedProject) {
+					return false;
+				}
 
 				await transaction
 					.update(contentBrief)
@@ -259,7 +264,13 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 						updatedAt: new Date(),
 					})
 					.where(eq(contentBrief.projectId, input.id));
+
+				return true;
 			});
+
+			if (!didUpdate) {
+				return undefined;
+			}
 
 			return findProjectDetails({
 				workspaceId: actor.workspaceId,

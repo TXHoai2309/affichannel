@@ -11,6 +11,35 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 Hoàn thiện AFF-US-004 cho luồng tạo Project và Content Brief trên nền App Shell và Auth.
 
+### 2026-08-11 — Hardening theo review AFF-US-004
+
+Thay đổi:
+
+- Drizzle migration ưu tiên `DATABASE_URL_DIRECT`, còn runtime tiếp tục dùng pooled
+  `DATABASE_URL`; cập nhật cảnh báo cấu hình hai Neon project khác nhau.
+- Workspace actor chỉ resolve membership ở `INTERNAL_WORKSPACE_ID`, không lấy membership
+  cũ nhất một cách ngầm định.
+- Repository update kiểm tra project update thành công trước khi ghi Content Brief.
+- Topbar lấy tên project thật qua protected query cho project persisted; demo fixture chỉ
+  được dùng ngoài production.
+- Bổ sung unit test cho required fields/duplicate name, mở rộng E2E persistence assertions và
+  thêm `pnpm test:integration:project-auth` cho kiểm tra chéo workspace.
+
+Blocker:
+
+- Chưa thể xác nhận E2E happy path với 0 skipped vì môi trường chưa có
+  `E2E_AUTH_EMAIL`/`E2E_AUTH_PASSWORD`; không ghi credential vào repository.
+- Chưa thể coi database config hoàn tất cho đến khi user thay hai URL bằng pooled/direct của
+  cùng một Neon project/branch.
+
+### 2026-08-11 — Gọn AppTopbar theo phản hồi giao diện
+
+- Xóa cell title, mô tả và breadcrumb ở đầu các protected route để tránh lặp nội dung
+  và tạo khoảng trống không đem lại giá trị.
+- AppTopbar dùng panel trắng bo tròn với title ngắn theo route, thông báo và tài khoản;
+  project stepper vẫn giữ vai trò điều hướng quy trình ở các trang project.
+- Cập nhật route test/E2E và `AGENTS.md` để không tự thêm lại page header chung.
+
 ### 2026-08-11 — Triển khai AFF-US-004 Project + Content Brief
 
 Thay đổi:

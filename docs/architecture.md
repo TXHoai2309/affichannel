@@ -306,6 +306,9 @@ Trước khi hoàn thành một slice:
 - Có thể dùng local filesystem adapter cho thử nghiệm media ban đầu.
 - Local render worker khi bắt đầu render.
 
+Runtime query dùng `DATABASE_URL` pooled; Drizzle schema tooling dùng
+`DATABASE_URL_DIRECT`. Hai URL phải thuộc cùng một Neon project/branch.
+
 ### Production web
 
 - Vercel cho Next.js.

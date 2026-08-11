@@ -1,5 +1,6 @@
+import { INTERNAL_WORKSPACE_ID } from "@affichannel/core/workspace";
 import { db, workspaceMember } from "@affichannel/db";
-import { asc, eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export type WorkspaceActor = {
 	workspaceId: string;
@@ -12,8 +13,12 @@ export async function getWorkspaceActor(
 	const [membership] = await db
 		.select({ workspaceId: workspaceMember.workspaceId })
 		.from(workspaceMember)
-		.where(eq(workspaceMember.userId, userId))
-		.orderBy(asc(workspaceMember.createdAt))
+		.where(
+			and(
+				eq(workspaceMember.userId, userId),
+				eq(workspaceMember.workspaceId, INTERNAL_WORKSPACE_ID),
+			),
+		)
 		.limit(1);
 
 	if (!membership) {

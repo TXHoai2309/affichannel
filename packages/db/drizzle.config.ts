@@ -11,6 +11,8 @@ export default defineConfig({
 	out: "./src/migrations",
 	dialect: "postgresql",
 	dbCredentials: {
-		url: process.env.DATABASE_URL || process.env.DATABASE_URL_DIRECT || "",
+		// Neon migrations require the direct connection. Runtime queries use the
+		// pooled DATABASE_URL from packages/db/src/index.ts.
+		url: process.env.DATABASE_URL_DIRECT || process.env.DATABASE_URL || "",
 	},
 });

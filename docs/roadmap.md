@@ -77,10 +77,11 @@ Backlog liên quan: `AFF-US-002`.
 
 Acceptance Criteria:
 
-- App dùng chung sidebar, topbar và breadcrumb trong protected layout.
+- App dùng chung sidebar và topbar dạng panel trong protected layout.
 - Sidebar có Dashboard, Dự án, Sản phẩm, Media Library, Analytics, Chi phí & Usage
   và Cài đặt.
-- Topbar có breadcrumb, Job Center entry point, notification entry point và profile.
+- Topbar có title ngắn theo route, notification entry point và profile; không lặp mô tả
+  dài hoặc breadcrumb ở đầu trang.
 - ProjectStepper có 7 bước và 5 trạng thái hiển thị bằng chữ/icon, không chỉ bằng màu.
 - Direct URL, browser back/forward và refresh giữ đúng shell, route và active step.
 - Route chưa có business logic hiển thị skeleton/placeholder rõ ràng.

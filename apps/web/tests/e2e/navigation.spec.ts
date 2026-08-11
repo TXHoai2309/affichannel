@@ -11,9 +11,7 @@ test.describe("AFF-US-002 app shell navigation", () => {
 		);
 	});
 
-	test("keeps shell and breadcrumb on a direct project URL", async ({
-		page,
-	}) => {
+	test("keeps the shell on a direct project URL", async ({ page }) => {
 		await signIn(page);
 		await page.goto("/projects/demo/fact-lock");
 
@@ -21,9 +19,6 @@ test.describe("AFF-US-002 app shell navigation", () => {
 		await expect(
 			page.getByRole("navigation", { name: "Điều hướng chính" }),
 		).toBeVisible();
-		await expect(
-			page.getByRole("navigation", { name: "Breadcrumb" }),
-		).toContainText("Video Affiliate Tai nghe");
 		await expect(page.getByRole("link", { name: "Fact Lock" })).toHaveAttribute(
 			"aria-current",
 			"step",
@@ -53,9 +48,7 @@ test.describe("AFF-US-002 app shell navigation", () => {
 		await expect(
 			page.getByText("Sản phẩm", { exact: true }).first(),
 		).toBeVisible();
-		await expect(
-			page.getByRole("button", { name: "Mở Job Center" }),
-		).toBeVisible();
+		await expect(page.getByRole("button", { name: "Thông báo" })).toBeVisible();
 	});
 });
 

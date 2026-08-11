@@ -21,6 +21,10 @@ sử dụng Semantic Versioning.
 
 ### Đã thay đổi
 
+- Hardening AFF-US-004: migration tooling dùng direct Neon URL, workspace actor dùng internal
+  workspace rõ ràng, repository update an toàn hơn và topbar hiển thị tên project persisted.
+- Bổ sung kiểm tra required fields, duplicate project name, persistence đủ brief/7 status và
+  authorization chéo workspace.
 - ProjectStepper đọc workflow current từ database, không coi route đang xem là
   trạng thái đã lưu.
 - Bootstrap auth có thể lặp lại để bảo đảm workspace membership cho fixed user hiện có.
@@ -45,6 +49,10 @@ sử dụng Semantic Versioning.
 - Hardening US004 trước merge: bỏ generic workflow mutation, sửa accessible label cho
   ProductSelector/E2E, kiểm tra workspace trước fixture, dùng chung Zod validation và
   dedupe server loader bằng `React.cache()`.
+- Đổi AppTopbar sang panel trắng bo tròn theo visual direction mới: title ngắn,
+  notification và Account Owner; bỏ Job Center khỏi header để giữ chrome gọn.
+- Gọn AppTopbar: bỏ cell title, mô tả và breadcrumb lặp lại ở đầu protected route;
+  giữ lại các utility action và ProjectStepper.
 
 ### Bảo mật
 

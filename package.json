@@ -16,6 +16,7 @@
 		"db:generate": "turbo run db:generate -F @affichannel/db",
 		"db:migrate": "turbo run db:migrate -F @affichannel/db",
 		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
+		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
 		"deploy:setup": "vercel link",
 		"dev:vercel": "vercel dev -L",
 		"env:preview": "tsx scripts/sync-vercel-env.ts preview",

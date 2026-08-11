@@ -34,10 +34,15 @@
 - Database smoke test tạo/đọc project, Content Brief và bảy status, rồi xóa chính record test:
   đạt.
 - `pnpm check-types`: đạt.
+- Unit test bổ sung missing required fields và duplicate project name; integration script kiểm tra
+  read/list/update/archive chéo workspace: đạt trên database runtime hiện tại.
 
 ## Lưu ý môi trường
 
-`DATABASE_URL` và `DATABASE_URL_DIRECT` hiện trỏ tới hai Neon project khác nhau. Runtime và
-migration đang dùng `DATABASE_URL` để giữ session/account hiện có. Trước khi deploy hoặc đổi
-database, thay cả hai URL bằng cặp pooled/direct của cùng một Neon project và chạy migration
-trên target đó.
+Runtime dùng `DATABASE_URL` pooled. Drizzle migration đã được cấu hình ưu tiên
+`DATABASE_URL_DIRECT`; hai biến local hiện vẫn trỏ tới hai Neon project khác nhau nên chưa
+được coi là cấu hình an toàn. Trước khi migrate/deploy, thay cả hai bằng cặp pooled/direct
+của cùng một Neon project/branch rồi chạy `pnpm db:migrate` trên target đó.
+
+`getWorkspaceActor()` chỉ resolve membership ở `INTERNAL_WORKSPACE_ID`; không chọn ngẫu nhiên
+membership cũ nhất khi một user có nhiều membership. Đây là invariant ownership của MVP 0.

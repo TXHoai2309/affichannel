@@ -1,82 +1,53 @@
 "use client";
 
 import { Button } from "@affichannel/ui/components/button";
-import {
-	Drawer,
-	DrawerBackdrop,
-	DrawerClose,
-	DrawerDescription,
-	DrawerPopup,
-	DrawerPortal,
-	DrawerTitle,
-	DrawerTrigger,
-} from "@affichannel/ui/components/drawer";
-import { Bell, BriefcaseBusiness, X } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Bell } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { toast } from "sonner";
 
-import { getAppTopbarContext } from "@/config/routes";
+import { getAppRouteFromPathname } from "@/config/routes";
+import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
+import { orpc } from "@/utils/orpc";
 
 import UserMenu from "../user-menu";
-import AppBreadcrumb from "./app-breadcrumb";
+
+function ProjectTitle({ projectId }: { projectId: string }) {
+	const fixture = getProjectFixture(projectId);
+	const projectQuery = useQuery(
+		orpc.project.get.queryOptions({
+			input: { id: projectId },
+			enabled: !fixture,
+		}),
+	);
+
+	return (
+		<h1 className="truncate font-semibold text-base text-foreground tracking-tight">
+			{fixture?.name ?? projectQuery.data?.name ?? "Dự án"}
+		</h1>
+	);
+}
 
 export default function AppTopbar() {
 	const pathname = usePathname();
-	const pageContext = getAppTopbarContext(pathname);
-	const isProjectRoute = pathname.startsWith("/projects/");
+	const pageTitle = getAppRouteFromPathname(pathname)?.title ?? "Tổng quan";
+	const [section, projectId] = pathname.split("/").filter(Boolean);
+	const isProjectRoute =
+		section === "projects" && projectId && projectId !== "new";
 
 	return (
-		<header className="flex min-h-24 items-center justify-between gap-4 border-b bg-background px-4 py-3 lg:px-6">
-			<div className="min-w-0 flex-1 space-y-0.5">
-				<h1 className="truncate font-semibold text-lg tracking-tight">
-					{pageContext.title}
+		<header className="mx-3 mt-3 flex min-h-14 items-center justify-between gap-4 rounded-[20px] border border-affi-blue-border bg-card px-5 py-2 shadow-sm lg:mx-5 lg:px-6">
+			{isProjectRoute ? (
+				<ProjectTitle projectId={projectId} />
+			) : (
+				<h1 className="truncate font-semibold text-base text-foreground tracking-tight">
+					{pageTitle}
 				</h1>
-				<p className="truncate text-muted-foreground text-sm italic">
-					{pageContext.description}
-				</p>
-				{isProjectRoute ? <AppBreadcrumb /> : null}
-			</div>
+			)}
 			<div className="flex items-center gap-2">
-				<Drawer>
-					<DrawerTrigger
-						render={
-							<Button variant="outline" size="sm" aria-label="Mở Job Center">
-								<BriefcaseBusiness aria-hidden="true" />
-								<span className="hidden sm:inline">Job Center</span>
-							</Button>
-						}
-					/>
-					<DrawerPortal>
-						<DrawerBackdrop />
-						<DrawerPopup>
-							<div className="flex items-start justify-between gap-4">
-								<div>
-									<DrawerTitle>Job Center</DrawerTitle>
-									<DrawerDescription>
-										Theo dõi job dài và retry sẽ được nối ở slice sau.
-									</DrawerDescription>
-								</div>
-								<DrawerClose
-									render={
-										<Button
-											variant="ghost"
-											size="icon"
-											aria-label="Đóng Job Center"
-										>
-											<X aria-hidden="true" />
-										</Button>
-									}
-								/>
-							</div>
-							<div className="mt-8 rounded-lg border border-dashed p-4 text-muted-foreground text-sm">
-								Chưa có job đang chạy.
-							</div>
-						</DrawerPopup>
-					</DrawerPortal>
-				</Drawer>
-
 				<Button
-					variant="outline"
+					className="rounded-full text-muted-foreground hover:bg-affi-blue-soft hover:text-foreground"
+					variant="ghost"
 					size="icon"
 					aria-label="Thông báo"
 					onClick={() =>

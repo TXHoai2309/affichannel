@@ -79,6 +79,8 @@ Không được:
 
 - Authentication không đủ để xác định quyền truy cập.
 - Mọi protected read/mutation phải kiểm tra ownership hoặc group access ở server.
+- Với MVP 0, `getWorkspaceActor()` phải resolve rõ `INTERNAL_WORKSPACE_ID`; không chọn
+  membership đầu tiên theo thời gian nếu user có nhiều membership.
 - Không tin `userId`, `projectId`, `productId`, media key hoặc job ID chỉ vì client
   gửi lên.
 - Mỗi protected aggregate phải có test từ chối truy cập chéo người dùng.
@@ -98,6 +100,8 @@ Không được:
 - Local `DATABASE_URL` và `DATABASE_URL_DIRECT` phải trỏ cùng một Neon project/branch.
   Trước khi migrate, kiểm tra host/database đã được nạp; không để inherited shell env âm thầm
   ghi đè `.env` của app.
+- Runtime luôn dùng pooled `DATABASE_URL`; Drizzle migration/schema tooling ưu tiên
+  `DATABASE_URL_DIRECT`.
 - Khi database đã có schema nhưng thiếu migration ledger, dừng để đối chiếu schema và ledger;
   không chạy `db:push` hoặc tạo lại bảng để “sửa nhanh”.
 
@@ -141,9 +145,9 @@ Không được:
   dùng hiểu trạng thái hoặc quyết định bước tiếp theo. Không thêm eyebrow/label
   chung chung như `Overview`, `Workflow` hoặc `Đang chuẩn bị` chỉ để lấp khoảng
   trống hay lặp lại title.
-- Khi topbar là page header chính, nó phải dùng cùng một contract cho mọi route:
-  title và mô tả in nghiêng. Không lặp lại contract này ở main content, và không
-  thay bằng một breadcrumb cell chỉ có title.
+- AppTopbar mặc định là một panel trắng bo tròn, chỉ giữ title ngắn theo route,
+  thông báo và tài khoản; không render mô tả dài hoặc breadcrumb chung. Không
+  thêm Job Center vào header nếu thiết kế được duyệt không hiển thị nó.
 - Eyebrow, badge và metadata phải thể hiện dữ liệu thật: số lượng, trạng thái,
   thời điểm hoặc ngữ cảnh cụ thể. Không dùng badge trạng thái cho cả một page
   nếu chưa có trạng thái domain tương ứng.

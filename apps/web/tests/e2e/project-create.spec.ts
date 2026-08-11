@@ -1,5 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { db, product, project } from "@affichannel/db";
+import {
+	contentBrief,
+	db,
+	product,
+	project,
+	projectStepStatus,
+} from "@affichannel/db";
 import { expect, type Page, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 
@@ -42,7 +48,35 @@ test.describe("AFF-US-004 project creation", () => {
 			projectId = page.url().match(/\/projects\/([^/]+)\/product$/)?.[1];
 			expect(projectId).toBeTruthy();
 
+			const [persistedProject] = await db
+				.select({
+					id: project.id,
+					currentStepKey: project.currentStepKey,
+				})
+				.from(project)
+				.where(eq(project.id, projectId as string));
+			expect(persistedProject).toEqual({
+				id: projectId,
+				currentStepKey: "product",
+			});
+
+			const persistedBrief = await db
+				.select({ id: contentBrief.id })
+				.from(contentBrief)
+				.where(eq(contentBrief.projectId, projectId as string));
+			expect(persistedBrief).toHaveLength(1);
+
+			const persistedStatuses = await db
+				.select({ stepKey: projectStepStatus.stepKey })
+				.from(projectStepStatus)
+				.where(eq(projectStepStatus.projectId, projectId as string));
+			expect(persistedStatuses).toHaveLength(7);
+
 			await page.goto(`/projects/${projectId}`);
+			await expect(page).toHaveURL(
+				new RegExp(`/projects/${projectId}/product$`),
+			);
+			await page.reload();
 			await expect(page).toHaveURL(
 				new RegExp(`/projects/${projectId}/product$`),
 			);

@@ -1,3 +1,4 @@
+import type { ProjectRepository } from "@affichannel/core/project/project-service";
 import {
 	createInitialProjectWorkflowState,
 	createProject,
@@ -14,6 +15,19 @@ const productId = "4d52617e-54d1-4f12-92d0-a98e7e9a4d81";
 describe("project domain contract", () => {
 	it("normalizes a project name without making it globally unique", () => {
 		expect(normalizeProjectName("  Video   Review  ")).toBe("video review");
+	});
+
+	it("rejects missing required Content Brief fields", () => {
+		const result = createProjectInputSchema.safeParse({
+			name: "",
+			productId: "",
+			platform: "tiktok",
+			goal: "",
+			durationSeconds: 30,
+			angle: "",
+		});
+
+		expect(result.success).toBe(false);
 	});
 
 	it("validates the Content Brief required fields", () => {
@@ -64,5 +78,54 @@ describe("project domain contract", () => {
 				},
 			),
 		).rejects.toBeInstanceOf(ProjectServiceError);
+	});
+
+	it("allows duplicate project names while keeping project records distinct", async () => {
+		const createdProjects: Array<{ id: string; name: string }> = [];
+		const repository: ProjectRepository<{ id: string; name: string }> = {
+			findAccessibleProduct: async () => ({ id: productId }),
+			createProjectBundle: async ({ input }) => {
+				const project = {
+					id: `project-${createdProjects.length + 1}`,
+					name: input.name,
+				};
+				createdProjects.push(project);
+				return project;
+			},
+			findProject: async () => undefined,
+			listProjects: async () => createdProjects,
+			updateProjectBundle: async () => undefined,
+			archiveProject: async () => undefined,
+		};
+		const input = {
+			name: "Chiến dịch mùa hè",
+			productId,
+			platform: "tiktok" as const,
+			goal: "Tạo đơn qua affiliate",
+			durationSeconds: 30,
+			description: undefined,
+			angle: "Review trải nghiệm dùng thật",
+		};
+
+		const first = await createProject(
+			repository,
+			{
+				workspaceId: "internal",
+				userId: "user-1",
+			},
+			input,
+		);
+		const second = await createProject(
+			repository,
+			{
+				workspaceId: "internal",
+				userId: "user-1",
+			},
+			input,
+		);
+
+		expect(first.name).toBe(second.name);
+		expect(first.id).not.toBe(second.id);
+		expect(createdProjects).toHaveLength(2);
 	});
 });
