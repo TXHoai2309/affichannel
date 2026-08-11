@@ -7,10 +7,16 @@ const fixedAccountName = process.env.E2E_AUTH_NAME ?? "Fixed Member";
 test.describe("AFF-US-001 authentication", () => {
 	test("redirects unauthenticated users away from the dashboard", async ({
 		page,
+		request,
 	}) => {
 		await page.goto("/dashboard");
 
 		await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
+		const dashboardResponse = await request.post(
+			"/api/rpc/dashboard/getOverview",
+			{ data: {} },
+		);
+		expect(dashboardResponse.status()).toBe(401);
 
 		await page.goto("/projects/demo/fact-lock");
 		await expect(page).toHaveURL(/\/login(?:\?.*)?$/);

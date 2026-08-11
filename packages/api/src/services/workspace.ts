@@ -1,5 +1,6 @@
 import { INTERNAL_WORKSPACE_ID } from "@affichannel/core/workspace";
 import { db, workspaceMember } from "@affichannel/db";
+import { ORPCError } from "@orpc/server";
 import { and, eq } from "drizzle-orm";
 
 export type WorkspaceActor = {
@@ -29,4 +30,16 @@ export async function getWorkspaceActor(
 		workspaceId: membership.workspaceId,
 		userId,
 	};
+}
+
+export async function requireWorkspaceActor(userId: string) {
+	const actor = await getWorkspaceActor(userId);
+
+	if (!actor) {
+		throw new ORPCError("FORBIDDEN", {
+			message: "Your account does not belong to an AffiChannel workspace.",
+		});
+	}
+
+	return actor;
 }

@@ -16,7 +16,7 @@ import {
 	getProjectDetails,
 	listProjectItems,
 } from "../services/project-repository";
-import { getWorkspaceActor } from "../services/workspace";
+import { requireWorkspaceActor } from "../services/workspace";
 
 function toOrpcError(error: unknown): never {
 	if (error instanceof ProjectServiceError) {
@@ -24,18 +24,6 @@ function toOrpcError(error: unknown): never {
 	}
 
 	throw error;
-}
-
-async function requireWorkspaceActor(userId: string) {
-	const actor = await getWorkspaceActor(userId);
-
-	if (!actor) {
-		throw new ORPCError("FORBIDDEN", {
-			message: "Your account does not belong to an AffiChannel workspace.",
-		});
-	}
-
-	return actor;
 }
 
 const repository = createDatabaseProjectRepository();

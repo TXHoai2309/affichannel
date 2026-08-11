@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
+import { dashboardRouter } from "./dashboard";
 import { productRouter } from "./product";
 import { projectRouter } from "./project";
 
@@ -14,6 +15,7 @@ export const appRouter = {
 			user: context.session?.user,
 		};
 	}),
+	dashboard: dashboardRouter,
 	product: productRouter,
 	project: projectRouter,
 };

@@ -10,6 +10,8 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- AFF-US-003: protected Dashboard aggregate, summary cards, recent project list/activity,
+  warning empty state, cost contract và loading/empty/error/retry states.
 - AFF-US-004: persistence Project, Content Brief, workflow seven-step và internal
   workspace ownership.
 - Form tạo project có validation, loading/error state, Product selector tạo nhanh,
@@ -21,6 +23,10 @@ sử dụng Semantic Versioning.
 
 ### Đã thay đổi
 
+- Dashboard chỉ đọc dữ liệu Project thật trong workspace hiện tại, không tạo mock metrics hoặc
+  bảng read model riêng; link project mở đúng `currentStepKey`.
+- Progress Dashboard được derive từ persisted completed step status và query recent projects
+  được giới hạn 5 bản ghi, tránh N+1 step status query.
 - Hardening AFF-US-004: migration tooling dùng direct Neon URL, workspace actor dùng internal
   workspace rõ ràng, repository update an toàn hơn và topbar hiển thị tên project persisted.
 - Bổ sung kiểm tra required fields, duplicate project name, persistence đủ brief/7 status và

@@ -9,7 +9,32 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 ## Mục tiêu hiện tại
 
-Hoàn thiện AFF-US-004 cho luồng tạo Project và Content Brief trên nền App Shell và Auth.
+Hoàn thiện AFF-US-003 Dashboard Overview trên nền Project persistence, App Shell và Auth.
+
+### 2026-08-11 — Triển khai AFF-US-003 Dashboard Overview
+
+Thay đổi:
+
+- Thêm contract và domain service Dashboard trong `packages/core`, gồm progress theo step status,
+  status/activity mapping và default cost/warning trung thực.
+- Thêm protected `dashboard.getOverview()` cùng Drizzle repository: query workspace-scoped,
+  recent project limit 5, order theo `updatedAt DESC`, step status tải theo một query `IN`.
+- Thay màn debug bằng summary cards, recent projects có link tới current step, activity, warning,
+  loading, empty, error/retry và route-level error boundary.
+- Thêm integration test kiểm tra workspace isolation, ordering, limit và current step; thêm E2E
+  click Dashboard → project current step khi fixed account được cấu hình.
+- Global query error chuyển sang message generic, không lộ raw server error.
+
+Kiểm tra:
+
+- `pnpm check-types`, `pnpm --filter web test` 16/16, `pnpm test:integration:dashboard`,
+  `pnpm --filter web build` và Biome scoped: đạt.
+- Playwright: 3 pass, 5 skipped vì thiếu fixed E2E credentials; Browser plugin không có nên
+  visual QA dùng Chrome cài sẵn qua Playwright fallback, chỉ xác nhận được unauthenticated redirect.
+
+Blocker:
+
+- Cần `E2E_AUTH_EMAIL`/`E2E_AUTH_PASSWORD` và cặp Neon pooled/direct cùng project để chốt gate.
 
 ### 2026-08-11 — Hardening theo review AFF-US-004
 

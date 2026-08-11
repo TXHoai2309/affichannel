@@ -88,6 +88,20 @@ test.describe("AFF-US-004 project creation", () => {
 
 			await page.goto("/projects");
 			await expect(page.getByText(projectName)).toBeVisible();
+
+			await page.goto("/dashboard");
+			await expect(
+				page.getByRole("heading", { name: "Tổng quan nhanh" }),
+			).toBeVisible();
+			await page
+				.getByRole("link", { name: `Mở project ${projectName}` })
+				.click();
+			await expect(page).toHaveURL(
+				new RegExp(`/projects/${projectId}/product$`),
+			);
+			await expect(
+				page.getByRole("navigation", { name: "Các bước project" }),
+			).toBeVisible();
 		} finally {
 			if (projectId) {
 				await db.delete(project).where(eq(project.id, projectId));

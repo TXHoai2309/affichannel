@@ -70,6 +70,10 @@ Không được:
 - Không expose mutation generic cho state machine/workflow. `currentStepKey` là source of
   truth: transition phải là business action có transaction cập nhật step status và current
   step nhất quán; nếu chưa có action thì giữ workflow read-only.
+- Dashboard là read model read-only: dùng một protected aggregate procedure, lấy workspace từ
+  server actor, không nhận `workspaceId` từ client và không tạo fake metrics/table riêng cho
+  module chưa tồn tại. Progress/activity phải derive trong core/domain service, không tính
+  business rule trực tiếp trong React component.
 - Trả typed error an toàn cho người dùng; không lộ stack trace, SQL, provider
   response hoặc secret.
 - Tắt hoặc bảo vệ OpenAPI reference trong production.
@@ -140,6 +144,8 @@ Không được:
   tự thêm gradient, glow hoặc đổi palette ngoài design system đã duyệt.
 - Làm loading, empty, validation, error, unauthorized và success ngay trong
   feature, không để thành cleanup sau.
+- Dashboard aggregate phải có loading skeleton, empty state theo từng vùng, lỗi generic và
+  retry gọi lại query thật; không hiện raw `error.message` hoặc số liệu giả để lấp khoảng trống.
 - Mỗi vùng chỉ có một primary action rõ ràng.
 - Header trang chỉ giữ title, mô tả ngắn và primary action khi chúng giúp người
   dùng hiểu trạng thái hoặc quyết định bước tiếp theo. Không thêm eyebrow/label

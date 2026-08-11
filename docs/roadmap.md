@@ -137,6 +137,11 @@ product trong form); Product management đầy đủ vẫn thuộc AFF-US-005. T
 phép trùng trong workspace. `currentStepKey` là workflow source of truth; các dòng
 `project_step_status` chỉ lưu `not_started`, `completed`, `needs_review` hoặc `blocked`.
 
+Trạng thái AFF-US-003 (2026-08-11): đã triển khai Dashboard read model từ Project thật.
+Dashboard dùng protected aggregate query, không thêm bảng riêng, hiển thị 4 summary card,
+recent projects giới hạn 5, activity derive từ created/updated timestamps, warnings/cost/job
+placeholder trung thực và mở project theo current step. Authenticated E2E còn chờ fixed account.
+
 ## 9. Slice 6 — Structured Script
 
 Backlog liên quan: `AFF-US-008` và `AFF-US-009`.
