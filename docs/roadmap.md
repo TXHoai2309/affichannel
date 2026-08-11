@@ -140,7 +140,8 @@ phép trùng trong workspace. `currentStepKey` là workflow source of truth; cá
 Trạng thái AFF-US-003 (2026-08-11): đã triển khai Dashboard read model từ Project thật.
 Dashboard dùng protected aggregate query, không thêm bảng riêng, hiển thị 4 summary card,
 recent projects giới hạn 5, activity derive từ created/updated timestamps, warnings/cost/job
-placeholder trung thực và mở project theo current step. Authenticated E2E còn chờ fixed account.
+placeholder trung thực và mở project theo current step. Authenticated E2E đã đạt 8/8, gồm
+flow tạo project → Dashboard → mở Recent Project → current step → ProjectStepper.
 
 ## 9. Slice 6 — Structured Script
 

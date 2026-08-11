@@ -28,6 +28,8 @@ sử dụng Semantic Versioning.
 - Dashboard polish: warning điều hướng tới `targetUrl` với severity rõ ràng, action tạo project
   dùng `CardAction`, copy hướng người dùng hơn, relative time dùng chung và loading skeleton
   bám đúng layout thật; lỗi inline không tạo thêm global toast.
+- Chốt authenticated E2E: Playwright tự nạp env cục bộ, fixed-account suite chạy tuần tự để
+  tránh tranh chấp session/dev server; 8/8 test đạt, không còn skipped.
 - Progress Dashboard được derive từ persisted completed step status và query recent projects
   được giới hạn 5 bản ghi, tránh N+1 step status query.
 - Hardening AFF-US-004: migration tooling dùng direct Neon URL, workspace actor dùng internal

@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 
 const fixedAccountEmail = process.env.E2E_AUTH_EMAIL;
 const fixedAccountPassword = process.env.E2E_AUTH_PASSWORD;
-const fixedAccountName = process.env.E2E_AUTH_NAME ?? "Fixed Member";
 
 test.describe("AFF-US-001 authentication", () => {
 	test("redirects unauthenticated users away from the dashboard", async ({
@@ -73,7 +72,7 @@ test.describe("AFF-US-001 authentication", () => {
 		await page.reload();
 		await expect(page).toHaveURL(/\/dashboard/);
 
-		await page.getByRole("button", { name: fixedAccountName }).click();
+		await page.getByRole("button", { name: "Account Owner" }).click();
 		await page.getByRole("menuitem", { name: "Đăng xuất" }).click();
 		await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
 	});

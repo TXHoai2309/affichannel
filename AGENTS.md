@@ -209,6 +209,12 @@ Chạy thêm unit, integration, migration, build và Playwright test phù hợp 
 có. Nếu không chạy được kiểm tra bắt buộc, ghi lý do chính xác trong bàn giao và
 `docs/ai-progress.md`.
 
+- Authenticated E2E dùng fixed account và dữ liệu dùng chung nên mặc định chạy một Playwright
+  worker. Không bật `fullyParallel` hoặc tăng worker cho tới khi mỗi worker có account và dữ
+  liệu test biệt lập.
+- Playwright được phép nạp credential từ `apps/web/.env` đã ignore; không commit, log hoặc đưa
+  `E2E_AUTH_PASSWORD` vào tài liệu.
+
 Không khẳng định visual state đúng nếu chưa kiểm tra bằng browser hoặc rendered
 artifact phù hợp.
 

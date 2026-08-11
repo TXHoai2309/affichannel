@@ -447,6 +447,28 @@ Blocker:
 - Cần cấu hình `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`, sau đó chạy lại authenticated E2E
   với mục tiêu `0 skipped` trước khi đánh dấu US003 Done.
 
+### 2026-08-11 — Đóng authenticated E2E gate cho AFF-US-003
+
+Mục tiêu:
+
+- Chạy thật toàn bộ authenticated flow với fixed account và đạt 0 failed, 0 skipped.
+
+Thay đổi:
+
+- Đồng bộ locator menu tài khoản với accessible name `Account Owner` của AppTopbar hiện tại.
+- Cho Playwright tự nạp `apps/web/.env` và chạy một worker vì suite dùng chung account/session
+  và dữ liệu Project.
+
+Kiểm tra:
+
+- `pnpm --filter web test:e2e`: 8/8 đạt, 0 failed, 0 skipped.
+- Flow create Project → Dashboard → Recent Project → `/projects/{id}/product` →
+  ProjectStepper đã chạy thật.
+
+Quyết định:
+
+- AFF-US-003 đủ điều kiện Done. Chỉ bật parallel E2E khi đã có isolation theo worker.
+
 ## Mẫu bản ghi
 
 ```text

@@ -1,6 +1,6 @@
 # AFF-US-003 — Dashboard Overview
 
-- Trạng thái: Đã triển khai và polish; còn QA authenticated bằng fixed E2E account.
+- Trạng thái: Done — authenticated E2E đã đạt 0 failed, 0 skipped.
 - Cập nhật: 2026-08-11
 - Mục tiêu: biến Dashboard debug thành read-only operational Dashboard từ Project data thật.
 
@@ -38,17 +38,18 @@
 ## Kiểm tra
 
 - `pnpm check-types`: đạt.
-- `pnpm --filter web test`: 16/16 đạt.
+- `pnpm --filter web test`: 18/18 đạt.
 - `pnpm test:integration:dashboard`: đạt workspace isolation, ordering, current step và limit 5.
 - `pnpm test:integration:project-auth`: giữ nguyên kiểm tra authorization Project.
 - `pnpm --filter web build`: đạt.
 - Biome scoped cho Dashboard/API/test: đạt.
-- Playwright: 3 pass, 5 skipped vì chưa có `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD`.
-- Playwright/system Chrome smoke `/dashboard`: redirect đúng về `/login`, nội dung có ý nghĩa,
-  không có console error; chưa thể chụp Dashboard authenticated khi thiếu fixed account.
+- `pnpm --filter web test:e2e`: 8/8 đạt, 0 failed, 0 skipped.
+- Flow authenticated đã chạy thật: login → create Project → Dashboard → Recent Project →
+  `/projects/{id}/product` → ProjectStepper visible.
+- Playwright tự nạp `apps/web/.env` và chạy một worker vì suite dùng chung fixed account và
+  dữ liệu project; không chạy song song cho tới khi mỗi worker có account/database isolation.
 
-## Blocker QA
+## Lưu ý vận hành
 
-- Cần cấu hình fixed E2E credentials để xác nhận authenticated Dashboard, click project tới
-  current step và hoàn tất gate không skip.
+- Không commit `E2E_AUTH_PASSWORD`; chỉ giữ credential test trong file env đã ignore.
 - `DATABASE_URL` và `DATABASE_URL_DIRECT` phải là cặp pooled/direct của cùng Neon project/branch.
