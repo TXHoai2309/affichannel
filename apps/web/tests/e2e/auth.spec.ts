@@ -72,7 +72,7 @@ test.describe("AFF-US-001 authentication", () => {
 		await page.reload();
 		await expect(page).toHaveURL(/\/dashboard/);
 
-		await page.getByRole("button", { name: "Account Owner" }).click();
+		await page.getByRole("button", { name: "Mở menu tài khoản" }).click();
 		await page.getByRole("menuitem", { name: "Đăng xuất" }).click();
 		await expect(page).toHaveURL(/\/login(?:\?.*)?$/);
 	});

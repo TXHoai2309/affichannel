@@ -104,6 +104,14 @@ MVP 0 không bao gồm Video AI, tạo lịch nội dung, analytics nâng cao v�
 
 ### Product
 
+Trong AFF-US-005, Product tối thiểu có `name`, `category`, `status`, `thumbnailUrl`,
+`sourceUrl`, `affiliateUrl`, `priceAmount` nullable integer và `currency=VND`. `archivedAt`
+là trạng thái lưu trữ độc lập với `status`; Product có thể được archive dù đang được Project
+tham chiếu. Product mới chỉ được chọn khi `status=active` và `archivedAt IS NULL`. Project cũ
+không bị tháo liên kết khi Product inactive/archived và vẫn phải đọc/lưu được nếu giữ nguyên
+`productId`. Xóa cứng chỉ hợp lệ khi không còn dòng Project tham chiếu; US005 chưa bao gồm
+Product Facts CRUD, R2 hay media upload đầy đủ.
+
 Sản phẩm affiliate tái sử dụng, gồm danh tính, link affiliate, trạng thái, media
 và tham chiếu hiệu suất.
 

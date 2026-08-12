@@ -86,7 +86,11 @@ export function ProjectForm() {
 	const router = useRouter();
 	const [values, setValues] = useState<ProjectFormValues>(INITIAL_VALUES);
 	const [errors, setErrors] = useState<FieldErrors>({});
-	const products = useQuery(orpc.product.listMinimal.queryOptions());
+	const products = useQuery(
+		orpc.product.listMinimal.queryOptions({
+			input: { selectableOnly: true },
+		}),
+	);
 	const createProduct = useMutation(
 		orpc.product.createMinimal.mutationOptions(),
 	);

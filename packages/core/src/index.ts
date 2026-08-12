@@ -1,3 +1,5 @@
+export * from "./product/product-errors";
+export * from "./product/product-types";
 export * from "./product/validation";
 export * from "./project/project-service";
 export * from "./project/project-types";

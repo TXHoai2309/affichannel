@@ -8,5 +8,9 @@ export default function ErrorBoundary({
 	error: Error & { digest?: string };
 	reset: () => void;
 }) {
-	return <DashboardError onRetry={reset} />;
+	return (
+		<div className="mx-auto w-full max-w-6xl">
+			<DashboardError onRetry={reset} />
+		</div>
+	);
 }

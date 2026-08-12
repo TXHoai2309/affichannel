@@ -208,6 +208,30 @@ password, email verification, 2FA, organization và role nằm ngoài US001.
 Acceptance Criteria của Slice 1 dùng fixed-account bootstrap thay cho đăng ký mở.
 Mọi thay đổi ownership/group vẫn phải chốt trước Product schema theo DEC-008.
 
+## DEC-011 — Vòng đời Product và liên kết Project trong AFF-US-005
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-11
+
+### Bối cảnh
+
+Product được tái sử dụng bởi nhiều Project. Archive Product không được làm hỏng các Project
+cũ, nhưng Product đã inactive hoặc archived không được chọn cho Project mới.
+
+### Quyết định
+
+Giữ quan hệ `project.productId` với foreign key restrict. `Product.status` biểu diễn active/inactive;
+`archivedAt` biểu diễn archive. Selector mới dùng `listMinimal({ selectableOnly: true })` và lọc
+`status=active AND archivedAt IS NULL`. Khi update Project, Product hiện tại được phép giữ nguyên
+dù đã inactive/archived; đổi sang Product khác vẫn phải thỏa điều kiện selectable. `referenceCount`
+đếm mọi Project còn tồn tại, kể cả Project đã archive. Hard delete chỉ thực hiện khi count bằng 0.
+
+### Hệ quả
+
+Product detail phải hiển thị usage count và các Project liên quan. Delete bị chặn bằng lỗi domain
+`PRODUCT_IN_USE`; archive/restore là action riêng. US005 không mở rộng sang Product Facts, R2,
+media upload hoặc grid/list toggle.
+
 ## DEC-010 — App Shell trước persistence Project
 
 - Trạng thái: Đã chấp nhận

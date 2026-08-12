@@ -1,5 +1,5 @@
-import FeaturePlaceholder from "@/components/feature-placeholder";
+import { ProductLibrary } from "@/features/product/product-library";
 
 export default function ProductsPage() {
-	return <FeaturePlaceholder />;
+	return <ProductLibrary />;
 }

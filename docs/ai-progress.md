@@ -1,6 +1,6 @@
 # Tiến trình AI agent
 
-- Trạng thái: Đang hoạt động
+- Trạng thái: AFF-US-003 đã hoàn thành; đang thực hiện cleanup sau story.
 - Cập nhật lần cuối: 2026-08-11
 
 File này ghi lại công việc đáng kể do AI agent thực hiện. Đây không phải chain of
@@ -9,7 +9,53 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 ## Mục tiêu hiện tại
 
-Hoàn thiện AFF-US-003 Dashboard Overview trên nền Project persistence, App Shell và Auth.
+AFF-US-005 Product Management đã hoàn thành trên branch `feat/us005-product-management`.
+
+### 2026-08-11 — Triển khai AFF-US-005 Product Management
+
+Phạm vi đã làm:
+
+- Mở rộng Product schema với `status`, link nguồn, thumbnail HTTPS, giá integer nullable và currency VND;
+  tạo migration `0003_unusual_maria_hill` và apply vào Neon development.
+- Hoàn thiện Product domain validation, list/search/filter, detail, create, update, archive, restore và
+  hard delete có chặn khi Product còn được Project tham chiếu.
+- Thêm Product Library, form, detail page, status badge, usage count, related projects, loading/empty/error
+  state và dialog xác nhận xóa.
+- Giữ `listMinimal({ selectableOnly: true })` cho Project selector; Product inactive/archived không được
+  chọn cho Project mới, nhưng Project cũ vẫn đọc/lưu được Product đang giữ liên kết.
+- Bổ sung unit test domain và integration test DB thật cho reuse, archive, restore, delete và workspace isolation.
+
+Kiểm tra:
+
+- `pnpm --filter @affichannel/core check-types`, `@affichannel/db check-types`, `@affichannel/api check-types` và
+  `pnpm --filter web check-types`: đạt.
+- `pnpm --filter web test`: 26/26 đạt.
+- `pnpm test:integration:product`: đạt và đã cleanup dữ liệu test.
+- Biome scope US005: đạt.
+
+Trạng thái story: đủ điều kiện đánh Done trong phạm vi US005. Authenticated E2E chạy bằng fixed
+account đạt 9 passed, 0 failed, 0 skipped; build production và visual QA desktop/mobile đã đạt.
+
+### 2026-08-11 — Cleanup sau AFF-US-003
+
+Mục tiêu:
+
+- Đồng bộ current status sau khi Dashboard đã dùng dữ liệu Project thật.
+- Hiển thị identity từ session trong user menu, có fallback an toàn về email.
+- Đảm bảo CI fail rõ ràng nếu authenticated E2E thiếu credentials bắt buộc.
+
+Thay đổi:
+
+- Bỏ label `Account Owner` hardcoded; dùng `session.user.name` sau khi trim, fallback về email.
+- Dùng accessible label ổn định `Mở menu tài khoản` cho trigger và cập nhật E2E locator.
+- Playwright vẫn tự load `apps/web/.env` ở local; khi `CI` truthy, thiếu
+  `E2E_AUTH_EMAIL` hoặc `E2E_AUTH_PASSWORD` sẽ dừng test ngay sau bước load env.
+- Giữ nguyên các entry lịch sử bên dưới để phân biệt blocker tại thời điểm cũ với trạng thái hiện tại.
+
+Kiểm tra:
+
+- Authenticated Playwright: 8 passed, 0 failed, 0 skipped với fixed account đã cấu hình ngoài repository.
+- Unit test cho display name/fallback, check-types, build và Biome scoped đạt.
 
 ### 2026-08-11 — Triển khai AFF-US-003 Dashboard Overview
 
@@ -157,14 +203,14 @@ Kiểm tra:
   vào Neon development.
 - AFF-US-001 Auth session, AFF-US-002 App Shell/Navigation và AFF-US-004 Project + Content
   Brief đã được triển khai.
-- AFF-US-005 Product management đầy đủ, AFF-US-003 Dashboard dùng dữ liệu thật và các feature
-  production workflow vẫn chưa được triển khai.
+- AFF-US-005 Product Management đã hoàn thành; AFF-US-003 Dashboard dùng dữ liệu thật và các
+  feature production workflow tiếp theo vẫn chưa được triển khai.
 
 ## Hành động khuyến nghị tiếp theo
 
-1. Làm AFF-US-003 Dashboard từ dữ liệu Project thật của US004.
-2. Mở AFF-US-005 để hoàn thiện Product management ngoài selector tối thiểu.
-3. Cấu hình `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD` để chạy happy-path browser test.
+1. Mở AFF-US-006 Product Facts theo dependency của Product đã hoàn thiện.
+2. Giữ nguyên `E2E_AUTH_EMAIL` và `E2E_AUTH_PASSWORD` ở môi trường local/CI, không đưa credential vào repository.
+3. Chốt storage/media decision trước khi bắt đầu các slice media tiếp theo.
 
 ## Blocker và quyết định còn mở
 

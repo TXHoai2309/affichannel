@@ -3,6 +3,7 @@ import {
 	createInitialProjectWorkflowState,
 	createProject,
 	ProjectServiceError,
+	updateProject,
 } from "@affichannel/core/project/project-service";
 import {
 	createProjectInputSchema,
@@ -127,5 +128,37 @@ describe("project domain contract", () => {
 		expect(first.name).toBe(second.name);
 		expect(first.id).not.toBe(second.id);
 		expect(createdProjects).toHaveLength(2);
+	});
+
+	it("allows an existing project to keep its archived product reference", async () => {
+		const calls: Array<{ productId: string; projectId?: string }> = [];
+		const repository: ProjectRepository<{ id: string }> = {
+			findAccessibleProduct: async (input) => {
+				calls.push({ productId: input.productId, projectId: input.projectId });
+				return input.projectId ? { id: input.productId } : undefined;
+			},
+			createProjectBundle: async () => ({ id: "created" }),
+			findProject: async () => ({ id: "project-1" }),
+			listProjects: async () => [],
+			updateProjectBundle: async () => ({ id: "project-1" }),
+			archiveProject: async () => undefined,
+		};
+
+		await updateProject(
+			repository,
+			{ workspaceId: "internal", userId: "user-1" },
+			{
+				id: "project-1",
+				name: "Review tai nghe",
+				productId,
+				platform: "tiktok",
+				goal: "Tạo đơn qua affiliate",
+				durationSeconds: 30,
+				description: undefined,
+				angle: "Review trải nghiệm dùng thật",
+			},
+		);
+
+		expect(calls).toEqual([{ productId, projectId: "project-1" }]);
 	});
 });

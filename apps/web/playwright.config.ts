@@ -6,6 +6,15 @@ dotenv.config({
 	path: resolve(__dirname, ".env"),
 });
 
+const e2eEmail = process.env.E2E_AUTH_EMAIL?.trim();
+const e2ePassword = process.env.E2E_AUTH_PASSWORD?.trim();
+
+if (process.env.CI && (!e2eEmail || !e2ePassword)) {
+	throw new Error(
+		"E2E_AUTH_EMAIL and E2E_AUTH_PASSWORD are required for authenticated Playwright tests in CI.",
+	);
+}
+
 export default defineConfig({
 	testDir: "./tests/e2e",
 	timeout: 30_000,

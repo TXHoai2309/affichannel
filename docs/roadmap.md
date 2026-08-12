@@ -105,6 +105,11 @@ Mở Products → tạo product → sửa product → archive product
 - List/detail có loading, empty, error và unauthorized.
 - Product có dependency được archive thay vì xóa cứng.
 
+Trạng thái AFF-US-005 (2026-08-11): đã triển khai vertical slice Product Library. Đã có
+schema/migration, domain validation, workspace-scoped API, search/filter, create/update/detail,
+archive/restore/delete và UI states. Invariant MVP: Product mới chỉ được chọn khi `status=active`
+và `archivedAt IS NULL`; archive không tháo liên kết Project; hard delete chỉ khi reference count bằng 0.
+
 ## 7. Slice 4 — Product Facts
 
 Backlog liên quan: `AFF-US-006` và `AFF-US-007`.

@@ -10,6 +10,8 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- AFF-US-005: Product Library, Product CRUD, search/filter, archive/restore, usage count và hard-delete guard;
+  Product được workspace-scope và có migration field status/source/affiliate/price/currency.
 - AFF-US-003: protected Dashboard aggregate, summary cards, recent project list/activity,
   warning empty state, cost contract và loading/empty/error/retry states.
 - AFF-US-004: persistence Project, Content Brief, workflow seven-step và internal
@@ -23,6 +25,8 @@ sử dụng Semantic Versioning.
 
 ### Đã thay đổi
 
+- Cleanup sau AFF-US-003: user menu hiển thị identity từ session với fallback email; CI fail rõ ràng
+  nếu authenticated E2E thiếu `E2E_AUTH_EMAIL` hoặc `E2E_AUTH_PASSWORD`.
 - Dashboard chỉ đọc dữ liệu Project thật trong workspace hiện tại, không tạo mock metrics hoặc
   bảng read model riêng; link project mở đúng `currentStepKey`.
 - Dashboard polish: warning điều hướng tới `targetUrl` với severity rõ ràng, action tạo project

@@ -15,6 +15,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { authClient } from "@/lib/auth-client";
+import { getUserDisplayName } from "./user-display-name";
 
 export default function UserMenu() {
 	const router = useRouter();
@@ -33,17 +34,20 @@ export default function UserMenu() {
 		);
 	}
 
+	const displayName = getUserDisplayName(session.user);
+
 	return (
 		<DropdownMenu>
 			<DropdownMenuTrigger
 				render={
 					<Button
+						aria-label="Mở menu tài khoản"
 						className="h-9 rounded-full border-affi-blue-border bg-affi-blue-soft px-3 text-affi-blue text-xs hover:bg-affi-blue-soft/80"
 						variant="outline"
 					/>
 				}
 			>
-				Account Owner
+				{displayName}
 			</DropdownMenuTrigger>
 			<DropdownMenuContent className="bg-card">
 				<DropdownMenuGroup>

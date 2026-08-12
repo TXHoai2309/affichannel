@@ -15,7 +15,7 @@ import {
 	project,
 	projectStepStatus,
 } from "@affichannel/db";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, isNull, or } from "drizzle-orm";
 
 export type ProjectDetails = {
 	id: string;
@@ -153,7 +153,30 @@ export async function listProjectItems(
 
 export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 	return {
-		async findAccessibleProduct({ workspaceId, productId }) {
+		async findAccessibleProduct({ workspaceId, productId, projectId }) {
+			if (projectId) {
+				const [existingProjectProduct] = await db
+					.select({ id: product.id })
+					.from(product)
+					.leftJoin(project, eq(project.productId, product.id))
+					.where(
+						and(
+							eq(product.id, productId),
+							eq(product.workspaceId, workspaceId),
+							or(
+								and(eq(product.status, "active"), isNull(product.archivedAt)),
+								and(
+									eq(project.id, projectId),
+									eq(project.workspaceId, workspaceId),
+								),
+							),
+						),
+					)
+					.limit(1);
+
+				return existingProjectProduct;
+			}
+
 			const [existingProduct] = await db
 				.select({ id: product.id })
 				.from(product)
@@ -161,6 +184,7 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 					and(
 						eq(product.id, productId),
 						eq(product.workspaceId, workspaceId),
+						eq(product.status, "active"),
 						isNull(product.archivedAt),
 					),
 				)
@@ -179,6 +203,7 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 						and(
 							eq(product.id, input.productId),
 							eq(product.workspaceId, actor.workspaceId),
+							eq(product.status, "active"),
 							isNull(product.archivedAt),
 						),
 					)

@@ -59,7 +59,7 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 			"Quản lý sản phẩm, Product Facts và thông tin nguồn để tái sử dụng trong các dự án affiliate.",
 		href: "/products",
 		icon: PackageOpen,
-		featureStatus: "skeleton",
+		featureStatus: "available",
 	},
 	media: {
 		key: "media",

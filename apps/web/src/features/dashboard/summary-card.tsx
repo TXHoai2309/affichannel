@@ -23,7 +23,7 @@ export default function SummaryCard({
 }) {
 	return (
 		<Card className="rounded-2xl border border-affi-blue-border/80 shadow-sm">
-			<CardContent className="flex min-h-36 flex-col justify-between gap-5 p-5">
+			<CardContent className="flex min-h-32 flex-col justify-between gap-4 px-5 py-4">
 				<div className="flex items-center justify-between gap-3">
 					<p className="font-medium text-muted-foreground text-sm">{label}</p>
 					<span

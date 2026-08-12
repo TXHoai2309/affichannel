@@ -43,6 +43,7 @@ export type ProjectRepository<TProject> = {
 	findAccessibleProduct(input: {
 		workspaceId: string;
 		productId: string;
+		projectId?: string;
 	}): Promise<{ id: string } | undefined>;
 	createProjectBundle(input: {
 		actor: ProjectActor;
@@ -103,6 +104,7 @@ export async function updateProject<TProject>(
 	const product = await repository.findAccessibleProduct({
 		workspaceId: actor.workspaceId,
 		productId: input.productId,
+		projectId: input.id,
 	});
 
 	if (!product) {
