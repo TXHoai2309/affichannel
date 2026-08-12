@@ -20,6 +20,27 @@ export function hasFactEvidence(
 	);
 }
 
+export function hasSupportingSource(
+	fact: Pick<ProductFactRecord, "sourceType" | "sourceLabel" | "sourceUrl">,
+) {
+	const sourceType = fact.sourceType?.trim();
+	const sourceLabel = fact.sourceLabel?.trim();
+	const sourceUrl = fact.sourceUrl?.trim();
+	if (!sourceType) return false;
+	if (sourceLabel) return true;
+	if (!sourceUrl) return false;
+
+	try {
+		const parsed = new URL(sourceUrl);
+		return Boolean(
+			parsed.hostname &&
+				(parsed.protocol === "http:" || parsed.protocol === "https:"),
+		);
+	} catch {
+		return false;
+	}
+}
+
 export function isFactEligibleForAi(
 	fact: Pick<
 		ProductFactRecord,

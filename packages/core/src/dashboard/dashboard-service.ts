@@ -1,3 +1,4 @@
+import type { FactFreshnessPolicy } from "../product-fact/freshness";
 import {
 	evaluateFactFreshness,
 	FACT_FRESHNESS_POLICY,
@@ -9,6 +10,7 @@ import {
 } from "../project/project-types";
 import type {
 	DashboardActivity,
+	DashboardFactFreshnessRecord,
 	DashboardOverview,
 	DashboardProjectRecord,
 	DashboardProjectStatus,
@@ -85,23 +87,19 @@ export function toDashboardActivity(
 	};
 }
 
-function toDashboardWarnings(
-	records: Awaited<
-		ReturnType<NonNullable<DashboardRepository["listFactFreshnessRecords"]>>
-	>,
-) {
-	const today = resolveBusinessToday();
+export function buildDashboardFactWarnings(input: {
+	records: DashboardFactFreshnessRecord[];
+	today: string;
+	policy?: FactFreshnessPolicy;
+}) {
+	const { records, today, policy = FACT_FRESHNESS_POLICY } = input;
 	const byProduct = new Map<
 		string,
 		{ productName: string; stale: number; expired: number }
 	>();
 
 	for (const record of records) {
-		const freshness = evaluateFactFreshness(
-			record,
-			today,
-			FACT_FRESHNESS_POLICY,
-		);
+		const freshness = evaluateFactFreshness(record, today, policy);
 		if (freshness.status !== "needs_update" && freshness.status !== "expired") {
 			continue;
 		}
@@ -168,6 +166,10 @@ export async function getDashboardOverview(
 		},
 		recentProjects: recentProjectRecords.map(toDashboardRecentProject),
 		recentActivities: recentProjectRecords.map(toDashboardActivity),
-		warnings: toDashboardWarnings(factFreshnessRecords),
+		warnings: buildDashboardFactWarnings({
+			records: factFreshnessRecords,
+			today: resolveBusinessToday(),
+			policy: FACT_FRESHNESS_POLICY,
+		}),
 	};
 }

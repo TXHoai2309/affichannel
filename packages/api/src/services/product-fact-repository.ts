@@ -320,7 +320,8 @@ export async function updateProductFactRecord(
 					eq(product.workspaceId, actor.workspaceId),
 				),
 			)
-			.limit(1);
+			.limit(1)
+			.for("update", { of: productFact });
 		if (!current) {
 			return { kind: "not_found" as const };
 		}
@@ -409,7 +410,8 @@ export async function deleteProductFactRecord(
 					eq(product.workspaceId, actor.workspaceId),
 				),
 			)
-			.limit(1);
+			.limit(1)
+			.for("update", { of: productFact });
 		if (!current) {
 			return { kind: "not_found" as const };
 		}

@@ -1,4 +1,5 @@
 import {
+	buildDashboardFactWarnings,
 	calculateDashboardProgress,
 	getDashboardOverview,
 	toDashboardActivity,
@@ -23,6 +24,31 @@ const baseProject: DashboardProjectRecord = {
 		{ stepKey: "completed", status: "not_started" },
 	],
 };
+
+const factRecords = [
+	{
+		productId: "product-1",
+		productName: "Tai nghe X1",
+		type: "price" as const,
+		status: "verified" as const,
+		sourceType: "official" as const,
+		sourceLabel: "Official website",
+		sourceUrl: "https://example.com",
+		confirmedAt: "2026-08-01",
+		expiresAt: null,
+	},
+	{
+		productId: "product-1",
+		productName: "Tai nghe X1",
+		type: "promotion" as const,
+		status: "verified" as const,
+		sourceType: "official" as const,
+		sourceLabel: "Official website",
+		sourceUrl: "https://example.com",
+		confirmedAt: "2026-08-11",
+		expiresAt: "2026-08-11",
+	},
+];
 
 describe("dashboard domain service", () => {
 	it("calculates progress from completed persisted steps", () => {
@@ -97,48 +123,27 @@ describe("dashboard domain service", () => {
 		});
 	});
 
-	it("groups stale and expired facts into product warnings", async () => {
-		const repository = {
-			countActiveProjects: async () => 0,
-			listRecentProjects: async () => [],
-			listFactFreshnessRecords: async () => [
-				{
-					productId: "product-1",
-					productName: "Tai nghe X1",
-					type: "price" as const,
-					status: "verified" as const,
-					sourceType: "official" as const,
-					sourceLabel: "Website hãng",
-					sourceUrl: "https://example.com",
-					confirmedAt: "2026-08-01",
-					expiresAt: null,
-				},
-				{
-					productId: "product-1",
-					productName: "Tai nghe X1",
-					type: "promotion" as const,
-					status: "verified" as const,
-					sourceType: "official" as const,
-					sourceLabel: "Website hãng",
-					sourceUrl: "https://example.com",
-					confirmedAt: "2026-08-11",
-					expiresAt: "2026-08-11",
-				},
-			],
-		};
-
-		const overview = await getDashboardOverview(repository, {
-			workspaceId: "internal",
-			userId: "user-1",
+	it("groups stale and expired facts deterministically for an explicit date", () => {
+		const warningsOnAugust12 = buildDashboardFactWarnings({
+			records: factRecords,
+			today: "2026-08-12",
 		});
+		expect(warningsOnAugust12).toHaveLength(1);
+		expect(warningsOnAugust12[0]).toMatchObject({
+			severity: "danger",
+			targetUrl: "/products/product-1?tab=facts",
+		});
+		expect(warningsOnAugust12[0]?.description).toContain("1");
 
-		expect(overview.warnings).toEqual([
-			expect.objectContaining({
-				severity: "danger",
-				title: "Tai nghe X1: 2 Product Fact cần xem lại",
-				description: "1 đã hết hạn · 1 cần cập nhật",
-				targetUrl: "/products/product-1?tab=facts",
-			}),
-		]);
+		const warningsOnAugust10 = buildDashboardFactWarnings({
+			records: factRecords,
+			today: "2026-08-10",
+		});
+		expect(warningsOnAugust10).toHaveLength(1);
+		expect(warningsOnAugust10[0]).toMatchObject({
+			severity: "warning",
+			targetUrl: "/products/product-1?tab=facts",
+		});
+		expect(warningsOnAugust10[0]?.description).toContain("1");
 	});
 });

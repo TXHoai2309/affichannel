@@ -10,7 +10,7 @@ const verifiedPrice = {
 	type: "price" as const,
 	status: "verified" as const,
 	sourceType: "official" as const,
-	sourceLabel: "Website hãng",
+	sourceLabel: "Official website",
 	sourceUrl: "https://example.com/price",
 	confirmedAt: "2026-08-11",
 	expiresAt: null,
@@ -85,6 +85,46 @@ describe("Product Fact freshness policy", () => {
 			verification: "verified",
 			evidence: "complete",
 			freshness: "fresh",
+		});
+	});
+
+	it("requires a supporting source for optional fact generation", () => {
+		const featureWithoutSource = {
+			...verifiedPrice,
+			type: "feature" as const,
+			sourceType: null,
+			sourceLabel: null,
+			sourceUrl: null,
+		};
+		const featureWithSource = {
+			...verifiedPrice,
+			type: "feature" as const,
+		};
+		const specificationWithoutSource = {
+			...featureWithoutSource,
+			type: "specification" as const,
+		};
+
+		expect(evaluateFactAssessment(featureWithoutSource, today)).toMatchObject({
+			verification: "verified",
+			evidence: "missing",
+			freshness: "not_applicable",
+		});
+		expect(
+			evaluateFactGenerationUsability(featureWithoutSource, today).usability,
+		).toBe("blocked");
+		expect(evaluateFactAssessment(featureWithSource, today)).toMatchObject({
+			evidence: "complete",
+			freshness: "not_applicable",
+		});
+		expect(
+			evaluateFactGenerationUsability(featureWithSource, today).usability,
+		).toBe("allowed");
+		expect(
+			evaluateFactAssessment(specificationWithoutSource, today),
+		).toMatchObject({
+			evidence: "missing",
+			freshness: "not_applicable",
 		});
 	});
 });

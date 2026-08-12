@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
 	factRequiresEvidence,
 	hasFactEvidence,
+	hasSupportingSource,
 	isFactEligibleForAi,
 } from "./eligibility";
 import type {
@@ -209,11 +210,7 @@ export function evaluateFactAssessment(
 	today: string,
 	policy: FactFreshnessPolicy = FACT_FRESHNESS_POLICY,
 ): FactAssessment {
-	const evidence = factRequiresEvidence(fact.type)
-		? hasFactEvidence(fact)
-			? "complete"
-			: "missing"
-		: "complete";
+	const evidence = hasSupportingSource(fact) ? "complete" : "missing";
 	const freshness = evaluateFactFreshness(fact, today, policy);
 	return {
 		verification: fact.status,

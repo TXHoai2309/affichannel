@@ -108,3 +108,6 @@ sử dụng Semantic Versioning.
   Dashboard warning deep-link về Product Facts.
 - Product Facts hiển thị badge freshness/evidence; migration `0005_exotic_edwin_jarvis.sql`
   đã apply trên Neon branch hiện tại.
+- AFF-US-007 hardening: khóa hàng Product Fact khi register/replace và update/delete để không
+  tạo active dependency stale; evidence assessment kiểm tra supporting source cho cả Fact type
+  optional; Dashboard warning test nhận ngày tường minh và có regression race.

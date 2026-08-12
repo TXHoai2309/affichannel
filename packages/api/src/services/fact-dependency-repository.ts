@@ -86,7 +86,8 @@ async function findFactForActor(
 				eq(product.workspaceId, actor.workspaceId),
 			),
 		)
-		.limit(1);
+		.limit(1)
+		.for("update", { of: productFact });
 	return record;
 }
 
@@ -232,21 +233,13 @@ export async function replaceFactDependencies(
 ) {
 	const productFactIds = [...new Set(input.productFactIds)];
 	return db.transaction(async (transaction) => {
-		const facts = productFactIds.length
-			? await transaction
-					.select({ id: productFact.id, revision: productFact.revision })
-					.from(productFact)
-					.innerJoin(product, eq(product.id, productFact.productId))
-					.where(
-						and(
-							eq(productFact.workspaceId, actor.workspaceId),
-							eq(product.workspaceId, actor.workspaceId),
-							inArray(productFact.id, productFactIds),
-						),
-					)
-			: [];
-		if (facts.length !== productFactIds.length) {
-			return { kind: "fact_not_found" as const };
+		const facts = [];
+		for (const productFactId of [...productFactIds].sort()) {
+			const fact = await findFactForActor(transaction, actor, productFactId);
+			if (!fact) {
+				return { kind: "fact_not_found" as const };
+			}
+			facts.push(fact);
 		}
 
 		const activeDependencies = await transaction

@@ -344,10 +344,16 @@ sản xuất đã tham chiếu revision cũ phải được đánh dấu cần x
   notes-only không tăng revision. Update/delete dùng optimistic CAS với `expectedRevision`.
 - Dependency engine dùng bảng `fact_dependency` và `fact_invalidation_event`. Register phải
   tự đọc revision hiện tại ở server, idempotent; replace detach dependency bị bỏ; mutation,
-  history, revision, invalidation và event nằm trong cùng transaction. Clock freshness không
-  tự invalidation dependency.
+  history, revision, invalidation và event nằm trong cùng transaction. Register/replace và
+  mutation Product Fact cùng khóa hàng Fact bằng `FOR UPDATE`, replace khóa theo thứ tự ổn định
+  để không commit active dependency stale với revision hiện tại. Clock freshness không tự
+  invalidation dependency.
+- Assessment evidence phản ánh supporting source thực tế cho mọi loại Fact: cần `sourceType` và
+  `sourceLabel` hoặc URL `http/https` hợp lệ; rule evidence bắt buộc của US006 và
+  `isFactEligibleForAi()` vẫn giữ nguyên. Generation usability vẫn chặn khi assessment thiếu source.
 - Dashboard chỉ hiển thị cảnh báo aggregate theo Product và deep-link về
-  `/products/{productId}?tab=facts`; không tạo warning table riêng.
+  `/products/{productId}?tab=facts`; không tạo warning table riêng. Logic aggregate là pure function
+  nhận `today` và policy tường minh; runtime mới lấy ngày nghiệp vụ theo timezone.
 
 ### Hệ quả
 

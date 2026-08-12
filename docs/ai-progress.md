@@ -1,6 +1,6 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-006 đã hoàn thành sau hardening trên branch `feat/us006-product-facts`; chưa commit/push/merge/deploy.
+- Trạng thái: AFF-US-007 đã hoàn thành sau hardening trên branch `feat/us006-product-facts`; chưa commit/push/merge/deploy.
 - Cập nhật lần cuối: 2026-08-12
 
 File này ghi lại công việc đáng kể do AI agent thực hiện. Đây không phải chain of
@@ -9,7 +9,8 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 ## Mục tiêu hiện tại
 
-AFF-US-006 Product Facts đã hoàn thành trên branch `feat/us006-product-facts`.
+AFF-US-007 Fact Freshness & Dependency Invalidation đã hoàn thành trên branch
+`feat/us006-product-facts`.
 
 ### 2026-08-12 — Hardening AFF-US-006 Product Facts
 
@@ -658,3 +659,29 @@ Kiểm tra:
 - Migration `0005_exotic_edwin_jarvis.sql` đã review và apply bằng `DATABASE_URL_DIRECT`.
 
 Trạng thái story: AFF-US-007 đã hoàn tất trong phạm vi đã chốt. Chưa commit/push/merge/deploy.
+
+### 2026-08-12 — Hardening AFF-US-007 Fact Freshness & Dependency Invalidation
+
+Đã xử lý ba blocker cuối:
+
+- Register/replace dependency và update/delete Product Fact cùng khóa hàng Fact bằng `FOR UPDATE`;
+  replace khóa nhiều Fact theo thứ tự ổn định. Bổ sung integration race test cho register-vs-update
+  và replace-vs-update, kiểm tra không còn active dependency stale sau commit.
+- Tách `hasSupportingSource()` khỏi `hasFactEvidence()`: assessment kiểm tra source thực tế cho
+  mọi Fact type, gồm source label hoặc URL `http/https` hợp lệ; generation usability chặn evidence
+  missing dù `isFactEligibleForAi()` vẫn giữ nguyên rule US006.
+- Tách pure `buildDashboardFactWarnings({ records, today, policy })`; runtime mới inject business
+  date theo timezone. Unit test cố định ngày `2026-08-12` và `2026-08-10`.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: 40/40 đạt.
+- `pnpm run test:integration:product-facts`, `dashboard`, `product` và `project-auth`: đều đạt.
+- `pnpm run test:integration:product-fact-freshness`: đạt trên Neon, gồm register/replace race,
+  revision, invalidation, delete và concurrency.
+- `pnpm --filter web test:e2e`: 12/12 đạt, 0 failed, 0 skipped; authenticated flow chạy thật.
+- `pnpm run build`: đạt.
+- Biome scope 8 file hardening và `git diff --check`: đạt.
+
+Trạng thái hardening: Done trong phạm vi AFF-US-007. Chưa commit/push/merge/deploy.

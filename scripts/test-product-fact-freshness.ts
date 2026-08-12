@@ -47,6 +47,21 @@ function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
 }
 
+function assertRaceResultsAreSafe(
+	results: PromiseSettledResult<unknown>[],
+	message: string,
+) {
+	assert(
+		results.every(
+			(result) =>
+				result.status === "fulfilled" ||
+				(result.reason instanceof ProductFactServiceError &&
+					result.reason.code === "FACT_CONCURRENT_MODIFICATION"),
+		),
+		message,
+	);
+}
+
 const email = process.env.E2E_AUTH_EMAIL?.trim();
 if (!email) throw new Error("Set E2E_AUTH_EMAIL before running US007 tests.");
 const [fixedUser] = await db
@@ -80,6 +95,25 @@ try {
 		currency: "VND",
 	});
 	productIds.push(createdProduct.id);
+
+	const createRaceFact = async (content: string) => {
+		const fact = await createProductFact(actor, {
+			productId: createdProduct.id,
+			data: {
+				content,
+				type: "feature",
+				status: "draft",
+				sourceType: null,
+				sourceLabel: null,
+				sourceUrl: null,
+				confirmedAt: null,
+				expiresAt: null,
+				notes: null,
+			},
+		});
+		factIds.push(fact.id);
+		return fact;
+	};
 
 	const price = await createProductFact(actor, {
 		productId: createdProduct.id,
@@ -262,6 +296,107 @@ try {
 	assert(
 		notesDependencies[0]?.invalidatedAt === null,
 		"Notes-only edit must keep the current revision dependency active.",
+	);
+
+	const registerRaceFact = await createRaceFact("Register race baseline");
+	const registerRaceDependentId = `${prefix}_register_race`;
+	const registerRaceResults = await Promise.allSettled([
+		registerFactDependency(actor, {
+			productFactId: registerRaceFact.id,
+			dependentType: "script",
+			dependentId: registerRaceDependentId,
+		}),
+		updateProductFact(actor, {
+			id: registerRaceFact.id,
+			expectedRevision: registerRaceFact.revision,
+			data: {
+				content: "Register race updated",
+				type: registerRaceFact.type,
+				status: "draft",
+				sourceType: registerRaceFact.sourceType,
+				sourceLabel: registerRaceFact.sourceLabel,
+				sourceUrl: registerRaceFact.sourceUrl,
+				confirmedAt: registerRaceFact.confirmedAt,
+				expiresAt: registerRaceFact.expiresAt,
+				notes: registerRaceFact.notes,
+			},
+			verificationIntent: "preserve",
+		}),
+	]);
+	assertRaceResultsAreSafe(
+		registerRaceResults,
+		"Register dependency race produced an unexpected failure.",
+	);
+	const registerRaceCurrent = await getProductFact(actor, registerRaceFact.id);
+	const registerRaceDependencies = await listFactDependenciesForDependent(
+		actor,
+		{
+			dependentType: "script",
+			dependentId: registerRaceDependentId,
+		},
+	);
+	const activeRegisterRaceDependencies = registerRaceDependencies.filter(
+		(dependency) =>
+			dependency.detachedAt === null && dependency.invalidatedAt === null,
+	);
+	assert(
+		activeRegisterRaceDependencies.every(
+			(dependency) => dependency.factRevision === registerRaceCurrent.revision,
+		),
+		"Register dependency race left a stale active dependency.",
+	);
+
+	const replaceRaceFact = await createRaceFact("Replace race baseline");
+	const replaceRaceDependentId = `${prefix}_replace_race`;
+	await registerFactDependency(actor, {
+		productFactId: replaceRaceFact.id,
+		dependentType: "script",
+		dependentId: replaceRaceDependentId,
+	});
+	const replaceRaceResults = await Promise.allSettled([
+		replaceFactDependencies(actor, {
+			dependentType: "script",
+			dependentId: replaceRaceDependentId,
+			productFactIds: [replaceRaceFact.id],
+		}),
+		updateProductFact(actor, {
+			id: replaceRaceFact.id,
+			expectedRevision: replaceRaceFact.revision,
+			data: {
+				content: "Replace race updated",
+				type: replaceRaceFact.type,
+				status: "draft",
+				sourceType: replaceRaceFact.sourceType,
+				sourceLabel: replaceRaceFact.sourceLabel,
+				sourceUrl: replaceRaceFact.sourceUrl,
+				confirmedAt: replaceRaceFact.confirmedAt,
+				expiresAt: replaceRaceFact.expiresAt,
+				notes: replaceRaceFact.notes,
+			},
+			verificationIntent: "preserve",
+		}),
+	]);
+	assertRaceResultsAreSafe(
+		replaceRaceResults,
+		"Replace dependency race produced an unexpected failure.",
+	);
+	const replaceRaceCurrent = await getProductFact(actor, replaceRaceFact.id);
+	const replaceRaceDependencies = await listFactDependenciesForDependent(
+		actor,
+		{
+			dependentType: "script",
+			dependentId: replaceRaceDependentId,
+		},
+	);
+	const activeReplaceRaceDependencies = replaceRaceDependencies.filter(
+		(dependency) =>
+			dependency.detachedAt === null && dependency.invalidatedAt === null,
+	);
+	assert(
+		activeReplaceRaceDependencies.every(
+			(dependency) => dependency.factRevision === replaceRaceCurrent.revision,
+		),
+		"Replace dependency race left a stale active dependency.",
 	);
 
 	const crossWorkspace = await registerFactDependency(
