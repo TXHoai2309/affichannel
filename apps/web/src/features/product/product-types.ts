@@ -22,6 +22,11 @@ export type ProductListItem = {
 export type ProductUsage = {
 	referenceCount: number;
 	activeProjectCount: number;
+	factCount: number;
+	factHistoryCount: number;
+	verifiedFactCount: number;
+	draftFactCount: number;
+	inactiveFactCount: number;
 	projects: Array<{
 		id: string;
 		name: string;

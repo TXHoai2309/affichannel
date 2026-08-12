@@ -255,3 +255,37 @@ này. Trạng thái `current` được suy ra từ route; các trạng thái dom
 US004 phải cung cấp contract persistence tương thích với `ProjectStepKey` và
 `PersistedProjectStepStatus`. Fixture/demo route của US002 chỉ là navigation
 scaffold, không được xem là business data.
+
+## DEC-012 — Product Facts: verification, history và Product ownership
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-12
+
+### Bối cảnh
+
+Product Facts là dữ liệu nguồn để tái sử dụng trong brief và các bước kiểm tra sau này.
+MVP cần lưu được nguồn, vòng đời và lịch sử thay đổi mà chưa mở rộng sang scheduler,
+freshness automation hoặc provider AI.
+
+### Quyết định
+
+- `ProductFact.status` chỉ dùng `draft`, `verified`, `inactive`; `type` dùng `price`,
+  `promotion`, `specification`, `feature`, `claim`, `policy`, `other`.
+- Khi `verified`, Fact loại `price`, `promotion` hoặc `claim` bắt buộc có `sourceType`,
+  `sourceLabel` hoặc `sourceUrl`, và `confirmedAt`. Server/core là nơi thực thi rule này.
+- `confirmedAt` và `expiresAt` là PostgreSQL `date`/chuỗi `YYYY-MM-DD`, không chuyển timezone.
+  `expiresAt` không được trước `confirmedAt`.
+- Sửa sensitive field của Fact đang `verified` sẽ demote về `draft` nếu không re-verify;
+  re-verify chỉ thành công khi evidence hợp lệ. Fact `verified` chỉ đủ điều kiện AI khi
+  status và evidence rule đều đạt.
+- Mỗi create/update/delete ghi snapshot trong cùng transaction. History không có FK tới
+  `ProductFact`, nên vẫn giữ `productFactId` sau hard delete Fact. Product không hard-delete
+  khi còn Project, Fact hoặc Fact history; archive vẫn được phép.
+- Facts được truy cập dưới hierarchy Product và workspace authorization. UI dùng deep-link
+  `/products/{productId}?tab=facts`; URL là source of truth cho tab và back/forward/reload.
+
+### Hệ quả
+
+US007 mới được bổ sung freshness/stale detection hoặc scheduler; US008 mới được bổ sung
+Fact Lock/provider/fetching. Product `priceAmount` vẫn là metadata hiển thị, không đồng bộ
+với Fact `type=price`.

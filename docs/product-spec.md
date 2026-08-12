@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-10
+- Cập nhật lần cuối: 2026-08-12
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -112,21 +112,39 @@ không bị tháo liên kết khi Product inactive/archived và vẫn phải đ�
 `productId`. Xóa cứng chỉ hợp lệ khi không còn dòng Project tham chiếu; US005 chưa bao gồm
 Product Facts CRUD, R2 hay media upload đầy đủ.
 
+Product Library hỗ trợ tìm kiếm, lọc và tải thêm theo cursor khi còn dữ liệu. Thumbnail chỉ nhận
+URL HTTPS hợp lệ; source URL và affiliate URL nhận HTTP hoặc HTTPS hợp lệ. Giá trị URL rỗng sau
+trim được coi là chưa khai báo.
+
 Sản phẩm affiliate tái sử dụng, gồm danh tính, link affiliate, trạng thái, media
 và tham chiếu hiệu suất.
 
 ### Product Fact
 
-Thông tin có cấu trúc có thể dùng để hỗ trợ claim trong script. Tối thiểu lưu:
+Trong AFF-US-006, Product Fact là một bản ghi con của Product, dùng để lưu thông tin có cấu
+trúc có thể tái sử dụng trong brief. Schema MVP lưu `content`, `type`, `status`, source metadata,
+`confirmedAt`, `expiresAt`, `notes` và audit user/timestamps. `Product.priceAmount` chỉ là
+metadata hiển thị của Product; Fact có `type=price` mới là nguồn Fact được phép dùng cho AI.
 
-- loại fact và giá trị đã chuẩn hóa;
-- đơn vị nếu có;
-- URL hoặc file bằng chứng;
-- nhãn nguồn;
-- `retrievedAt` và `lastVerifiedAt`;
-- `validUntil` tùy chọn cho giá và khuyến mại;
-- locale, thị trường hoặc người bán khi có liên quan;
-- trạng thái: active, needs review, expired hoặc archived.
+Type MVP: `price`, `promotion`, `specification`, `feature`, `claim`, `policy`, `other`.
+Status MVP: `draft`, `verified`, `inactive`; không dùng `fresh`, `stale` hoặc `expired` trong
+slice này. `confirmedAt` và `expiresAt` dùng ngày lịch `YYYY-MM-DD`; ngày hết hạn không được
+trước ngày xác nhận.
+
+Fact `price`, `promotion` và `claim` chỉ được `verified` khi có `sourceType`, có ít nhất
+`sourceLabel` hoặc `sourceUrl`, và có `confirmedAt`. `feature`, `specification`, `policy` và
+`other` có thể verified không cần evidence theo rule MVP. AI eligibility là server/core rule:
+`verified` và thỏa evidence theo type; `draft`/`inactive` không eligible.
+
+Sửa `content`, `type`, source hoặc ngày của Fact đang `verified` phải re-verify với evidence
+hợp lệ hoặc tự động trở về `draft`; sửa chỉ `notes` có thể giữ `verified`. Create/update/delete
+đồng thời ghi `ProductFactHistory` theo snapshot post-create, pre-update và pre-delete. History
+không phụ thuộc FK tới Fact nên vẫn truy vết được `productFactId` sau khi Fact bị xóa.
+
+Product không hard-delete nếu còn Project reference, Product Fact hoặc Fact history; archive
+không làm mất Facts. UI Product Detail có tab deep-link `/products/{productId}?tab=facts` với
+search, type/status filter, cursor pagination, drawer thêm/sửa và dialog xóa. Freshness automation,
+stale detection, scheduler, scraping/fetching và Fact Lock nằm ngoài AFF-US-006.
 
 ### Project
 

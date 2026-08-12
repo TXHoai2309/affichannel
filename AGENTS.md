@@ -193,6 +193,21 @@ Không được:
   input version, cost và failure reason an toàn.
 - Retry phải hữu hạn và idempotent.
 
+### Product Facts MVP
+
+- Dùng đúng status `draft | verified | inactive` và type `price | promotion | specification |
+  feature | claim | policy | other`; không tự thêm `fresh`, `stale` hoặc `expired` vào AFF-US-006.
+- Fact `price`, `promotion`, `claim` khi `verified` bắt buộc có `sourceType`, `sourceLabel` hoặc
+  `sourceUrl`, và `confirmedAt`; validate lại ở core/service, không chỉ ở React form.
+- `confirmedAt`/`expiresAt` là ngày lịch `YYYY-MM-DD`, không chuyển qua `Date` timezone. Không để
+  `expiresAt` trước `confirmedAt`; normalize chuỗi trống thành null.
+- Verified sensitive edit phải demote/re-verify; notes-only edit mới được giữ verified. AI eligibility
+  luôn là server/core rule và không dựa vào màu badge hay trạng thái UI.
+- Create/update/delete Fact và history phải nằm cùng transaction. History không FK tới Fact để giữ
+  snapshot và `productFactId` sau delete; Product delete phải kiểm tra cả Project, Fact và Fact history.
+- Product Facts chỉ được query/mutate qua Product hierarchy và workspace authorization; URL tab
+  `/products/{id}?tab=facts` là source of truth cho reload/back/forward.
+
 ## 12. Kiểm tra
 
 Chọn mức kiểm tra tương xứng với thay đổi. Tối thiểu cho feature work:

@@ -3,6 +3,7 @@ import type { RouterClient } from "@orpc/server";
 import { protectedProcedure, publicProcedure } from "../index";
 import { dashboardRouter } from "./dashboard";
 import { productRouter } from "./product";
+import { productFactRouter } from "./product-fact";
 import { projectRouter } from "./project";
 
 export const appRouter = {
@@ -17,6 +18,7 @@ export const appRouter = {
 	}),
 	dashboard: dashboardRouter,
 	product: productRouter,
+	productFact: productFactRouter,
 	project: projectRouter,
 };
 export type AppRouter = typeof appRouter;

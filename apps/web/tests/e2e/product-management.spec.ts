@@ -1,6 +1,8 @@
-import { db, product } from "@affichannel/db";
+import { randomUUID } from "node:crypto";
+import { INTERNAL_WORKSPACE_ID } from "@affichannel/core/workspace";
+import { db, product, user } from "@affichannel/db";
 import { expect, test } from "@playwright/test";
-import { eq } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 
 const fixedAccountEmail = process.env.E2E_AUTH_EMAIL;
 const fixedAccountPassword = process.env.E2E_AUTH_PASSWORD;
@@ -55,7 +57,7 @@ test.describe("AFF-US-005 product management", () => {
 				.click();
 
 			await page.getByRole("button", { name: "Lưu trữ" }).click();
-			await expect(page.getByText("Đã lưu trữ")).toBeVisible();
+			await expect(page.getByText("Đã lưu trữ", { exact: true })).toBeVisible();
 			await page.getByRole("button", { name: "Khôi phục" }).click();
 			await expect(page.getByText("Đang hoạt động")).toBeVisible();
 
@@ -71,6 +73,63 @@ test.describe("AFF-US-005 product management", () => {
 		} finally {
 			await db.delete(product).where(eq(product.name, editedProductName));
 			await db.delete(product).where(eq(product.name, productName));
+		}
+	});
+
+	test("loads the next cursor page and appends products", async ({ page }) => {
+		const suffix = Date.now().toString(36);
+		const productPrefix = `E2E Pagination ${suffix}`;
+		const [fixedUser] = await db
+			.select({ id: user.id })
+			.from(user)
+			.where(eq(user.email, fixedAccountEmail as string))
+			.limit(1);
+
+		if (!fixedUser) {
+			throw new Error("E2E_AUTH_EMAIL does not exist in the database.");
+		}
+
+		const now = Date.now();
+		const seededProducts = Array.from({ length: 51 }, (_, index) => {
+			const timestamp = new Date(now - index * 1_000);
+			return {
+				id: randomUUID(),
+				workspaceId: INTERNAL_WORKSPACE_ID,
+				name: `${productPrefix} ${String(index + 1).padStart(2, "0")}`,
+				category: "E2E pagination",
+				status: "active",
+				currency: "VND",
+				createdByUserId: fixedUser.id,
+				createdAt: timestamp,
+				updatedAt: timestamp,
+			};
+		});
+
+		try {
+			await db.insert(product).values(seededProducts);
+			await signIn(page);
+			await page.goto("/products");
+			await page.getByLabel("Tìm kiếm sản phẩm").fill(productPrefix);
+
+			await expect(
+				page.getByRole("link", {
+					name: `Mở chi tiết sản phẩm ${productPrefix} 01`,
+				}),
+			).toBeVisible();
+			await expect(
+				page.getByRole("link", {
+					name: `Mở chi tiết sản phẩm ${productPrefix} 51`,
+				}),
+			).toHaveCount(0);
+
+			await page.getByRole("button", { name: "Tải thêm" }).click();
+			await expect(
+				page.getByRole("link", {
+					name: `Mở chi tiết sản phẩm ${productPrefix} 51`,
+				}),
+			).toBeVisible();
+		} finally {
+			await db.delete(product).where(like(product.name, `${productPrefix}%`));
 		}
 	});
 });

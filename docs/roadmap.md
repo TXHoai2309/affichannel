@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-10
+- Cập nhật lần cuối: 2026-08-12
 
 ## 1. Phương pháp triển khai
 
@@ -110,18 +110,26 @@ schema/migration, domain validation, workspace-scoped API, search/filter, create
 archive/restore/delete và UI states. Invariant MVP: Product mới chỉ được chọn khi `status=active`
 và `archivedAt IS NULL`; archive không tháo liên kết Project; hard delete chỉ khi reference count bằng 0.
 
+Cập nhật hoàn thiện (2026-08-12): Product Library dùng cursor pagination với load-more/retry,
+Product Detail không hiển thị copy implementation, và URL validation dùng parser cùng allow-list
+protocol. Story đã đủ điều kiện chuyển sang AFF-US-006 Product Facts.
+
 ## 7. Slice 4 — Product Facts
 
-Backlog liên quan: `AFF-US-006` và `AFF-US-007`.
+Backlog liên quan: `AFF-US-006`.
 
 ```text
-Mở product → thêm fact có nguồn → kiểm tra freshness → sửa/archive fact
+Mở product → mở tab Facts → thêm draft/verified Fact → lọc/tìm kiếm → sửa/xóa Fact
 ```
 
-- Fact giữ source và verification metadata.
-- Fact về giá/khuyến mại hỗ trợ expiry.
-- Fact hết hạn/thay đổi chuyển sang review rõ ràng.
-- Thay đổi fact có thể vô hiệu Fact Lock run phụ thuộc sau này.
+AFF-US-006 đã triển khai schema `ProductFact`/`ProductFactHistory`, workspace-scoped CRUD,
+search/filter/cursor pagination, verification evidence, AI eligibility, history transaction
+và Product delete guard. Product Detail dùng URL tab làm source of truth; archive Product
+không làm mất Facts. `priceAmount` của Product không đồng bộ với Fact giá.
+
+Không thuộc slice này: freshness automation, stale/expired status, scheduler, invalidation,
+scraping/fetching, provider AI, Fact Lock và restore/diff UI. Các phần này chỉ bắt đầu khi
+story tương ứng có contract riêng.
 
 ## 8. Slice 5 — Project và Content Brief
 

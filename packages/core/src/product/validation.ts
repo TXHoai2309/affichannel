@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { optionalHttpUrl, optionalHttpsUrl } from "../validation/url";
+
 export const productNameSchema = z
 	.string()
 	.trim()
@@ -15,22 +17,6 @@ const optionalText = (maxLength: number) =>
 		.max(maxLength)
 		.optional()
 		.transform((value) => value || undefined);
-
-const optionalUrl = (label: string, protocols: RegExp) =>
-	z
-		.string()
-		.trim()
-		.max(2_048, `${label} tối đa 2048 ký tự.`)
-		.optional()
-		.transform((value) => value || undefined)
-		.refine(
-			(value) => !value || protocols.test(value),
-			`${label} có protocol không hợp lệ.`,
-		);
-
-const optionalHttpUrl = (label: string) => optionalUrl(label, /^https?:\/\//i);
-
-const optionalHttpsUrl = (label: string) => optionalUrl(label, /^https:\/\//i);
 
 export const productFieldsSchema = z.object({
 	name: productNameSchema,

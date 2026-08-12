@@ -1,4 +1,10 @@
-import { db, product, project } from "@affichannel/db";
+import {
+	db,
+	product,
+	productFact,
+	productFactHistory,
+	project,
+} from "@affichannel/db";
 import {
 	and,
 	desc,
@@ -46,6 +52,11 @@ function toProductRecord(
 export type ProductUsageRecord = {
 	referenceCount: number;
 	activeProjectCount: number;
+	factCount: number;
+	factHistoryCount: number;
+	verifiedFactCount: number;
+	draftFactCount: number;
+	inactiveFactCount: number;
 	projects: Array<{
 		id: string;
 		name: string;
@@ -230,27 +241,62 @@ export async function findProductUsage(
 	actor: WorkspaceActor,
 	productId: string,
 ): Promise<ProductUsageRecord> {
-	const projectRecords = await db
-		.select({
-			id: project.id,
-			name: project.name,
-			currentStepKey: project.currentStepKey,
-			archivedAt: project.archivedAt,
-		})
-		.from(project)
-		.where(
-			and(
-				eq(project.productId, productId),
-				eq(project.workspaceId, actor.workspaceId),
+	const [projectRecords, factCounts, factHistoryCountRows] = await Promise.all([
+		db
+			.select({
+				id: project.id,
+				name: project.name,
+				currentStepKey: project.currentStepKey,
+				archivedAt: project.archivedAt,
+			})
+			.from(project)
+			.where(
+				and(
+					eq(project.productId, productId),
+					eq(project.workspaceId, actor.workspaceId),
+				),
+			)
+			.orderBy(desc(project.updatedAt), desc(project.id)),
+		db
+			.select({
+				status: productFact.status,
+				count: sql<number>`count(*)::int`,
+			})
+			.from(productFact)
+			.where(
+				and(
+					eq(productFact.productId, productId),
+					eq(productFact.workspaceId, actor.workspaceId),
+				),
+			)
+			.groupBy(productFact.status),
+		db
+			.select({ count: sql<number>`count(*)::int` })
+			.from(productFactHistory)
+			.where(
+				and(
+					eq(productFactHistory.productId, productId),
+					eq(productFactHistory.workspaceId, actor.workspaceId),
+				),
 			),
-		)
-		.orderBy(desc(project.updatedAt), desc(project.id));
+	]);
+
+	const factsByStatus = new Map(
+		factCounts.map((row) => [row.status, row.count]),
+	);
+	const factCount = factCounts.reduce((total, row) => total + row.count, 0);
+	const factHistoryCount = factHistoryCountRows[0]?.count ?? 0;
 
 	return {
 		referenceCount: projectRecords.length,
 		activeProjectCount: projectRecords.filter(
 			(projectRecord) => projectRecord.archivedAt === null,
 		).length,
+		factCount,
+		verifiedFactCount: factsByStatus.get("verified") ?? 0,
+		draftFactCount: factsByStatus.get("draft") ?? 0,
+		inactiveFactCount: factsByStatus.get("inactive") ?? 0,
+		factHistoryCount,
 		projects: projectRecords,
 	};
 }
@@ -376,19 +422,46 @@ export async function deleteProductRecord(
 			return { kind: "not_found" as const };
 		}
 
-		const references = await transaction
-			.select({ count: sql<number>`count(*)::int` })
-			.from(project)
-			.where(
-				and(
-					eq(project.productId, productId),
-					eq(project.workspaceId, actor.workspaceId),
+		const [references, facts, factHistory] = await Promise.all([
+			transaction
+				.select({ count: sql<number>`count(*)::int` })
+				.from(project)
+				.where(
+					and(
+						eq(project.productId, productId),
+						eq(project.workspaceId, actor.workspaceId),
+					),
 				),
-			);
-		const referenceCount = references[0]?.count ?? 0;
+			transaction
+				.select({ count: sql<number>`count(*)::int` })
+				.from(productFact)
+				.where(
+					and(
+						eq(productFact.productId, productId),
+						eq(productFact.workspaceId, actor.workspaceId),
+					),
+				),
+			transaction
+				.select({ count: sql<number>`count(*)::int` })
+				.from(productFactHistory)
+				.where(
+					and(
+						eq(productFactHistory.productId, productId),
+						eq(productFactHistory.workspaceId, actor.workspaceId),
+					),
+				),
+		]);
+		const projectCount = references[0]?.count ?? 0;
+		const factCount = facts[0]?.count ?? 0;
+		const factHistoryCount = factHistory[0]?.count ?? 0;
 
-		if (referenceCount > 0) {
-			return { kind: "in_use" as const, referenceCount };
+		if (projectCount > 0 || factCount > 0 || factHistoryCount > 0) {
+			return {
+				kind: "in_use" as const,
+				projectCount,
+				factCount,
+				factHistoryCount,
+			};
 		}
 
 		await transaction

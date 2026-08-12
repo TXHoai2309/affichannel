@@ -1,7 +1,7 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-003 đã hoàn thành; đang thực hiện cleanup sau story.
-- Cập nhật lần cuối: 2026-08-11
+- Trạng thái: AFF-US-006 đã hoàn thành trên branch `feat/us006-product-facts`; chưa commit/push/merge/deploy.
+- Cập nhật lần cuối: 2026-08-12
 
 File này ghi lại công việc đáng kể do AI agent thực hiện. Đây không phải chain of
 thought hoặc bản sao terminal. Mỗi bản ghi chỉ tóm tắt mục tiêu, thay đổi, bằng
@@ -9,7 +9,66 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 
 ## Mục tiêu hiện tại
 
-AFF-US-005 Product Management đã hoàn thành trên branch `feat/us005-product-management`.
+AFF-US-006 Product Facts đã hoàn thành trên branch `feat/us006-product-facts`.
+
+### 2026-08-12 — Hoàn thiện AFF-US-006 Product Facts
+
+Thay đổi:
+
+- Thêm `product_fact` và `product_fact_history`, migration `0004_military_joystick` đã apply
+  trên Neon bằng migration tooling dùng `DATABASE_URL_DIRECT`.
+- Thêm core contract cho Fact type/status/source, ngày lịch, evidence verification, status transition
+  và AI eligibility. Verified sensitive edit được demote hoặc re-verify; lỗi API được map sang copy
+  tiếng Việt thân thiện.
+- Thêm protected oRPC CRUD/list/history với workspace + Product hierarchy authorization, search/filter,
+  cursor pagination và transaction snapshot create/update/delete.
+- Product Detail có tab `/products/{id}?tab=facts`, Fact list, filter, drawer thêm/sửa, delete dialog,
+  history summary và count thật; URL giữ được reload/back/forward.
+- Mở rộng Product delete guard: còn Project, Fact hoặc Fact history đều trả `PRODUCT_IN_USE`; archive
+  vẫn giữ dữ liệu. Product `priceAmount` không đồng bộ Fact `price`.
+- Cập nhật DEC-012, product spec, roadmap, changelog và AGENTS; không triển khai US007 freshness,
+  scheduler/stale detection hay US008 Fact Lock/provider.
+
+Kiểm tra:
+
+- `pnpm --filter @affichannel/db db:migrate`: đạt.
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: 33/33 đạt.
+- `pnpm test:integration:product-facts`: đạt; gồm evidence, transition, pagination/filter, history,
+  workspace isolation, Product delete guard và archive regression.
+- `pnpm --filter web test:e2e`: 11/11 đạt, 0 failed, 0 skipped; authenticated Product Facts flow chạy thật.
+- `pnpm --filter web build`: đạt.
+- Biome scope các file US006: đạt.
+- `pnpm exec biome check .`: không đạt do 46 diagnostics/18 warnings baseline ở nhiều file cũ và
+  một cảnh báo cấu hình deprecated; lệnh không ghi thay đổi. Không sửa lan sang phạm vi ngoài US006.
+
+Trạng thái story: AFF-US-006 Done trong phạm vi đã chốt. Không commit/push/merge/deploy theo yêu cầu.
+
+### 2026-08-12 — Hoàn thiện cuối AFF-US-005
+
+Thay đổi:
+
+- Bỏ copy kỹ thuật khỏi Product Detail; chỉ giữ trạng thái dữ liệu người dùng có thể hành động,
+  gồm Product Facts và Media đang chưa có dữ liệu.
+- Hoàn thiện Product Library với cursor pagination: nút `Tải thêm` chỉ hiện khi API trả `nextCursor`,
+  nối dữ liệu vào danh sách hiện tại, giữ dữ liệu cũ khi lỗi và cho phép retry.
+- Đổi validation URL dùng `new URL()` cùng allow-list protocol: thumbnail chỉ HTTPS; source và affiliate
+  chấp nhận HTTP/HTTPS; giá trị rỗng sau trim được normalize thành `undefined`.
+- Bổ sung unit test cho URL, integration test kiểm tra cursor không trùng bản ghi và authenticated E2E
+  kiểm tra load trang kế tiếp với 51 Product tạm thời.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: 28/28 đạt.
+- `pnpm test:integration:product`: đạt.
+- `pnpm --filter web test:e2e`: 10/10 đạt, 0 failed, 0 skipped.
+- Biome scope cho các file US005: đạt.
+- `pnpm run check`: còn lỗi baseline ngoài US005 tại shared `packages/ui/src/components/label.tsx`
+  (`noLabelWithoutControl`); root script cũng phát hiện hai cảnh báo unused import không liên quan.
+
+Trạng thái story: AFF-US-005 Done. Bước tiếp theo là AFF-US-006 Product Facts; không triển khai
+Product Facts, media upload hoặc R2 trong cleanup này.
 
 ### 2026-08-11 — Triển khai AFF-US-005 Product Management
 

@@ -4,6 +4,8 @@ type ProductErrorShape = {
 	data?: {
 		code?: string;
 		projectCount?: number;
+		factCount?: number;
+		factHistoryCount?: number;
 	};
 };
 
@@ -22,8 +24,14 @@ export function getProductErrorMessage(
 ) {
 	switch (getProductErrorCode(error)) {
 		case "PRODUCT_IN_USE": {
-			const count = (error as ProductErrorShape).data?.projectCount ?? 0;
-			return `Không thể xóa sản phẩm vì đang được dùng bởi ${count} dự án.`;
+			const data = (error as ProductErrorShape).data;
+			const projectCount = data?.projectCount ?? 0;
+			const factCount = data?.factCount ?? 0;
+			const factHistoryCount = data?.factHistoryCount ?? 0;
+			if (factCount > 0 || factHistoryCount > 0) {
+				return "Không thể xóa sản phẩm vì đang có Product Facts hoặc lịch sử Fact. Hãy lưu trữ sản phẩm thay thế.";
+			}
+			return `Không thể xóa sản phẩm vì đang được dùng bởi ${projectCount} dự án.`;
 		}
 		case "PRODUCT_NOT_FOUND":
 			return "Không tìm thấy sản phẩm hoặc bạn không có quyền truy cập.";

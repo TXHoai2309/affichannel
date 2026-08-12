@@ -135,7 +135,9 @@ export async function deleteProduct(actor: WorkspaceActor, productId: string) {
 
 	if (result.kind === "in_use") {
 		throw new ProductServiceError("PRODUCT_IN_USE", {
-			projectCount: result.referenceCount,
+			projectCount: result.projectCount,
+			factCount: result.factCount,
+			factHistoryCount: result.factHistoryCount,
 		});
 	}
 

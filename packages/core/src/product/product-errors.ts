@@ -8,7 +8,11 @@ export type ProductServiceErrorCode =
 export class ProductServiceError extends Error {
 	constructor(
 		public readonly code: ProductServiceErrorCode,
-		public readonly metadata?: { projectCount?: number },
+		public readonly metadata?: {
+			projectCount?: number;
+			factCount?: number;
+			factHistoryCount?: number;
+		},
 	) {
 		super(code);
 	}

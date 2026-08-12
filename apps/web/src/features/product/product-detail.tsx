@@ -24,18 +24,19 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import {
 	Archive,
 	ArrowLeft,
+	ClipboardList,
 	ExternalLink,
-	Package,
 	Pencil,
 	RotateCcw,
 	Trash2,
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { FactList } from "@/features/product-facts/fact-list";
 import { orpc } from "@/utils/orpc";
 
 import { getProductErrorMessage } from "./product-errors";
@@ -80,7 +81,6 @@ function ProductLinks({ product }: { product: ProductDetails }) {
 		{ label: "Nguồn sản phẩm", value: product.sourceUrl },
 		{ label: "Link affiliate", value: product.affiliateUrl },
 	];
-
 	return (
 		<div className="space-y-3">
 			{links.map((link) => (
@@ -128,8 +128,8 @@ function DeleteProductDialog({
 					<Button
 						aria-label="Xóa sản phẩm"
 						className="text-destructive hover:bg-destructive/10"
-						variant="ghost"
 						size="icon"
+						variant="ghost"
 					/>
 				}
 			>
@@ -141,8 +141,8 @@ function DeleteProductDialog({
 					<DialogTitle>Xóa sản phẩm?</DialogTitle>
 					<DialogDescription>
 						{canDelete
-							? "Sản phẩm chưa được dùng trong dự án nào. Thao tác này không thể hoàn tác."
-							: "Sản phẩm đang được tham chiếu bởi dự án. Hãy giữ lại hoặc lưu trữ sản phẩm thay vì xóa."}
+							? "Sản phẩm chưa có dự án, Fact hoặc lịch sử Fact liên quan. Thao tác này không thể hoàn tác."
+							: "Sản phẩm đang có dữ liệu liên quan. Hãy lưu trữ sản phẩm thay vì xóa."}
 					</DialogDescription>
 					<div className="mt-6 flex justify-end gap-2">
 						<DialogClose render={<Button variant="outline" />}>Hủy</DialogClose>
@@ -164,6 +164,7 @@ function DeleteProductDialog({
 
 export function ProductDetail({ productId }: { productId: string }) {
 	const router = useRouter();
+	const searchParams = useSearchParams();
 	const [deleteOpen, setDeleteOpen] = useState(false);
 	const productQuery = useQuery(
 		orpc.product.get.queryOptions({
@@ -175,11 +176,8 @@ export function ProductDetail({ productId }: { productId: string }) {
 	const restoreProduct = useMutation(orpc.product.restore.mutationOptions());
 	const deleteProduct = useMutation(orpc.product.delete.mutationOptions());
 
-	if (productQuery.isPending) {
-		return <DetailSkeleton />;
-	}
-
-	if (productQuery.isError || !productQuery.data) {
+	if (productQuery.isPending) return <DetailSkeleton />;
+	if (productQuery.isError || !productQuery.data)
 		return (
 			<div className="mx-auto w-full max-w-3xl rounded-2xl border border-destructive/30 bg-destructive/5 p-8 text-destructive">
 				<h1 className="font-semibold text-lg">Không thể tải sản phẩm</h1>
@@ -195,14 +193,27 @@ export function ProductDetail({ productId }: { productId: string }) {
 				</Button>
 			</div>
 		);
-	}
 
 	const product = productQuery.data as ProductDetails;
 	const isArchived = Boolean(product.archivedAt);
+	const activeTab = searchParams.get("tab") === "facts" ? "facts" : "overview";
 	const isActionPending =
 		archiveProduct.isPending ||
 		restoreProduct.isPending ||
 		deleteProduct.isPending;
+	const canDelete =
+		product.usage.referenceCount === 0 &&
+		product.usage.factCount === 0 &&
+		product.usage.factHistoryCount === 0;
+
+	function selectTab(tab: "overview" | "facts") {
+		void router.replace(
+			tab === "facts"
+				? `/products/${product.id}?tab=facts`
+				: `/products/${product.id}`,
+			{ scroll: false },
+		);
+	}
 
 	function onArchive() {
 		archiveProduct.mutate(
@@ -219,7 +230,6 @@ export function ProductDetail({ productId }: { productId: string }) {
 			},
 		);
 	}
-
 	function onRestore() {
 		restoreProduct.mutate(
 			{ id: product.id },
@@ -235,7 +245,6 @@ export function ProductDetail({ productId }: { productId: string }) {
 			},
 		);
 	}
-
 	function onDelete() {
 		deleteProduct.mutate(
 			{ id: product.id },
@@ -293,7 +302,7 @@ export function ProductDetail({ productId }: { productId: string }) {
 						</Button>
 					)}
 					<DeleteProductDialog
-						canDelete={product.usage.referenceCount === 0}
+						canDelete={canDelete}
 						isPending={deleteProduct.isPending}
 						onDelete={onDelete}
 						onOpenChange={setDeleteOpen}
@@ -301,7 +310,6 @@ export function ProductDetail({ productId }: { productId: string }) {
 					/>
 				</div>
 			</div>
-
 			<Card className="rounded-2xl">
 				<CardContent className="grid gap-6 p-6 md:grid-cols-[220px_1fr] md:p-8">
 					<ProductThumbnail
@@ -324,7 +332,7 @@ export function ProductDetail({ productId }: { productId: string }) {
 						<p className="mt-2 text-muted-foreground text-sm">
 							Cập nhật lần cuối {formatDate(product.updatedAt)}
 						</p>
-						<div className="mt-6 grid gap-4 sm:grid-cols-2">
+						<div className="mt-6 grid gap-4 sm:grid-cols-3">
 							<div className="rounded-xl bg-muted/40 p-4">
 								<p className="text-muted-foreground text-xs">Giá tham khảo</p>
 								<p className="mt-1 font-semibold text-base">
@@ -339,98 +347,148 @@ export function ProductDetail({ productId }: { productId: string }) {
 									{product.usage.referenceCount}
 								</p>
 							</div>
+							<button
+								className="rounded-xl bg-muted/40 p-4 text-left transition-colors hover:bg-muted"
+								onClick={() => selectTab("facts")}
+								type="button"
+							>
+								<p className="text-muted-foreground text-xs">Product Facts</p>
+								<p className="mt-1 font-semibold text-base">
+									{product.usage.factCount}
+								</p>
+								<p className="mt-1 text-muted-foreground text-xs">
+									{product.usage.verifiedFactCount} đã xác minh
+								</p>
+							</button>
 						</div>
 					</div>
 				</CardContent>
 			</Card>
-
-			<div className="grid gap-5 lg:grid-cols-2">
-				<Card className="rounded-2xl">
-					<CardHeader>
-						<CardTitle>Thông tin nguồn</CardTitle>
-						<CardDescription>
-							Liên kết được lưu để tái sử dụng khi làm brief.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<ProductLinks product={product} />
-					</CardContent>
-				</Card>
-
-				<Card className="rounded-2xl">
-					<CardHeader>
-						<CardTitle>Dữ liệu mở rộng</CardTitle>
-						<CardDescription>
-							Facts và media sẽ được nối ở các slice tiếp theo.
-						</CardDescription>
-					</CardHeader>
-					<CardContent className="grid gap-3 sm:grid-cols-2">
-						<div className="rounded-xl border border-dashed p-4">
-							<Package className="size-5 text-primary" />
-							<p className="mt-3 font-medium">Product Facts</p>
-							<p className="mt-1 text-muted-foreground text-xs">
-								0 facts · sẽ nối ở US006
-							</p>
-						</div>
-						<div className="rounded-xl border border-dashed p-4">
-							<Package className="size-5 text-primary" />
-							<p className="mt-3 font-medium">Media</p>
-							<p className="mt-1 text-muted-foreground text-xs">
-								0 asset · chưa upload trong US005
-							</p>
-						</div>
-					</CardContent>
-				</Card>
+			<div
+				className="flex gap-1 border-b"
+				role="tablist"
+				aria-label="Chi tiết sản phẩm"
+			>
+				<button
+					aria-selected={activeTab === "overview"}
+					className={`border-b-2 px-4 py-2 font-medium text-sm transition-colors ${activeTab === "overview" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+					onClick={() => selectTab("overview")}
+					role="tab"
+					type="button"
+				>
+					Tổng quan
+				</button>
+				<button
+					aria-selected={activeTab === "facts"}
+					className={`border-b-2 px-4 py-2 font-medium text-sm transition-colors ${activeTab === "facts" ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`}
+					onClick={() => selectTab("facts")}
+					role="tab"
+					type="button"
+				>
+					Product Facts{" "}
+					<span className="ml-1 text-muted-foreground">
+						({product.usage.factCount})
+					</span>
+				</button>
 			</div>
-
-			<Card className="rounded-2xl">
-				<CardHeader>
-					<CardTitle>Dự án liên quan</CardTitle>
-					<CardDescription>
-						{product.usage.referenceCount === 0
-							? "Chưa có dự án nào sử dụng sản phẩm này."
-							: `${product.usage.referenceCount} dự án đang giữ liên kết với sản phẩm này.`}
-					</CardDescription>
-				</CardHeader>
-				<CardContent>
-					{product.usage.projects.length > 0 ? (
-						<div className="divide-y rounded-xl border">
-							{product.usage.projects.map((project) => (
-								<div
-									className="flex flex-wrap items-center justify-between gap-3 p-4"
-									key={project.id}
+			{activeTab === "facts" ? (
+				<FactList
+					onChanged={async () => {
+						await productQuery.refetch();
+					}}
+					productId={product.id}
+				/>
+			) : (
+				<>
+					<div className="grid gap-5 lg:grid-cols-2">
+						<Card className="rounded-2xl">
+							<CardHeader>
+								<CardTitle>Thông tin nguồn</CardTitle>
+								<CardDescription>
+									Liên kết được lưu để tái sử dụng khi làm brief.
+								</CardDescription>
+							</CardHeader>
+							<CardContent>
+								<ProductLinks product={product} />
+							</CardContent>
+						</Card>
+						<Card className="rounded-2xl">
+							<CardHeader>
+								<CardTitle>Product Facts</CardTitle>
+								<CardDescription>
+									Dữ liệu có thể kiểm tra và tái sử dụng trong nội dung.
+								</CardDescription>
+							</CardHeader>
+							<CardContent>
+								<button
+									className="flex w-full items-center gap-4 rounded-xl border border-dashed p-4 text-left transition-colors hover:bg-muted/50"
+									onClick={() => selectTab("facts")}
+									type="button"
 								>
-									<div className="min-w-0">
-										<p className="truncate font-medium">{project.name}</p>
-										{project.archivedAt ? (
-											<p className="mt-1 text-muted-foreground text-xs">
-												Dự án đã lưu trữ
-											</p>
-										) : null}
-									</div>
-									<Button
-										nativeButton={false}
-										render={
-											<Link
-												href={
-													getProjectStepRoute(
-														project.id,
-														project.currentStepKey,
-													) as Route
+									<ClipboardList className="size-5 text-primary" />
+									<span>
+										<span className="block font-medium">
+											{product.usage.factCount} Fact đã lưu
+										</span>
+										<span className="mt-1 block text-muted-foreground text-xs">
+											{product.usage.verifiedFactCount} đã xác minh ·{" "}
+											{product.usage.draftFactCount} bản nháp
+										</span>
+									</span>
+								</button>
+							</CardContent>
+						</Card>
+					</div>
+					<Card className="rounded-2xl">
+						<CardHeader>
+							<CardTitle>Dự án liên quan</CardTitle>
+							<CardDescription>
+								{product.usage.referenceCount === 0
+									? "Chưa có dự án nào sử dụng sản phẩm này."
+									: `${product.usage.referenceCount} dự án đang giữ liên kết với sản phẩm này.`}
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							{product.usage.projects.length > 0 ? (
+								<div className="divide-y rounded-xl border">
+									{product.usage.projects.map((project) => (
+										<div
+											className="flex flex-wrap items-center justify-between gap-3 p-4"
+											key={project.id}
+										>
+											<div className="min-w-0">
+												<p className="truncate font-medium">{project.name}</p>
+												{project.archivedAt ? (
+													<p className="mt-1 text-muted-foreground text-xs">
+														Dự án đã lưu trữ
+													</p>
+												) : null}
+											</div>
+											<Button
+												nativeButton={false}
+												render={
+													<Link
+														href={
+															getProjectStepRoute(
+																project.id,
+																project.currentStepKey,
+															) as Route
+														}
+													/>
 												}
-											/>
-										}
-										variant="outline"
-										size="sm"
-									>
-										Mở dự án
-									</Button>
+												size="sm"
+												variant="outline"
+											>
+												Mở dự án
+											</Button>
+										</div>
+									))}
 								</div>
-							))}
-						</div>
-					) : null}
-				</CardContent>
-			</Card>
+							) : null}
+						</CardContent>
+					</Card>
+				</>
+			)}
 		</div>
 	);
 }

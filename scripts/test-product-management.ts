@@ -79,6 +79,17 @@ try {
 		currency: "VND",
 	});
 	productIds.push(reusableProduct.id);
+	const cursorProduct = await createProduct(actor, {
+		name: `${prefix}_Cursor Product`,
+		category: `${prefix}_Cursor`,
+		status: "active",
+		thumbnailUrl: undefined,
+		sourceUrl: undefined,
+		affiliateUrl: undefined,
+		priceAmount: null,
+		currency: "VND",
+	});
+	productIds.push(cursorProduct.id);
 
 	const projectInput = (name: string) => ({
 		name,
@@ -112,6 +123,28 @@ try {
 	assert(
 		searchable.items.some((item) => item.id === reusableProduct.id),
 		"Product search/filter failed.",
+	);
+
+	const firstCursorPage = await listProducts(actor, {
+		search: prefix,
+		archiveScope: "activeOnly",
+		limit: 1,
+	});
+	assert(
+		firstCursorPage.kind === "success" && firstCursorPage.nextCursor !== null,
+		"Product list should return a cursor when more items are available.",
+	);
+	const secondCursorPage = await listProducts(actor, {
+		search: prefix,
+		archiveScope: "activeOnly",
+		limit: 1,
+		cursor: firstCursorPage.nextCursor,
+	});
+	assert(
+		secondCursorPage.kind === "success" &&
+			secondCursorPage.items.length === 1 &&
+			secondCursorPage.items[0]?.id !== firstCursorPage.items[0]?.id,
+		"Product list cursor should return the next item without duplication.",
 	);
 
 	await archiveProduct(actor, reusableProduct.id);

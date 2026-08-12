@@ -34,6 +34,8 @@ function toProductOrpcError(error: unknown): never {
 			data: {
 				code: error.code,
 				projectCount: error.metadata?.projectCount ?? 0,
+				factCount: error.metadata?.factCount ?? 0,
+				factHistoryCount: error.metadata?.factHistoryCount ?? 0,
 			},
 		});
 	}

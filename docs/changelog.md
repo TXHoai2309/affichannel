@@ -10,8 +10,14 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- AFF-US-006: Product Facts với schema Fact/History, search/filter/cursor pagination, tab deep-link
+  trên Product Detail, drawer thêm/sửa, dialog xóa và trạng thái loading/empty/error.
+- AFF-US-006 hardening: server-side evidence rule cho Fact verified, AI eligibility, demote/re-verify
+  khi sửa Fact verified, snapshot history transaction và chặn xóa Product khi còn Fact/history.
 - AFF-US-005: Product Library, Product CRUD, search/filter, archive/restore, usage count và hard-delete guard;
   Product được workspace-scope và có migration field status/source/affiliate/price/currency.
+- AFF-US-005 hardening: Product Library tải thêm theo cursor và Product Detail dùng copy người dùng thay vì
+  nhãn implementation; URL được kiểm tra bằng parser với allow-list protocol.
 - AFF-US-003: protected Dashboard aggregate, summary cards, recent project list/activity,
   warning empty state, cost contract và loading/empty/error/retry states.
 - AFF-US-004: persistence Project, Content Brief, workflow seven-step và internal
@@ -38,6 +44,8 @@ sử dụng Semantic Versioning.
   được giới hạn 5 bản ghi, tránh N+1 step status query.
 - Hardening AFF-US-004: migration tooling dùng direct Neon URL, workspace actor dùng internal
   workspace rõ ràng, repository update an toàn hơn và topbar hiển thị tên project persisted.
+- Product Library giữ dữ liệu đã tải khi lấy trang tiếp theo; lỗi load-more hiển thị inline và có retry,
+  không làm mất danh sách hiện tại.
 - Bổ sung kiểm tra required fields, duplicate project name, persistence đủ brief/7 status và
   authorization chéo workspace.
 - ProjectStepper đọc workflow current từ database, không coi route đang xem là
