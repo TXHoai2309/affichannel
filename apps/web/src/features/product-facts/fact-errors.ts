@@ -27,6 +27,8 @@ export function getFactErrorMessage(
 			return "Product Fact không còn tồn tại hoặc bạn không có quyền truy cập.";
 		case "INVALID_CURSOR":
 			return "Danh sách Product Facts đã thay đổi. Hãy tải lại trang.";
+		case "FACT_CONCURRENT_MODIFICATION":
+			return "Product Fact vừa được thay đổi ở nơi khác. Hãy tải lại dữ liệu trước khi tiếp tục.";
 		default:
 			return fallback;
 	}

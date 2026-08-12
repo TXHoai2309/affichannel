@@ -98,3 +98,13 @@ sử dụng Semantic Versioning.
 ### Đã thêm
 
 - Khởi tạo project bằng Better T Stack.
+### AFF-US-007 — Fact Freshness và Dependency Invalidation
+
+- Thêm policy freshness tập trung cho price/promotion, assessment verification/evidence/freshness
+  và generation usability contract.
+- Thêm Product Fact revision, history revision, optimistic CAS cho update/delete và mã lỗi
+  `FACT_CONCURRENT_MODIFICATION` với copy tiếng Việt.
+- Thêm dependency register/replace/detach, invalidation event trong cùng transaction và
+  Dashboard warning deep-link về Product Facts.
+- Product Facts hiển thị badge freshness/evidence; migration `0005_exotic_edwin_jarvis.sql`
+  đã apply trên Neon branch hiện tại.

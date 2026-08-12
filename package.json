@@ -19,6 +19,7 @@
 		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
 		"test:integration:product": "tsx scripts/test-product-management.ts",
 		"test:integration:product-facts": "tsx scripts/test-product-facts.ts",
+		"test:integration:product-fact-freshness": "tsx scripts/test-product-fact-freshness.ts",
 		"test:integration:dashboard": "tsx scripts/test-dashboard-overview.ts",
 		"deploy:setup": "vercel link",
 		"dev:vercel": "vercel dev -L",

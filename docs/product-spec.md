@@ -283,3 +283,21 @@ trở nên khó thay đổi.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.
+## AFF-US-007 — Fact Freshness và Dependency Invalidation
+
+AFF-US-007 mở rộng Product Facts bằng assessment freshness, không thay đổi các status
+`draft | verified | inactive` của bản ghi Fact. `price` dùng tuổi tối đa 7 ngày và
+`promotion` dùng tuổi tối đa 3 ngày; cảnh báo trước `expiresAt` một ngày. Các type khác
+trả về `not_applicable`.
+
+Assessment luôn tách ba trục: `verification`, `evidence` và `freshness`. Dữ liệu chưa
+đủ an toàn để đánh giá trả về `unknown`; `expiresAt` đúng ngày hiện tại là `needs_update`,
+không phải `expired`. Generation usability chặn draft, inactive, thiếu evidence, unknown
+và expired; verified fresh được phép; verified needs_update được phép nhưng phải cảnh báo.
+
+Mỗi Fact có `revision`. Sensitive field hoặc status thay đổi làm tăng revision; notes-only
+không tăng revision. Update/delete yêu cầu `expectedRevision` và trả conflict an toàn khi
+revision đã đổi. Dependency được đăng ký theo revision hiện tại, có replace/detach và audit
+invalidation event khi Fact thay đổi, bị deactivate hoặc bị xóa. Dashboard nhóm cảnh báo theo
+Product và dẫn tới tab Facts; Product Facts hiển thị badge `Còn hiệu lực`, `Cần cập nhật`,
+`Hết hạn`, `Chưa xác định` và cảnh báo thiếu evidence.

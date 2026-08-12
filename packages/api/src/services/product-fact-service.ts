@@ -1,13 +1,16 @@
 import {
+	evaluateFactGenerationUsability,
 	factRequiresEvidence,
 	hasFactEvidence,
 	hasSensitiveFactChanges,
 	isValidFactDateRange,
 	ProductFactServiceError,
+	resolveBusinessToday,
 	resolveFactStatusAfterEdit,
 } from "@affichannel/core";
 import type {
 	CreateProductFactInput,
+	DeleteProductFactInput,
 	ListProductFactInput,
 	ProductFactFields,
 	UpdateProductFactInput,
@@ -36,6 +39,18 @@ function validateFactForPersistence(data: ProductFactFields) {
 	}
 }
 
+function withFactAssessment<
+	T extends Awaited<ReturnType<typeof findProductFactRecord>>,
+>(record: T, today: ReturnType<typeof resolveBusinessToday>) {
+	if (!record) return record;
+	const evaluated = evaluateFactGenerationUsability(record, today);
+	return {
+		...record,
+		assessment: evaluated.assessment,
+		generationUsability: evaluated.usability,
+	};
+}
+
 export async function listProductFacts(
 	actor: WorkspaceActor,
 	input: ListProductFactInput,
@@ -47,7 +62,11 @@ export async function listProductFacts(
 	if (result.kind === "product_not_found") {
 		throw new ProductFactServiceError("PRODUCT_NOT_FOUND");
 	}
-	return result;
+	const today = resolveBusinessToday();
+	return {
+		...result,
+		items: result.items.map((item) => withFactAssessment(item, today)),
+	};
 }
 
 export async function getProductFact(actor: WorkspaceActor, factId: string) {
@@ -55,7 +74,7 @@ export async function getProductFact(actor: WorkspaceActor, factId: string) {
 	if (!record) {
 		throw new ProductFactServiceError("FACT_NOT_FOUND");
 	}
-	return record;
+	return withFactAssessment(record, resolveBusinessToday());
 }
 
 export async function createProductFact(
@@ -95,17 +114,35 @@ export async function updateProductFact(
 	};
 	validateFactForPersistence(data);
 
-	const result = await updateProductFactRecord(actor, input.id, data);
+	const result = await updateProductFactRecord(
+		actor,
+		input.id,
+		data,
+		input.expectedRevision,
+	);
 	if (result.kind === "not_found") {
 		throw new ProductFactServiceError("FACT_NOT_FOUND");
+	}
+	if (result.kind === "concurrent_modification") {
+		throw new ProductFactServiceError("FACT_CONCURRENT_MODIFICATION");
 	}
 	return result.record;
 }
 
-export async function deleteProductFact(actor: WorkspaceActor, factId: string) {
-	const result = await deleteProductFactRecord(actor, factId);
+export async function deleteProductFact(
+	actor: WorkspaceActor,
+	input: DeleteProductFactInput,
+) {
+	const result = await deleteProductFactRecord(
+		actor,
+		input.id,
+		input.expectedRevision,
+	);
 	if (result.kind === "not_found") {
 		throw new ProductFactServiceError("FACT_NOT_FOUND");
+	}
+	if (result.kind === "concurrent_modification") {
+		throw new ProductFactServiceError("FACT_CONCURRENT_MODIFICATION");
 	}
 	return { deleted: true, productId: result.productId };
 }

@@ -67,12 +67,27 @@ export type DashboardProjectRecord = {
 	}>;
 };
 
+export type DashboardFactFreshnessRecord = {
+	productId: string;
+	productName: string;
+	type: "price" | "promotion";
+	status: "draft" | "verified" | "inactive";
+	sourceType: "official" | "marketplace" | "document" | null;
+	sourceLabel: string | null;
+	sourceUrl: string | null;
+	confirmedAt: string | null;
+	expiresAt: string | null;
+};
+
 export type DashboardRepository = {
 	countActiveProjects(input: { workspaceId: string }): Promise<number>;
 	listRecentProjects(input: {
 		workspaceId: string;
 		limit: number;
 	}): Promise<DashboardProjectRecord[]>;
+	listFactFreshnessRecords?(input: {
+		workspaceId: string;
+	}): Promise<DashboardFactFreshnessRecord[]>;
 };
 
 export const DASHBOARD_RECENT_PROJECT_LIMIT = 5;

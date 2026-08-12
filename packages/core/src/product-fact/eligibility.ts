@@ -54,11 +54,28 @@ const sensitiveFactFields = [
 	"expiresAt",
 ] as const;
 
+const dependencyRelevantFactFields = [
+	...sensitiveFactFields,
+	"status",
+] as const;
+
 export function hasSensitiveFactChanges(
 	current: Pick<ProductFactRecord, (typeof sensitiveFactFields)[number]>,
 	next: Pick<ProductFactRecord, (typeof sensitiveFactFields)[number]>,
 ) {
 	return sensitiveFactFields.some((field) => current[field] !== next[field]);
+}
+
+export function hasDependencyRelevantFactChanges(
+	current: Pick<
+		ProductFactRecord,
+		(typeof dependencyRelevantFactFields)[number]
+	>,
+	next: Pick<ProductFactRecord, (typeof dependencyRelevantFactFields)[number]>,
+) {
+	return dependencyRelevantFactFields.some(
+		(field) => current[field] !== next[field],
+	);
 }
 
 export function resolveFactStatusAfterEdit(

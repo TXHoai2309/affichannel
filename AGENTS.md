@@ -266,3 +266,17 @@ Task chỉ hoàn thành khi:
 - tài liệu, changelog và AI progress đã cập nhật;
 - diff không có secret hoặc thay đổi không liên quan;
 - hạn chế còn lại và hành động an toàn tiếp theo được bàn giao rõ ràng.
+### AFF-US-007 Freshness và dependency
+
+- Không mở rộng `ProductFact.status` bằng `fresh`, `stale` hoặc `expired`; freshness là
+  assessment gồm verification/evidence/freshness và phải dùng policy tập trung.
+- Chỉ price/promotion áp dụng freshness. Tính date-only theo `Asia/Ho_Chi_Minh`, truyền
+  business today vào evaluator và không dùng `new Date("YYYY-MM-DD")`.
+- Revision là source of truth cho dependency. Update/delete phải dùng optimistic CAS;
+  history, mutation, revision, invalidation và audit event cùng transaction. Không tin
+  `factRevision` do client gửi.
+- UI phải hiển thị trạng thái bằng text badge, có loading/empty/error/conflict state và
+  cảnh báo rõ khi thiếu evidence hoặc Fact đã cần cập nhật. Dashboard warning phải dẫn
+  tới `/products/{productId}?tab=facts`.
+- Khi sửa UI Product Facts/Dashboard, giữ panel mềm, bo góc vừa phải, spacing thoáng và
+  hierarchy rõ; không dùng màu làm tín hiệu duy nhất.

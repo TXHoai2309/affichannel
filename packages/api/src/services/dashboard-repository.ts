@@ -1,8 +1,15 @@
 import type {
+	DashboardFactFreshnessRecord,
 	DashboardProjectRecord,
 	DashboardRepository,
 } from "@affichannel/core/dashboard/dashboard-types";
-import { db, product, project, projectStepStatus } from "@affichannel/db";
+import {
+	db,
+	product,
+	productFact,
+	project,
+	projectStepStatus,
+} from "@affichannel/db";
 import { and, count, desc, eq, inArray, isNull, ne } from "drizzle-orm";
 
 export function createDashboardRepository(): DashboardRepository {
@@ -84,6 +91,41 @@ export function createDashboardRepository(): DashboardRepository {
 				updatedAt: record.updatedAt,
 				stepStatuses: statusesByProject.get(record.id) ?? [],
 			}));
+		},
+
+		async listFactFreshnessRecords({ workspaceId }) {
+			const records = await db
+				.select({
+					productId: productFact.productId,
+					productName: product.name,
+					type: productFact.type,
+					status: productFact.status,
+					sourceType: productFact.sourceType,
+					sourceLabel: productFact.sourceLabel,
+					sourceUrl: productFact.sourceUrl,
+					confirmedAt: productFact.confirmedAt,
+					expiresAt: productFact.expiresAt,
+				})
+				.from(productFact)
+				.innerJoin(product, eq(product.id, productFact.productId))
+				.where(
+					and(
+						eq(productFact.workspaceId, workspaceId),
+						eq(product.workspaceId, workspaceId),
+						inArray(productFact.type, ["price", "promotion"]),
+					),
+				);
+
+			return records.map(
+				(record) =>
+					({
+						...record,
+						type: record.type as DashboardFactFreshnessRecord["type"],
+						status: record.status as DashboardFactFreshnessRecord["status"],
+						sourceType:
+							record.sourceType as DashboardFactFreshnessRecord["sourceType"],
+					}) satisfies DashboardFactFreshnessRecord,
+			);
 		},
 	};
 }

@@ -200,7 +200,12 @@ export function FactFormDrawer({
 
 		if (fact) {
 			updateFact.mutate(
-				{ id: fact.id, data, verificationIntent },
+				{
+					id: fact.id,
+					expectedRevision: fact.revision,
+					data,
+					verificationIntent,
+				},
 				{ onSuccess, onError },
 			);
 		} else {

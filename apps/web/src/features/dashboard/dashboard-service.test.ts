@@ -96,4 +96,49 @@ describe("dashboard domain service", () => {
 			progressPercent: 29,
 		});
 	});
+
+	it("groups stale and expired facts into product warnings", async () => {
+		const repository = {
+			countActiveProjects: async () => 0,
+			listRecentProjects: async () => [],
+			listFactFreshnessRecords: async () => [
+				{
+					productId: "product-1",
+					productName: "Tai nghe X1",
+					type: "price" as const,
+					status: "verified" as const,
+					sourceType: "official" as const,
+					sourceLabel: "Website hãng",
+					sourceUrl: "https://example.com",
+					confirmedAt: "2026-08-01",
+					expiresAt: null,
+				},
+				{
+					productId: "product-1",
+					productName: "Tai nghe X1",
+					type: "promotion" as const,
+					status: "verified" as const,
+					sourceType: "official" as const,
+					sourceLabel: "Website hãng",
+					sourceUrl: "https://example.com",
+					confirmedAt: "2026-08-11",
+					expiresAt: "2026-08-11",
+				},
+			],
+		};
+
+		const overview = await getDashboardOverview(repository, {
+			workspaceId: "internal",
+			userId: "user-1",
+		});
+
+		expect(overview.warnings).toEqual([
+			expect.objectContaining({
+				severity: "danger",
+				title: "Tai nghe X1: 2 Product Fact cần xem lại",
+				description: "1 đã hết hạn · 1 cần cập nhật",
+				targetUrl: "/products/product-1?tab=facts",
+			}),
+		]);
+	});
 });

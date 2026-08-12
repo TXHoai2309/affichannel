@@ -75,9 +75,19 @@ export const createProductFactInputSchema = z.object({
 
 export const updateProductFactInputSchema = z.object({
 	id: z.string().uuid("Product Fact không hợp lệ."),
+	expectedRevision: z.number().int().positive("Phiên bản Fact không hợp lệ."),
 	data: productFactFieldsSchema,
 	verificationIntent: productFactVerificationIntentSchema.default("preserve"),
 });
+
+export const deleteProductFactInputSchema = z.object({
+	id: z.string().uuid("Product Fact không hợp lệ."),
+	expectedRevision: z.number().int().positive("Phiên bản Fact không hợp lệ."),
+});
+
+export type DeleteProductFactInput = z.infer<
+	typeof deleteProductFactInputSchema
+>;
 
 export const productFactIdInputSchema = z.object({
 	id: z.string().uuid("Product Fact không hợp lệ."),

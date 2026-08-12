@@ -1,6 +1,7 @@
 import { ProductFactServiceError } from "@affichannel/core/product-fact/errors";
 import {
 	createProductFactInputSchema,
+	deleteProductFactInputSchema,
 	listProductFactHistoryInputSchema,
 	listProductFactInputSchema,
 	productFactIdInputSchema,
@@ -27,7 +28,8 @@ function toProductFactOrpcError(error: unknown): never {
 	if (
 		error.code === "INVALID_CURSOR" ||
 		error.code === "FACT_EVIDENCE_REQUIRED" ||
-		error.code === "FACT_INVALID_DATE_RANGE"
+		error.code === "FACT_INVALID_DATE_RANGE" ||
+		error.code === "FACT_CONCURRENT_MODIFICATION"
 	) {
 		throw new ORPCError("BAD_REQUEST", {
 			message: error.code,
@@ -83,11 +85,11 @@ export const productFactRouter = {
 			}
 		}),
 	delete: protectedProcedure
-		.input(productFactIdInputSchema)
+		.input(deleteProductFactInputSchema)
 		.handler(async ({ context, input }) => {
 			const actor = await requireWorkspaceActor(context.session.user.id);
 			try {
-				return await deleteProductFact(actor, input.id);
+				return await deleteProductFact(actor, input);
 			} catch (error) {
 				return toProductFactOrpcError(error);
 			}

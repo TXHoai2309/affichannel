@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { hasDependencyRelevantFactChanges } from "@affichannel/core/product-fact/eligibility";
 import type {
 	ProductFactHistoryAction,
 	ProductFactRecord,
@@ -9,12 +10,14 @@ import type {
 import type { ProductFactFields } from "@affichannel/core/product-fact/validation";
 import { db, product, productFact, productFactHistory } from "@affichannel/db";
 import { and, desc, eq, ilike, lt, or } from "drizzle-orm";
+import { invalidateFactDependencies } from "./fact-dependency-repository";
 import type { WorkspaceActor } from "./workspace";
 
 const factColumns = {
 	id: productFact.id,
 	workspaceId: productFact.workspaceId,
 	productId: productFact.productId,
+	revision: productFact.revision,
 	content: productFact.content,
 	type: productFact.type,
 	status: productFact.status,
@@ -35,6 +38,7 @@ const historyColumns = {
 	productFactId: productFactHistory.productFactId,
 	productId: productFactHistory.productId,
 	workspaceId: productFactHistory.workspaceId,
+	revision: productFactHistory.revision,
 	action: productFactHistory.action,
 	content: productFactHistory.content,
 	type: productFactHistory.type,
@@ -128,6 +132,7 @@ function snapshotValues(
 		| "id"
 		| "productId"
 		| "workspaceId"
+		| "revision"
 		| "content"
 		| "type"
 		| "status"
@@ -146,6 +151,7 @@ function snapshotValues(
 		productFactId: fact.id,
 		productId: fact.productId,
 		workspaceId: fact.workspaceId,
+		revision: fact.revision,
 		action,
 		content: fact.content,
 		type: fact.type,
@@ -300,6 +306,7 @@ export async function updateProductFactRecord(
 	actor: WorkspaceActor,
 	factId: string,
 	data: ProductFactFields,
+	expectedRevision: number,
 ) {
 	return db.transaction(async (transaction) => {
 		const [current] = await transaction
@@ -319,6 +326,17 @@ export async function updateProductFactRecord(
 		}
 
 		const currentRecord = toFactRecord(current as RawFactRecord);
+		if (currentRecord.revision !== expectedRevision) {
+			return { kind: "concurrent_modification" as const };
+		}
+
+		const dependencyRelevantChanged = hasDependencyRelevantFactChanges(
+			currentRecord,
+			data,
+		);
+		const nextRevision = dependencyRelevantChanged
+			? currentRecord.revision + 1
+			: currentRecord.revision;
 		const action: ProductFactHistoryAction =
 			currentRecord.status !== data.status &&
 			currentRecord.content === data.content &&
@@ -331,22 +349,41 @@ export async function updateProductFactRecord(
 			currentRecord.notes === data.notes
 				? "status_changed"
 				: "updated";
-		await transaction
-			.insert(productFactHistory)
-			.values(snapshotValues(currentRecord, action, actor.userId));
-
 		const [updated] = await transaction
 			.update(productFact)
-			.set({ ...data, updatedByUserId: actor.userId, updatedAt: new Date() })
+			.set({
+				...data,
+				revision: nextRevision,
+				updatedByUserId: actor.userId,
+				updatedAt: new Date(),
+			})
 			.where(
 				and(
 					eq(productFact.id, factId),
 					eq(productFact.workspaceId, actor.workspaceId),
+					eq(productFact.revision, expectedRevision),
 				),
 			)
 			.returning(factColumns);
 		if (!updated) {
-			return { kind: "not_found" as const };
+			return { kind: "concurrent_modification" as const };
+		}
+		await transaction
+			.insert(productFactHistory)
+			.values(snapshotValues(currentRecord, action, actor.userId));
+		if (dependencyRelevantChanged) {
+			const reason =
+				data.status === "inactive" && currentRecord.status !== "inactive"
+					? ("fact_deactivated" as const)
+					: ("fact_changed" as const);
+			await invalidateFactDependencies(transaction, {
+				workspaceId: actor.workspaceId,
+				productFactId: factId,
+				fromRevision: currentRecord.revision,
+				toRevision: nextRevision,
+				reason,
+				triggeredByUserId: actor.userId,
+			});
 		}
 		return {
 			kind: "success" as const,
@@ -358,6 +395,7 @@ export async function updateProductFactRecord(
 export async function deleteProductFactRecord(
 	actor: WorkspaceActor,
 	factId: string,
+	expectedRevision: number,
 ) {
 	return db.transaction(async (transaction) => {
 		const [current] = await transaction
@@ -377,17 +415,33 @@ export async function deleteProductFactRecord(
 		}
 
 		const record = toFactRecord(current as RawFactRecord);
-		await transaction
-			.insert(productFactHistory)
-			.values(snapshotValues(record, "deleted", actor.userId));
-		await transaction
+		if (record.revision !== expectedRevision) {
+			return { kind: "concurrent_modification" as const };
+		}
+		const [deleted] = await transaction
 			.delete(productFact)
 			.where(
 				and(
 					eq(productFact.id, factId),
 					eq(productFact.workspaceId, actor.workspaceId),
+					eq(productFact.revision, expectedRevision),
 				),
-			);
+			)
+			.returning({ id: productFact.id });
+		if (!deleted) {
+			return { kind: "concurrent_modification" as const };
+		}
+		await transaction
+			.insert(productFactHistory)
+			.values(snapshotValues(record, "deleted", actor.userId));
+		await invalidateFactDependencies(transaction, {
+			workspaceId: actor.workspaceId,
+			productFactId: factId,
+			fromRevision: record.revision,
+			toRevision: null,
+			reason: "fact_deleted",
+			triggeredByUserId: actor.userId,
+		});
 		return { kind: "deleted" as const, productId: record.productId };
 	});
 }

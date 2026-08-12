@@ -1,5 +1,6 @@
 "use client";
 
+import type { ProductFactListItem } from "@affichannel/core/product-fact/freshness";
 import type {
 	ProductFactRecord,
 	ProductFactStatus,
@@ -33,6 +34,7 @@ import { orpc } from "@/utils/orpc";
 
 import { getFactErrorMessage } from "./fact-errors";
 import { FactFormDrawer } from "./fact-form-drawer";
+import { FactFreshnessBadge } from "./fact-freshness-badge";
 import { FactStatusBadge } from "./fact-status-badge";
 import { FACT_STATUS_LABELS, FACT_TYPE_LABELS, FACT_TYPES } from "./fact-types";
 
@@ -109,7 +111,7 @@ export function FactList({
 		ProductFactRecord | undefined
 	>();
 	const deferredSearch = useDeferredValue(search.trim());
-	const [loadedItems, setLoadedItems] = useState<ProductFactRecord[]>([]);
+	const [loadedItems, setLoadedItems] = useState<ProductFactListItem[]>([]);
 	const [nextCursor, setNextCursor] = useState<string | null>(null);
 	const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
 	const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -139,7 +141,7 @@ export function FactList({
 
 	useEffect(() => {
 		if (factsQuery.data?.kind !== "success") return;
-		setLoadedItems(factsQuery.data.items as ProductFactRecord[]);
+		setLoadedItems(factsQuery.data.items as ProductFactListItem[]);
 		setNextCursor(factsQuery.data.nextCursor);
 		setLoadMoreError(null);
 	}, [factsQuery.data]);
@@ -165,7 +167,7 @@ export function FactList({
 			if (activeFilterKey.current !== requestFilterKey) return;
 			setLoadedItems((current) => [
 				...current,
-				...(nextPage.items as ProductFactRecord[]),
+				...(nextPage.items as ProductFactListItem[]),
 			]);
 			setNextCursor(nextPage.nextCursor);
 		} catch {
@@ -189,7 +191,7 @@ export function FactList({
 	const deleteFact = useMutation(orpc.productFact.delete.mutationOptions());
 	function handleDelete(fact: ProductFactRecord) {
 		deleteFact.mutate(
-			{ id: fact.id },
+			{ id: fact.id, expectedRevision: fact.revision },
 			{
 				onSuccess: async () => {
 					toast.success("Đã xóa Product Fact");
@@ -309,6 +311,7 @@ export function FactList({
 								<div className="min-w-0 flex-1">
 									<div className="flex flex-wrap items-center gap-2">
 										<FactStatusBadge status={fact.status} />
+										<FactFreshnessBadge assessment={fact.assessment} />
 										<span className="text-muted-foreground text-xs">
 											{FACT_TYPE_LABELS[fact.type]}
 										</span>

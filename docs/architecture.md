@@ -317,3 +317,18 @@ Runtime query dùng `DATABASE_URL` pooled; Drizzle schema tooling dùng
 - Worker deploy riêng hoặc local worker được vận hành rõ ràng.
 
 Agent không tự deploy production nếu chủ dự án chưa cho phép rõ ràng.
+## AFF-US-007 — Transaction boundary và read model freshness
+
+AFF-US-007 bổ sung `revision` cho `product_fact` và `product_fact_history`, cùng
+`fact_dependency` và `fact_invalidation_event`. `fact_dependency.productFactId` cố ý không
+có foreign key để giữ identity dependency sau hard delete Fact; event giữ `fromRevision`,
+`toRevision`, dependent và reason.
+
+Fact update/delete dùng optimistic compare-and-set theo `(id, workspaceId, revision)`. History,
+mutation, revision bump, dependency invalidation và event phải chạy trong cùng transaction.
+Register dependency không nhận revision từ client mà đọc revision hiện tại sau workspace
+authorization; unique partial index bảo đảm idempotency cho dependency còn active.
+
+Freshness được tính ở core từ date-only và business timezone, sau đó dùng lại cho Product Facts
+list và Dashboard aggregate. Không tạo scheduler, warning table hoặc invalidation job riêng cho
+clock freshness.

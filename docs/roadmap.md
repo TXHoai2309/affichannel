@@ -237,3 +237,11 @@ Sau khi có dữ liệu sử dụng thực tế:
 - Migration được tạo và review khi phù hợp.
 - Changelog và AI progress được cập nhật.
 - Slice sau không phụ thuộc hành vi chưa được tài liệu hóa.
+## AFF-US-007 — Fact Freshness và Dependency Invalidation
+
+Trạng thái (2026-08-12): đã triển khai vertical slice domain/API/UI/test. Đã có policy freshness
+tập trung cho price/promotion, assessment và generation usability, Product Fact revision với
+optimistic concurrency, dependency register/replace/detach, invalidation audit event và
+Dashboard warning theo Product. Migration `0005_exotic_edwin_jarvis.sql` đã được review và
+apply bằng `DATABASE_URL_DIRECT`. Authenticated E2E đã chạy thật trên `3002`; scheduler,
+notification, scraping và provider AI vẫn để ngoài slice.

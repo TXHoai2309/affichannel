@@ -640,3 +640,21 @@ Tiếp theo:
 - Nêu rõ nếu chưa thực hiện kiểm tra.
 - Không đánh dấu hoàn thành khi Acceptance Criteria chưa đạt.
 - Nếu agent hoàn tác hoặc thay thế công việc trước, giữ lịch sử và giải thích.
+### 2026-08-12 — Triển khai AFF-US-007 Fact Freshness & Dependency Invalidation
+
+Đã triển khai policy freshness tập trung cho price/promotion, assessment verification/evidence/
+freshness và generation usability; thêm revision/history revision, optimistic CAS, dependency
+register/replace/detach và invalidation audit event cùng transaction. Product Facts có badge
+freshness/evidence; Dashboard có warning theo Product và deep-link về tab Facts.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test -- src/features/product-facts/fact-freshness.test.ts src/features/dashboard/dashboard-service.test.ts`: 8/8 đạt.
+- `pnpm run test:integration:product-facts`: đạt.
+- `pnpm run test:integration:product-fact-freshness`: đạt trên Neon, gồm revision, dependency,
+  invalidation, delete và concurrency.
+- `pnpm --filter web test:e2e tests/e2e/product-fact-freshness.spec.ts`: 1/1 đạt, 0 failed, 0 skipped.
+- Migration `0005_exotic_edwin_jarvis.sql` đã review và apply bằng `DATABASE_URL_DIRECT`.
+
+Trạng thái story: AFF-US-007 đã hoàn tất trong phạm vi đã chốt. Chưa commit/push/merge/deploy.

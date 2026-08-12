@@ -1,4 +1,9 @@
 import {
+	evaluateFactFreshness,
+	FACT_FRESHNESS_POLICY,
+	resolveBusinessToday,
+} from "../product-fact/freshness";
+import {
 	getProjectStepRoute,
 	PROJECT_STEP_KEYS,
 } from "../project/project-types";
@@ -80,17 +85,76 @@ export function toDashboardActivity(
 	};
 }
 
+function toDashboardWarnings(
+	records: Awaited<
+		ReturnType<NonNullable<DashboardRepository["listFactFreshnessRecords"]>>
+	>,
+) {
+	const today = resolveBusinessToday();
+	const byProduct = new Map<
+		string,
+		{ productName: string; stale: number; expired: number }
+	>();
+
+	for (const record of records) {
+		const freshness = evaluateFactFreshness(
+			record,
+			today,
+			FACT_FRESHNESS_POLICY,
+		);
+		if (freshness.status !== "needs_update" && freshness.status !== "expired") {
+			continue;
+		}
+		const current = byProduct.get(record.productId) ?? {
+			productName: record.productName,
+			stale: 0,
+			expired: 0,
+		};
+		if (freshness.status === "expired") current.expired += 1;
+		else current.stale += 1;
+		byProduct.set(record.productId, current);
+	}
+
+	return [...byProduct.entries()]
+		.sort(
+			([, left], [, right]) =>
+				right.expired - left.expired || right.stale - left.stale,
+		)
+		.map(([productId, summary]) => {
+			const total = summary.expired + summary.stale;
+			const expiredText =
+				summary.expired > 0 ? `${summary.expired} đã hết hạn` : "";
+			const staleText =
+				summary.stale > 0 ? `${summary.stale} cần cập nhật` : "";
+			return {
+				id: `fact-stale:${productId}`,
+				type: "fact_stale" as const,
+				severity:
+					summary.expired > 0 ? ("danger" as const) : ("warning" as const),
+				title: `${summary.productName}: ${total} Product Fact cần xem lại`,
+				description: [expiredText, staleText].filter(Boolean).join(" · "),
+				targetUrl: `/products/${productId}?tab=facts`,
+			};
+		});
+}
+
 export async function getDashboardOverview(
 	repository: DashboardRepository,
 	actor: DashboardActor,
 ): Promise<DashboardOverview> {
-	const [activeProjects, recentProjectRecords] = await Promise.all([
-		repository.countActiveProjects({ workspaceId: actor.workspaceId }),
-		repository.listRecentProjects({
-			workspaceId: actor.workspaceId,
-			limit: DASHBOARD_RECENT_PROJECT_LIMIT,
-		}),
-	]);
+	const [activeProjects, recentProjectRecords, factFreshnessRecords] =
+		await Promise.all([
+			repository.countActiveProjects({ workspaceId: actor.workspaceId }),
+			repository.listRecentProjects({
+				workspaceId: actor.workspaceId,
+				limit: DASHBOARD_RECENT_PROJECT_LIMIT,
+			}),
+			repository.listFactFreshnessRecords
+				? repository.listFactFreshnessRecords({
+						workspaceId: actor.workspaceId,
+					})
+				: Promise.resolve([]),
+		]);
 
 	return {
 		summary: {
@@ -104,6 +168,6 @@ export async function getDashboardOverview(
 		},
 		recentProjects: recentProjectRecords.map(toDashboardRecentProject),
 		recentActivities: recentProjectRecords.map(toDashboardActivity),
-		warnings: [],
+		warnings: toDashboardWarnings(factFreshnessRecords),
 	};
 }

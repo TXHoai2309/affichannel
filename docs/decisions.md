@@ -318,3 +318,39 @@ tránh mất swipe handling/touch scroll lock.
 UI phải tách action lưu bình thường khỏi action re-verify và hiển thị cảnh báo khi verified
 data bị thay đổi. Regression phải kiểm tra console error của Drawer, lifecycle verified và
 history navigation; không dùng global zero-console-errors assertion cho toàn ứng dụng.
+## DEC-014 — Freshness, generation usability và dependency invalidation của Product Fact
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-12
+
+### Bối cảnh
+
+Price và promotion có thể trở nên lỗi thời theo thời gian. Khi Fact thay đổi, các bước
+sản xuất đã tham chiếu revision cũ phải được đánh dấu cần xem lại; việc này không thể
+để từng module tự suy luận riêng.
+
+### Quyết định
+
+- Freshness là assessment/read model, không mở rộng `ProductFact.status`. Chính sách tập
+  trung dùng `priceMaxAgeDays=7`, `promotionMaxAgeDays=3`, cảnh báo trước hạn 1 ngày và
+  timezone nghiệp vụ `Asia/Ho_Chi_Minh`.
+- Tính ngày theo lịch `YYYY-MM-DD`, truyền rõ `today` vào evaluator và không parse date-only
+  bằng `new Date("YYYY-MM-DD")`. Thứ tự kết quả là `not_applicable`, `unknown`, `expired`,
+  `needs_update`, rồi `fresh`.
+- Generation usability tách khỏi freshness: verified+fresh được phép, verified+needs_update
+  được phép kèm cảnh báo, còn draft/inactive/thiếu evidence/unknown/expired bị chặn.
+  `isFactEligibleForAi()` hiện tại vẫn giữ nguyên.
+- Fact có `revision`, mặc định 1. Thay đổi content/type/status/source/date làm tăng revision;
+  notes-only không tăng revision. Update/delete dùng optimistic CAS với `expectedRevision`.
+- Dependency engine dùng bảng `fact_dependency` và `fact_invalidation_event`. Register phải
+  tự đọc revision hiện tại ở server, idempotent; replace detach dependency bị bỏ; mutation,
+  history, revision, invalidation và event nằm trong cùng transaction. Clock freshness không
+  tự invalidation dependency.
+- Dashboard chỉ hiển thị cảnh báo aggregate theo Product và deep-link về
+  `/products/{productId}?tab=facts`; không tạo warning table riêng.
+
+### Hệ quả
+
+US008/Fact Lock có thể dùng dependency service và generation usability contract mà không
+phụ thuộc vào implementation của UI. Scheduler, notification, scraping và provider AI vẫn
+nằm ngoài US007.

@@ -3,6 +3,7 @@ import {
 	check,
 	date,
 	index,
+	integer,
 	pgTable,
 	text,
 	timestamp,
@@ -22,6 +23,7 @@ export const productFact = pgTable(
 		productId: text("product_id")
 			.notNull()
 			.references(() => product.id, { onDelete: "restrict" }),
+		revision: integer("revision").notNull().default(1),
 		content: text("content").notNull(),
 		type: text("type").notNull().default("other"),
 		status: text("status").notNull().default("draft"),
@@ -62,6 +64,7 @@ export const productFact = pgTable(
 			"product_fact_date_order_check",
 			sql`${table.confirmedAt} is null or ${table.expiresAt} is null or ${table.confirmedAt} <= ${table.expiresAt}`,
 		),
+		check("product_fact_revision_check", sql`${table.revision} > 0`),
 		index("product_fact_product_updated_idx").on(
 			table.productId,
 			table.updatedAt,
@@ -80,6 +83,11 @@ export const productFact = pgTable(
 			table.id,
 		),
 		index("product_fact_workspace_id_idx").on(table.workspaceId),
+		index("product_fact_workspace_type_status_idx").on(
+			table.workspaceId,
+			table.type,
+			table.status,
+		),
 		index("product_fact_created_by_user_id_idx").on(table.createdByUserId),
 		index("product_fact_updated_by_user_id_idx").on(table.updatedByUserId),
 	],

@@ -37,6 +37,7 @@ export type ProductFactRecord = {
 	id: string;
 	workspaceId: string;
 	productId: string;
+	revision: number;
 	content: string;
 	type: ProductFactType;
 	status: ProductFactStatus;
@@ -57,6 +58,7 @@ export type ProductFactHistoryRecord = {
 	productFactId: string;
 	productId: string;
 	workspaceId: string;
+	revision: number;
 	action: ProductFactHistoryAction;
 	content: string;
 	type: ProductFactType;

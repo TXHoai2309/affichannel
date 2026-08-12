@@ -128,6 +128,7 @@ try {
 
 	const notesOnly = await updateProductFact(actor, {
 		id: verified.id,
+		expectedRevision: verified.revision,
 		data: {
 			content: verified.content,
 			type: verified.type,
@@ -148,6 +149,7 @@ try {
 
 	const edited = await updateProductFact(actor, {
 		id: verified.id,
+		expectedRevision: notesOnly.revision,
 		data: {
 			content: "Giá 149.000đ",
 			type: "price",
@@ -167,6 +169,7 @@ try {
 	);
 	const reverified = await updateProductFact(actor, {
 		id: edited.id,
+		expectedRevision: edited.revision,
 		data: {
 			content: edited.content,
 			type: edited.type,
@@ -201,6 +204,7 @@ try {
 	});
 	const typeChanged = await updateProductFact(actor, {
 		id: second.id,
+		expectedRevision: second.revision,
 		data: {
 			content: "Price without evidence",
 			type: "price",
@@ -221,6 +225,7 @@ try {
 	try {
 		await updateProductFact(actor, {
 			id: second.id,
+			expectedRevision: typeChanged.revision,
 			data: { ...typeChanged, status: "verified" },
 			verificationIntent: "verify",
 		});
@@ -234,6 +239,7 @@ try {
 	}
 	const secondVerified = await updateProductFact(actor, {
 		id: second.id,
+		expectedRevision: typeChanged.revision,
 		data: {
 			...typeChanged,
 			status: "verified",
@@ -250,6 +256,7 @@ try {
 	);
 	const inactive = await updateProductFact(actor, {
 		id: second.id,
+		expectedRevision: secondVerified.revision,
 		data: { ...secondVerified, status: "inactive" },
 		verificationIntent: "preserve",
 	});
@@ -260,6 +267,7 @@ try {
 	try {
 		await updateProductFact(actor, {
 			id: second.id,
+			expectedRevision: inactive.revision,
 			data: {
 				...inactive,
 				status: "verified",
@@ -280,11 +288,13 @@ try {
 	}
 	await updateProductFact(actor, {
 		id: second.id,
+		expectedRevision: inactive.revision,
 		data: { ...secondVerified, status: "verified" },
 		verificationIntent: "verify",
 	});
 	await updateProductFact(actor, {
 		id: second.id,
+		expectedRevision: (await getProductFact(actor, second.id)).revision,
 		data: {
 			content: "Có chế độ chống ồn",
 			type: "feature",
@@ -336,7 +346,10 @@ try {
 			beforeDeleteHistory.items.some((item) => item.action === "created"),
 		"Create history snapshot missing.",
 	);
-	await deleteProductFact(actor, draft.id);
+	await deleteProductFact(actor, {
+		id: draft.id,
+		expectedRevision: draft.revision,
+	});
 	const afterDeleteHistory = await listProductFactHistory(actor, {
 		productId,
 		factId: draft.id,
