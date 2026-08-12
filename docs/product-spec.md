@@ -136,8 +136,10 @@ Fact `price`, `promotion` và `claim` chỉ được `verified` khi có `sourceT
 `other` có thể verified không cần evidence theo rule MVP. AI eligibility là server/core rule:
 `verified` và thỏa evidence theo type; `draft`/`inactive` không eligible.
 
-Sửa `content`, `type`, source hoặc ngày của Fact đang `verified` phải re-verify với evidence
-hợp lệ hoặc tự động trở về `draft`; sửa chỉ `notes` có thể giữ `verified`. Create/update/delete
+Sửa `content`, `type`, source hoặc ngày của Fact đang `verified` mặc định dùng intent bảo toàn và
+phải tự động trở về `draft`; chỉ action re-verify rõ ràng với evidence hợp lệ mới giữ/chuyển sang
+`verified`. Quy tắc này cũng áp dụng khi đổi sang type cần evidence hoặc khôi phục từ `inactive`;
+sửa chỉ `notes` có thể giữ `verified`. Create/update/delete
 đồng thời ghi `ProductFactHistory` theo snapshot post-create, pre-update và pre-delete. History
 không phụ thuộc FK tới Fact nên vẫn truy vết được `productFactId` sau khi Fact bị xóa.
 

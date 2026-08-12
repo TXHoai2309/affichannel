@@ -207,7 +207,7 @@ export function ProductDetail({ productId }: { productId: string }) {
 		product.usage.factHistoryCount === 0;
 
 	function selectTab(tab: "overview" | "facts") {
-		void router.replace(
+		void router.push(
 			tab === "facts"
 				? `/products/${product.id}?tab=facts`
 				: `/products/${product.id}`,

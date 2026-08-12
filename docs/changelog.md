@@ -14,6 +14,9 @@ sử dụng Semantic Versioning.
   trên Product Detail, drawer thêm/sửa, dialog xóa và trạng thái loading/empty/error.
 - AFF-US-006 hardening: server-side evidence rule cho Fact verified, AI eligibility, demote/re-verify
   khi sửa Fact verified, snapshot history transaction và chặn xóa Product khi còn Fact/history.
+- AFF-US-006 hardening tiếp: Drawer dùng Viewport đúng chuẩn Base UI và panel bên phải; update Fact
+  dùng intent `preserve | verify`; tab Product Facts giữ history bằng browser back/forward/reload;
+  regression E2E xác nhận không còn lỗi `Drawer.Popup` và verified content edit trở về Bản nháp.
 - AFF-US-005: Product Library, Product CRUD, search/filter, archive/restore, usage count và hard-delete guard;
   Product được workspace-scope và có migration field status/source/affiliate/price/currency.
 - AFF-US-005 hardening: Product Library tải thêm theo cursor và Product Detail dùng copy người dùng thay vì

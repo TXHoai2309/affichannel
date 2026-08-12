@@ -69,13 +69,27 @@ describe("Product Facts domain contract", () => {
 		expect(isValidFactDateRange("2026-08-20", "2026-08-21")).toBe(true);
 	});
 
-	it("demotes sensitive edits and preserves notes-only verified edits", () => {
-		expect(resolveFactStatusAfterEdit("verified", "draft", true)).toBe("draft");
-		expect(resolveFactStatusAfterEdit("verified", "verified", true)).toBe(
-			"verified",
-		);
+	it("requires explicit intent for sensitive verified edits", () => {
+		expect(
+			resolveFactStatusAfterEdit("verified", "verified", true, "preserve"),
+		).toBe("draft");
+		expect(
+			resolveFactStatusAfterEdit("verified", "verified", true, "verify"),
+		).toBe("verified");
+	});
+
+	it("preserves notes-only edits and protects draft/inactive verification", () => {
 		expect(resolveFactStatusAfterEdit("verified", "verified", false)).toBe(
 			"verified",
 		);
+		expect(resolveFactStatusAfterEdit("draft", "verified", false)).toBe(
+			"draft",
+		);
+		expect(resolveFactStatusAfterEdit("inactive", "verified", false)).toBe(
+			"draft",
+		);
+		expect(
+			resolveFactStatusAfterEdit("draft", "verified", false, "verify"),
+		).toBe("verified");
 	});
 });

@@ -1,6 +1,6 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-006 đã hoàn thành trên branch `feat/us006-product-facts`; chưa commit/push/merge/deploy.
+- Trạng thái: AFF-US-006 đã hoàn thành sau hardening trên branch `feat/us006-product-facts`; chưa commit/push/merge/deploy.
 - Cập nhật lần cuối: 2026-08-12
 
 File này ghi lại công việc đáng kể do AI agent thực hiện. Đây không phải chain of
@@ -10,6 +10,41 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 ## Mục tiêu hiện tại
 
 AFF-US-006 Product Facts đã hoàn thành trên branch `feat/us006-product-facts`.
+
+### 2026-08-12 — Hardening AFF-US-006 Product Facts
+
+Đã xử lý:
+
+- Shared Base UI Drawer dùng đúng anatomy `Drawer.Portal > Drawer.Viewport > Drawer.Popup`;
+  panel vẫn mở từ bên phải và `swipeDirection="right"` khớp với layout.
+- Update Fact nhận `verificationIntent: preserve | verify`. Sửa sensitive field của Fact đang
+  `verified` với intent mặc định sẽ chuyển về `draft` dù payload status cũ vẫn là `verified`;
+  notes-only giữ `verified`; re-verify phải là action rõ ràng và chạy lại evidence validation,
+  kể cả khi đổi `feature` sang `price` hoặc khôi phục từ `inactive`.
+- Fact drawer hiển thị cảnh báo demote và action `Xác minh lại & Lưu`; form dùng submitter để
+  truyền intent, không suy luận re-verify từ select status.
+- Click tab Product Detail dùng `router.push`; URL `?tab=facts` tiếp tục là source of truth cho
+  reload, back và forward.
+- Bổ sung regression cho Base UI console error, URL history, verified lifecycle, notes-only,
+  feature→price và inactive→verified evidence rules; siết E2E URL về UUID và cleanup test
+  theo thứ tự FK.
+
+Kiểm tra hardening:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: 34/34 đạt.
+- `pnpm test:integration:product`: đạt.
+- `pnpm test:integration:product-facts`: đạt; gồm notes-only preserve, sensitive demote,
+  explicit re-verify, feature→price và inactive evidence validation.
+- `pnpm --filter web test:e2e`: 11/11 đạt, 0 failed, 0 skipped; authenticated flow chạy thật,
+  Drawer không còn console error `Drawer.Popup`, tab Facts chạy được back/forward/reload và
+  sửa verified content hiển thị `Bản nháp`.
+- `pnpm --filter web build`: đạt.
+- Biome scope 11 file hardening: đạt.
+- Root `pnpm exec biome check .` vẫn có diagnostics/warnings baseline ngoài phạm vi; không chạy
+  script root `pnpm run check` để tránh ghi formatting lan sang các file người dùng đang sửa.
+
+Trạng thái hardening: Done trong phạm vi AFF-US-006. Không commit/push/merge/deploy.
 
 ### 2026-08-12 — Hoàn thiện AFF-US-006 Product Facts
 

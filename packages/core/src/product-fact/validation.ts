@@ -5,11 +5,15 @@ import {
 	productFactSourceTypes,
 	productFactStatuses,
 	productFactTypes,
+	productFactVerificationIntents,
 } from "./types";
 
 export const productFactTypeSchema = z.enum(productFactTypes);
 export const productFactStatusSchema = z.enum(productFactStatuses);
 export const productFactSourceTypeSchema = z.enum(productFactSourceTypes);
+export const productFactVerificationIntentSchema = z.enum(
+	productFactVerificationIntents,
+);
 
 export const isoDateSchema = z
 	.string()
@@ -72,6 +76,7 @@ export const createProductFactInputSchema = z.object({
 export const updateProductFactInputSchema = z.object({
 	id: z.string().uuid("Product Fact không hợp lệ."),
 	data: productFactFieldsSchema,
+	verificationIntent: productFactVerificationIntentSchema.default("preserve"),
 });
 
 export const productFactIdInputSchema = z.object({

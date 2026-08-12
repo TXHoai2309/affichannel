@@ -90,6 +90,7 @@ export async function updateProductFact(
 			current.status,
 			input.data.status,
 			sensitiveChanged,
+			input.verificationIntent,
 		),
 	};
 	validateFactForPersistence(data);

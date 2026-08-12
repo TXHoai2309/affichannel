@@ -3,6 +3,7 @@
 import {
 	factRequiresEvidence,
 	hasFactEvidence,
+	hasSensitiveFactChanges,
 	isValidFactDateRange,
 } from "@affichannel/core/product-fact/eligibility";
 import type {
@@ -21,6 +22,7 @@ import {
 	DrawerPopup,
 	DrawerPortal,
 	DrawerTitle,
+	DrawerViewport,
 } from "@affichannel/ui/components/drawer";
 import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
@@ -88,6 +90,18 @@ function fieldId(prefix: string, field: string) {
 	return `${prefix}-${field}`;
 }
 
+function toComparableFact(values: FactFormValues) {
+	return {
+		content: values.content.trim(),
+		type: values.type,
+		sourceType: values.sourceType || null,
+		sourceLabel: values.sourceLabel.trim() || null,
+		sourceUrl: values.sourceUrl.trim() || null,
+		confirmedAt: values.confirmedAt || null,
+		expiresAt: values.expiresAt || null,
+	};
+}
+
 export function FactFormDrawer({
 	open,
 	onOpenChange,
@@ -136,6 +150,11 @@ export function FactFormDrawer({
 
 	function submit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
+		const submitter = (event.nativeEvent as SubmitEvent).submitter;
+		const verificationIntent =
+			submitter instanceof HTMLButtonElement && submitter.value === "verify"
+				? "verify"
+				: "preserve";
 		const parsed = productFactFieldsSchema.safeParse({
 			...values,
 			sourceType: values.sourceType || null,
@@ -157,7 +176,7 @@ export function FactFormDrawer({
 			nextErrors.expiresAt = "Ngày hết hạn phải bằng hoặc sau ngày xác nhận.";
 		}
 		if (
-			data.status === "verified" &&
+			(!fact ? data.status === "verified" : verificationIntent === "verify") &&
 			factRequiresEvidence(data.type) &&
 			!hasFactEvidence(data)
 		) {
@@ -180,222 +199,262 @@ export function FactFormDrawer({
 			setErrors({ form: getFactErrorMessage(error) });
 
 		if (fact) {
-			updateFact.mutate({ id: fact.id, data }, { onSuccess, onError });
+			updateFact.mutate(
+				{ id: fact.id, data, verificationIntent },
+				{ onSuccess, onError },
+			);
 		} else {
 			createFact.mutate({ productId, data }, { onSuccess, onError });
 		}
 	}
 
+	const hasSensitiveEdits = Boolean(
+		fact && hasSensitiveFactChanges(fact, toComparableFact(values)),
+	);
+	const shouldOfferReverify = Boolean(
+		fact &&
+			values.status === "verified" &&
+			(fact.status !== "verified" || hasSensitiveEdits),
+	);
 	const isPending = createFact.isPending || updateFact.isPending;
 	return (
 		<Drawer open={open} onOpenChange={onOpenChange}>
 			<DrawerPortal>
 				<DrawerBackdrop />
-				<DrawerPopup className="w-[min(34rem,calc(100%-1rem))] overflow-y-auto">
-					<div>
-						<DrawerTitle>
-							{isEditing ? "Chỉnh sửa Fact" : "Thêm Product Fact"}
-						</DrawerTitle>
-						<DrawerDescription>
-							Lưu một thông tin có thể tái sử dụng cho brief và kiểm tra AI.
-						</DrawerDescription>
-					</div>
-					<form className="mt-6 space-y-4" noValidate onSubmit={submit}>
-						<div className="space-y-2">
-							<Label htmlFor={fieldId(prefix, "content")}>Nội dung Fact</Label>
-							<Textarea
-								aria-invalid={Boolean(errors.content)}
-								id={fieldId(prefix, "content")}
-								maxLength={5000}
-								placeholder="Ví dụ: Pin có thời lượng 20 giờ"
-								value={values.content}
-								onChange={(event) => updateField("content", event.target.value)}
-							/>
-							{errors.content ? (
-								<p className="text-destructive text-xs" role="alert">
-									{errors.content}
-								</p>
-							) : null}
+				<DrawerViewport>
+					<DrawerPopup className="w-[min(34rem,calc(100%-1rem))] overflow-y-auto">
+						<div>
+							<DrawerTitle>
+								{isEditing ? "Chỉnh sửa Fact" : "Thêm Product Fact"}
+							</DrawerTitle>
+							<DrawerDescription>
+								Lưu một thông tin có thể tái sử dụng cho brief và kiểm tra AI.
+							</DrawerDescription>
 						</div>
-						<div className="grid gap-4 sm:grid-cols-2">
+						<form className="mt-6 space-y-4" noValidate onSubmit={submit}>
 							<div className="space-y-2">
-								<Label htmlFor={fieldId(prefix, "type")}>Loại Fact</Label>
-								<select
-									className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-xs"
-									id={fieldId(prefix, "type")}
-									value={values.type}
-									onChange={(event) => updateField("type", event.target.value)}
-								>
-									{FACT_TYPES.map((type) => (
-										<option key={type} value={type}>
-											{FACT_TYPE_LABELS[type]}
-										</option>
-									))}
-								</select>
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor={fieldId(prefix, "status")}>Trạng thái</Label>
-								<select
-									className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-xs"
-									id={fieldId(prefix, "status")}
-									value={values.status}
+								<Label htmlFor={fieldId(prefix, "content")}>
+									Nội dung Fact
+								</Label>
+								<Textarea
+									aria-invalid={Boolean(errors.content)}
+									id={fieldId(prefix, "content")}
+									maxLength={5000}
+									placeholder="Ví dụ: Pin có thời lượng 20 giờ"
+									value={values.content}
 									onChange={(event) =>
-										updateField("status", event.target.value)
+										updateField("content", event.target.value)
 									}
-								>
-									{FACT_STATUSES.map((status) => (
-										<option key={status} value={status}>
-											{FACT_STATUS_LABELS[status]}
-										</option>
-									))}
-								</select>
+								/>
+								{errors.content ? (
+									<p className="text-destructive text-xs" role="alert">
+										{errors.content}
+									</p>
+								) : null}
 							</div>
-						</div>
-						<div className="rounded-xl border bg-muted/30 p-4">
-							<p className="font-medium text-sm">Nguồn xác minh</p>
-							<p className="mt-1 text-muted-foreground text-xs">
-								Giá, khuyến mãi và claim cần đủ nguồn cùng ngày xác nhận khi
-								chuyển sang Đã xác minh.
-							</p>
-							<div className="mt-4 grid gap-4 sm:grid-cols-2">
+							<div className="grid gap-4 sm:grid-cols-2">
 								<div className="space-y-2">
-									<Label htmlFor={fieldId(prefix, "sourceType")}>
-										Loại nguồn
-									</Label>
+									<Label htmlFor={fieldId(prefix, "type")}>Loại Fact</Label>
 									<select
 										className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-xs"
-										id={fieldId(prefix, "sourceType")}
-										value={values.sourceType}
+										id={fieldId(prefix, "type")}
+										value={values.type}
 										onChange={(event) =>
-											updateField("sourceType", event.target.value)
+											updateField("type", event.target.value)
 										}
 									>
-										<option value="">Chưa chọn</option>
-										{FACT_SOURCE_TYPES.map((sourceType) => (
-											<option key={sourceType} value={sourceType}>
-												{FACT_SOURCE_LABELS[sourceType]}
+										{FACT_TYPES.map((type) => (
+											<option key={type} value={type}>
+												{FACT_TYPE_LABELS[type]}
 											</option>
 										))}
 									</select>
 								</div>
 								<div className="space-y-2">
-									<Label htmlFor={fieldId(prefix, "confirmedAt")}>
-										Ngày xác nhận
+									<Label htmlFor={fieldId(prefix, "status")}>Trạng thái</Label>
+									<select
+										className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-xs"
+										id={fieldId(prefix, "status")}
+										value={values.status}
+										onChange={(event) =>
+											updateField("status", event.target.value)
+										}
+									>
+										{FACT_STATUSES.map((status) => (
+											<option key={status} value={status}>
+												{FACT_STATUS_LABELS[status]}
+											</option>
+										))}
+									</select>
+								</div>
+							</div>
+							<div className="rounded-xl border bg-muted/30 p-4">
+								<p className="font-medium text-sm">Nguồn xác minh</p>
+								<p className="mt-1 text-muted-foreground text-xs">
+									Giá, khuyến mãi và claim cần đủ nguồn cùng ngày xác nhận khi
+									chuyển sang Đã xác minh.
+								</p>
+								<div className="mt-4 grid gap-4 sm:grid-cols-2">
+									<div className="space-y-2">
+										<Label htmlFor={fieldId(prefix, "sourceType")}>
+											Loại nguồn
+										</Label>
+										<select
+											className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-xs"
+											id={fieldId(prefix, "sourceType")}
+											value={values.sourceType}
+											onChange={(event) =>
+												updateField("sourceType", event.target.value)
+											}
+										>
+											<option value="">Chưa chọn</option>
+											{FACT_SOURCE_TYPES.map((sourceType) => (
+												<option key={sourceType} value={sourceType}>
+													{FACT_SOURCE_LABELS[sourceType]}
+												</option>
+											))}
+										</select>
+									</div>
+									<div className="space-y-2">
+										<Label htmlFor={fieldId(prefix, "confirmedAt")}>
+											Ngày xác nhận
+										</Label>
+										<Input
+											aria-invalid={Boolean(errors.confirmedAt)}
+											id={fieldId(prefix, "confirmedAt")}
+											type="date"
+											value={values.confirmedAt}
+											onChange={(event) =>
+												updateField("confirmedAt", event.target.value)
+											}
+										/>
+									</div>
+								</div>
+								<div className="mt-4 space-y-2">
+									<Label htmlFor={fieldId(prefix, "sourceLabel")}>
+										Nhãn nguồn
 									</Label>
 									<Input
-										aria-invalid={Boolean(errors.confirmedAt)}
-										id={fieldId(prefix, "confirmedAt")}
-										type="date"
-										value={values.confirmedAt}
+										id={fieldId(prefix, "sourceLabel")}
+										placeholder="Ví dụ: Website thương hiệu"
+										value={values.sourceLabel}
 										onChange={(event) =>
-											updateField("confirmedAt", event.target.value)
+											updateField("sourceLabel", event.target.value)
+										}
+									/>
+								</div>
+								<div className="mt-4 space-y-2">
+									<Label htmlFor={fieldId(prefix, "sourceUrl")}>
+										URL nguồn (không bắt buộc nếu có nhãn)
+									</Label>
+									<Input
+										aria-invalid={Boolean(errors.sourceUrl)}
+										id={fieldId(prefix, "sourceUrl")}
+										placeholder="https://..."
+										value={values.sourceUrl}
+										onChange={(event) =>
+											updateField("sourceUrl", event.target.value)
 										}
 									/>
 								</div>
 							</div>
-							<div className="mt-4 space-y-2">
-								<Label htmlFor={fieldId(prefix, "sourceLabel")}>
-									Nhãn nguồn
-								</Label>
-								<Input
-									id={fieldId(prefix, "sourceLabel")}
-									placeholder="Ví dụ: Website thương hiệu"
-									value={values.sourceLabel}
-									onChange={(event) =>
-										updateField("sourceLabel", event.target.value)
-									}
-								/>
+							<div className="grid gap-4 sm:grid-cols-2">
+								<div className="space-y-2">
+									<Label htmlFor={fieldId(prefix, "expiresAt")}>
+										Ngày hết hạn (không bắt buộc)
+									</Label>
+									<Input
+										aria-invalid={Boolean(errors.expiresAt)}
+										id={fieldId(prefix, "expiresAt")}
+										type="date"
+										value={values.expiresAt}
+										onChange={(event) =>
+											updateField("expiresAt", event.target.value)
+										}
+									/>
+									{errors.expiresAt ? (
+										<p className="text-destructive text-xs" role="alert">
+											{errors.expiresAt}
+										</p>
+									) : null}
+								</div>
+								<div className="space-y-2">
+									<Label htmlFor={fieldId(prefix, "notes")}>Ghi chú</Label>
+									<Input
+										id={fieldId(prefix, "notes")}
+										maxLength={2000}
+										placeholder="Ghi chú nội bộ"
+										value={values.notes}
+										onChange={(event) =>
+											updateField("notes", event.target.value)
+										}
+									/>
+								</div>
 							</div>
-							<div className="mt-4 space-y-2">
-								<Label htmlFor={fieldId(prefix, "sourceUrl")}>
-									URL nguồn (không bắt buộc nếu có nhãn)
-								</Label>
-								<Input
-									aria-invalid={Boolean(errors.sourceUrl)}
-									id={fieldId(prefix, "sourceUrl")}
-									placeholder="https://..."
-									value={values.sourceUrl}
-									onChange={(event) =>
-										updateField("sourceUrl", event.target.value)
-									}
-								/>
-							</div>
-						</div>
-						<div className="grid gap-4 sm:grid-cols-2">
-							<div className="space-y-2">
-								<Label htmlFor={fieldId(prefix, "expiresAt")}>
-									Ngày hết hạn (không bắt buộc)
-								</Label>
-								<Input
-									aria-invalid={Boolean(errors.expiresAt)}
-									id={fieldId(prefix, "expiresAt")}
-									type="date"
-									value={values.expiresAt}
-									onChange={(event) =>
-										updateField("expiresAt", event.target.value)
-									}
-								/>
-								{errors.expiresAt ? (
-									<p className="text-destructive text-xs" role="alert">
-										{errors.expiresAt}
+							{errors.form ? (
+								<p
+									className="rounded-lg bg-destructive/10 p-3 text-destructive text-sm"
+									role="alert"
+								>
+									{errors.form}
+								</p>
+							) : null}
+							{fact?.status === "verified" && hasSensitiveEdits ? (
+								<p
+									className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 text-sm"
+									role="status"
+								>
+									Thông tin đã xác minh đã thay đổi. Fact sẽ chuyển về Bản nháp
+									khi lưu.
+								</p>
+							) : null}
+							{fact && historyQuery.data?.items.length ? (
+								<div className="rounded-xl border bg-muted/20 p-4">
+									<p className="font-medium text-sm">
+										Lịch sử thay đổi ({historyQuery.data.items.length})
 									</p>
-								) : null}
-							</div>
-							<div className="space-y-2">
-								<Label htmlFor={fieldId(prefix, "notes")}>Ghi chú</Label>
-								<Input
-									id={fieldId(prefix, "notes")}
-									maxLength={2000}
-									placeholder="Ghi chú nội bộ"
-									value={values.notes}
-									onChange={(event) => updateField("notes", event.target.value)}
-								/>
-							</div>
-						</div>
-						{errors.form ? (
-							<p
-								className="rounded-lg bg-destructive/10 p-3 text-destructive text-sm"
-								role="alert"
-							>
-								{errors.form}
-							</p>
-						) : null}
-						{fact && historyQuery.data?.items.length ? (
-							<div className="rounded-xl border bg-muted/20 p-4">
-								<p className="font-medium text-sm">
-									Lịch sử thay đổi ({historyQuery.data.items.length})
-								</p>
-								<p className="mt-1 text-muted-foreground text-xs">
-									Lần gần nhất:{" "}
-									{new Intl.DateTimeFormat("vi-VN", {
-										dateStyle: "medium",
-										timeStyle: "short",
-									}).format(new Date(historyQuery.data.items[0].changedAt))}
-								</p>
-							</div>
-						) : null}
-						<div className="flex justify-end gap-2 border-t pt-4">
-							<DrawerClose
-								render={
+									<p className="mt-1 text-muted-foreground text-xs">
+										Lần gần nhất:{" "}
+										{new Intl.DateTimeFormat("vi-VN", {
+											dateStyle: "medium",
+											timeStyle: "short",
+										}).format(new Date(historyQuery.data.items[0].changedAt))}
+									</p>
+								</div>
+							) : null}
+							<div className="flex justify-end gap-2 border-t pt-4">
+								<DrawerClose
+									render={
+										<Button
+											disabled={isPending}
+											type="button"
+											variant="outline"
+										/>
+									}
+								>
+									Hủy
+								</DrawerClose>
+								<Button disabled={isPending} type="submit" value="preserve">
+									{isPending
+										? "Đang lưu..."
+										: isEditing
+											? "Lưu thay đổi"
+											: "Thêm Fact"}
+								</Button>
+								{shouldOfferReverify ? (
 									<Button
 										disabled={isPending}
-										type="button"
+										type="submit"
+										value="verify"
 										variant="outline"
-									/>
-								}
-							>
-								Hủy
-							</DrawerClose>
-							<Button disabled={isPending} type="submit">
-								{isPending
-									? "Đang lưu..."
-									: isEditing
-										? "Lưu thay đổi"
-										: "Thêm Fact"}
-							</Button>
-						</div>
-					</form>
-				</DrawerPopup>
+									>
+										Xác minh lại &amp; Lưu
+									</Button>
+								) : null}
+							</div>
+						</form>
+					</DrawerPopup>
+				</DrawerViewport>
 			</DrawerPortal>
 		</Drawer>
 	);

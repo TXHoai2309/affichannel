@@ -13,6 +13,10 @@ export type ProductFactType = (typeof productFactTypes)[number];
 export const productFactStatuses = ["draft", "verified", "inactive"] as const;
 export type ProductFactStatus = (typeof productFactStatuses)[number];
 
+export const productFactVerificationIntents = ["preserve", "verify"] as const;
+export type ProductFactVerificationIntent =
+	(typeof productFactVerificationIntents)[number];
+
 export const productFactSourceTypes = [
 	"official",
 	"marketplace",

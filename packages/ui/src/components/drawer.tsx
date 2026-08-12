@@ -4,7 +4,13 @@ import { cn } from "@affichannel/ui/lib/utils";
 import { Drawer as DrawerPrimitive } from "@base-ui/react/drawer";
 
 function Drawer({ ...props }: DrawerPrimitive.Root.Props) {
-	return <DrawerPrimitive.Root data-slot="drawer" {...props} />;
+	return (
+		<DrawerPrimitive.Root
+			data-slot="drawer"
+			swipeDirection="right"
+			{...props}
+		/>
+	);
 }
 
 function DrawerTrigger({ ...props }: DrawerPrimitive.Trigger.Props) {
@@ -13,6 +19,19 @@ function DrawerTrigger({ ...props }: DrawerPrimitive.Trigger.Props) {
 
 function DrawerPortal({ ...props }: DrawerPrimitive.Portal.Props) {
 	return <DrawerPrimitive.Portal data-slot="drawer-portal" {...props} />;
+}
+
+function DrawerViewport({
+	className,
+	...props
+}: DrawerPrimitive.Viewport.Props) {
+	return (
+		<DrawerPrimitive.Viewport
+			data-slot="drawer-viewport"
+			className={cn("pointer-events-none fixed inset-0 z-50", className)}
+			{...props}
+		/>
+	);
 }
 
 function DrawerBackdrop({
@@ -36,7 +55,7 @@ function DrawerPopup({ className, ...props }: DrawerPrimitive.Popup.Props) {
 		<DrawerPrimitive.Popup
 			data-slot="drawer-popup"
 			className={cn(
-				"fixed top-0 right-0 z-50 flex h-full w-[min(24rem,calc(100%-1rem))] flex-col rounded-l-2xl border-l bg-background p-6 shadow-lg outline-none data-closed:translate-x-full data-open:translate-x-0",
+				"pointer-events-auto fixed top-0 right-0 z-50 flex h-full w-[min(24rem,calc(100%-1rem))] flex-col rounded-l-2xl border-l bg-background p-6 shadow-lg outline-none data-closed:translate-x-full data-open:translate-x-0",
 				className,
 			)}
 			{...props}
@@ -80,4 +99,5 @@ export {
 	DrawerPortal,
 	DrawerTitle,
 	DrawerTrigger,
+	DrawerViewport,
 };

@@ -289,3 +289,32 @@ freshness automation hoặc provider AI.
 US007 mới được bổ sung freshness/stale detection hoặc scheduler; US008 mới được bổ sung
 Fact Lock/provider/fetching. Product `priceAmount` vẫn là metadata hiển thị, không đồng bộ
 với Fact `type=price`.
+
+## DEC-013 — Intent xác minh Fact và anatomy Drawer dùng chung
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-12
+
+### Bối cảnh
+
+Form chỉnh sửa Fact có thể gửi lại `status=verified` từ state cũ trong khi nội dung hoặc
+evidence đã thay đổi. Base UI Drawer cũng yêu cầu `Viewport` để popup hoạt động đúng và
+tránh mất swipe handling/touch scroll lock.
+
+### Quyết định
+
+- Update Product Fact phải có intent rõ ràng `preserve | verify`, mặc định là `preserve`.
+  Sensitive edit của Fact đang `verified` với `preserve` luôn demote về `draft`; notes-only
+  được giữ `verified`. Chỉ `verify` mới chuyển sang `verified`, sau khi server/core validate
+  evidence theo type mới và trạng thái hiện tại.
+- Shared Drawer dùng anatomy `Drawer.Portal > Drawer.Viewport > Drawer.Popup`; Drawer dạng
+  panel bên phải đặt `swipeDirection="right"`. Feature không tự dựng anatomy riêng.
+- Tab Product Detail dùng `router.push` cho thao tác người dùng; URL `?tab=facts` là nguồn
+  sự thật để render và khôi phục bằng reload/back/forward. `replace` chỉ phù hợp cho chuẩn hóa
+  URL nội bộ không tạo history entry.
+
+### Hệ quả
+
+UI phải tách action lưu bình thường khỏi action re-verify và hiển thị cảnh báo khi verified
+data bị thay đổi. Regression phải kiểm tra console error của Drawer, lifecycle verified và
+history navigation; không dùng global zero-console-errors assertion cho toàn ứng dụng.

@@ -44,8 +44,10 @@ test.describe("AFF-US-004 project creation", () => {
 				.fill("Kiểm tra persistence của content brief");
 			await page.getByRole("button", { name: "Tạo dự án" }).click();
 
-			await expect(page).toHaveURL(/\/projects\/[^/]+\/product$/);
-			projectId = page.url().match(/\/projects\/([^/]+)\/product$/)?.[1];
+			await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\/product$/i);
+			projectId = page
+				.url()
+				.match(/\/projects\/([0-9a-f-]{36})\/product$/i)?.[1];
 			expect(projectId).toBeTruthy();
 
 			const [persistedProject] = await db

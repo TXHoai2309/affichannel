@@ -126,12 +126,32 @@ try {
 		"Verified Fact should be stored as verified.",
 	);
 
+	const notesOnly = await updateProductFact(actor, {
+		id: verified.id,
+		data: {
+			content: verified.content,
+			type: verified.type,
+			status: "verified",
+			sourceType: verified.sourceType,
+			sourceLabel: verified.sourceLabel,
+			sourceUrl: verified.sourceUrl,
+			confirmedAt: verified.confirmedAt,
+			expiresAt: verified.expiresAt,
+			notes: "Ghi chú đã cập nhật",
+		},
+		verificationIntent: "preserve",
+	});
+	assert(
+		notesOnly.status === "verified",
+		"Notes-only verified edit should remain verified.",
+	);
+
 	const edited = await updateProductFact(actor, {
 		id: verified.id,
 		data: {
 			content: "Giá 149.000đ",
 			type: "price",
-			status: "draft",
+			status: "verified",
 			sourceType: "official",
 			sourceLabel: "Website thương hiệu",
 			sourceUrl: "https://example.com/price",
@@ -139,6 +159,7 @@ try {
 			expiresAt: "2026-08-20",
 			notes: "Đã đổi giá",
 		},
+		verificationIntent: "preserve",
 	});
 	assert(
 		edited.status === "draft",
@@ -157,6 +178,7 @@ try {
 			expiresAt: edited.expiresAt,
 			notes: edited.notes,
 		},
+		verificationIntent: "verify",
 	});
 	assert(
 		reverified.status === "verified",
@@ -176,6 +198,105 @@ try {
 			expiresAt: null,
 			notes: null,
 		},
+	});
+	const typeChanged = await updateProductFact(actor, {
+		id: second.id,
+		data: {
+			content: "Price without evidence",
+			type: "price",
+			status: "verified",
+			sourceType: null,
+			sourceLabel: null,
+			sourceUrl: null,
+			confirmedAt: null,
+			expiresAt: null,
+			notes: null,
+		},
+		verificationIntent: "preserve",
+	});
+	assert(
+		typeChanged.status === "draft",
+		"Feature-to-price edit should default to draft.",
+	);
+	try {
+		await updateProductFact(actor, {
+			id: second.id,
+			data: { ...typeChanged, status: "verified" },
+			verificationIntent: "verify",
+		});
+		throw new Error("Explicit verification without evidence was accepted.");
+	} catch (error) {
+		assert(
+			error instanceof ProductFactServiceError &&
+				error.code === "FACT_EVIDENCE_REQUIRED",
+			"Explicit verification must validate evidence for the new type.",
+		);
+	}
+	const secondVerified = await updateProductFact(actor, {
+		id: second.id,
+		data: {
+			...typeChanged,
+			status: "verified",
+			sourceType: "official",
+			sourceLabel: "Official source",
+			sourceUrl: "https://example.com/second",
+			confirmedAt: "2026-08-12",
+		},
+		verificationIntent: "verify",
+	});
+	assert(
+		secondVerified.status === "verified",
+		"Explicit verification with evidence should succeed.",
+	);
+	const inactive = await updateProductFact(actor, {
+		id: second.id,
+		data: { ...secondVerified, status: "inactive" },
+		verificationIntent: "preserve",
+	});
+	assert(
+		inactive.status === "inactive",
+		"Fact should support inactive status.",
+	);
+	try {
+		await updateProductFact(actor, {
+			id: second.id,
+			data: {
+				...inactive,
+				status: "verified",
+				sourceType: null,
+				sourceLabel: null,
+				sourceUrl: null,
+				confirmedAt: null,
+			},
+			verificationIntent: "verify",
+		});
+		throw new Error("Inactive Fact was verified without evidence.");
+	} catch (error) {
+		assert(
+			error instanceof ProductFactServiceError &&
+				error.code === "FACT_EVIDENCE_REQUIRED",
+			"Inactive Fact verification must validate evidence.",
+		);
+	}
+	await updateProductFact(actor, {
+		id: second.id,
+		data: { ...secondVerified, status: "verified" },
+		verificationIntent: "verify",
+	});
+	await updateProductFact(actor, {
+		id: second.id,
+		data: {
+			content: "Có chế độ chống ồn",
+			type: "feature",
+			status: "draft",
+			sourceType: null,
+			sourceLabel: null,
+			sourceUrl: null,
+			confirmedAt: null,
+			expiresAt: null,
+			notes: null,
+		},
+		verificationIntent: "preserve",
 	});
 	const firstPage = await listProductFacts(actor, { productId, limit: 1 });
 	assert(

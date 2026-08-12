@@ -2,6 +2,7 @@ import type {
 	ProductFactRecord,
 	ProductFactStatus,
 	ProductFactType,
+	ProductFactVerificationIntent,
 } from "./types";
 
 export function factRequiresEvidence(type: ProductFactType) {
@@ -64,12 +65,17 @@ export function resolveFactStatusAfterEdit(
 	currentStatus: ProductFactStatus,
 	requestedStatus: ProductFactStatus,
 	sensitiveChanged: boolean,
+	verificationIntent: ProductFactVerificationIntent = "preserve",
 ) {
-	if (
-		currentStatus === "verified" &&
-		sensitiveChanged &&
-		requestedStatus !== "verified"
-	) {
+	if (verificationIntent === "verify") {
+		return "verified" as const;
+	}
+
+	if (currentStatus === "verified" && sensitiveChanged) {
+		return "draft" as const;
+	}
+
+	if (requestedStatus === "verified" && currentStatus !== "verified") {
 		return "draft" as const;
 	}
 
