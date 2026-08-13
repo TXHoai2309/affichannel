@@ -1,7 +1,8 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-007 đã hoàn thành sau hardening trên branch `feat/us006-product-facts`; chưa commit/push/merge/deploy.
-- Cập nhật lần cuối: 2026-08-12
+- Trạng thái: AFF-US-007 đã hoàn thành sau hardening và fix regression TC-021 trên branch
+  `feat/us006-product-facts`; chưa commit/push/merge/deploy.
+- Cập nhật lần cuối: 2026-08-13
 
 File này ghi lại công việc đáng kể do AI agent thực hiện. Đây không phải chain of
 thought hoặc bản sao terminal. Mỗi bản ghi chỉ tóm tắt mục tiêu, thay đổi, bằng
@@ -10,7 +11,30 @@ chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp t
 ## Mục tiêu hiện tại
 
 AFF-US-007 Fact Freshness & Dependency Invalidation đã hoàn thành trên branch
-`feat/us006-product-facts`.
+`feat/us006-product-facts`; TC-021 verified Feature không source đã được sửa và xác nhận.
+
+### 2026-08-13 — Fix regression TC-021 Product Facts
+
+Root cause là `nullableSourceUrl` ở shared Product Fact schema chỉ nhận `string | undefined`,
+trong khi form normalize URL rỗng thành `null`. Vì vậy request browser bị oRPC reject ở input
+validation trước khi tới persistence service; đây không phải lỗi của `factRequiresEvidence()`.
+
+Đã sửa schema để URL nguồn nhận `null`/rỗng và vẫn kiểm tra protocol `http/https` khi có giá trị.
+Persistence tiếp tục chỉ yêu cầu evidence cho `price`, `promotion`, `claim`; supporting-source
+assessment và generation usability của US007 không đổi.
+
+Đã bổ sung regression coverage cho verified `feature`, `specification`, `policy`, `other` không
+source; kiểm tra assessment `evidence=missing`, freshness `not_applicable`, generation `blocked`,
+source được thêm thì generation `allowed`; đồng thời giữ các required-evidence case price/
+promotion/claim bị reject.
+
+Kiểm tra:
+
+- `pnpm run check-types`: đạt.
+- `pnpm --filter web test`: 40/40 đạt.
+- `pnpm run test:integration:product-facts`: đạt trên Neon.
+- `pnpm --filter web test:e2e -- tests/e2e/product-facts.spec.ts`: 1/1 đạt.
+- `pnpm --filter web test:e2e`: 12/12 đạt, 0 failed, 0 skipped.
 
 ### 2026-08-12 — Hardening AFF-US-006 Product Facts
 
@@ -685,3 +709,21 @@ Kiểm tra:
 - Biome scope 8 file hardening và `git diff --check`: đạt.
 
 Trạng thái hardening: Done trong phạm vi AFF-US-007. Chưa commit/push/merge/deploy.
+
+### 2026-08-13 — Sửa regression TC-026A Project Overview
+
+Đã xác định nút “Tổng quan project” trỏ đúng `/projects/{id}`, nhưng route này tự redirect
+về `currentStepKey`, khiến người dùng quay lại `/product`. Route hiện có được đổi thành
+Project Overview thật, hiển thị Project, Product liên kết, platform, current step và Content
+Brief persisted; không tạo route trùng và không thay đổi logic Product Facts/US007.
+
+Kiểm tra:
+
+- `pnpm check-types`: đạt.
+- `pnpm --filter web test`: 40/40 đạt.
+- `pnpm test:integration:project-auth`: đạt, cross-workspace read vẫn bị chặn.
+- `pnpm --filter web test:e2e`: 12/12 đạt, gồm click overview, refresh và browser Back.
+- `pnpm --filter web build`: đạt.
+- `git diff --check`: đạt.
+
+Trạng thái regression: đã sửa. Chưa commit/push/merge/deploy.

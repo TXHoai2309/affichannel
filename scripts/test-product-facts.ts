@@ -83,6 +83,84 @@ try {
 	});
 	assert(draft.status === "draft", "Feature Fact should be created as draft.");
 
+	const verifiedFeature = await createProductFact(actor, {
+		productId,
+		data: {
+			content: "Pin sử dụng liên tục 30 giờ",
+			type: "feature",
+			status: "verified",
+			sourceType: null,
+			sourceLabel: null,
+			sourceUrl: null,
+			confirmedAt: null,
+			expiresAt: null,
+			notes: null,
+		},
+	});
+	const verifiedFeatureAssessment = await getProductFact(
+		actor,
+		verifiedFeature.id,
+	);
+	assert(
+		verifiedFeature.status === "verified" &&
+			verifiedFeatureAssessment.assessment.evidence === "missing" &&
+			verifiedFeatureAssessment.assessment.freshness === "not_applicable" &&
+			verifiedFeatureAssessment.generationUsability === "blocked",
+		"Verified Feature without source must persist but remain blocked for generation.",
+	);
+
+	const optionalTypes = ["specification", "policy", "other"] as const;
+	for (const type of optionalTypes) {
+		const optionalFact = await createProductFact(actor, {
+			productId,
+			data: {
+				content: `${type} without source`,
+				type,
+				status: "verified",
+				sourceType: null,
+				sourceLabel: null,
+				sourceUrl: null,
+				confirmedAt: null,
+				expiresAt: null,
+				notes: null,
+			},
+		});
+		const optionalAssessment = await getProductFact(actor, optionalFact.id);
+		assert(
+			optionalFact.status === "verified" &&
+				optionalAssessment.assessment.evidence === "missing" &&
+				optionalAssessment.generationUsability === "blocked",
+			`Verified ${type} without source must persist with blocked generation.`,
+		);
+	}
+
+	const sourcedFeature = await updateProductFact(actor, {
+		id: verifiedFeature.id,
+		expectedRevision: verifiedFeature.revision,
+		data: {
+			content: verifiedFeature.content,
+			type: verifiedFeature.type,
+			status: "verified",
+			sourceType: "official",
+			sourceLabel: "Official source",
+			sourceUrl: "https://example.com/feature",
+			confirmedAt: "2026-08-12",
+			expiresAt: null,
+			notes: verifiedFeature.notes,
+		},
+		verificationIntent: "verify",
+	});
+	const sourcedFeatureAssessment = await getProductFact(
+		actor,
+		sourcedFeature.id,
+	);
+	assert(
+		sourcedFeature.status === "verified" &&
+			sourcedFeatureAssessment.assessment.evidence === "complete" &&
+			sourcedFeatureAssessment.generationUsability === "allowed",
+		"Verified Feature with supporting source should be generation-ready.",
+	);
+
 	try {
 		await createProductFact(actor, {
 			productId,
@@ -105,6 +183,31 @@ try {
 				error.code === "FACT_EVIDENCE_REQUIRED",
 			"Missing evidence should be rejected.",
 		);
+	}
+	for (const type of ["promotion", "claim"] as const) {
+		try {
+			await createProductFact(actor, {
+				productId,
+				data: {
+					content: `${type} without evidence`,
+					type,
+					status: "verified",
+					sourceType: null,
+					sourceLabel: null,
+					sourceUrl: null,
+					confirmedAt: null,
+					expiresAt: null,
+					notes: null,
+				},
+			});
+			throw new Error(`Verified ${type} without evidence was accepted.`);
+		} catch (error) {
+			assert(
+				error instanceof ProductFactServiceError &&
+					error.code === "FACT_EVIDENCE_REQUIRED",
+				`Missing evidence for ${type} should be rejected.`,
+			);
+		}
 	}
 
 	const verified = await createProductFact(actor, {
@@ -389,7 +492,7 @@ try {
 	await archiveProduct(actor, productId);
 	const archived = await getProduct(actor, productId);
 	assert(
-		archived.usage.factCount === 2 && archived.usage.factHistoryCount > 0,
+		archived.usage.factCount >= 6 && archived.usage.factHistoryCount > 0,
 		"Archive must preserve Facts and history counts.",
 	);
 

@@ -24,8 +24,10 @@
 - oRPC bảo vệ list/get/create/update/archive project và list/create product bằng workspace
   membership ở server.
 - `/projects/new` có validation client/server, loading/error state, tạo product nhanh và
-  redirect tới `/projects/{id}/product`. `/projects/{id}` luôn redirect theo current step
-  đã lưu.
+  redirect tới `/projects/{id}/product`.
+- `/projects/{id}` là Project Overview, hiển thị project, Product liên kết, platform,
+  current workflow step và Content Brief đã lưu. Từ từng step, “Tổng quan project” điều
+  hướng về route này; refresh và browser Back giữ đúng lịch sử điều hướng.
 
 ## Kiểm tra đã thực hiện
 

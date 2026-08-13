@@ -52,6 +52,32 @@ test.describe("AFF-US-006 Product Facts", () => {
 				page.getByRole("tab", { name: /Product Facts/ }),
 			).toHaveAttribute("aria-selected", "true");
 
+			const verifiedFeatureContent = `Pin sử dụng liên tục 30 giờ ${suffix}`;
+			await page.getByRole("button", { name: "Thêm Fact" }).click();
+			await page.getByLabel("Nội dung Fact").fill(verifiedFeatureContent);
+			await page.getByLabel("Loại Fact").selectOption("feature");
+			await page
+				.getByLabel("Trạng thái", { exact: true })
+				.selectOption("verified");
+			await page.getByRole("button", { name: "Thêm Fact" }).click();
+			await expect(
+				page.getByText(verifiedFeatureContent, { exact: true }),
+			).toBeVisible();
+			const verifiedFeatureRow = page
+				.getByText(verifiedFeatureContent, { exact: true })
+				.locator(
+					"xpath=ancestor::div[.//button[starts-with(@aria-label, 'Sửa Fact')]][1]",
+				);
+			await expect(
+				verifiedFeatureRow.getByText("Đã xác minh", { exact: true }),
+			).toBeVisible();
+			await expect(
+				verifiedFeatureRow.getByText("Thiếu căn cứ", { exact: true }),
+			).toBeVisible();
+			await expect(
+				verifiedFeatureRow.getByText("Tính năng", { exact: true }),
+			).toBeVisible();
+
 			await page.getByRole("button", { name: "Thêm Fact" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Thêm Product Fact" }),
@@ -75,8 +101,9 @@ test.describe("AFF-US-006 Product Facts", () => {
 			await expect(
 				page
 					.getByText(factContent, { exact: true })
-					.locator("..")
-					.locator("..")
+					.locator(
+						"xpath=ancestor::div[.//button[starts-with(@aria-label, 'Sửa Fact')]][1]",
+					)
 					.getByText("Đã xác minh", { exact: true }),
 			).toBeVisible();
 
@@ -91,8 +118,9 @@ test.describe("AFF-US-006 Product Facts", () => {
 			await expect(
 				page
 					.getByText(editedContent, { exact: true })
-					.locator("..")
-					.locator("..")
+					.locator(
+						"xpath=ancestor::div[.//button[starts-with(@aria-label, 'Sửa Fact')]][1]",
+					)
 					.getByText("Bản nháp", { exact: true }),
 			).toBeVisible();
 

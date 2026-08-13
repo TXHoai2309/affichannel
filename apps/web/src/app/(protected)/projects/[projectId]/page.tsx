@@ -1,6 +1,7 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
+import ProjectOverview from "@/features/project-navigation/project-overview";
 import {
 	getCurrentWorkspaceActor,
 	getProjectForCurrentUser,
@@ -21,7 +22,7 @@ export default async function ProjectOverviewPage({
 	const fixture = getProjectFixture(projectId);
 
 	if (fixture) {
-		redirect(`/projects/${fixture.id}/${fixture.currentStepKey}`);
+		return <ProjectOverview project={fixture} />;
 	}
 
 	const project = await getProjectForCurrentUser(projectId);
@@ -30,5 +31,14 @@ export default async function ProjectOverviewPage({
 		notFound();
 	}
 
-	redirect(`/projects/${project.id}/${project.currentStepKey}`);
+	return (
+		<ProjectOverview
+			project={{
+				name: project.name,
+				productName: project.product.name,
+				currentStepKey: project.currentStepKey,
+				brief: project.brief,
+			}}
+		/>
+	);
 }

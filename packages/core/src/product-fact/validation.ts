@@ -48,8 +48,8 @@ const nullableDate = z
 
 const nullableSourceUrl = z
 	.preprocess(
-		(value) => (typeof value === "string" && !value.trim() ? undefined : value),
-		optionalHttpUrl("URL nguồn"),
+		(value) => (typeof value === "string" && !value.trim() ? null : value),
+		optionalHttpUrl("URL nguồn").nullable().optional(),
 	)
 	.transform((value) => value ?? null);
 

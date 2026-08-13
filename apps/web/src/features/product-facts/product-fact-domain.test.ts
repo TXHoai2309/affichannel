@@ -25,7 +25,10 @@ describe("Product Facts domain contract", () => {
 		expect(factRequiresEvidence("price")).toBe(true);
 		expect(factRequiresEvidence("promotion")).toBe(true);
 		expect(factRequiresEvidence("claim")).toBe(true);
+		expect(factRequiresEvidence("specification")).toBe(false);
 		expect(factRequiresEvidence("feature")).toBe(false);
+		expect(factRequiresEvidence("policy")).toBe(false);
+		expect(factRequiresEvidence("other")).toBe(false);
 	});
 
 	it("validates verified evidence and AI eligibility", () => {
@@ -50,6 +53,7 @@ describe("Product Facts domain contract", () => {
 			sourceUrl: null,
 			confirmedAt: null,
 		};
+		expect(productFactFieldsSchema.safeParse(feature).success).toBe(true);
 		expect(hasFactEvidence(feature)).toBe(false);
 		expect(isFactEligibleForAi(feature)).toBe(true);
 	});

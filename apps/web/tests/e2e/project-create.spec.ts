@@ -74,11 +74,35 @@ test.describe("AFF-US-004 project creation", () => {
 				.where(eq(projectStepStatus.projectId, projectId as string));
 			expect(persistedStatuses).toHaveLength(7);
 
-			await page.goto(`/projects/${projectId}`);
-			await expect(page).toHaveURL(
-				new RegExp(`/projects/${projectId}/product$`),
-			);
+			await page.getByRole("button", { name: "Tổng quan project" }).click();
+			await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+			const overview = page.getByRole("region", { name: projectName });
+			await expect(
+				overview.getByRole("heading", { name: projectName }),
+			).toBeVisible();
+			await expect(
+				overview.getByText(productName, { exact: true }),
+			).toBeVisible();
+			await expect(overview.getByText("TikTok", { exact: true })).toBeVisible();
+			await expect(
+				overview.getByRole("definition").filter({ hasText: /^Sản phẩm$/ }),
+			).toBeVisible();
+			await expect(
+				overview.getByText("Kiểm tra luồng tạo project"),
+			).toBeVisible();
+			await expect(
+				overview.getByText("Kiểm tra persistence của content brief"),
+			).toBeVisible();
+
 			await page.reload();
+			await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
+			await expect(
+				page
+					.getByRole("region", { name: projectName })
+					.getByRole("heading", { name: projectName }),
+			).toBeVisible();
+
+			await page.goBack();
 			await expect(page).toHaveURL(
 				new RegExp(`/projects/${projectId}/product$`),
 			);

@@ -34,7 +34,7 @@ export function FactFreshnessBadge({
 				{FRESHNESS_LABELS[assessment.freshness]}
 			</Badge>
 			{assessment.evidence === "missing" ? (
-				<Badge variant="destructive">Thiếu nguồn xác thực</Badge>
+				<Badge variant="destructive">Thiếu căn cứ</Badge>
 			) : null}
 		</div>
 	);

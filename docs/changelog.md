@@ -34,6 +34,8 @@ sử dụng Semantic Versioning.
 
 ### Đã thay đổi
 
+- AFF-US-004 regression TC-026A: `/projects/{id}` nay render Project Overview persisted thay vì
+  redirect về current step; nút “Tổng quan project” từ `/product` hỗ trợ refresh và browser Back.
 - Cleanup sau AFF-US-003: user menu hiển thị identity từ session với fallback email; CI fail rõ ràng
   nếu authenticated E2E thiếu `E2E_AUTH_EMAIL` hoặc `E2E_AUTH_PASSWORD`.
 - Dashboard chỉ đọc dữ liệu Project thật trong workspace hiện tại, không tạo mock metrics hoặc
@@ -111,3 +113,6 @@ sử dụng Semantic Versioning.
 - AFF-US-007 hardening: khóa hàng Product Fact khi register/replace và update/delete để không
   tạo active dependency stale; evidence assessment kiểm tra supporting source cho cả Fact type
   optional; Dashboard warning test nhận ngày tường minh và có regression race.
+- Regression fix AFF-US-006/007: schema API nhận `null`/rỗng cho URL nguồn của Fact optional;
+  verified feature/specification/policy/other không còn bị chặn trước persistence, nhưng vẫn
+  hiển thị badge `Thiếu căn cứ` và bị block generation như contract.
