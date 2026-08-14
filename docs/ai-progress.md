@@ -727,3 +727,47 @@ Kiểm tra:
 - `git diff --check`: đạt.
 
 Trạng thái regression: đã sửa. Chưa commit/push/merge/deploy.
+
+### 2026-08-14 — Chốt foundation AFF-US-008 Structured Script Generation
+
+Mục tiêu:
+
+- Audit source sau US7 và khóa kiến trúc ScriptGeneration trước implementation DB/API/provider.
+
+Thay đổi:
+
+- Chấp nhận DEC-015: US8 lưu generated artifact read-only, US9 mới tạo ScriptVersion và US10 mới
+  làm Fact Lock.
+- Thiết kế strict ScriptDraft/partial sections, exact input snapshot, canonical hashing,
+  idempotency, một pending request mỗi Project, immutable repair lineage và stale pending
+  `indeterminate`.
+- Thiết kế Transaction A khóa/snapshot Fact và ghi dependency bằng cùng revision, provider call
+  ngoài transaction, Transaction B conditional-finalize; thêm dependent type
+  `script_generation` trong migration tương lai.
+- Chốt read model `latestRequest + latestUsableArtifact`, database/index/constraint proposal,
+  file change map và foundation test plan trong `docs/aff-us-008-foundation.md`.
+- Cập nhật product spec, architecture và roadmap để tách rõ US8 khỏi editor/ScriptVersion US9.
+
+Kiểm tra:
+
+- Audit schema/migration 0000–0005, US7 freshness/dependency repository, workspace authorization,
+  Project/ContentBrief và transaction convention hiện tại.
+- `pnpm check-types`: đạt.
+- Chưa tạo hoặc apply migration; chưa thêm provider SDK, API, UI hay ScriptVersion.
+- `git diff --check`: đạt.
+
+Quyết định:
+
+- DEC-015 đã chấp nhận. Live provider/model và khả năng provider idempotency/retrieve là blocker
+  duy nhất trước phase live adapter, không chặn foundation implementation.
+
+Implementation update:
+
+- Đã triển khai core contract, canonical JSON/SHA-256, migration `0006` + hardening `0007`, repository/read model, transaction-scoped dependencies và deterministic provider.
+- Unit test foundation pass; migration SQL đã được apply thử trên Postgres local cô lập. Shared Neon chưa bị migrate.
+- Chưa triển khai live provider/API/UI/ScriptVersion/Fact Lock.
+
+Tiếp theo:
+
+- Implement domain schemas/policy/hashing và generate/review migration theo file map foundation;
+  không gọi live AI cho tới phase provider.

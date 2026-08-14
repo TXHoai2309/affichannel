@@ -33,7 +33,7 @@ export const factDependency = pgTable(
 		check("fact_dependency_revision_check", sql`${table.factRevision} > 0`),
 		check(
 			"fact_dependency_type_check",
-			sql`${table.dependentType} in ('script', 'fact_lock', 'voice', 'video', 'render')`,
+			sql`${table.dependentType} in ('script', 'script_generation', 'fact_lock', 'voice', 'video', 'render')`,
 		),
 		check(
 			"fact_dependency_reason_check",

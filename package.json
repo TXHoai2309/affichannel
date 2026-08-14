@@ -21,6 +21,7 @@
 		"test:integration:product-facts": "tsx scripts/test-product-facts.ts",
 		"test:integration:product-fact-freshness": "tsx scripts/test-product-fact-freshness.ts",
 		"test:integration:dashboard": "tsx scripts/test-dashboard-overview.ts",
+		"test:integration:script-generation": "tsx scripts/test-script-generation-foundation.ts",
 		"deploy:setup": "vercel link",
 		"dev:vercel": "vercel dev -L",
 		"env:preview": "tsx scripts/sync-vercel-env.ts preview",

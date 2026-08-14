@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-10
+- Cập nhật lần cuối: 2026-08-14
 
 ## 1. Mục tiêu kiến trúc
 
@@ -143,7 +143,7 @@ Schema đầu tiên chỉ thêm những gì vertical slice hiện tại cần:
 - `product`.
 - `product_fact`.
 - `project`.
-- `script_version`.
+- `script_generation` khi bắt đầu AFF-US-008; `script_version` chỉ thêm ở AFF-US-009.
 - `fact_check_run` và `claim_review` khi bắt đầu Fact Lock.
 
 Quy tắc chung:
@@ -242,6 +242,11 @@ Mọi adapter tốn phí cung cấp các khái niệm tương đương:
 Provider relay bên thứ ba vẫn là thử nghiệm cho đến khi xác minh privacy, nguồn
 upstream, độ ổn định và cơ chế refund.
 
+Text generation dùng hai transaction ngắn: transaction đầu snapshot input và Fact revision,
+tạo pending artifact/dependency rồi commit; provider call chạy ngoài transaction; transaction
+sau conditional-finalize output/usage/error. Không giữ connection hoặc row lock khi chờ AI.
+Chi tiết được khóa bởi DEC-015 và `docs/aff-us-008-foundation.md`.
+
 ## 12. Kiến trúc Fact Lock
 
 Fact Lock gồm các giai đoạn riêng:
@@ -332,3 +337,15 @@ authorization; unique partial index bảo đảm idempotency cho dependency còn
 Freshness được tính ở core từ date-only và business timezone, sau đó dùng lại cho Product Facts
 list và Dashboard aggregate. Không tạo scheduler, warning table hoặc invalidation job riêng cho
 clock freshness.
+
+## AFF-US-008 — ScriptGeneration foundation
+
+US8 lưu `script_generation` như generated artifact read-only, có full/partial output và reload
+được. Artifact này không phải `script_version`; repair tạo child artifact mới. Input snapshot
+chỉ chứa Project/Brief/Product và Facts có generation usability allowed hoặc
+allowed-with-warning. Transaction prepare khóa Fact theo thứ tự ổn định và ghi dependency
+`script_generation` bằng đúng revision đã snapshot; provider call luôn ở ngoài transaction.
+
+Database enforce idempotency theo workspace, tối đa một pending generation mỗi Project và
+lineage cùng workspace/project. Read model trả cả request mới nhất và artifact usable mới nhất,
+để pending/failed/indeterminate không làm mất draft completed/partial trước đó.

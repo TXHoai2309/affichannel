@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-10
+- Cập nhật lần cuối: 2026-08-14
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -360,3 +360,65 @@ sản xuất đã tham chiếu revision cũ phải được đánh dấu cần x
 US008/Fact Lock có thể dùng dependency service và generation usability contract mà không
 phụ thuộc vào implementation của UI. Scheduler, notification, scraping và provider AI vẫn
 nằm ngoài US007.
+
+## DEC-015 — ScriptGeneration artifact và transaction boundary của AFF-US-008
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-14
+
+### Bối cảnh
+
+AFF-US-008 cần tạo structured draft từ Project, Content Brief, Product và Product Facts, đồng
+thời cho phép refresh, partial repair, idempotency và truy vết Fact revision. Provider output
+không phải script đã được người dùng chọn/chỉnh; nếu dùng generation ID như `ScriptVersion` hoặc
+chỉ giữ draft ở client, US9 và Fact Lock sẽ không có identity/tracing đáng tin cậy.
+
+US7 đã có dependency engine khóa Product Fact và tự đọc revision trong transaction. Tuy nhiên
+public register/replace helper hiện tự mở transaction, nên không thể bảo đảm revision của một
+snapshot US8 đã đọc trước đó nếu gọi helper sau snapshot. Provider call cũng không được giữ row
+lock hoặc database transaction trong thời gian chờ mạng.
+
+### Quyết định
+
+- US8 lưu `ScriptGeneration` dưới dạng generated artifact read-only và persisted. Nó khác
+  `ScriptVersion`: US8 dùng dependent type `script_generation`; US9 mới dùng `script` cho
+  `ScriptVersion`.
+- Một generation được tạo ở `pending` và chỉ được finalize một lần sang `completed`, `partial`,
+  `failed` hoặc `indeterminate`. Sau terminal state, artifact bất biến. Repair không update parent;
+  nó tạo generation mới cùng project với `parentGenerationId`.
+- Transaction A authorize và khóa Project/Product Facts, evaluate generation usability, tạo exact
+  input snapshot, request pending và Fact dependencies bằng chính revision đang khóa rồi commit.
+  Provider call chạy sau commit. Transaction B conditional-finalize row pending và detach
+  dependency nếu kết quả là failed không có usable output.
+- Fact IDs được khóa theo thứ tự ổn định. Blocked Fact không xuất hiện trong snapshot, prompt hoặc
+  dependency. Revision trong snapshot và `fact_dependency.factRevision` luôn lấy từ cùng locked
+  row trong Transaction A.
+- Idempotency key unique theo workspace. `requestHash` nhận diện normalized client intent để xử lý
+  network replay; `inputHash` nhận diện canonical server snapshot; `promptHash` nhận diện exact
+  rendered provider prompt. Reuse key với request hash khác trả `IDEMPOTENCY_CONFLICT`.
+- Database dùng partial unique index để mỗi Project tối đa một row `pending`, kể cả full generation
+  hay repair. Conflict trả `GENERATION_ALREADY_IN_PROGRESS` và không gọi provider lần hai.
+- Read model trả đồng thời `latestRequest` và `latestUsableArtifact`. Latest order theo
+  `createdAt` rồi ID làm tie-break, không theo completion time. Usable chỉ gồm completed/partial có
+  normalized output; pending/failed/indeterminate không che artifact usable trước đó. Dependency
+  invalidation được trả như trạng thái riêng: output vẫn hiển thị nhưng không còn factual-current,
+  và không được dùng làm repair base giữ nguyên section cũ.
+- Stale pending có thể chuyển conditional sang `indeterminate`. Không automatic resubmit nếu live
+  provider chưa chứng minh idempotency/retrieve an toàn; indeterminate giữ dependency.
+- Completed, partial và indeterminate giữ dependency. Failed không có usable output detach active
+  dependency trong finalize transaction. Repair đăng ký dependency riêng và không mutate parent.
+- Input snapshot chỉ chứa dữ liệu generation pipeline thật sự nhìn thấy. Project/Product/Fact data
+  là untrusted serialized data, tách khỏi system/developer instructions. Không lưu raw provider
+  response, secret, cookie hoặc authorization data.
+
+### Hệ quả
+
+- Thêm table `script_generation`, dependent type `script_generation`, CHECK/index/FK tương ứng và
+  transaction-scoped dependency primitive khi implementation bắt đầu.
+- US8 có thể reload full/partial artifact và repair theo server state mà chưa tạo `ScriptVersion`.
+  Editor, autosave, version history và immutable ScriptVersion vẫn thuộc US9; Fact Lock vẫn thuộc
+  US10.
+- Live provider/model và policy reconcile `indeterminate` được chốt trước phase provider, nhưng
+  không thay đổi artifact/transaction/read-model contract này.
+- Contract chi tiết, schema proposal, migration design, file map và test plan nằm tại
+  `docs/aff-us-008-foundation.md`.

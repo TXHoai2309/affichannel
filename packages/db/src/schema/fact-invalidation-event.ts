@@ -47,7 +47,7 @@ export const factInvalidationEvent = pgTable(
 		),
 		check(
 			"fact_invalidation_type_check",
-			sql`${table.dependentType} in ('script', 'fact_lock', 'voice', 'video', 'render')`,
+			sql`${table.dependentType} in ('script', 'script_generation', 'fact_lock', 'voice', 'video', 'render')`,
 		),
 		check(
 			"fact_invalidation_reason_check",

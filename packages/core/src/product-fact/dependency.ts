@@ -2,6 +2,7 @@ import { z } from "zod";
 
 export const factDependentTypes = [
 	"script",
+	"script_generation",
 	"fact_lock",
 	"voice",
 	"video",

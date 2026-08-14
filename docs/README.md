@@ -14,6 +14,7 @@ với các tài liệu tại đây.
 6. [Tiến trình AI agent](./ai-progress.md)
 7. [Nhật ký thay đổi](./changelog.md)
 8. [Bàn giao AFF-US-004](./aff-us-004.md)
+9. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

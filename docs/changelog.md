@@ -10,6 +10,9 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- DEC-015 và foundation AFF-US-008: persisted `ScriptGeneration`, immutable repair lineage,
+  Fact revision snapshot/dependency atomic, idempotency, pending concurrency và latest usable
+  artifact read model; chưa thêm provider/API/UI.
 - AFF-US-006: Product Facts với schema Fact/History, search/filter/cursor pagination, tab deep-link
   trên Product Detail, drawer thêm/sửa, dialog xóa và trạng thái loading/empty/error.
 - AFF-US-006 hardening: server-side evidence rule cho Fact verified, AI eligibility, demote/re-verify
@@ -94,6 +97,12 @@ sử dụng Semantic Versioning.
   breadcrumb, Job Center/notification entry point và ProjectStepper 7 bước.
 - Các route MVP chưa có business logic hiện skeleton; persistence Project/StepStatus
   được giữ lại cho US004 theo DEC-010.
+
+## Chưa phát hành — AFF-US-008 foundation
+
+- Thêm ScriptDraft schema/partial validation, input snapshot, canonical hashing, idempotency và generation read model.
+- Thêm `script_generation` migrations `0006`/`0007`, dependency type `script_generation`, transaction-scoped registration/detach và deterministic provider test scenarios.
+- Chưa thêm live AI SDK, API generate, Script Studio hay ScriptVersion.
 
 ## 0.0.0 — 2026-08-10
 

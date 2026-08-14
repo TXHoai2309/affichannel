@@ -5,4 +5,5 @@ export * from "./product";
 export * from "./product-fact";
 export * from "./product-fact-history";
 export * from "./project";
+export * from "./script-generation";
 export * from "./workspace";

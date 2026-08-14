@@ -17,7 +17,7 @@ import {
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { WorkspaceActor } from "./workspace";
 
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const dependencyColumns = {
 	id: factDependency.id,
@@ -148,6 +148,52 @@ async function insertActiveDependency(
 	return toDependencyRecord(retried);
 }
 
+export async function registerFactDependenciesInTransaction(
+	transaction: DbTransaction,
+	actor: WorkspaceActor,
+	input: {
+		dependentType: FactDependentType;
+		dependentId: string;
+		facts: Array<{ id: string; revision: number }>;
+	},
+) {
+	const dependencies = [];
+	for (const fact of [...input.facts].sort((left, right) => left.id.localeCompare(right.id))) {
+		dependencies.push(
+			await insertActiveDependency(
+				transaction,
+				actor,
+				fact,
+				input.dependentType,
+				input.dependentId,
+			),
+		);
+	}
+	return dependencies;
+}
+
+export async function detachFactDependenciesInTransaction(
+	transaction: DbTransaction,
+	actor: WorkspaceActor,
+	input: { dependentType: FactDependentType; dependentId: string },
+) {
+	const detachedAt = new Date();
+	const detached = await transaction
+		.update(factDependency)
+		.set({ detachedAt })
+		.where(
+			and(
+				eq(factDependency.workspaceId, actor.workspaceId),
+				eq(factDependency.dependentType, input.dependentType),
+				eq(factDependency.dependentId, input.dependentId),
+				isNull(factDependency.detachedAt),
+				isNull(factDependency.invalidatedAt),
+			),
+		)
+		.returning({ id: factDependency.id });
+	return detached.length;
+}
+
 export async function invalidateFactDependencies(
 	transaction: DbTransaction,
 	input: {
@@ -216,12 +262,10 @@ export async function registerFactDependency(
 		);
 		if (!fact) return { kind: "fact_not_found" as const };
 
-		const dependency = await insertActiveDependency(
+		const [dependency] = await registerFactDependenciesInTransaction(
 			transaction,
 			actor,
-			fact,
-			input.dependentType,
-			input.dependentId,
+			{ ...input, facts: [fact] },
 		);
 		return { kind: "success" as const, dependency };
 	});
@@ -270,17 +314,11 @@ export async function replaceFactDependencies(
 				);
 		}
 
-		const dependencies = [];
-		for (const fact of facts) {
-			const dependency = await insertActiveDependency(
-				transaction,
-				actor,
-				fact,
-				input.dependentType,
-				input.dependentId,
-			);
-			dependencies.push(dependency);
-		}
+		const dependencies = await registerFactDependenciesInTransaction(
+			transaction,
+			actor,
+			{ ...input, facts },
+		);
 		return { kind: "success" as const, dependencies };
 	});
 }

@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-12
+- Cập nhật lần cuối: 2026-08-14
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -152,6 +152,17 @@ stale detection, scheduler, scraping/fetching và Fact Lock nằm ngoài AFF-US-
 
 Đơn vị sản xuất nội dung, liên kết sản phẩm, nền tảng, mục tiêu, thời lượng, góc
 tiếp cận, các version script, scene, asset, render và dữ liệu đăng bài.
+
+### Script generation
+
+AFF-US-008 tạo generated artifact read-only từ Project, Content Brief, Product và Product Facts
+đủ điều kiện. Artifact được lưu bền vững, có thể `completed` hoặc `partial`, reload sau refresh và
+repair bằng một child artifact mới. Nó giữ input snapshot, Fact revision/dependency, prompt/output
+schema version và request/provider metadata an toàn. Provider output vẫn là dữ liệu không đáng tin
+cậy và candidate claim chưa qua Fact Lock.
+
+Script generation không phải nội dung đã được người dùng chọn/chỉnh và không tự hoàn tất workflow.
+`pending`, `failed` hoặc `indeterminate` không được làm mất artifact completed/partial trước đó.
 
 ### Script version
 

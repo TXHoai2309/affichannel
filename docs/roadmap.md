@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-12
+- Cập nhật lần cuối: 2026-08-14
 
 ## 1. Phương pháp triển khai
 
@@ -161,20 +161,19 @@ flow tạo project → Dashboard → mở Recent Project → current step → Pr
 Backlog liên quan: `AFF-US-008` và `AFF-US-009`.
 
 ```text
-Mở project → tạo mock structured draft → chỉnh sửa → lưu version
+US8: Mở project → tạo persisted structured generation → reload/repair phần lỗi
+US9: Chọn/chỉnh artifact → lưu immutable ScriptVersion
 ```
 
-Thứ tự triển khai:
+AFF-US-008 triển khai theo thứ tự schema/refinement → deterministic provider → persisted
+`ScriptGeneration` → idempotency/dependency → generate/repair/read model → Script Studio read-only
+→ live adapter cuối cùng. Generation có hook, voice segment, scene, CTA, caption, hashtag,
+disclosure và candidate claim riêng; completed/partial artifact được lưu và provider failure không
+che artifact usable trước đó.
 
-1. Định nghĩa và validate script schema.
-2. Xây editor bằng deterministic mock output.
-3. Thêm immutable version persistence.
-4. Chỉ tích hợp một Text AI adapter sau khi schema và UI hoạt động.
-
-- Hook, voice segment, scene, CTA, caption, hashtag, disclosure và claim có field
-  riêng.
-- Provider output không hợp schema không được ghi đè draft hợp lệ.
-- Mỗi lần lưu/chỉnh sửa tạo script version nhận diện được.
+AFF-US-009 mới thêm editor, autosave, selection, immutable `ScriptVersion`, history và restore.
+US8 không tự advance workflow hoặc tạo Fact Lock. Contract foundation được chốt tại DEC-015 và
+`docs/aff-us-008-foundation.md`.
 
 ## 10. Slice 7 — Fact Lock
 
