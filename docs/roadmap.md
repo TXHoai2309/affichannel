@@ -244,3 +244,7 @@ optimistic concurrency, dependency register/replace/detach, invalidation audit e
 Dashboard warning theo Product. Migration `0005_exotic_edwin_jarvis.sql` đã được review và
 apply bằng `DATABASE_URL_DIRECT`. Authenticated E2E đã chạy thật trên `3002`; scheduler,
 notification, scraping và provider AI vẫn để ngoài slice.
+AFF-US-008 foundation hardening is complete only for domain/persistence contracts: repair merge,
+idempotency intent hash, provider error boundary, stale/uncertain timeout semantics, cross-field
+validation và DB state checks. Runtime live provider, production API và Script Studio remain later
+work and are not implied by this foundation.

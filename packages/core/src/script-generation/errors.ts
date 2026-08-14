@@ -4,11 +4,14 @@ export const scriptGenerationErrorCodes = [
 	"IDEMPOTENCY_CONFLICT",
 	"GENERATION_NOT_FOUND",
 	"GENERATION_INVALID_TRANSITION",
+	"INVALID_REPAIR_SECTIONS",
 	"BASE_GENERATION_INVALIDATED",
 	"INVALID_GENERATION_OUTPUT",
 	"AI_TIMEOUT",
+	"AI_TIMEOUT_UNCERTAIN",
 	"AI_PROVIDER_ERROR",
 	"GENERATION_INDETERMINATE",
+	"GENERATION_NOT_STALE",
 ] as const;
 export type ScriptGenerationErrorCode =
 	(typeof scriptGenerationErrorCodes)[number];

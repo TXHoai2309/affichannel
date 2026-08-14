@@ -312,3 +312,7 @@ revision đã đổi. Dependency được đăng ký theo revision hiện tại,
 invalidation event khi Fact thay đổi, bị deactivate hoặc bị xóa. Dashboard nhóm cảnh báo theo
 Product và dẫn tới tab Facts; Product Facts hiển thị badge `Còn hiệu lực`, `Cần cập nhật`,
 `Hết hạn`, `Chưa xác định` và cảnh báo thiếu evidence.
+AFF-US-008 foundation hardening: repair chỉ sửa các section invalid của parent `partial`, merge
+server-side và tạo child bất biến; `requestHash` chỉ nhận client intent để replay không phụ thuộc
+provider config. Generated output là untrusted, phải strict-validate cross-reference/hashtag và
+state shape; live provider/API/UI vẫn chưa thuộc slice này.

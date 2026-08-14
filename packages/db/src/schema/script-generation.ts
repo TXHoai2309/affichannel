@@ -73,6 +73,12 @@ export const scriptGeneration = pgTable(
 		check("script_generation_status_output_check", sql`(${table.status} in ('completed', 'partial') and ${table.outputJson} is not null) or (${table.status} in ('pending', 'failed', 'indeterminate') and ${table.outputJson} is null)`),
 		check("script_generation_status_finished_check", sql`(${table.status} = 'pending' and ${table.finishedAt} is null) or (${table.status} <> 'pending' and ${table.finishedAt} is not null)`),
 		check("script_generation_sections_check", sql`${table.validSections} <@ ${sql.raw(sectionArray)} and ${table.invalidSections} <@ ${sql.raw(sectionArray)} and not (${table.validSections} && ${table.invalidSections})`),
+		check("script_generation_state_shape_check", sql`(
+			(${table.status} = 'completed' and ${table.outputJson} is not null and cardinality(${table.validSections}) = ${sql.raw(String(scriptGenerationSections.length))} and cardinality(${table.invalidSections}) = 0 and (${table.validSections} || ${table.invalidSections}) @> ${sql.raw(sectionArray)})
+			or (${table.status} = 'partial' and ${table.outputJson} is not null and cardinality(${table.validSections}) > 0 and cardinality(${table.invalidSections}) > 0 and cardinality(${table.validSections} || ${table.invalidSections}) = ${sql.raw(String(scriptGenerationSections.length))} and (${table.validSections} || ${table.invalidSections}) @> ${sql.raw(sectionArray)})
+			or (${table.status} = 'failed' and ${table.outputJson} is null and cardinality(${table.validSections}) = 0)
+			or ${table.status} in ('pending', 'indeterminate')
+		)`),
 		check("script_generation_sections_unique_check", sql.raw(scriptGenerationSections.flatMap((section) => [
 			`cardinality(array_positions("script_generation"."valid_sections", '${section}')) <= 1`,
 			`cardinality(array_positions("script_generation"."invalid_sections", '${section}')) <= 1`,

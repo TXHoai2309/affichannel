@@ -1,6 +1,7 @@
 import {
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
 	canonicalizeJson,
+	validateRepairScriptOutput,
 	validateScriptDraftOutput,
 } from "@affichannel/core";
 import { DeterministicTextProvider } from "@affichannel/api/providers/text/deterministic-text-provider";
@@ -45,7 +46,7 @@ describe("AFF-US-008 script-generation foundation", () => {
 
 	it("accepts a deterministic full draft and enforces duration tolerance", async () => {
 		const provider = new DeterministicTextProvider({ snapshot });
-		const result = await provider.generate({ prompt: "test", model: "test", mode: "full", sections: [], idempotencyKey: "unit-test-1" });
+		const result = await provider.generate({ messages: [{ role: "user", content: "test" }], model: "test", mode: "full", sections: [], idempotencyKey: "unit-test-1" });
 		const validation = validateScriptDraftOutput(result.content, 30);
 		expect(validation.status).toBe("completed");
 		expect(validation.validSections).toHaveLength(8);
@@ -54,7 +55,7 @@ describe("AFF-US-008 script-generation foundation", () => {
 
 	it("classifies missing scenes and claims as a usable partial draft", async () => {
 		const provider = new DeterministicTextProvider({ snapshot, scenario: "partial" });
-		const result = await provider.generate({ prompt: "test", model: "test", mode: "full", sections: [], idempotencyKey: "unit-test-2" });
+		const result = await provider.generate({ messages: [{ role: "user", content: "test" }], model: "test", mode: "full", sections: [], idempotencyKey: "unit-test-2" });
 		const validation = validateScriptDraftOutput(result.content, 30);
 		expect(validation.status).toBe("partial");
 		expect(validation.validSections).toEqual(["hook", "cta", "caption", "hashtags", "disclosure"]);
@@ -67,8 +68,39 @@ describe("AFF-US-008 script-generation foundation", () => {
 	});
 
 	it("models timeout and provider failure without a live SDK", async () => {
-		const request = { prompt: "test", model: "test", mode: "full" as const, sections: [], idempotencyKey: "unit-test-3" };
+		const request = { messages: [{ role: "user" as const, content: "test" }], model: "test", mode: "full" as const, sections: [], idempotencyKey: "unit-test-3" };
 		await expect(new DeterministicTextProvider({ snapshot, scenario: "timeout" }).generate(request)).rejects.toMatchObject({ code: "AI_TIMEOUT" });
+		await expect(new DeterministicTextProvider({ snapshot, scenario: "timeout_uncertain" }).generate(request)).rejects.toMatchObject({ code: "AI_TIMEOUT_UNCERTAIN" });
 		await expect(new DeterministicTextProvider({ snapshot, scenario: "provider_error" }).generate(request)).rejects.toMatchObject({ code: "AI_PROVIDER_ERROR" });
+	});
+
+	it("does not validate cross-references against missing or invalid partial sections", () => {
+		const output = validateScriptDraftOutput({
+			schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+			language: "vi-VN",
+			scenes: [{ order: 1, durationSeconds: 30, visualDirection: "x", onScreenText: null, voiceoverSegmentKeys: ["missing"] }],
+			claims: [{ text: "claim", occurrence: { section: "hook" } }],
+		}, 30);
+		expect(output.validSections).not.toContain("scenes");
+		expect(output.validSections).not.toContain("claims");
+	});
+
+	it("normalizes hashtag uniqueness case-insensitively and audits duplicate scene refs", () => {
+		const output = validateScriptDraftOutput({
+			schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+			language: "vi-VN",
+			voiceoverSegments: [{ key: "a", text: "x" }],
+			scenes: [{ order: 1, durationSeconds: 30, visualDirection: "x", onScreenText: null, voiceoverSegmentKeys: ["a", "a"] }],
+			hashtags: [" #Review ", "#review"],
+		}, 30);
+		expect(output.validSections).not.toContain("scenes");
+		expect(output.validSections).not.toContain("hashtags");
+	});
+
+	it("accepts only the requested sections in a repair payload", () => {
+		const valid = validateRepairScriptOutput({ schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION, language: "vi-VN", claims: [] }, ["claims"]);
+		const extra = validateRepairScriptOutput({ schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION, language: "vi-VN", claims: [], hook: { text: "not allowed" } }, ["claims"]);
+		expect(valid.success).toBe(true);
+		expect(extra.success).toBe(false);
 	});
 });

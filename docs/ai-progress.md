@@ -763,8 +763,13 @@ Quyết định:
 
 Implementation update:
 
-- Đã triển khai core contract, canonical JSON/SHA-256, migration `0006` + hardening `0007`, repository/read model, transaction-scoped dependencies và deterministic provider.
+- Đã triển khai core contract, canonical JSON/SHA-256, migrations `0006`–`0009`, repository/read model, transaction-scoped dependencies và deterministic provider.
+- AFF-US-008 hardening đã tách client intent/server config, khóa repair subset + server-side merge,
+  tách provider catch khỏi finalize, thêm timeout uncertain/indeterminate, stale guard, partial
+  cross-reference validation và DB state-shape CHECK.
 - Unit test foundation pass; migration SQL đã được apply thử trên Postgres local cô lập. Shared Neon chưa bị migrate.
+- Integration smoke script đã bổ sung concurrency, repair, idempotency, read model và failure cases;
+  chưa claim runtime integration pass vì Neon serverless driver không kết nối Docker localhost.
 - Chưa triển khai live provider/API/UI/ScriptVersion/Fact Lock.
 
 Tiếp theo:

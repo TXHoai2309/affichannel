@@ -101,7 +101,10 @@ sử dụng Semantic Versioning.
 ## Chưa phát hành — AFF-US-008 foundation
 
 - Thêm ScriptDraft schema/partial validation, input snapshot, canonical hashing, idempotency và generation read model.
-- Thêm `script_generation` migrations `0006`/`0007`, dependency type `script_generation`, transaction-scoped registration/detach và deterministic provider test scenarios.
+- Thêm `script_generation` migrations `0006`/`0007`/`0008`/`0009`, dependency type `script_generation`, transaction-scoped registration/detach và deterministic provider test scenarios.
+- Hardening foundation: requestHash chỉ nhận client intent; repair merge server-side với parent partial;
+  provider roles/schema contract; timeout uncertain; stale pending guard; partial cross-reference/
+  hashtag validation; DB state-shape CHECK; concurrency/failure integration smoke coverage.
 - Chưa thêm live AI SDK, API generate, Script Studio hay ScriptVersion.
 
 ## 0.0.0 — 2026-08-10

@@ -1,7 +1,12 @@
-export type TextProviderScenario = "valid" | "partial" | "malformed" | "timeout" | "provider_error";
+export type TextProviderScenario = "valid" | "partial" | "malformed" | "timeout" | "timeout_uncertain" | "provider_error";
+
+export type TextProviderMessage = {
+	role: "system" | "developer" | "user";
+	content: string;
+};
 
 export type TextProviderRequest = {
-	prompt: string;
+	messages: TextProviderMessage[];
 	model: string;
 	mode: "full" | "repair";
 	sections: string[];
@@ -19,9 +24,9 @@ export type TextProviderResult = {
 };
 
 export class TextProviderError extends Error {
-	readonly code: "AI_TIMEOUT" | "AI_PROVIDER_ERROR";
+	readonly code: "AI_TIMEOUT" | "AI_TIMEOUT_UNCERTAIN" | "AI_PROVIDER_ERROR";
 
-	constructor(code: "AI_TIMEOUT" | "AI_PROVIDER_ERROR", message: string = code) {
+	constructor(code: "AI_TIMEOUT" | "AI_TIMEOUT_UNCERTAIN" | "AI_PROVIDER_ERROR", message: string = code) {
 		super(message);
 		this.name = "TextProviderError";
 		this.code = code;

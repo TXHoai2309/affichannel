@@ -422,3 +422,16 @@ lock hoặc database transaction trong thời gian chờ mạng.
   không thay đổi artifact/transaction/read-model contract này.
 - Contract chi tiết, schema proposal, migration design, file map và test plan nằm tại
   `docs/aff-us-008-foundation.md`.
+
+### DEC-015 hardening notes — 2026-08-14
+
+- Repair chỉ dùng parent `partial` còn usable; `repairSections` phải là tập con unique của
+  `parent.invalidSections`. Provider chỉ được trả section đã yêu cầu; server merge với parent,
+  validate merged output và tạo child bất biến.
+- `requestHash` chỉ hash normalized `ClientGenerationIntent`; provider/model/version thuộc
+  `ServerGenerationConfig`, không làm hỏng network replay cùng idempotency key.
+- `AI_TIMEOUT_UNCERTAIN` chuyển `indeterminate` và giữ dependency; stale transition yêu cầu
+  `expectedCreatedAt` cùng cutoff do server policy cung cấp. Không automatic retry/reconcile trong
+  foundation.
+- Database CHECK `script_generation_state_shape_check` khóa shape của completed/partial/failed;
+  pending/indeterminate tiếp tục theo semantics DEC-015.

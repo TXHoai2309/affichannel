@@ -349,3 +349,7 @@ allowed-with-warning. Transaction prepare khóa Fact theo thứ tự ổn địn
 Database enforce idempotency theo workspace, tối đa một pending generation mỗi Project và
 lineage cùng workspace/project. Read model trả cả request mới nhất và artifact usable mới nhất,
 để pending/failed/indeterminate không làm mất draft completed/partial trước đó.
+Foundation hardening: `requestHash` chỉ hash `ClientGenerationIntent`; repair chỉ nhận parent
+partial và merge server-side trước validate/persist child; provider messages giữ role separation;
+timeout uncertain dùng `indeterminate`; stale transition cần created-at policy; DB CHECK khóa state
+shape của completed/partial/failed. Live provider/API/UI vẫn nằm ngoài phase này.

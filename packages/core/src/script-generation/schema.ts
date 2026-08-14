@@ -45,6 +45,7 @@ export const claimSchema = z
 	.strict();
 
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
+const uniqueNormalized = (values: string[]) => new Set(values.map((value) => value.trim().toLowerCase())).size === values.length;
 
 export const scriptDraftSchema = z
 	.object({
@@ -67,8 +68,8 @@ export const scriptDraftSchema = z
 	})
 	.strict()
 	.superRefine((draft, context) => {
-		if (!unique(draft.hashtags)) {
-			context.addIssue({ code: "custom", path: ["hashtags"], message: "Hashtags must be unique." });
+		if (!uniqueNormalized(draft.hashtags)) {
+			context.addIssue({ code: "custom", path: ["hashtags"], message: "Hashtags must be unique after normalization." });
 		}
 		const voiceoverKeys = draft.voiceoverSegments.map((segment) => segment.key);
 		if (!unique(voiceoverKeys)) {
@@ -81,6 +82,9 @@ export const scriptDraftSchema = z
 		}
 		const voiceoverKeySet = new Set(voiceoverKeys);
 		for (const [index, scene] of draft.scenes.entries()) {
+			if (!unique(scene.voiceoverSegmentKeys)) {
+				context.addIssue({ code: "custom", path: ["scenes", index, "voiceoverSegmentKeys"], message: "Scene voiceover references must be unique." });
+			}
 			if (scene.voiceoverSegmentKeys.some((key) => !voiceoverKeySet.has(key))) {
 				context.addIssue({ code: "custom", path: ["scenes", index, "voiceoverSegmentKeys"], message: "Scene references an unknown voiceover segment." });
 			}
@@ -103,7 +107,7 @@ export const scriptSectionSchemas = {
 	cta: ctaSchema,
 	caption: text(),
 	hashtags: hashtagsSchema.superRefine((values, context) => {
-		if (!unique(values)) context.addIssue({ code: "custom", message: "Hashtags must be unique." });
+		if (!uniqueNormalized(values)) context.addIssue({ code: "custom", message: "Hashtags must be unique after normalization." });
 	}),
 	disclosure: z.string().trim().max(500).nullable(),
 	claims: z.array(claimSchema).max(SCRIPT_GENERATION_LIMITS.maxClaims),
@@ -124,6 +128,16 @@ function byteLength(value: unknown) {
 
 function allSections(): ScriptGenerationSection[] {
 	return [...scriptGenerationSections];
+}
+
+function inputKey(section: ScriptGenerationSection) {
+	return section === "voiceover" ? "voiceoverSegments" : section;
+}
+
+function removeValidSection(validSections: ScriptGenerationSection[], invalidSections: ScriptGenerationSection[], section: ScriptGenerationSection) {
+	const index = validSections.indexOf(section);
+	if (index >= 0) validSections.splice(index, 1);
+	if (!invalidSections.includes(section)) invalidSections.push(section);
 }
 
 export type ScriptOutputValidation = {
@@ -186,16 +200,16 @@ export function validateScriptDraftOutput(
 	const voiceover = output.voiceoverSegments;
 	const scenes = output.scenes;
 	if (voiceover && !unique(voiceover.map((segment) => segment.key))) {
-		validSections.splice(validSections.indexOf("voiceover"), 1);
-		if (!invalidSections.includes("voiceover")) invalidSections.push("voiceover");
+		removeValidSection(validSections, invalidSections, "voiceover");
 		delete output.voiceoverSegments;
 	}
 	if (scenes) {
 		const orders = scenes.map((scene) => scene.order);
 		const keys = new Set(voiceover?.map((segment) => segment.key) ?? []);
-		if (!unique(orders) || orders.some((order, index) => order !== index + 1) || (voiceover && scenes.some((scene) => scene.voiceoverSegmentKeys.some((key) => !keys.has(key))))) {
-			validSections.splice(validSections.indexOf("scenes"), 1);
-			if (!invalidSections.includes("scenes")) invalidSections.push("scenes");
+		const hasUnprovableVoiceoverRefs = scenes.some((scene) => scene.voiceoverSegmentKeys.length > 0 && !voiceover);
+		const hasDuplicateSceneRefs = scenes.some((scene) => !unique(scene.voiceoverSegmentKeys));
+		if (!unique(orders) || orders.some((order, index) => order !== index + 1) || hasUnprovableVoiceoverRefs || hasDuplicateSceneRefs || (voiceover && scenes.some((scene) => scene.voiceoverSegmentKeys.some((key) => !keys.has(key))))) {
+			removeValidSection(validSections, invalidSections, "scenes");
 			delete output.scenes;
 		}
 	}
@@ -204,19 +218,17 @@ export function validateScriptDraftOutput(
 			const occurrence = claim.occurrence;
 			if (occurrence.section === "voiceover") return Boolean(output.voiceoverSegments?.some((segment) => segment.key === occurrence.segmentKey));
 			if (occurrence.section === "scene") return Boolean(output.scenes?.some((scene) => scene.order === occurrence.sceneOrder));
-			return true;
+			return validSections.includes(occurrence.section);
 		});
 		if (!claimTargetValid) {
-			validSections.splice(validSections.indexOf("claims"), 1);
-			if (!invalidSections.includes("claims")) invalidSections.push("claims");
+			removeValidSection(validSections, invalidSections, "claims");
 			delete output.claims;
 		}
 	}
 	if (output.scenes) {
 		const totalDuration = output.scenes.reduce((sum, scene) => sum + scene.durationSeconds, 0);
 		if (Math.abs(totalDuration - targetDurationSeconds) > targetDurationSeconds * SCRIPT_GENERATION_LIMITS.durationToleranceRatio) {
-			validSections.splice(validSections.indexOf("scenes"), 1);
-			if (!invalidSections.includes("scenes")) invalidSections.push("scenes");
+			removeValidSection(validSections, invalidSections, "scenes");
 			delete output.scenes;
 		}
 	}
@@ -232,6 +244,37 @@ export function validateScriptDraftOutput(
 		invalidSections,
 		errorCode: validSections.length === 0 ? "INVALID_GENERATION_OUTPUT" : null,
 	};
+}
+
+export type RepairOutputValidation = {
+	success: boolean;
+	output: PartialScriptDraft | null;
+};
+
+/** Strictly validates the provider's repair payload before server-side merge. */
+export function validateRepairScriptOutput(
+	raw: unknown,
+	repairSections: ScriptGenerationSection[],
+): RepairOutputValidation {
+	const parsed = parseUnknownOutput(raw);
+	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return { success: false, output: null };
+	const root = parsed as Record<string, unknown>;
+	if (root.schemaVersion !== SCRIPT_OUTPUT_SCHEMA_VERSION || typeof root.language !== "string" || root.language.trim().length < 2) {
+		return { success: false, output: null };
+	}
+	const normalizedSections = [...new Set(repairSections)];
+	if (normalizedSections.length !== repairSections.length || normalizedSections.length === 0 || normalizedSections.some((section) => !scriptGenerationSections.includes(section))) return { success: false, output: null };
+	const allowedKeys = new Set(["schemaVersion", "language", ...normalizedSections.map(inputKey)]);
+	if (Object.keys(root).some((key) => !allowedKeys.has(key))) return { success: false, output: null };
+	const output: PartialScriptDraft = { schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION, language: root.language.trim() };
+	for (const section of normalizedSections) {
+		const key = inputKey(section);
+		if (!(key in root)) return { success: false, output: null };
+		const result = scriptSectionSchemas[section].safeParse(root[key]);
+		if (!result.success) return { success: false, output: null };
+		(output as Record<string, unknown>)[key] = result.data;
+	}
+	return { success: true, output };
 }
 
 export type ValidScriptDraft = z.infer<typeof scriptDraftSchema>;

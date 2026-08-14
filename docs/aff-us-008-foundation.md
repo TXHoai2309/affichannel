@@ -130,14 +130,15 @@ DEC-015 được ghi trong `docs/decisions.md`. Nội dung chuẩn của quyết
 ### Version và policy tập trung
 
 ```ts
-export const SCRIPT_OUTPUT_SCHEMA_VERSION = "1";
-export const SCRIPT_PROMPT_VERSION = "script-v1";
+export const SCRIPT_SNAPSHOT_VERSION = "script-input.v1";
+export const SCRIPT_OUTPUT_SCHEMA_VERSION = "script-draft.v1";
+export const SCRIPT_PROMPT_VERSION = "script-prompt.v1";
 
 export const SCRIPT_DURATION_TOLERANCE_RATIO = 0.15;
-export const SCRIPT_MAX_VOICEOVER_SEGMENTS = 20;
-export const SCRIPT_MAX_SCENES = 20;
-export const SCRIPT_MAX_HASHTAGS = 15;
-export const SCRIPT_MAX_CLAIMS = 50;
+export const SCRIPT_MAX_VOICEOVER_SEGMENTS = 32;
+export const SCRIPT_MAX_SCENES = 32;
+export const SCRIPT_MAX_HASHTAGS = 30;
+export const SCRIPT_MAX_CLAIMS = 64;
 export const SCRIPT_MAX_NORMALIZED_BYTES = 128 * 1024;
 ```
 
@@ -196,7 +197,7 @@ export type ScriptScene = {
 export type ClaimOccurrence =
   | { section: "hook" }
   | { section: "voiceover"; segmentKey: string }
-  | { section: "scenes"; sceneOrder: number }
+  | { section: "scene"; sceneOrder: number }
   | { section: "cta" | "caption" | "hashtags" | "disclosure" };
 
 export type CandidateClaim = {
@@ -334,15 +335,15 @@ export type ScriptGenerationArtifact = {
 ### Structural và cross-field refinement
 
 - Mọi object là strict; unknown key bị reject.
-- Mọi string được trim, có min/max rõ. Hook/CTA/on-screen text tối đa 500 ký tự;
-  voiceover/visual direction tối đa 2.000; caption tối đa 5.000; disclosure tối đa 1.000;
-  hashtag tối đa 100; candidate claim tối đa 1.000.
+- Mọi string được trim, có min/max rõ. Text domain dùng giới hạn 4.000 ký tự;
+  `onScreenText` và `disclosure` tối đa 500; hashtag tối đa 80 ký tự và 30 item;
+  voiceover/scenes tối đa 32 item, claims tối đa 64 item.
 - Voiceover key unique và match pattern ổn định như `^[a-z0-9][a-z0-9_-]{0,63}$`.
 - Scene order unique, integer dương và liên tục `1..N`.
 - Scene duration là số hữu hạn dương.
 - Mọi `voiceoverSegmentKeys` phải tồn tại và không trùng trong cùng scene.
 - Claim occurrence phải trỏ tới segment/scene tồn tại.
-- Hashtag trim, không rỗng, unique sau normalize không phân biệt hoa/thường và không vượt 15.
+- Hashtag trim, không rỗng, unique sau normalize không phân biệt hoa/thường và không vượt 30.
 - Tổng scene duration nằm trong `brief.durationSeconds ±15%`.
 - Normalized UTF-8 JSON không vượt 128 KiB.
 - `validSections` và `invalidSections` chỉ chứa enum, unique, theo canonical order và không giao.
@@ -424,8 +425,10 @@ khối và validate lại bằng domain schema. Foundation không thêm GIN inde
 11. CHECK token/cost nullable hoặc không âm; khi có cost thì currency bắt buộc và match
     `^[A-Z]{3}$`.
 12. CHECK section arrays chỉ là subset của 8 section chuẩn, không duplicate, không overlap.
-13. CHECK state shape tối thiểu: completed có output và invalid rỗng; partial có output và hai
-    array không rỗng; pending có `finished_at IS NULL`; terminal có `finished_at IS NOT NULL`.
+13. CHECK state shape đầy đủ: completed có output, đủ 8 valid section và invalid rỗng; partial có
+    output, valid/invalid đều khác rỗng và hợp lại đủ 8 section; failed có output null và valid rỗng.
+    pending/indeterminate giữ semantics DEC-015; pending có `finished_at IS NULL`, terminal có
+    `finished_at IS NOT NULL`.
 
 Để ngăn repair cross-project, nên dùng composite self-reference:
 
@@ -620,8 +623,8 @@ transition và provider-specific policy.
 | `packages/api/src/providers/text/deterministic-text-provider.ts` | deterministic fixtures/tests |
 | `packages/api/src/services/script-prompt.ts` | versioned prompt builder/safety boundary |
 | `scripts/test-script-generation-foundation.ts` | DB integration/concurrency tests |
-| `packages/db/src/migrations/0006_tan_khan.sql`, `0007_slimy_morgan_stark.sql` | generated migration + follow-up hardening |
-| `packages/db/src/migrations/meta/0006_snapshot.json`, `0007_snapshot.json` | generated migration snapshots |
+| `packages/db/src/migrations/0006_tan_khan.sql` → `0009_lazy_juggernaut.sql` | generated migration + follow-up hardening/state-shape CHECK |
+| `packages/db/src/migrations/meta/0006_snapshot.json` → `0009_snapshot.json` | generated migration snapshots |
 
 UI/live-provider files chưa được tạo trong foundation implementation đầu tiên. Khi bước UI bắt
 đầu mới tạo `apps/web/src/features/script-generation/*` và thay route `/content`.
@@ -710,15 +713,47 @@ Foundation implementation is now present. The committed scope includes:
 
 - core `ScriptDraft` and strict partial-output validation with cross-field checks;
 - exact input snapshot, deterministic canonical JSON and server-side SHA-256 hashes;
-- `script_generation` schema plus migrations `0006_tan_khan.sql` and `0007_slimy_morgan_stark.sql`;
+- `script_generation` schema plus migrations `0006_tan_khan.sql`, `0007_slimy_morgan_stark.sql`
+  `0008_bright_lilith.sql` and `0009_lazy_juggernaut.sql`;
 - `script_generation` Fact dependency registration/detach primitives inside the caller transaction;
 - prepare/finalize orchestration, idempotency by `(workspace_id, idempotency_key)` plus `request_hash`, one pending generation per `(workspace_id, project_id)`, and latest read model;
-- deterministic provider scenarios for valid, partial, malformed, timeout and provider-error output;
+- deterministic provider scenarios for valid, partial, malformed, definitely-failed timeout,
+  uncertain timeout and provider-error output;
 - focused domain tests and a DB integration script.
 
 The pending uniqueness rule is `(workspace_id, project_id) WHERE status = 'pending'`. The project FK is `ON DELETE RESTRICT`, and the composite self-FK uses the scoped unique constraint `(workspace_id, project_id, id)`. Migration SQL was exercised on an isolated local Postgres database. It was not applied to the shared Neon branch.
 
 No production router, live provider SDK, API key, UI, ScriptVersion, Fact Lock, TTS, media or workflow-advance code is included in this phase.
+
+## Implementation hardening addendum — 2026-08-14
+
+Audit sau implementation đã khóa thêm các invariant sau:
+
+- `ClientGenerationIntent` chỉ gồm `projectId`, `mode`, `parentGenerationId` và canonical
+  `repairSections`. `requestHash` không phụ thuộc provider, model, prompt version hoặc output
+  schema version; các giá trị đó thuộc `ServerGenerationConfig` và vẫn được persist trên artifact.
+- Repair chỉ nhận parent `partial` còn usable, với `repairSections` không rỗng, unique và là
+  subset của `parent.invalidSections`. Provider repair payload phải chứa đúng các section được
+  yêu cầu; server merge nó với `parent.output`, validate merged draft rồi mới persist child.
+  Parent bất biến, child giữ `parentGenerationId` và dependency riêng.
+- Provider call dùng message roles `system`/`developer`/`user`; Product/Brief/Facts được serialize
+  deterministic trong user data, còn developer message mô tả output contract cụ thể. Timeout trước
+  acceptance là `AI_TIMEOUT`/`failed`; timeout không biết provider đã nhận là `AI_TIMEOUT_UNCERTAIN`
+  và chuyển `indeterminate`/giữ dependency.
+- `runPreparedScriptGeneration` chỉ bắt lỗi `provider.generate`; lỗi finalize/persistence được
+  propagate nguyên trạng. Stale pending chỉ được chuyển `indeterminate` khi caller cung cấp
+  `expectedCreatedAt` và `staleBefore` do server policy xác định.
+- Partial validation không coi scenes/claims là valid nếu target cross-reference không chứng minh
+  được; duplicate voiceover key trong scene bị loại; hashtag trim và unique không phân biệt hoa/thường.
+- Migrations `0008_bright_lilith.sql` và `0009_lazy_juggernaut.sql` thêm/chuẩn hóa DB CHECK cho
+  completed/partial/failed state shape. Migration
+  chỉ được review/apply thử trên database disposable local; không apply Neon shared.
+
+Integration smoke script `scripts/test-script-generation-foundation.ts` đã bao phủ repair merge/
+lineage, config replay, different-key và same-key race, snapshot/dependency revision, finalize
+failure boundary, read model, detach/retain dependency, stale guard và cross-workspace isolation.
+Runtime integration cần test-only PostgreSQL driver riêng vì Neon serverless driver hiện không kết
+nối Docker localhost; không claim integration pass khi chưa có adapter chạy thật.
 
 ## I. Open questions
 

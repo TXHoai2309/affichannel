@@ -59,19 +59,28 @@ export class DeterministicTextProvider implements TextProvider {
 		if (!request.idempotencyKey.trim()) {
 			throw new ScriptGenerationError("IDEMPOTENCY_CONFLICT", "Provider request requires an idempotency key.");
 		}
-		if (this.scenario === "timeout") throw new TextProviderError("AI_TIMEOUT", "Deterministic timeout.");
+		if (this.scenario === "timeout") throw new TextProviderError("AI_TIMEOUT", "Deterministic timeout before acceptance.");
+		if (this.scenario === "timeout_uncertain") throw new TextProviderError("AI_TIMEOUT_UNCERTAIN", "Deterministic timeout with uncertain provider acceptance.");
 		if (this.scenario === "provider_error") throw new TextProviderError("AI_PROVIDER_ERROR", "Deterministic provider failure.");
 		if (this.scenario === "malformed") {
 			return { content: "not-json", providerRequestId: `det-${request.idempotencyKey}`, inputTokens: 10, outputTokens: 2, estimatedCostMicros: BigInt(0), actualCostMicros: BigInt(0), currency: "VND" };
 		}
 		const draft = createDraft(this.snapshot);
-		const content = this.scenario === "partial"
+		const fullContent = this.scenario === "partial"
 			? { schemaVersion: draft.schemaVersion, language: draft.language, hook: draft.hook, cta: draft.cta, caption: draft.caption, hashtags: draft.hashtags, disclosure: draft.disclosure }
 			: draft;
+		const repairSections = new Set(request.sections);
+		const content = request.mode === "repair"
+			? Object.fromEntries([
+				["schemaVersion", draft.schemaVersion],
+				["language", draft.language],
+				...[...repairSections].map((section) => [section === "voiceover" ? "voiceoverSegments" : section, (fullContent as Record<string, unknown>)[section === "voiceover" ? "voiceoverSegments" : section]]),
+			])
+			: fullContent;
 		return {
 			content,
 			providerRequestId: `det-${request.idempotencyKey}`,
-			inputTokens: request.prompt.length,
+			inputTokens: request.messages.reduce((total, message) => total + message.content.length, 0),
 			outputTokens: JSON.stringify(content).length,
 			estimatedCostMicros: BigInt(0),
 			actualCostMicros: BigInt(0),
