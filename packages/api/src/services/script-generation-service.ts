@@ -465,6 +465,7 @@ async function prepareInTransaction(
 	const today = resolveBusinessToday();
 	let parentOutput: PartialScriptDraft | null = null;
 	let parentValidSections: ScriptGenerationSection[] = [];
+	let parentInvalidSections: ScriptGenerationSection[] = [];
 	if (input.mode === "repair" && input.parentGenerationId) {
 		const parent = await findScriptGenerationInTransaction(
 			transaction,
@@ -513,6 +514,7 @@ async function prepareInTransaction(
 			);
 		parentOutput = parent.outputJson as PartialScriptDraft;
 		parentValidSections = parent.validSections as ScriptGenerationSection[];
+		parentInvalidSections = invalidSections;
 	}
 
 	const snapshot = createSnapshot(
@@ -528,6 +530,7 @@ async function prepareInTransaction(
 							sections: sortedSections(input.repairSections ?? []),
 							baseOutput: parentOutput as PartialScriptDraft,
 							baseValidSections: parentValidSections,
+							baseInvalidSections: parentInvalidSections,
 						}
 					: null,
 		},
@@ -689,6 +692,7 @@ type FinalizeFailure = {
 		| "TEXT_PROVIDER_NOT_CONFIGURED"
 		| "AI_TIMEOUT"
 		| "AI_TIMEOUT_UNCERTAIN"
+		| "AI_PROVIDER_UNCERTAIN"
 		| "AI_REQUEST_STATE_UNCERTAIN"
 		| "AI_PROVIDER_ERROR"
 		| "AI_INVALID_OUTPUT"
@@ -1045,7 +1049,8 @@ export async function runPreparedScriptGeneration(
 	} catch (error) {
 		const code: FinalizeFailure["code"] =
 			error instanceof TextProviderError
-				? error.code === "AI_TIMEOUT_UNCERTAIN"
+				? error.code === "AI_TIMEOUT_UNCERTAIN" ||
+					error.code === "AI_PROVIDER_UNCERTAIN"
 					? "AI_REQUEST_STATE_UNCERTAIN"
 					: error.code
 				: "AI_PROVIDER_ERROR";

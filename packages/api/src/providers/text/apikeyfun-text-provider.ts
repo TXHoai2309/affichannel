@@ -169,6 +169,8 @@ function parseJsonContent(text: string): unknown {
 }
 
 function parseSse(raw: string): ParsedProviderResponse | null {
+	const hasSseMarker = /^(?:event|data|id|retry):/m.test(raw);
+	if (!hasSseMarker) return null;
 	const frames = raw.split(/\r?\n\r?\n/);
 	let contentText = "";
 	let providerRequestId: string | null = null;
@@ -176,24 +178,57 @@ function parseSse(raw: string): ParsedProviderResponse | null {
 	let finishReason: string | null = null;
 	let reported: { micros: bigint; currency: string } | null = null;
 	let sawEvent = false;
+	let sawCompletion = false;
 
 	for (const frame of frames) {
-		const data = frame
-			.split(/\r?\n/)
-			.filter((line) => line.startsWith("data:"))
-			.map((line) => line.slice(5).trim())
-			.join("\n")
+		const lines = frame.split(/\r?\n/);
+		const eventName = lines
+			.find((line) => line.startsWith("event:"))
+			?.slice(6)
 			.trim();
-		if (!data || data === "[DONE]") continue;
+		const dataLines = lines
+			.filter((line) => line.startsWith("data:"))
+			.map((line) => line.slice(5).replace(/^ /, ""));
+		if (eventName === "error" && dataLines.length === 0) {
+			throw new TextProviderError(
+				"AI_PROVIDER_UNCERTAIN",
+				"Text provider reported a stream error; delivery state is uncertain.",
+			);
+		}
+		if (dataLines.length === 0) continue;
+		const data = dataLines.join("\n").trim();
+		if (!data) continue;
+		if (data === "[DONE]") {
+			sawCompletion = true;
+			continue;
+		}
 		let event: unknown;
 		try {
 			event = JSON.parse(data) as unknown;
 		} catch {
-			continue;
+			throw new TextProviderError(
+				"AI_PROVIDER_UNCERTAIN",
+				"Text provider returned malformed stream data; delivery state is uncertain.",
+			);
 		}
-		if (!isRecord(event)) continue;
+		if (!isRecord(event)) {
+			throw new TextProviderError(
+				"AI_PROVIDER_UNCERTAIN",
+				"Text provider returned an invalid stream event; delivery state is uncertain.",
+			);
+		}
 		sawEvent = true;
 		const type = typeof event.type === "string" ? event.type : "";
+		if (
+			eventName === "error" ||
+			type === "error" ||
+			(type === "error_event" && isRecord(event.error))
+		) {
+			throw new TextProviderError(
+				"AI_PROVIDER_UNCERTAIN",
+				"Text provider reported a stream error; delivery state is uncertain.",
+			);
+		}
 		if (type === "message_start") {
 			const message = isRecord(event.message) ? event.message : event;
 			if (typeof message.id === "string") providerRequestId = message.id;
@@ -213,22 +248,35 @@ function parseSse(raw: string): ParsedProviderResponse | null {
 		}
 		if (typeof event.id === "string" && !providerRequestId)
 			providerRequestId = event.id;
-		if (type === "message_stop" && isRecord(event.usage)) {
-			usage = mergeUsage(usage, usageFrom({ usage: event.usage }));
+		if (type === "message_stop") {
+			sawCompletion = true;
+			if (isRecord(event.usage)) {
+				usage = mergeUsage(usage, usageFrom({ usage: event.usage }));
+			}
 		}
 		const cost = reportedCost(event);
 		if (cost) reported = cost;
 	}
 
-	return sawEvent
-		? {
-				contentText,
-				providerRequestId,
-				usage,
-				finishReason,
-				reportedCost: reported,
-			}
-		: null;
+	if (!sawEvent) {
+		throw new TextProviderError(
+			"AI_PROVIDER_UNCERTAIN",
+			"Text provider stream did not contain a valid event; delivery state is uncertain.",
+		);
+	}
+	if (!sawCompletion) {
+		throw new TextProviderError(
+			"AI_PROVIDER_UNCERTAIN",
+			"Text provider stream closed before completion; delivery state is uncertain.",
+		);
+	}
+	return {
+		contentText,
+		providerRequestId,
+		usage,
+		finishReason,
+		reportedCost: reported,
+	};
 }
 
 function parseResponseBody(raw: string): ParsedProviderResponse {
@@ -254,6 +302,15 @@ function parseResponseBody(raw: string): ParsedProviderResponse {
 			finishReason: null,
 			reportedCost: null,
 		};
+	}
+	if (
+		parsed.type === "error" ||
+		(parsed.type === "error_event" && isRecord(parsed.error))
+	) {
+		throw new TextProviderError(
+			"AI_PROVIDER_UNCERTAIN",
+			"Text provider reported an error after accepting the request; delivery state is uncertain.",
+		);
 	}
 	const choices = Array.isArray(parsed.choices) ? parsed.choices[0] : null;
 	const finishReason =
@@ -289,8 +346,8 @@ function isAbortError(error: unknown) {
 function safeProviderError(status: number) {
 	if (status === 408)
 		return new TextProviderError(
-			"AI_TIMEOUT",
-			"Text provider returned a timeout.",
+			"AI_TIMEOUT_UNCERTAIN",
+			"Text provider returned a timeout; delivery state is uncertain.",
 		);
 	if (status === 401 || status === 403)
 		return new TextProviderError(
@@ -312,11 +369,14 @@ function safeProviderError(status: number) {
 			"AI_PROVIDER_ERROR",
 			"Text provider rate limit was reached.",
 		);
+	if (status >= 500 && status <= 599)
+		return new TextProviderError(
+			"AI_PROVIDER_UNCERTAIN",
+			"Text provider returned a server error; delivery state is uncertain.",
+		);
 	return new TextProviderError(
 		"AI_PROVIDER_ERROR",
-		status >= 500
-			? "Text provider is temporarily unavailable."
-			: "Text provider request failed.",
+		"Text provider request failed.",
 	);
 }
 

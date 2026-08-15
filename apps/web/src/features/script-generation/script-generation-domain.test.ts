@@ -190,6 +190,10 @@ describe("AFF-US-008 script-generation foundation", () => {
 	it("separates trusted prompt roles from untrusted input data", () => {
 		const prompt = renderScriptPrompt(snapshot);
 		expect(prompt.trustedInstructions).not.toContain(snapshot.product.name);
+		expect(prompt.trustedInstructions).toContain("untrusted input data");
+		expect(prompt.outputSchema).toContain("Return exactly one JSON object.");
+		expect(prompt.outputSchema).toContain("voiceoverSegmentKeys");
+		expect(prompt.outputSchema).toContain("Do not add selectedHook");
 		expect(prompt.outputSchema).toContain("hookVariants");
 		expect(prompt.outputSchema).toContain("channelSettings.avoidWords");
 		expect(prompt.untrustedInputData).toContain(snapshot.product.name);
@@ -591,6 +595,7 @@ describe("AFF-US-008 Phase 2A final hardening", () => {
 
 	it.each([
 		["provider_error", "AI_PROVIDER_ERROR"],
+		["provider_uncertain", "AI_REQUEST_STATE_UNCERTAIN"],
 		["timeout_uncertain", "AI_REQUEST_STATE_UNCERTAIN"],
 	] as const)("preserves %s provider semantics", async (scenario, code) => {
 		const provider = new DeterministicTextProvider({ snapshot, scenario });

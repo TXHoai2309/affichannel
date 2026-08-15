@@ -125,6 +125,11 @@ export class DeterministicTextProvider implements TextProvider {
 				"AI_PROVIDER_ERROR",
 				"Deterministic provider failure.",
 			);
+		if (this.scenario === "provider_uncertain")
+			throw new TextProviderError(
+				"AI_PROVIDER_UNCERTAIN",
+				"Deterministic provider failure with uncertain delivery.",
+			);
 		if (this.scenario === "malformed") {
 			return {
 				content: "not-json",

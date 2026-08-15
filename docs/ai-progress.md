@@ -872,3 +872,33 @@ Kiểm tra trong vòng:
 - Adapter tests dùng mock fetch: SSE/structured extraction, malformed JSON, HTTP 400/401/403/404/408/429/5xx,
   timeout/network uncertain, missing/present usage, request ID và cost fail-closed.
 - Live smoke chưa bật; không gọi API thật.
+
+### 2026-08-15 — AFF-US-008 Phase 2B SSE/error hardening
+
+Mục tiêu:
+
+- Đóng các gap trước live call mà không mở rộng sang Script Studio hoặc migration.
+
+Thay đổi:
+
+- SSE parser không còn bỏ qua malformed data; nhận `event:error`, JSON error sau HTTP
+  200, stream đóng trước completion và phân biệt empty completed stream với provider error.
+- HTTP 408/5xx và các relay/network state không chứng minh được delivery chuyển sang
+  uncertain/indeterminate; không automatic retry và chỉ detach Fact dependency ở `failed`.
+- Prompt builder gửi exact ScriptDraft v2 contract, repair section allow-list và
+  trusted/untrusted separation rõ hơn; thêm base invalid section metadata vào repair snapshot.
+- Pricing audit ngày 2026-08-15 ghi nhận public APIKEY.FUN pricing metadata cho
+  `claude-sonnet-4-6`: USD 3/1M input, USD 15/1M output; runtime vẫn fail-closed nếu
+  pricing config thiếu.
+- APIKEY.FUN audit không yêu cầu `anthropic-version`, nên adapter không thêm header mù.
+
+Kiểm tra:
+
+- Provider test bổ sung SSE error/malformed/incomplete/empty, JSON error, HTTP 408/500/502/503,
+  network/abort uncertain và request ID/usage mapping.
+- Live paid smoke chỉ chạy khi `AFFICHANNEL_LIVE_AI_SMOKE=1` và server key/pricing đầy đủ;
+  nếu chưa bật thì ghi `LIVE SMOKE PENDING`, không giả PASS.
+- `pnpm test:integration:script-generation` chưa chạy qua: configured Neon runtime trả
+  `42P01 relation "channel_settings"/"script_generation" does not exist`; cleanup cũng
+  không tạo được dữ liệu. Không migrate shared Neon trong task này.
+- Authenticated E2E chạy thật `12 passed`; không phát sinh regression từ Phase 2B.

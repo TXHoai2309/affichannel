@@ -525,3 +525,31 @@ integration và authenticated/live smoke vẫn là phần deferred; không đán
 - Docs contract audit và limitation được ghi tại
   `docs/aff-us-008-phase-2b.md`; Phase 2B ready for review không đồng nghĩa
   AFF-US-008 tổng thể Done.
+
+## DEC-019 — Conservative uncertainty cho live text relay
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-15
+
+### Quyết định
+
+- HTTP 408, mọi HTTP 5xx, network/AbortController timeout và SSE `event:error`,
+  malformed hoặc incomplete đều được coi là delivery uncertain. Provider adapter
+  dùng `AI_TIMEOUT_UNCERTAIN` hoặc `AI_PROVIDER_UNCERTAIN`; service chuyển thành
+  `AI_REQUEST_STATE_UNCERTAIN` và status `indeterminate`.
+- HTTP 400/401/403/404/429 chỉ là definite rejection theo status response và không
+  retry tự động. Không suy diễn rằng relay chưa upstream xử lý nếu APIKEY.FUN không
+  công bố bằng chứng đó.
+- Empty stream chỉ được coi là provider success khi có completion event; output rỗng
+  sau đó vẫn đi qua Zod/domain validation và có thể thành `AI_INVALID_OUTPUT`.
+- Exact output contract được dựng từ constants/schema hiện tại ở prompt builder;
+  Zod/domain validator vẫn là authority. Repair chỉ nhận requested sections và server
+  merge giữ root metadata cùng parent sections.
+
+### Hệ quả
+
+- Dependency Fact chỉ detach ở status `failed`; `partial`, `completed` và
+  `indeterminate` giữ dependency để không mất lineage khi delivery chưa rõ.
+- Không có automatic retry trong adapter hoặc smoke runner.
+- Pricing dùng config versioned server-side; public pricing chỉ là evidence cấu hình,
+  không được scrape tại runtime.

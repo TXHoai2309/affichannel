@@ -97,6 +97,13 @@ describe("APIKEY.FUN text provider adapter", () => {
 		expect(body.model).toBe("claude-sonnet-4-6");
 		expect(body.stream).toBe(true);
 		expect(body).not.toHaveProperty("response_format");
+		expect(init?.headers).toEqual(
+			expect.objectContaining({
+				Authorization: "Bearer test-api-key",
+				Accept: "text/event-stream",
+			}),
+		);
+		expect(init?.headers).not.toHaveProperty("anthropic-version");
 		expect(body.system).toContain("[system]");
 		expect(body.system).toContain("[developer]");
 		expect(body.messages).toEqual([
@@ -144,8 +151,75 @@ describe("APIKEY.FUN text provider adapter", () => {
 		expect(result.providerRequestId).toBe("header-request-1");
 	});
 
+	it("normalizes an event:error SSE frame as uncertain", async () => {
+		const fetchMock = vi.fn<typeof fetch>(
+			async () =>
+				new Response(
+					`${[
+						'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_error"}}',
+						'event: error\ndata: {"type":"error","error":{"message":"provider secret"}}',
+					].join("\n\n")}\n\n`,
+					{ status: 200, headers: { "content-type": "text/event-stream" } },
+				),
+		);
+
+		await expect(
+			makeProvider(fetchMock).generate(request),
+		).rejects.toMatchObject({
+			code: "AI_PROVIDER_UNCERTAIN",
+		});
+		await expect(makeProvider(fetchMock).generate(request)).rejects.not.toThrow(
+			"provider secret",
+		);
+	});
+
+	it("treats malformed and incomplete SSE streams as uncertain", async () => {
+		const malformed = vi.fn<typeof fetch>(
+			async () =>
+				new Response(
+					'event: message_start\ndata: {"type":"message_start"}\n\nevent: content_block_delta\ndata: not-json\n\n',
+					{ status: 200, headers: { "content-type": "text/event-stream" } },
+				),
+		);
+		await expect(
+			makeProvider(malformed).generate(request),
+		).rejects.toMatchObject({
+			code: "AI_PROVIDER_UNCERTAIN",
+		});
+
+		const incomplete = vi.fn<typeof fetch>(
+			async () =>
+				new Response(
+					'event: message_start\ndata: {"type":"message_start"}\n\nevent: content_block_delta\ndata: {"type":"content_block_delta","delta":{"text":"{")}\n\n',
+					{ status: 200, headers: { "content-type": "text/event-stream" } },
+				),
+		);
+		await expect(
+			makeProvider(incomplete).generate(request),
+		).rejects.toMatchObject({
+			code: "AI_PROVIDER_UNCERTAIN",
+		});
+	});
+
+	it("keeps an empty but completed stream distinct from a stream error", async () => {
+		const fetchMock = vi.fn<typeof fetch>(
+			async () =>
+				new Response(
+					`${[
+						'event: message_start\ndata: {"type":"message_start","message":{"id":"msg_empty"}}',
+						'event: message_stop\ndata: {"type":"message_stop"}',
+					].join("\n\n")}\n\n`,
+					{ status: 200, headers: { "content-type": "text/event-stream" } },
+				),
+		);
+
+		const result = await makeProvider(fetchMock).generate(request);
+		expect(result.content).toBe("");
+		expect(result.providerRequestId).toBe("msg_empty");
+	});
+
 	it("normalizes provider HTTP errors without exposing provider payloads", async () => {
-		for (const status of [401, 403, 400, 404, 429, 500]) {
+		for (const status of [401, 403, 400, 404, 429]) {
 			const fetchMock = vi.fn<typeof fetch>(
 				async () =>
 					new Response('{"message":"secret provider detail"}', { status }),
@@ -159,12 +233,33 @@ describe("APIKEY.FUN text provider adapter", () => {
 				makeProvider(fetchMock).generate(request),
 			).rejects.not.toThrow("secret provider detail");
 		}
-		const timeoutResponse = vi.fn<typeof fetch>(
-			async () => new Response("timeout", { status: 408 }),
+		for (const status of [408]) {
+			const timeoutResponse = vi.fn<typeof fetch>(
+				async () => new Response("timeout", { status }),
+			);
+			await expect(
+				makeProvider(timeoutResponse).generate(request),
+			).rejects.toMatchObject({ code: "AI_TIMEOUT_UNCERTAIN" });
+		}
+		for (const status of [500, 502, 503]) {
+			const uncertainResponse = vi.fn<typeof fetch>(
+				async () =>
+					new Response('{"message":"secret provider detail"}', { status }),
+			);
+			await expect(
+				makeProvider(uncertainResponse).generate(request),
+			).rejects.toMatchObject({ code: "AI_PROVIDER_UNCERTAIN" });
+		}
+		const jsonErrorResponse = vi.fn<typeof fetch>(
+			async () =>
+				new Response(
+					JSON.stringify({ type: "error", error: { message: "secret body" } }),
+					{ status: 200, headers: { "content-type": "application/json" } },
+				),
 		);
 		await expect(
-			makeProvider(timeoutResponse).generate(request),
-		).rejects.toMatchObject({ code: "AI_TIMEOUT" });
+			makeProvider(jsonErrorResponse).generate(request),
+		).rejects.toMatchObject({ code: "AI_PROVIDER_UNCERTAIN" });
 	});
 
 	it("classifies abort and network failures as uncertain without retrying", async () => {

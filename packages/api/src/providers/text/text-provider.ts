@@ -4,6 +4,7 @@ export type TextProviderScenario =
 	| "malformed"
 	| "timeout"
 	| "timeout_uncertain"
+	| "provider_uncertain"
 	| "provider_error";
 
 export type TextProviderMessage = {
@@ -47,10 +48,18 @@ export type TextProviderEstimate = {
 };
 
 export class TextProviderError extends Error {
-	readonly code: "AI_TIMEOUT" | "AI_TIMEOUT_UNCERTAIN" | "AI_PROVIDER_ERROR";
+	readonly code:
+		| "AI_TIMEOUT"
+		| "AI_TIMEOUT_UNCERTAIN"
+		| "AI_PROVIDER_UNCERTAIN"
+		| "AI_PROVIDER_ERROR";
 
 	constructor(
-		code: "AI_TIMEOUT" | "AI_TIMEOUT_UNCERTAIN" | "AI_PROVIDER_ERROR",
+		code:
+			| "AI_TIMEOUT"
+			| "AI_TIMEOUT_UNCERTAIN"
+			| "AI_PROVIDER_UNCERTAIN"
+			| "AI_PROVIDER_ERROR",
 		message: string = code,
 	) {
 		super(message);

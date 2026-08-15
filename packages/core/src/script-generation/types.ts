@@ -90,6 +90,7 @@ export type ScriptGenerationInputSnapshot = {
 			sections: ScriptGenerationSection[];
 			baseOutput: PartialScriptDraft;
 			baseValidSections?: ScriptGenerationSection[];
+			baseInvalidSections?: ScriptGenerationSection[];
 		};
 	};
 	project: {

@@ -132,6 +132,16 @@ sử dụng Semantic Versioning.
 - Thêm mock adapter tests và smoke command opt-in; không gọi live API mặc định, không thêm
   migration hoặc Script Studio UI.
 
+### AFF-US-008 Phase 2B — SSE/error hardening
+
+- Nhận diện `event:error`, JSON error sau HTTP 200, malformed/incomplete SSE và không
+  biến provider-side stream error thành `AI_INVALID_OUTPUT`.
+- Giữ policy uncertain bảo thủ cho HTTP 408/5xx, network/abort và không automatic retry;
+  dependency Product Facts chỉ bị detach ở trạng thái `failed`.
+- Làm rõ exact ScriptDraft v2 JSON contract và repair allow-list trong trusted prompt;
+  cập nhật audit pricing/model và kết luận không thêm `anthropic-version` khi relay không
+  yêu cầu.
+
 ## 0.0.0 — 2026-08-10
 
 ### Đã thêm
