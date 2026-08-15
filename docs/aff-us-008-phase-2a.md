@@ -1,7 +1,7 @@
 # AFF-US-008 Phase 2A — Production AI input và cost preflight
 
-- Trạng thái: Ready for review — backend/domain Phase 2A
-- Cập nhật: 2026-08-14
+- Trạng thái: Ready for acceptance — backend/domain Phase 2A
+- Cập nhật: 2026-08-15
 - Phạm vi: Channel Settings, AI provider settings, Media Metadata contract, Output Rules,
   structured draft v2 và production oRPC boundary
 
@@ -34,6 +34,25 @@ MIME validation và binary storage thuộc slice media sau.
 
 Khi claimLimit khác null, server validator áp dụng đúng giới hạn đã cấu hình; khi null, không có
 business cap số lượng claim nào được tự phát minh.
+
+## Final hardening contract
+
+- Router tách rõ preflight và provider execution: lỗi resolve provider trả
+	`TEXT_PROVIDER_NOT_CONFIGURED` khi thiếu credential hoặc `TEXT_PROVIDER_UNAVAILABLE` khi provider
+	không tồn tại, lỗi estimate trả `COST_ESTIMATE_UNAVAILABLE`; lỗi ghi estimate và lỗi finalize là
+	lỗi persistence/application được propagate nguyên trạng. Mỗi preflight failure chỉ finalize một
+	lần, còn `provider.generate()` do service giữ semantics definite/uncertain.
+- Repair chỉ thay các section trong `repairSections`. `schemaVersion` và `language` phải bằng parent;
+  server merge lại root metadata từ parent và kiểm tra nội dung của mọi section hợp lệ của parent
+  không nằm trong repair vẫn giữ nguyên. Snapshot repair lưu `baseValidSections` để proof dựa trên
+  parent artifact, không dựa vào `validSections` rỗng của child pending.
+- Output phải có `language` đúng `outputRules.language` và `disclosure` là chuỗi không rỗng đúng
+  `channelSettings.affiliateDisclosure`. `avoidWords` được nhắc ở prompt level và kiểm tra lại ở
+  domain level với trim, NFKC và so sánh không phân biệt hoa thường; vi phạm một section tạo partial
+  để section đó có thể repair, không âm thầm thay nội dung.
+- Provider chỉ nhận `mediaMetadata` usable: `status=ready` và `usageRights=owned|licensed`.
+  Media archived, needs_review, restricted, unknown rights hoặc metadata không hợp lệ bị loại khỏi
+  provider input; không có media usable vẫn là snapshot hợp lệ.
 
 ## ScriptDraft v2
 
@@ -85,5 +104,8 @@ Integration smoke hiện vẫn phụ thuộc Neon serverless driver nên không 
 localhost trong môi trường hiện tại. Chỉ thêm test-only driver nếu không làm thay đổi runtime
 production; nếu chưa có adapter sạch, phải báo rõ thay vì claim integration pass.
 
-AFF-US-008 Phase 2A is ready for review. AFF-US-008 is not marked Done until the live provider,
-Script Studio UI và authenticated end-to-end smoke được triển khai.
+AFF-US-008 Phase 2A is ready for acceptance. AFF-US-008 is not marked Done until the live provider,
+Script Studio UI và authenticated end-to-end/live smoke được triển khai. Runtime integration hiện
+chưa được claim pass do Neon serverless driver không kết nối Docker localhost. Authenticated E2E
+hiện chạy được 11/12; test AFF-US-004 về browser Back còn fail vì route quay lại overview sau khi
+đã đi qua product, nằm ngoài hardening Phase 2A và chưa được sửa trong vòng này.

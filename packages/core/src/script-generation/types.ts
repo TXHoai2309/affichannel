@@ -56,7 +56,7 @@ export type ScriptDraft = {
 	cta: { text: string };
 	caption: string;
 	hashtags: string[];
-	disclosure: string | null;
+	disclosure: string;
 	claims: Array<{ text: string; occurrence: ClaimOccurrence }>;
 };
 
@@ -89,6 +89,7 @@ export type ScriptGenerationInputSnapshot = {
 			parentGenerationId: string;
 			sections: ScriptGenerationSection[];
 			baseOutput: PartialScriptDraft;
+			baseValidSections?: ScriptGenerationSection[];
 		};
 	};
 	project: {

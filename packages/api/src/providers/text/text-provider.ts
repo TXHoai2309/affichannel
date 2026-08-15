@@ -21,12 +21,15 @@ export type TextProviderRequest = {
 
 export type TextProviderResult = {
 	content: unknown;
-	providerRequestId: string;
+	providerRequestId: string | null;
 	inputTokens: number | null;
 	outputTokens: number | null;
 	estimatedCostMicros: bigint | null;
 	actualCostMicros: bigint | null;
 	currency: string | null;
+	provider?: string;
+	model?: string;
+	finishReason?: string | null;
 };
 
 export type TextProviderEstimateRequest = {

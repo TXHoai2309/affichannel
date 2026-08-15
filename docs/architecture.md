@@ -361,3 +361,32 @@ Product Facts usable, Media Metadata và Output Rules. Snapshot v2 lưu config i
 secret. Provider adapter phải có cost preflight; deterministic chỉ được registry bật ở development
 hoặc test, production không fallback sang provider giả. Protected oRPC gồm estimate, generate,
 repair và getState; không nhận provider/model từ client và không tự advance workflow.
+
+Phase 2A hardening giữ error boundary theo lớp: preflight provider/estimate có domain code và được
+finalize một lần; lỗi persistence của estimate/finalize không bị đổi thành lỗi provider. Repair tạo
+child từ parent partial, giữ nguyên root metadata và các section hợp lệ ngoài tập repair. Output
+validator enforce language theo Output Rules, disclosure theo Channel Settings và `avoidWords` ở cả
+prompt/domain; vi phạm section được ghi nhận theo partial semantics. Provider chỉ thấy media
+`ready` với quyền `owned` hoặc `licensed`; không có media usable không chặn generation. oRPC hiện
+dùng standard serializer built-in cho `bigint`, nên các trường cost giữ nguyên `bigint` trong domain/API
+contract để không mất precision.
+
+### AFF-US-008 Phase 2B — Live TextProvider
+
+Live text chạy qua `TextProvider` registry; ScriptGenerationService không biết
+APIKEY.FUN-specific payload. Adapter server-only `ApikeyFunTextProvider` dùng
+Anthropic Messages `POST /v1/messages` với SSE theo contract đã audit, model mặc
+định cấu hình là `claude-sonnet-4-6`. AI Settings vẫn quyết định logical
+provider/model; API key, base URL, timeout và pricing versioned chỉ nằm trong
+server environment.
+
+APIKEY.FUN không công bố structured-output/JSON-Schema contract và pricing
+preflight đủ ổn định trong tài liệu hiện tại. Adapter vì vậy chỉ yêu cầu JSON ở
+prompt, parse response rồi giao cho Zod/domain validator; cost estimate dùng
+pricing config server-side, thiếu config thì fail closed. Không scrape pricing,
+không giả cost zero và không đổi currency provider sang VND trong adapter.
+
+HTTP error được normalize về domain error hiện có; timeout/network sau khi request
+có thể đã được nhận đi theo uncertain/indeterminate, không automatic retry. Raw
+provider body, API key và prompt không được log hoặc trả cho client. `getState`
+tiếp tục DB-only; Phase 2B không tạo migration.

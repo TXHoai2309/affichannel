@@ -68,6 +68,13 @@ export const mediaMetadataSchema = z
 
 export type MediaMetadataSnapshot = z.infer<typeof mediaMetadataSchema>;
 
+export function isUsableMediaMetadata(media: MediaMetadataSnapshot) {
+	return (
+		media.status === "ready" &&
+		(media.usageRights === "owned" || media.usageRights === "licensed")
+	);
+}
+
 export const defaultOutputRules: OutputRules = {
 	language: "vi-VN",
 	aspectRatio: "9:16",

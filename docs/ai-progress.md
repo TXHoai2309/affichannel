@@ -808,3 +808,67 @@ Kiểm tra:
 Trạng thái:
 
 - Phase 2A backend/domain ready for review; chưa đánh dấu AFF-US-008 Done. Chưa commit/push/merge/deploy.
+
+### 2026-08-15 — Final hardening AFF-US-008 Phase 2A
+
+Mục tiêu:
+
+- Đưa các invariant còn thiếu của Phase 2A vào router/service/domain và giữ docs khớp implementation.
+
+Thay đổi:
+
+- Tách router preflight error boundary khỏi provider execution; record estimate/finalize persistence
+  error được propagate, preflight failure chỉ finalize một lần và provider definite/uncertain giữ
+  đúng semantics.
+- Repair merge giữ root `schemaVersion`/`language`, chỉ thay requested sections và đối chiếu nội dung
+  parent valid sections từ `baseValidSections`.
+- Enforce Output Rules language, non-empty exact affiliate disclosure và `avoidWords` ở prompt/domain;
+  lọc provider media còn `ready + owned|licensed`.
+- Audit BigInt: oRPC standard serializer built-in giữ precision bằng metadata + string transport;
+  không đổi DTO/database.
+
+Kiểm tra:
+
+- `pnpm check-types`: đạt.
+- `pnpm --filter web test`: 60/60 đạt, gồm hardening unit/service boundary tests.
+- Runtime DB integration và live provider smoke chưa chạy trong vòng này; không claim pass vì Neon
+  serverless driver hiện không kết nối Docker localhost.
+- `pnpm --filter web test:e2e`: 11/12 pass, 1 fail ở test AFF-US-004 browser Back. Trace cho thấy
+  browser back đi tới `/projects/{id}/product` rồi route quay lại `/projects/{id}`; đây là regression
+  ngoài scope Phase 2A, không thay đổi US1–US7 trong vòng này.
+- Chưa tạo migration; chưa commit/push/merge/deploy.
+
+Trạng thái:
+
+- AFF-US-008 Phase 2A backend/domain is ready for acceptance. AFF-US-008 tổng thể chưa Done.
+
+### 2026-08-15 — AFF-US-008 Phase 2B live TextProvider
+
+Mục tiêu:
+
+- Nối provider text thật qua abstraction hiện có mà không phá invariant Phase 2A.
+
+Audit/API contract:
+
+- APIKEY.FUN Docs chính thức xác nhận `POST /v1/messages`, Bearer auth, SSE và
+  model `claude-sonnet-4-6` cho Anthropic Messages.
+- Docs không công bố structured JSON Schema hoặc pricing/usage-cost contract đủ
+  để tự động preflight. Quyết định là prompt JSON + server Zod validation và
+  pricing config versioned; không giả cost zero.
+
+Implementation:
+
+- Thêm `ApikeyFunTextProvider` và registry entry `apikeyfun`; map system/developer/user,
+  SSE text, usage/request ID khi có, provider/model/finish reason và currency.
+- Thêm server env cho default provider/model, API key/base URL, timeout, output budget
+  và pricing config. Production thiếu key hoặc pricing fail closed; deterministic không
+  fallback implicit.
+- Thêm live smoke opt-in `AFFICHANNEL_LIVE_AI_SMOKE=1`; mặc định không gọi API có phí.
+- Không đổi Product Facts, freshness, dependency, auth/workspace, Script Studio UI,
+  migration hoặc video/TTS.
+
+Kiểm tra trong vòng:
+
+- Adapter tests dùng mock fetch: SSE/structured extraction, malformed JSON, HTTP 400/401/403/404/408/429/5xx,
+  timeout/network uncertain, missing/present usage, request ID và cost fail-closed.
+- Live smoke chưa bật; không gọi API thật.

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { canonicalizeJson } from "./canonical-json";
+import { defaultOutputRules } from "./input-contract";
 import {
 	SCRIPT_GENERATION_LIMITS,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
@@ -83,7 +84,7 @@ export const scriptDraftSchema = z
 		cta: ctaSchema,
 		caption: text(),
 		hashtags: hashtagsSchema,
-		disclosure: z.string().trim().max(500).nullable(),
+		disclosure: z.string().trim().min(1).max(500),
 		claims: z.array(claimSchema).max(SCRIPT_GENERATION_LIMITS.maxClaims),
 	})
 	.strict()
@@ -185,7 +186,7 @@ export const scriptSectionSchemas = {
 				message: "Hashtags must be unique after normalization.",
 			});
 	}),
-	disclosure: z.string().trim().max(500).nullable(),
+	disclosure: z.string().trim().min(1).max(500),
 	claims: z.array(claimSchema).max(SCRIPT_GENERATION_LIMITS.maxClaims),
 } as const;
 
@@ -232,11 +233,129 @@ export type ScriptOutputValidation = {
 	errorCode: "INVALID_GENERATION_OUTPUT" | null;
 };
 
+export type ScriptDraftValidationOptions = {
+	expectedLanguage?: string;
+	requiredDisclosure?: string | null;
+	avoidWords?: string[];
+};
+
+function normalizePolicyText(value: string) {
+	return value.normalize("NFKC").trim().toLocaleLowerCase("vi-VN");
+}
+
+function containsAvoidWord(value: string, avoidWords: string[]) {
+	const normalizedValue = normalizePolicyText(value);
+	return avoidWords.some((word) => {
+		const normalizedWord = normalizePolicyText(word);
+		return (
+			normalizedWord.length > 0 && normalizedValue.includes(normalizedWord)
+		);
+	});
+}
+
+function textValuesForSection(
+	section: ScriptGenerationSection,
+	value: unknown,
+): string[] {
+	if (section === "hook" && Array.isArray(value)) {
+		return value.flatMap((item) =>
+			item &&
+			typeof item === "object" &&
+			"text" in item &&
+			typeof item.text === "string"
+				? [item.text]
+				: [],
+		);
+	}
+	if (section === "voiceover" && Array.isArray(value)) {
+		return value.flatMap((item) =>
+			item &&
+			typeof item === "object" &&
+			"text" in item &&
+			typeof item.text === "string"
+				? [item.text]
+				: [],
+		);
+	}
+	if (section === "scenes" && Array.isArray(value)) {
+		return value.flatMap((item) => {
+			if (!item || typeof item !== "object") return [];
+			const record = item as Record<string, unknown>;
+			return [record.visualDirection, record.onScreenText].filter(
+				(text): text is string => typeof text === "string",
+			);
+		});
+	}
+	if (
+		section === "cta" &&
+		value &&
+		typeof value === "object" &&
+		"text" in value
+	) {
+		return typeof value.text === "string" ? [value.text] : [];
+	}
+	if (section === "caption" && typeof value === "string") return [value];
+	if (section === "hashtags" && Array.isArray(value)) {
+		return value.filter((text): text is string => typeof text === "string");
+	}
+	if (section === "disclosure" && typeof value === "string") return [value];
+	if (section === "claims" && Array.isArray(value)) {
+		return value.flatMap((item) =>
+			item &&
+			typeof item === "object" &&
+			"text" in item &&
+			typeof item.text === "string"
+				? [item.text]
+				: [],
+		);
+	}
+	return [];
+}
+
+function sectionViolatesPolicy(
+	section: ScriptGenerationSection,
+	value: unknown,
+	options: Required<
+		Pick<ScriptDraftValidationOptions, "requiredDisclosure" | "avoidWords">
+	>,
+) {
+	if (
+		section === "disclosure" &&
+		options.requiredDisclosure !== null &&
+		(typeof value !== "string" ||
+			normalizePolicyText(value) !==
+				normalizePolicyText(options.requiredDisclosure))
+	) {
+		return true;
+	}
+	return textValuesForSection(section, value).some((text) => {
+		if (
+			section === "disclosure" &&
+			options.requiredDisclosure !== null &&
+			normalizePolicyText(text) ===
+				normalizePolicyText(options.requiredDisclosure)
+		) {
+			return false;
+		}
+		return containsAvoidWord(text, options.avoidWords);
+	});
+}
+
+function resolvedValidationOptions(options: ScriptDraftValidationOptions) {
+	return {
+		expectedLanguage: options.expectedLanguage ?? defaultOutputRules.language,
+		requiredDisclosure: options.requiredDisclosure ?? null,
+		avoidWords: options.avoidWords ?? [],
+	};
+}
+
 export function validateScriptDraftOutput(
 	raw: unknown,
 	targetDurationSeconds: number,
 	claimLimit: number | null = null,
+	options: ScriptDraftValidationOptions = {},
 ): ScriptOutputValidation {
+	const resolvedOptions = resolvedValidationOptions(options);
 	const parsed = parseUnknownOutput(raw);
 	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
 		return {
@@ -249,7 +368,7 @@ export function validateScriptDraftOutput(
 	}
 	const root = parsed as Record<string, unknown>;
 	const full = scriptDraftSchema.safeParse(root);
-	if (full.success) {
+	if (full.success && full.data.language === resolvedOptions.expectedLanguage) {
 		const totalDuration = full.data.scenes.reduce(
 			(sum, scene) => sum + scene.durationSeconds,
 			0,
@@ -259,6 +378,18 @@ export function validateScriptDraftOutput(
 			targetDurationSeconds * SCRIPT_GENERATION_LIMITS.durationToleranceRatio;
 		const withinClaimLimit =
 			claimLimit === null || full.data.claims.length <= claimLimit;
+		const policyValid = scriptGenerationSections.every(
+			(section) =>
+				!sectionViolatesPolicy(
+					section,
+					section === "hook"
+						? full.data.hookVariants
+						: section === "voiceover"
+							? full.data.voiceoverSegments
+							: full.data[section],
+					resolvedOptions,
+				),
+		);
 		if (
 			!withinDuration ||
 			!withinClaimLimit ||
@@ -272,13 +403,15 @@ export function validateScriptDraftOutput(
 				errorCode: "INVALID_GENERATION_OUTPUT",
 			};
 		}
-		return {
-			status: "completed",
-			output: full.data,
-			validSections: allSections(),
-			invalidSections: [],
-			errorCode: null,
-		};
+		if (policyValid) {
+			return {
+				status: "completed",
+				output: full.data,
+				validSections: allSections(),
+				invalidSections: [],
+				errorCode: null,
+			};
+		}
 	}
 
 	const schemaVersion = root.schemaVersion;
@@ -286,7 +419,7 @@ export function validateScriptDraftOutput(
 	if (
 		schemaVersion !== SCRIPT_OUTPUT_SCHEMA_VERSION ||
 		typeof language !== "string" ||
-		language.trim().length < 2
+		language.trim() !== resolvedOptions.expectedLanguage
 	) {
 		return {
 			status: "failed",
@@ -331,6 +464,10 @@ export function validateScriptDraftOutput(
 		}
 		const result = scriptSectionSchemas[section].safeParse(root[key]);
 		if (result.success) {
+			if (sectionViolatesPolicy(section, result.data, resolvedOptions)) {
+				invalidSections.push(section);
+				continue;
+			}
 			(output as Record<string, unknown>)[key] = result.data;
 			validSections.push(section);
 		} else {
@@ -459,7 +596,9 @@ export function validateRepairScriptOutput(
 	raw: unknown,
 	repairSections: ScriptGenerationSection[],
 	claimLimit: number | null = null,
+	options: ScriptDraftValidationOptions = {},
 ): RepairOutputValidation {
+	const resolvedOptions = resolvedValidationOptions(options);
 	const parsed = parseUnknownOutput(raw);
 	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
 		return { success: false, output: null };
@@ -467,7 +606,7 @@ export function validateRepairScriptOutput(
 	if (
 		root.schemaVersion !== SCRIPT_OUTPUT_SCHEMA_VERSION ||
 		typeof root.language !== "string" ||
-		root.language.trim().length < 2
+		root.language.trim() !== resolvedOptions.expectedLanguage
 	)
 		return { success: false, output: null };
 	const normalizedSections = [...new Set(repairSections)];
@@ -507,6 +646,8 @@ export function validateRepairScriptOutput(
 			Array.isArray(result.data) &&
 			result.data.length > claimLimit
 		)
+			return { success: false, output: null };
+		if (sectionViolatesPolicy(section, result.data, resolvedOptions))
 			return { success: false, output: null };
 		(output as Record<string, unknown>)[key] = result.data;
 	}

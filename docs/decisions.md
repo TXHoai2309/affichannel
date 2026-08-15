@@ -461,3 +461,67 @@ Phase 2A thêm migration `0010` cho Channel Settings/AI Settings/Media Metadata 
 Output Rules, nhưng không
 thêm UI hoặc provider SDK. Script schema/prompt/snapshot bump v2 sạch vì chưa có shared output cần
 compatibility converter.
+
+## DEC-017 — Phase 2A output policy, repair preservation và provider boundary
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-15
+
+### Quyết định
+
+- Router chỉ bắt lỗi domain ở preflight provider/estimate để finalize failure đúng code một lần.
+  Lỗi ghi estimate và finalize không được map thành `AI_PROVIDER_ERROR`; provider execution tiếp tục
+  do `runPreparedScriptGeneration()` chuẩn hóa definite/uncertain semantics.
+- Repair phải giữ `schemaVersion` và `language` của parent, chỉ thay section được yêu cầu, và chứng
+  minh nội dung của parent valid sections ngoài repair không đổi. `baseValidSections` được chụp từ
+  parent artifact trong snapshot để child pending không tự chứng minh chính nó.
+- `language` lấy từ Output Rules; disclosure là non-empty và phải khớp policy affiliate disclosure
+  của Channel Settings. `avoidWords` được enforce sau generation với Unicode NFKC/case-insensitive
+  matching và dùng partial semantics theo section.
+- Chỉ media `ready` với rights `owned` hoặc `licensed` được đưa vào provider input. Media bị loại
+  không được mô tả như available media; snapshot rỗng media vẫn hợp lệ.
+- `estimatedCostMicros` và `actualCostMicros` tiếp tục là `bigint`. Audit package `@orpc/client`
+  1.15.0 cho thấy standard RPC serializer đánh dấu BigInt và serialize bằng `toString()`, nên chưa
+  cần đổi DTO hoặc schema database.
+
+### Hệ quả
+
+Phase 2A không thêm migration cho các hardening này. Live provider, Script Studio, runtime
+integration và authenticated/live smoke vẫn là phần deferred; không đánh dấu toàn bộ AFF-US-008 Done.
+
+## DEC-018 — APIKEY.FUN live TextProvider cho AFF-US-008 Phase 2B
+
+- Trạng thái: Đã chấp nhận cho Phase 2B
+- Ngày: 2026-08-15
+
+### Quyết định
+
+- APIKEY.FUN là provider text mặc định ở lớp cấu hình, với logical provider
+  `apikeyfun` và model identifier đã xác minh từ Docs là `claude-sonnet-4-6`.
+  Provider/model vẫn configurable qua AI Settings; default không phải business
+  hard-code.
+- Adapter dùng Anthropic Messages `POST /v1/messages`, Bearer auth và documented
+  SSE. Structured JSON Schema không được coi là capability vì Docs không công bố
+  contract đó; JSON prompt chỉ là hỗ trợ định dạng, Zod/domain validation vẫn là
+  authority cuối.
+- API key không lưu DB/client/log. Thiếu key production trả
+  `TEXT_PROVIDER_NOT_CONFIGURED`, không fallback deterministic. Unknown provider
+  cũng fail closed.
+- Cost preflight bắt buộc dùng pricing config versioned server-side. Thiếu pricing
+  hoặc currency thì `COST_ESTIMATE_UNAVAILABLE`; tuyệt đối không giả `0`, scrape
+  pricing HTML hoặc đổi currency trong TextProvider.
+- Usage/request ID chỉ map khi provider trả về; thiếu giữ `null`. Timeout/network
+  không xác định delivery chuyển sang uncertain/indeterminate và không automatic
+  retry. HTTP errors được normalize về error code domain, không leak provider body.
+- Phase 2B không thêm migration, không đổi auth/workspace scope, không tạo UI
+  Script Studio hay mở rộng sang TTS/video.
+
+### Hệ quả
+
+- `ApikeyFunTextProvider` là registry entry độc lập; provider khác có thể thêm mà
+  không sửa ScriptGeneration workflow.
+- Runtime phải cung cấp `APIKEY_FUN_API_KEY` và bộ pricing env đã xác nhận trước
+  khi generate live. Live smoke chỉ chạy với `AFFICHANNEL_LIVE_AI_SMOKE=1`.
+- Docs contract audit và limitation được ghi tại
+  `docs/aff-us-008-phase-2b.md`; Phase 2B ready for review không đồng nghĩa
+  AFF-US-008 tổng thể Done.

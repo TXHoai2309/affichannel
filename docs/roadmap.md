@@ -175,6 +175,13 @@ AFF-US-009 mới thêm editor, autosave, selection, immutable `ScriptVersion`, h
 US8 không tự advance workflow hoặc tạo Fact Lock. Contract foundation được chốt tại DEC-015 và
 `docs/aff-us-008-foundation.md`.
 
+AFF-US-008 Phase 2B nối live TextProvider qua registry với APIKEY.FUN +
+`claude-sonnet-4-6` là default cấu hình. Adapter dùng Anthropic Messages/SSE,
+server-side pricing preflight và fail-closed error/timeout mapping. Script Studio,
+ScriptVersion, Fact Lock, TTS, video và authenticated/live acceptance vẫn là các
+phần sau phase này; video default được giữ ở APIKEY.FUN + Grok 720p theo adapter,
+không triển khai trong Phase 2B.
+
 ## 10. Slice 7 — Fact Lock
 
 Backlog dự kiến: `AFF-US-010`; phải sửa khoảng trống ID hiện có trước triển khai.

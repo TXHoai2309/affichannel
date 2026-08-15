@@ -4,6 +4,7 @@ import {
 	channelSettingsSchema,
 	defaultOutputRules,
 	evaluateFactGenerationUsability,
+	isUsableMediaMetadata,
 	mediaMetadataSchema,
 	outputRulesSchema,
 	resolveBusinessToday,
@@ -46,6 +47,7 @@ import {
 	project,
 	scriptGeneration,
 } from "@affichannel/db";
+import { env } from "@affichannel/env/server";
 import { and, eq, isNotNull } from "drizzle-orm";
 import type {
 	TextProvider,
@@ -98,6 +100,14 @@ export async function resolveServerGenerationConfig(
 		.where(eq(aiSettings.workspaceId, actor.workspaceId))
 		.limit(1);
 	const parsed = aiSettingsSchema.safeParse(settings);
+	if (!settings) {
+		return {
+			provider: env.TEXT_AI_DEFAULT_PROVIDER,
+			model: env.TEXT_AI_DEFAULT_MODEL,
+			promptVersion: SCRIPT_PROMPT_VERSION,
+			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		};
+	}
 	if (!parsed.success) {
 		throw new ScriptGenerationError(
 			"TEXT_PROVIDER_NOT_CONFIGURED",
@@ -425,7 +435,9 @@ async function prepareInTransaction(
 				referenceUrl: record.referenceUrl,
 			},
 		});
-		return parsed.success ? [parsed.data] : [];
+		return parsed.success && isUsableMediaMetadata(parsed.data)
+			? [parsed.data]
+			: [];
 	});
 	const [outputRulesRecord] = await transaction
 		.select()
@@ -452,6 +464,7 @@ async function prepareInTransaction(
 
 	const today = resolveBusinessToday();
 	let parentOutput: PartialScriptDraft | null = null;
+	let parentValidSections: ScriptGenerationSection[] = [];
 	if (input.mode === "repair" && input.parentGenerationId) {
 		const parent = await findScriptGenerationInTransaction(
 			transaction,
@@ -499,6 +512,7 @@ async function prepareInTransaction(
 				"Repair parent depends on invalidated Product Facts.",
 			);
 		parentOutput = parent.outputJson as PartialScriptDraft;
+		parentValidSections = parent.validSections as ScriptGenerationSection[];
 	}
 
 	const snapshot = createSnapshot(
@@ -513,6 +527,7 @@ async function prepareInTransaction(
 							parentGenerationId: input.parentGenerationId as string,
 							sections: sortedSections(input.repairSections ?? []),
 							baseOutput: parentOutput as PartialScriptDraft,
+							baseValidSections: parentValidSections,
 						}
 					: null,
 		},
@@ -671,6 +686,7 @@ type FinalizeSuccess = { kind: "success"; result: TextProviderResult };
 type FinalizeFailure = {
 	kind: "failure";
 	code:
+		| "TEXT_PROVIDER_NOT_CONFIGURED"
 		| "AI_TIMEOUT"
 		| "AI_TIMEOUT_UNCERTAIN"
 		| "AI_REQUEST_STATE_UNCERTAIN"
@@ -680,6 +696,57 @@ type FinalizeFailure = {
 		| "COST_ESTIMATE_UNAVAILABLE"
 		| "GENERATION_INDETERMINATE";
 };
+
+function scriptSectionOutputKey(section: ScriptGenerationSection) {
+	return section === "hook"
+		? "hookVariants"
+		: section === "voiceover"
+			? "voiceoverSegments"
+			: section;
+}
+
+function getScriptSectionValue(
+	output: PartialScriptDraft,
+	section: ScriptGenerationSection,
+) {
+	return (output as Record<string, unknown>)[scriptSectionOutputKey(section)];
+}
+
+export function mergeRepairScriptOutput(
+	parentOutput: PartialScriptDraft,
+	parentValidSections: ScriptGenerationSection[],
+	repairSections: ScriptGenerationSection[],
+	repairOutput: PartialScriptDraft,
+) {
+	if (
+		repairOutput.schemaVersion !== parentOutput.schemaVersion ||
+		repairOutput.language !== parentOutput.language
+	)
+		return null;
+
+	const merged: PartialScriptDraft = {
+		schemaVersion: parentOutput.schemaVersion,
+		language: parentOutput.language,
+	};
+	for (const section of scriptGenerationSections) {
+		const value = getScriptSectionValue(parentOutput, section);
+		if (value !== undefined)
+			(merged as Record<string, unknown>)[scriptSectionOutputKey(section)] =
+				value;
+	}
+	for (const section of repairSections) {
+		const value = getScriptSectionValue(repairOutput, section);
+		if (value === undefined) return null;
+		(merged as Record<string, unknown>)[scriptSectionOutputKey(section)] =
+			value;
+	}
+	return {
+		output: merged,
+		preservedSections: parentValidSections.filter(
+			(section) => !repairSections.includes(section),
+		),
+	};
+}
 
 function buildProviderRequest(generation: ScriptGenerationArtifact) {
 	const prompt = renderScriptPrompt(generation.inputSnapshot);
@@ -817,49 +884,91 @@ export async function finalizeScriptGeneration(
 		} else {
 			const result = input.outcome.result;
 			const snapshot = row.inputSnapshotJson as ScriptGenerationInputSnapshot;
+			const validationOptions = {
+				expectedLanguage: snapshot.outputRules.language,
+				requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
+				avoidWords: snapshot.channelSettings.avoidWords,
+			};
 			let validation = validateScriptDraftOutput(
 				result.content,
 				snapshot.contentBrief.durationSeconds,
 				snapshot.outputRules.claimLimit,
+				validationOptions,
 			);
 			if (row.mode === "repair" && snapshot.request.repair) {
 				const repairValidation = validateRepairScriptOutput(
 					result.content,
 					snapshot.request.repair.sections,
 					snapshot.outputRules.claimLimit,
+					validationOptions,
 				);
 				if (repairValidation.success && repairValidation.output) {
-					const merged = {
-						...snapshot.request.repair.baseOutput,
-						...repairValidation.output,
-					};
-					const mergedValidation = validateScriptDraftOutput(
-						merged,
-						snapshot.contentBrief.durationSeconds,
-						snapshot.outputRules.claimLimit,
-					);
-					const preservesParentSections =
-						snapshot.request.repair.baseOutput &&
-						snapshot.request.repair.sections.every((section) =>
-							mergedValidation.validSections.includes(section),
-						) &&
-						(row.validSections as ScriptGenerationSection[]).every((section) =>
-							mergedValidation.validSections.includes(section),
+					const parentValidSections =
+						snapshot.request.repair.baseValidSections ??
+						scriptGenerationSections.filter(
+							(section) =>
+								getScriptSectionValue(
+									snapshot.request.repair?.baseOutput as PartialScriptDraft,
+									section,
+								) !== undefined,
 						);
-					validation =
-						preservesParentSections &&
-						mergedValidation.status !== "failed" &&
-						snapshot.request.repair.sections.every((section) =>
-							mergedValidation.validSections.includes(section),
-						)
-							? mergedValidation
-							: {
-									status: "failed",
-									output: null,
-									validSections: [],
-									invalidSections: [...scriptGenerationSections],
-									errorCode: "INVALID_GENERATION_OUTPUT",
-								};
+					const mergedRepair = mergeRepairScriptOutput(
+						snapshot.request.repair.baseOutput,
+						parentValidSections,
+						snapshot.request.repair.sections,
+						repairValidation.output,
+					);
+					if (!mergedRepair) {
+						validation = {
+							status: "failed",
+							output: null,
+							validSections: [],
+							invalidSections: [...scriptGenerationSections],
+							errorCode: "INVALID_GENERATION_OUTPUT",
+						};
+					} else {
+						const mergedValidation = validateScriptDraftOutput(
+							mergedRepair.output,
+							snapshot.contentBrief.durationSeconds,
+							snapshot.outputRules.claimLimit,
+							validationOptions,
+						);
+						const preservedContent = mergedRepair.preservedSections.every(
+							(section) => {
+								const mergedValue = getScriptSectionValue(
+									mergedRepair.output,
+									section,
+								);
+								const parentValue = getScriptSectionValue(
+									snapshot.request.repair?.baseOutput as PartialScriptDraft,
+									section,
+								);
+								return (
+									mergedValidation.validSections.includes(section) &&
+									mergedValue !== undefined &&
+									parentValue !== undefined &&
+									canonicalizeJson(mergedValue) ===
+										canonicalizeJson(parentValue)
+								);
+							},
+						);
+						const repairedSectionsValid =
+							snapshot.request.repair.sections.every((section) =>
+								mergedValidation.validSections.includes(section),
+							);
+						validation =
+							preservedContent &&
+							repairedSectionsValid &&
+							mergedValidation.status !== "failed"
+								? mergedValidation
+								: {
+										status: "failed",
+										output: null,
+										validSections: [],
+										invalidSections: [...scriptGenerationSections],
+										errorCode: "INVALID_GENERATION_OUTPUT",
+									};
+					}
 				} else {
 					validation = {
 						status: "failed",

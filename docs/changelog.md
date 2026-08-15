@@ -107,14 +107,30 @@ sử dụng Semantic Versioning.
   hashtag validation; DB state-shape CHECK; concurrency/failure integration smoke coverage.
 - Chưa thêm live AI SDK, API generate, Script Studio hay ScriptVersion.
 
-### AFF-US-008 Phase 2A — đang triển khai
+### AFF-US-008 Phase 2A — backend/domain ready for acceptance
 
 - Thêm Channel Settings/AI Settings/Output Rules theo workspace, Media Metadata tối thiểu và
   migration `0010`/`0011`.
 - Bump structured output/snapshot/prompt lên v2; `hook` đơn thành 3–5 `hookVariants` có key.
 - Thêm server-owned production input snapshot, prompt role separation, provider cost estimate và
   protected oRPC estimate/generate/repair/getState.
+- Hardening Phase 2A: router phân lớp lỗi preflight/provider/persistence; repair giữ root metadata và
+  parent valid sections; output enforce language, affiliate disclosure và avoidWords; provider chỉ
+  nhận media `ready` với rights `owned|licensed`; audit BigInt oRPC không cần đổi DTO.
 - Chưa có live provider SDK, UI, ScriptVersion, Fact Lock hay migration shared Neon.
+
+### AFF-US-008 Phase 2B — live TextProvider ready for review
+
+- Thêm `ApikeyFunTextProvider` qua registry, dùng APIKEY.FUN Anthropic Messages/SSE
+  với model cấu hình mặc định `claude-sonnet-4-6`.
+- Giữ server-side prompt boundary, parse JSON rồi validate bằng ScriptDraft v2/domain;
+  repair vẫn merge và enforce invariant ở server.
+- Thêm server env cho API key/base URL, timeout/output budget và pricing versioned;
+  thiếu key/pricing fail closed, không fallback deterministic production, không giả cost 0.
+- Normalize HTTP error, timeout/network uncertain, usage/request ID và currency; không log
+  secret hoặc raw provider payload. `getState` vẫn DB-only.
+- Thêm mock adapter tests và smoke command opt-in; không gọi live API mặc định, không thêm
+  migration hoặc Script Studio UI.
 
 ## 0.0.0 — 2026-08-10
 

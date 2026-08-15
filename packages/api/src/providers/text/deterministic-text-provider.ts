@@ -22,7 +22,7 @@ function createDraft(snapshot: ScriptGenerationInputSnapshot) {
 	const firstFact = snapshot.facts[0]?.content ?? "thông tin đã được xác thực";
 	const draft = {
 		schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
-		language: "vi-VN",
+		language: snapshot.outputRules.language,
 		hookVariants: [
 			{
 				key: "curiosity",

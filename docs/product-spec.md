@@ -324,3 +324,12 @@ provider/model. Input snapshot phải ghi lại Product Facts usable cùng revis
 Brief, Channel Settings, Media Metadata và Output Rules. Draft có 3–5 hook variants để người dùng
 chọn ở phase editor sau; AI không tự chọn hook và không tự phê duyệt claim. Mọi request tốn phí phải
 có cost estimate trước khi gửi provider; thiếu cấu hình hoặc estimate phải dừng an toàn.
+
+### AFF-US-008 Phase 2B — live TextProvider
+
+Text AI mặc định ở lớp cấu hình là APIKEY.FUN + Claude Sonnet 4.6; video AI vẫn
+theo adapter APIKEY.FUN + Grok 720p ở roadmap, không triển khai trong phase này.
+Provider/model phải có thể đổi qua adapter/AI Settings. API key, timeout và pricing
+không thuộc dữ liệu người dùng hoặc client bundle. Output live vẫn phải giữ JSON
+ScriptDraft v2, affiliate disclosure, claim policy, freshness và mọi validation của
+server; AI không tự phê duyệt claim hoặc tự advance workflow.

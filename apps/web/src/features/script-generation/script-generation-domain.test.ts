@@ -1,15 +1,31 @@
 import { DeterministicTextProvider } from "@affichannel/api/providers/text/deterministic-text-provider";
+import type {
+	TextProvider,
+	TextProviderResult,
+} from "@affichannel/api/providers/text/text-provider";
+import { executePreparedGeneration } from "@affichannel/api/routers/script-generation";
+import {
+	mergeRepairScriptOutput,
+	runPreparedScriptGeneration,
+} from "@affichannel/api/services/script-generation-service";
 import { renderScriptPrompt } from "@affichannel/api/services/script-prompt";
 import {
 	canonicalizeJson,
 	channelSettingsSchema,
 	hookVariantsSchema,
+	isUsableMediaMetadata,
 	outputRulesSchema,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
+	ScriptGenerationError,
 	validateRepairScriptOutput,
 	validateScriptDraftOutput,
 } from "@affichannel/core";
-import { describe, expect, it } from "vitest";
+import type {
+	PartialScriptDraft,
+	ScriptGenerationArtifact,
+	ScriptGenerationInputSnapshot,
+} from "@affichannel/core/script-generation/types";
+import { describe, expect, it, vi } from "vitest";
 
 const snapshot = {
 	snapshotVersion: "script-input.v2",
@@ -73,6 +89,53 @@ const snapshot = {
 	],
 };
 
+async function buildDeterministicOutput() {
+	const provider = new DeterministicTextProvider({ snapshot });
+	const result = await provider.generate({
+		messages: [{ role: "user", content: "test" }],
+		model: "test",
+		mode: "full",
+		sections: [],
+		idempotencyKey: "unit-test-output",
+	});
+	return result.content as PartialScriptDraft;
+}
+
+function makeGeneration(): ScriptGenerationArtifact {
+	return {
+		id: "generation-1",
+		workspaceId: "workspace-1",
+		projectId: "project-1",
+		createdByUserId: "user-1",
+		idempotencyKey: "unit-test-generation",
+		requestHash: "request-hash",
+		parentGenerationId: null,
+		mode: "full",
+		provider: "deterministic",
+		model: "test-model",
+		promptVersion: "script-prompt.v2",
+		outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		inputSnapshot: snapshot as ScriptGenerationInputSnapshot,
+		inputHash: "input-hash",
+		promptHash: "prompt-hash",
+		status: "pending",
+		output: null,
+		validSections: [],
+		invalidSections: [],
+		providerRequestId: null,
+		inputTokens: null,
+		outputTokens: null,
+		estimatedCostMicros: null,
+		actualCostMicros: null,
+		currency: null,
+		errorCode: null,
+		finishedAt: null,
+		createdAt: new Date("2026-08-15T00:00:00.000Z"),
+	};
+}
+
+const actor = { workspaceId: "workspace-1", userId: "user-1" };
+
 describe("AFF-US-008 script-generation foundation", () => {
 	it("enforces Phase 2A settings and hook variant contracts", () => {
 		expect(
@@ -128,6 +191,7 @@ describe("AFF-US-008 script-generation foundation", () => {
 		const prompt = renderScriptPrompt(snapshot);
 		expect(prompt.trustedInstructions).not.toContain(snapshot.product.name);
 		expect(prompt.outputSchema).toContain("hookVariants");
+		expect(prompt.outputSchema).toContain("channelSettings.avoidWords");
 		expect(prompt.untrustedInputData).toContain(snapshot.product.name);
 	});
 
@@ -338,5 +402,265 @@ describe("AFF-US-008 script-generation foundation", () => {
 		);
 		expect(valid.success).toBe(true);
 		expect(extra.success).toBe(false);
+	});
+});
+
+describe("AFF-US-008 Phase 2A final hardening", () => {
+	it("enforces output language and the configured disclosure", async () => {
+		const output = await buildDeterministicOutput();
+
+		expect(
+			validateScriptDraftOutput(output, 30, null, {
+				expectedLanguage: "en-US",
+			}).status,
+		).toBe("failed");
+
+		const wrongDisclosure = {
+			...output,
+			disclosure: "Đây là một chính sách disclosure khác.",
+		};
+		const validation = validateScriptDraftOutput(wrongDisclosure, 30, null, {
+			requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
+		});
+		expect(validation.status).toBe("partial");
+		expect(validation.invalidSections).toContain("disclosure");
+
+		const missingDisclosure = { ...output };
+		delete missingDisclosure.disclosure;
+		const missingValidation = validateScriptDraftOutput(
+			missingDisclosure,
+			30,
+			null,
+			{ requiredDisclosure: snapshot.channelSettings.affiliateDisclosure },
+		);
+		expect(missingValidation.status).toBe("partial");
+		expect(missingValidation.invalidSections).toContain("disclosure");
+	});
+
+	it("enforces avoidWords with Unicode-safe case normalization", async () => {
+		const output = await buildDeterministicOutput();
+		const forbiddenCaption = {
+			...output,
+			caption: "Sản phẩm KHẨN CẤP cần được kiểm tra thêm.",
+		};
+		const validation = validateScriptDraftOutput(forbiddenCaption, 30, null, {
+			avoidWords: ["khẩn cấp"],
+		});
+		expect(validation.status).toBe("partial");
+		expect(validation.validSections).not.toContain("caption");
+		expect(validation.invalidSections).toContain("caption");
+	});
+
+	it("includes only ready media with owned or licensed rights", () => {
+		const baseMedia = {
+			id: "media-1",
+			mediaType: "image" as const,
+			aspectRatio: "9:16",
+			durationSeconds: null,
+			sceneSuitability: "product",
+			tags: [],
+			reference: { displayName: "Product image", referenceUrl: null },
+		};
+		expect(
+			isUsableMediaMetadata({
+				...baseMedia,
+				status: "ready",
+				usageRights: "owned",
+			}),
+		).toBe(true);
+		expect(
+			isUsableMediaMetadata({
+				...baseMedia,
+				status: "ready",
+				usageRights: "licensed",
+			}),
+		).toBe(true);
+		for (const media of [
+			{ status: "archived" as const, usageRights: "owned" as const },
+			{ status: "needs_review" as const, usageRights: "licensed" as const },
+			{ status: "ready" as const, usageRights: "restricted" as const },
+			{ status: "ready" as const, usageRights: "unknown" as const },
+		]) {
+			expect(isUsableMediaMetadata({ ...baseMedia, ...media })).toBe(false);
+		}
+		expect(snapshot.mediaMetadata).toEqual([]);
+	});
+
+	it("preserves parent root metadata and every valid section during repair", async () => {
+		const fullOutput = await buildDeterministicOutput();
+		const parentOutput: PartialScriptDraft = { ...fullOutput };
+		delete parentOutput.scenes;
+		const parentBeforeRepair = structuredClone(parentOutput);
+		const repairOutput: PartialScriptDraft = {
+			schemaVersion: fullOutput.schemaVersion,
+			language: fullOutput.language,
+			scenes: fullOutput.scenes,
+		};
+		const merged = mergeRepairScriptOutput(
+			parentOutput,
+			[
+				"hook",
+				"voiceover",
+				"cta",
+				"caption",
+				"hashtags",
+				"disclosure",
+				"claims",
+			],
+			["scenes"],
+			repairOutput,
+		);
+
+		expect(merged).not.toBeNull();
+		if (!merged) return;
+		expect(merged.output.schemaVersion).toBe(parentOutput.schemaVersion);
+		expect(merged.output.language).toBe(parentOutput.language);
+		expect(merged.output.hookVariants).toEqual(parentOutput.hookVariants);
+		expect(merged.output.voiceoverSegments).toEqual(
+			parentOutput.voiceoverSegments,
+		);
+		expect(merged.output.cta).toEqual(parentOutput.cta);
+		expect(merged.output.caption).toBe(parentOutput.caption);
+		expect(merged.output.hashtags).toEqual(parentOutput.hashtags);
+		expect(merged.output.disclosure).toBe(parentOutput.disclosure);
+		expect(merged.output.claims).toEqual(parentOutput.claims);
+		expect(merged.output.scenes).toEqual(repairOutput.scenes);
+		expect(parentOutput).toEqual(parentBeforeRepair);
+	});
+
+	it("keeps estimate persistence failures outside the provider error boundary", async () => {
+		const provider = new DeterministicTextProvider({ snapshot });
+		const estimate = {
+			estimatedCostMicros: BigInt(1),
+			currency: "VND",
+			inputTokens: 1,
+			pricingBasis: "test",
+		};
+		const finalize = vi.fn(async () => makeGeneration());
+		const run = vi.fn(async () => makeGeneration());
+
+		await expect(
+			executePreparedGeneration(
+				actor,
+				{ provider: "deterministic" },
+				makeGeneration(),
+				{
+					resolveProvider: () => provider,
+					estimate: async () => estimate,
+					recordEstimate: async () => {
+						throw new Error("database estimate write failed");
+					},
+					run,
+					finalize,
+				},
+			),
+		).rejects.toThrow("database estimate write failed");
+		expect(run).not.toHaveBeenCalled();
+		expect(finalize).not.toHaveBeenCalled();
+	});
+
+	it("propagates finalize persistence failures without a second finalize", async () => {
+		const result: TextProviderResult = {
+			content: {},
+			providerRequestId: "provider-request-1",
+			inputTokens: 1,
+			outputTokens: 1,
+			estimatedCostMicros: BigInt(1),
+			actualCostMicros: BigInt(1),
+			currency: "VND",
+		};
+		const provider: TextProvider = {
+			name: "test-provider",
+			estimateCost: async () => ({
+				estimatedCostMicros: BigInt(1),
+				currency: "VND",
+				inputTokens: 1,
+				pricingBasis: "test",
+			}),
+			generate: async () => result,
+		};
+		const finalize = vi.fn(async () => {
+			throw new Error("database finalize failed");
+		});
+
+		await expect(
+			runPreparedScriptGeneration(actor, makeGeneration(), provider, finalize),
+		).rejects.toThrow("database finalize failed");
+		expect(finalize).toHaveBeenCalledTimes(1);
+	});
+
+	it.each([
+		["provider_error", "AI_PROVIDER_ERROR"],
+		["timeout_uncertain", "AI_REQUEST_STATE_UNCERTAIN"],
+	] as const)("preserves %s provider semantics", async (scenario, code) => {
+		const provider = new DeterministicTextProvider({ snapshot, scenario });
+		const finalize = vi.fn(async () => makeGeneration());
+
+		await runPreparedScriptGeneration(
+			actor,
+			makeGeneration(),
+			provider,
+			finalize,
+		);
+		expect(finalize).toHaveBeenCalledWith(actor, {
+			generationId: "generation-1",
+			outcome: { kind: "failure", code },
+		});
+	});
+
+	it("finalizes provider resolution and estimate preflight failures once", async () => {
+		const provider = new DeterministicTextProvider({ snapshot });
+		for (const [phase, error] of [
+			[
+				"resolve",
+				new ScriptGenerationError(
+					"TEXT_PROVIDER_UNAVAILABLE",
+					"provider unavailable",
+				),
+			],
+			[
+				"estimate",
+				new ScriptGenerationError(
+					"COST_ESTIMATE_UNAVAILABLE",
+					"estimate unavailable",
+				),
+			],
+		] as const) {
+			const finalize = vi.fn(async () => makeGeneration());
+			const dependencies =
+				phase === "resolve"
+					? {
+							resolveProvider: () => {
+								throw error;
+							},
+							estimate: async () => ({
+								estimatedCostMicros: BigInt(1),
+								currency: "VND",
+								inputTokens: 1,
+								pricingBasis: "test",
+							}),
+							recordEstimate: async () => makeGeneration(),
+							run: async () => makeGeneration(),
+							finalize,
+						}
+					: {
+							resolveProvider: () => provider,
+							estimate: async () => {
+								throw error;
+							},
+							recordEstimate: async () => makeGeneration(),
+							run: async () => makeGeneration(),
+							finalize,
+						};
+			await expect(
+				executePreparedGeneration(
+					actor,
+					{ provider: "deterministic" },
+					makeGeneration(),
+					dependencies,
+				),
+			).rejects.toMatchObject({ code: error.code });
+			expect(finalize).toHaveBeenCalledTimes(1);
+		}
 	});
 });

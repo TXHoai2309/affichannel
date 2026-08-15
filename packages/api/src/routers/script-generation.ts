@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { ScriptGenerationError } from "@affichannel/core";
+import type { ScriptGenerationArtifact } from "@affichannel/core/script-generation/types";
 import { scriptGenerationSections } from "@affichannel/core/script-generation/types";
 import { env } from "@affichannel/env/server";
 import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 
 import { protectedProcedure } from "../index";
+import type {
+	TextProvider,
+	TextProviderEstimate,
+} from "../providers/text/text-provider";
 import { resolveTextProvider } from "../providers/text/text-provider-registry";
 import {
 	buildScriptGenerationPreview,
@@ -18,7 +23,10 @@ import {
 	resolveServerGenerationConfig,
 	runPreparedScriptGeneration,
 } from "../services/script-generation-service";
-import { requireWorkspaceActor } from "../services/workspace";
+import {
+	requireWorkspaceActor,
+	type WorkspaceActor,
+} from "../services/workspace";
 
 const projectIdSchema = z.string().trim().min(1).max(120);
 const idempotencyKeySchema = z.string().trim().min(8).max(200);
@@ -63,6 +71,12 @@ function resolveProvider(
 	config: { provider: string },
 	snapshot: Parameters<typeof resolveTextProvider>[1],
 ) {
+	if (config.provider === "apikeyfun" && !env.APIKEY_FUN_API_KEY) {
+		throw new ScriptGenerationError(
+			"TEXT_PROVIDER_NOT_CONFIGURED",
+			"The configured text provider is missing its server-side API key.",
+		);
+	}
 	const provider = resolveTextProvider(config.provider, snapshot, {
 		allowDeterministic: env.NODE_ENV !== "production",
 	});
@@ -72,6 +86,94 @@ function resolveProvider(
 			"Configured text provider is not available on the server.",
 		);
 	return provider;
+}
+
+type PreparedGenerationDependencies = {
+	resolveProvider: typeof resolveProvider;
+	estimate: typeof estimatePreparedScriptGeneration;
+	recordEstimate: typeof recordScriptGenerationEstimate;
+	run: typeof runPreparedScriptGeneration;
+	finalize: typeof finalizeScriptGeneration;
+};
+
+const defaultPreparedGenerationDependencies: PreparedGenerationDependencies = {
+	resolveProvider,
+	estimate: estimatePreparedScriptGeneration,
+	recordEstimate: recordScriptGenerationEstimate,
+	run: runPreparedScriptGeneration,
+	finalize: finalizeScriptGeneration,
+};
+
+async function finalizePreflightFailure(
+	actor: WorkspaceActor,
+	generation: ScriptGenerationArtifact,
+	error: unknown,
+	code:
+		| "TEXT_PROVIDER_NOT_CONFIGURED"
+		| "TEXT_PROVIDER_UNAVAILABLE"
+		| "COST_ESTIMATE_UNAVAILABLE",
+	dependencies: PreparedGenerationDependencies,
+): Promise<never> {
+	const domainError =
+		error instanceof ScriptGenerationError
+			? error
+			: new ScriptGenerationError(code, "Generation preflight failed.");
+	await dependencies.finalize(actor, {
+		generationId: generation.id,
+		outcome: { kind: "failure", code },
+	});
+	throw domainError;
+}
+
+export async function executePreparedGeneration(
+	actor: WorkspaceActor,
+	config: { provider: string },
+	generation: ScriptGenerationArtifact,
+	dependencies: PreparedGenerationDependencies = defaultPreparedGenerationDependencies,
+) {
+	let provider: TextProvider;
+	try {
+		provider = dependencies.resolveProvider(config, generation.inputSnapshot);
+	} catch (error) {
+		if (
+			error instanceof ScriptGenerationError &&
+			(error.code === "TEXT_PROVIDER_NOT_CONFIGURED" ||
+				error.code === "TEXT_PROVIDER_UNAVAILABLE")
+		)
+			return finalizePreflightFailure(
+				actor,
+				generation,
+				error,
+				error.code,
+				dependencies,
+			);
+		throw error;
+	}
+
+	let estimate: TextProviderEstimate;
+	try {
+		estimate = await dependencies.estimate(generation, provider);
+	} catch (error) {
+		if (
+			error instanceof ScriptGenerationError &&
+			error.code === "COST_ESTIMATE_UNAVAILABLE"
+		)
+			return finalizePreflightFailure(
+				actor,
+				generation,
+				error,
+				"COST_ESTIMATE_UNAVAILABLE",
+				dependencies,
+			);
+		throw error;
+	}
+
+	const estimated = await dependencies.recordEstimate(
+		actor,
+		generation.id,
+		estimate,
+	);
+	return dependencies.run(actor, estimated, provider);
 }
 
 export const scriptGenerationRouter = {
@@ -120,37 +222,7 @@ export const scriptGenerationRouter = {
 					config,
 				);
 				if (generation.status !== "pending") return generation;
-				try {
-					const provider = resolveProvider(config, generation.inputSnapshot);
-					const estimate = await estimatePreparedScriptGeneration(
-						generation,
-						provider,
-					);
-					const estimated = await recordScriptGenerationEstimate(
-						actor,
-						generation.id,
-						estimate,
-					);
-					return await runPreparedScriptGeneration(actor, estimated, provider);
-				} catch (error) {
-					const code =
-						error instanceof ScriptGenerationError &&
-						error.code === "COST_ESTIMATE_UNAVAILABLE"
-							? "COST_ESTIMATE_UNAVAILABLE"
-							: error instanceof ScriptGenerationError &&
-									error.code === "TEXT_PROVIDER_UNAVAILABLE"
-								? "TEXT_PROVIDER_UNAVAILABLE"
-								: "AI_PROVIDER_ERROR";
-					await finalizeScriptGeneration(actor, {
-						generationId: generation.id,
-						outcome: { kind: "failure", code },
-					});
-					return toScriptGenerationOrpcError(
-						error instanceof ScriptGenerationError
-							? error
-							: new ScriptGenerationError(code, "AI provider request failed."),
-					);
-				}
+				return await executePreparedGeneration(actor, config, generation);
 			} catch (error) {
 				return toScriptGenerationOrpcError(error);
 			}
@@ -173,37 +245,7 @@ export const scriptGenerationRouter = {
 					config,
 				);
 				if (generation.status !== "pending") return generation;
-				try {
-					const provider = resolveProvider(config, generation.inputSnapshot);
-					const estimate = await estimatePreparedScriptGeneration(
-						generation,
-						provider,
-					);
-					const estimated = await recordScriptGenerationEstimate(
-						actor,
-						generation.id,
-						estimate,
-					);
-					return await runPreparedScriptGeneration(actor, estimated, provider);
-				} catch (error) {
-					const code =
-						error instanceof ScriptGenerationError &&
-						error.code === "COST_ESTIMATE_UNAVAILABLE"
-							? "COST_ESTIMATE_UNAVAILABLE"
-							: error instanceof ScriptGenerationError &&
-									error.code === "TEXT_PROVIDER_UNAVAILABLE"
-								? "TEXT_PROVIDER_UNAVAILABLE"
-								: "AI_PROVIDER_ERROR";
-					await finalizeScriptGeneration(actor, {
-						generationId: generation.id,
-						outcome: { kind: "failure", code },
-					});
-					return toScriptGenerationOrpcError(
-						error instanceof ScriptGenerationError
-							? error
-							: new ScriptGenerationError(code, "AI provider request failed."),
-					);
-				}
+				return await executePreparedGeneration(actor, config, generation);
 			} catch (error) {
 				return toScriptGenerationOrpcError(error);
 			}

@@ -16,6 +16,7 @@ với các tài liệu tại đây.
 8. [Bàn giao AFF-US-004](./aff-us-004.md)
 9. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
 10. [AFF-US-008 Phase 2A](./aff-us-008-phase-2a.md)
+11. [AFF-US-008 Phase 2B](./aff-us-008-phase-2b.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

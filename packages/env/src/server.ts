@@ -34,6 +34,45 @@ export const env = createEnv({
 		NODE_ENV: z
 			.enum(["development", "production", "test"])
 			.default("development"),
+		TEXT_AI_DEFAULT_PROVIDER: z.string().trim().min(1).default("apikeyfun"),
+		TEXT_AI_DEFAULT_MODEL: z
+			.string()
+			.trim()
+			.min(1)
+			.default("claude-sonnet-4-6"),
+		TEXT_AI_TIMEOUT_MS: z.coerce
+			.number()
+			.int()
+			.min(1_000)
+			.max(900_000)
+			.default(120_000),
+		TEXT_AI_MAX_OUTPUT_TOKENS: z.coerce
+			.number()
+			.int()
+			.min(256)
+			.max(64_000)
+			.default(8_192),
+		APIKEY_FUN_API_KEY: z.string().trim().min(1).optional(),
+		APIKEY_FUN_BASE_URL: z.url().optional(),
+		APIKEY_FUN_PRICING_VERSION: z.string().trim().min(1).optional(),
+		APIKEY_FUN_PRICING_CURRENCY: z
+			.string()
+			.regex(/^[A-Z]{3}$/)
+			.optional(),
+		APIKEY_FUN_INPUT_PRICE_MICROS_PER_MILLION: z
+			.string()
+			.regex(/^\d+$/)
+			.optional(),
+		APIKEY_FUN_OUTPUT_PRICE_MICROS_PER_MILLION: z
+			.string()
+			.regex(/^\d+$/)
+			.optional(),
+		APIKEY_FUN_ESTIMATED_OUTPUT_TOKENS: z.coerce
+			.number()
+			.int()
+			.min(1)
+			.max(64_000)
+			.optional(),
 	},
 	runtimeEnv: runtimeEnv,
 	skipValidation: !!process.env.SKIP_ENV_VALIDATION,
