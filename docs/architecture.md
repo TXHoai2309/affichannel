@@ -353,3 +353,11 @@ Foundation hardening: `requestHash` chỉ hash `ClientGenerationIntent`; repair 
 partial và merge server-side trước validate/persist child; provider messages giữ role separation;
 timeout uncertain dùng `indeterminate`; stale transition cần created-at policy; DB CHECK khóa state
 shape của completed/partial/failed. Live provider/API/UI vẫn nằm ngoài phase này.
+
+### AFF-US-008 Phase 2A
+
+AI generation input được resolve ở server từ Channel Settings, AI settings, Project/Content Brief,
+Product Facts usable, Media Metadata và Output Rules. Snapshot v2 lưu config identity không có
+secret. Provider adapter phải có cost preflight; deterministic chỉ được registry bật ở development
+hoặc test, production không fallback sang provider giả. Protected oRPC gồm estimate, generate,
+repair và getState; không nhận provider/model từ client và không tự advance workflow.

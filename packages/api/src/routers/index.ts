@@ -5,6 +5,8 @@ import { dashboardRouter } from "./dashboard";
 import { productRouter } from "./product";
 import { productFactRouter } from "./product-fact";
 import { projectRouter } from "./project";
+import { scriptGenerationRouter } from "./script-generation";
+import { settingsRouter } from "./settings";
 
 export const appRouter = {
 	healthCheck: publicProcedure.handler(() => {
@@ -20,6 +22,8 @@ export const appRouter = {
 	product: productRouter,
 	productFact: productFactRouter,
 	project: projectRouter,
+	scriptGeneration: scriptGenerationRouter,
+	settings: settingsRouter,
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;

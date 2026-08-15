@@ -1,8 +1,8 @@
 export * from "./product/product-errors";
 export * from "./product/product-types";
 export * from "./product/validation";
-export * from "./product-fact/eligibility";
 export * from "./product-fact/dependency";
+export * from "./product-fact/eligibility";
 export * from "./product-fact/errors";
 export * from "./product-fact/freshness";
 export * from "./product-fact/types";
@@ -12,6 +12,7 @@ export * from "./project/project-types";
 export * from "./project/project-validation";
 export * from "./script-generation/canonical-json";
 export * from "./script-generation/errors";
+export * from "./script-generation/input-contract";
 export * from "./script-generation/policy";
 export * from "./script-generation/schema";
 export * from "./script-generation/types";

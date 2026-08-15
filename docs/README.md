@@ -15,6 +15,7 @@ với các tài liệu tại đây.
 7. [Nhật ký thay đổi](./changelog.md)
 8. [Bàn giao AFF-US-004](./aff-us-004.md)
 9. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
+10. [AFF-US-008 Phase 2A](./aff-us-008-phase-2a.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

@@ -1,16 +1,30 @@
 import { randomUUID } from "node:crypto";
 import {
+	aiSettingsSchema,
+	channelSettingsSchema,
+	defaultOutputRules,
+	evaluateFactGenerationUsability,
+	mediaMetadataSchema,
+	outputRulesSchema,
+	resolveBusinessToday,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
 	SCRIPT_PROMPT_VERSION,
 	SCRIPT_SNAPSHOT_VERSION,
 	ScriptGenerationError,
-	evaluateFactGenerationUsability,
-	resolveBusinessToday,
 	scriptGenerationSections,
 	validateRepairScriptOutput,
 	validateScriptDraftOutput,
 } from "@affichannel/core";
+import type {
+	ProductFactSourceType,
+	ProductFactStatus,
+	ProductFactType,
+} from "@affichannel/core/product-fact/types";
 import { canonicalizeJson } from "@affichannel/core/script-generation/canonical-json";
+import type {
+	ChannelSettings,
+	MediaMetadataSnapshot,
+} from "@affichannel/core/script-generation/input-contract";
 import type {
 	PartialScriptDraft,
 	ScriptGenerationArtifact,
@@ -19,36 +33,39 @@ import type {
 	ScriptGenerationReadModel,
 	ScriptGenerationSection,
 } from "@affichannel/core/script-generation/types";
-import type {
-	ProductFactSourceType,
-	ProductFactStatus,
-	ProductFactType,
-} from "@affichannel/core/product-fact/types";
 import {
+	aiSettings,
+	channelSettings,
 	contentBrief,
 	db,
 	factDependency,
+	mediaMetadata,
+	outputRules,
 	product,
 	productFact,
 	project,
 	scriptGeneration,
 } from "@affichannel/db";
 import { and, eq, isNotNull } from "drizzle-orm";
-import type { TextProvider, TextProviderResult } from "../providers/text/text-provider";
+import type {
+	TextProvider,
+	TextProviderEstimate,
+	TextProviderResult,
+} from "../providers/text/text-provider";
 import { TextProviderError } from "../providers/text/text-provider";
 import {
 	detachFactDependenciesInTransaction,
 	registerFactDependenciesInTransaction,
 } from "./fact-dependency-repository";
-import { canonicalPrompt, renderScriptPrompt } from "./script-prompt";
+import { sha256Hex } from "./script-generation-hashing";
 import {
+	findScriptGeneration,
 	findScriptGenerationByIdempotencyKey,
 	findScriptGenerationInTransaction,
-	findScriptGeneration,
 	listScriptGenerationReadModel,
 	toScriptGenerationArtifact,
 } from "./script-generation-repository";
-import { sha256Hex } from "./script-generation-hashing";
+import { canonicalPrompt, renderScriptPrompt } from "./script-prompt";
 import type { WorkspaceActor } from "./workspace";
 
 export type ClientGenerationIntent = {
@@ -69,18 +86,61 @@ export type ServerGenerationConfig = {
 export type PrepareScriptGenerationInput = ClientGenerationIntent;
 export type ScriptGenerationProviderConfig = ServerGenerationConfig;
 
-function sortedSections(sections: ScriptGenerationSection[]) {
-	return [...new Set(sections)].sort((a, b) => scriptGenerationSections.indexOf(a) - scriptGenerationSections.indexOf(b));
+export async function resolveServerGenerationConfig(
+	actor: WorkspaceActor,
+): Promise<Required<ServerGenerationConfig>> {
+	const [settings] = await db
+		.select({
+			textProvider: aiSettings.textProvider,
+			textModel: aiSettings.textModel,
+		})
+		.from(aiSettings)
+		.where(eq(aiSettings.workspaceId, actor.workspaceId))
+		.limit(1);
+	const parsed = aiSettingsSchema.safeParse(settings);
+	if (!parsed.success) {
+		throw new ScriptGenerationError(
+			"TEXT_PROVIDER_NOT_CONFIGURED",
+			"Text provider and model must be configured on the server.",
+		);
+	}
+	return {
+		provider: parsed.data.textProvider,
+		model: parsed.data.textModel,
+		promptVersion: SCRIPT_PROMPT_VERSION,
+		outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+	};
 }
 
-function normalizeClientGenerationIntent(input: ClientGenerationIntent): ClientGenerationIntent {
+function sortedSections(sections: ScriptGenerationSection[]) {
+	return [...new Set(sections)].sort(
+		(a, b) =>
+			scriptGenerationSections.indexOf(a) - scriptGenerationSections.indexOf(b),
+	);
+}
+
+function normalizeClientGenerationIntent(
+	input: ClientGenerationIntent,
+): ClientGenerationIntent {
 	const projectId = input.projectId.trim();
 	const idempotencyKey = input.idempotencyKey.trim();
 	const parentGenerationId = input.parentGenerationId?.trim() || undefined;
 	const repairSections = sortedSections(input.repairSections ?? []);
 	return input.mode === "repair"
-		? { projectId, idempotencyKey, mode: input.mode, parentGenerationId, repairSections }
-		: { projectId, idempotencyKey, mode: input.mode, parentGenerationId: undefined, repairSections: [] };
+		? {
+				projectId,
+				idempotencyKey,
+				mode: input.mode,
+				parentGenerationId,
+				repairSections,
+			}
+		: {
+				projectId,
+				idempotencyKey,
+				mode: input.mode,
+				parentGenerationId: undefined,
+				repairSections: [],
+			};
 }
 
 export function hashClientGenerationIntent(input: ClientGenerationIntent) {
@@ -125,21 +185,44 @@ function assertPreparationInput(input: PrepareScriptGenerationInput) {
 	const normalized = normalizeClientGenerationIntent(input);
 	const idempotencyKey = normalized.idempotencyKey;
 	if (idempotencyKey.length < 8 || idempotencyKey.length > 200) {
-		throw new ScriptGenerationError("IDEMPOTENCY_CONFLICT", "Idempotency key must be between 8 and 200 characters.");
+		throw new ScriptGenerationError(
+			"IDEMPOTENCY_CONFLICT",
+			"Idempotency key must be between 8 and 200 characters.",
+		);
 	}
 	if (!normalized.projectId) {
-		throw new ScriptGenerationError("GENERATION_NOT_FOUND", "Project was not found in this workspace.");
+		throw new ScriptGenerationError(
+			"GENERATION_NOT_FOUND",
+			"Project was not found in this workspace.",
+		);
 	}
 	if (normalized.mode === "repair") {
 		const requested = input.repairSections ?? [];
 		if (!normalized.parentGenerationId || requested.length === 0) {
-			throw new ScriptGenerationError("INVALID_REPAIR_SECTIONS", "Repair requires a parent generation and at least one section.");
+			throw new ScriptGenerationError(
+				"INVALID_REPAIR_SECTIONS",
+				"Repair requires a parent generation and at least one section.",
+			);
 		}
-		if (requested.some((section) => !scriptGenerationSections.includes(section)) || new Set(requested).size !== requested.length) {
-			throw new ScriptGenerationError("INVALID_REPAIR_SECTIONS", "Repair sections must be known and unique.");
+		if (
+			requested.some(
+				(section) => !scriptGenerationSections.includes(section),
+			) ||
+			new Set(requested).size !== requested.length
+		) {
+			throw new ScriptGenerationError(
+				"INVALID_REPAIR_SECTIONS",
+				"Repair sections must be known and unique.",
+			);
 		}
-	} else if (input.parentGenerationId || (input.repairSections && input.repairSections.length > 0)) {
-		throw new ScriptGenerationError("GENERATION_INVALID_TRANSITION", "Full generation cannot include repair parameters.");
+	} else if (
+		input.parentGenerationId ||
+		(input.repairSections && input.repairSections.length > 0)
+	) {
+		throw new ScriptGenerationError(
+			"GENERATION_INVALID_TRANSITION",
+			"Full generation cannot include repair parameters.",
+		);
 	}
 	return { idempotencyKey, intent: normalized };
 }
@@ -168,28 +251,34 @@ function createSnapshot(
 		sourceUrl: string | null;
 		confirmedAt: string | null;
 		expiresAt: string | null;
-	}> ,
+	}>,
 	today: string,
 	request: ScriptGenerationInputSnapshot["request"],
+	channelSettings: ChannelSettings,
+	mediaSnapshots: MediaMetadataSnapshot[],
+	outputRulesValue: ScriptGenerationInputSnapshot["outputRules"],
+	config: Required<ScriptGenerationProviderConfig>,
 ): ScriptGenerationInputSnapshot {
 	const usableFacts = facts.flatMap((fact) => {
 		const evaluated = evaluateDbFact(fact, today);
 		if (evaluated.usability === "blocked") return [];
-		return [{
-			id: fact.id,
-			revision: fact.revision,
-			content: fact.content,
-			type: fact.type as ScriptGenerationInputSnapshot["facts"][number]["type"],
-			assessment: evaluated.assessment,
-			generationUsability: evaluated.usability,
-			source: {
-				type: fact.sourceType,
-				label: fact.sourceLabel,
-				url: fact.sourceUrl,
-				confirmedAt: fact.confirmedAt,
-				expiresAt: fact.expiresAt,
+		return [
+			{
+				id: fact.id,
+				revision: fact.revision,
+				content: fact.content,
+				type: fact.type as ScriptGenerationInputSnapshot["facts"][number]["type"],
+				assessment: evaluated.assessment,
+				generationUsability: evaluated.usability,
+				source: {
+					type: fact.sourceType,
+					label: fact.sourceLabel,
+					url: fact.sourceUrl,
+					confirmedAt: fact.confirmedAt,
+					expiresAt: fact.expiresAt,
+				},
 			},
-		}];
+		];
 	});
 	return {
 		snapshotVersion: SCRIPT_SNAPSHOT_VERSION,
@@ -197,6 +286,8 @@ function createSnapshot(
 		project: {
 			id: projectRecord.id,
 			name: projectRecord.name,
+		},
+		contentBrief: {
 			platform: projectRecord.platform as "tiktok",
 			goal: projectRecord.goal,
 			durationSeconds: projectRecord.durationSeconds,
@@ -207,6 +298,15 @@ function createSnapshot(
 			id: projectRecord.productId,
 			name: projectRecord.productName,
 			category: projectRecord.productCategory,
+		},
+		channelSettings,
+		mediaMetadata: mediaSnapshots,
+		outputRules: outputRulesValue,
+		generationConfig: {
+			textProvider: config.provider,
+			textModel: config.model,
+			promptVersion: config.promptVersion,
+			outputSchemaVersion: config.outputSchemaVersion,
 		},
 		facts: usableFacts,
 	};
@@ -219,6 +319,7 @@ async function prepareInTransaction(
 	config: Required<ScriptGenerationProviderConfig>,
 	requestHash: string,
 	idempotencyKey: string,
+	options: { persist?: boolean } = {},
 ) {
 	const [projectRecord] = await transaction
 		.select({
@@ -236,10 +337,20 @@ async function prepareInTransaction(
 		.from(project)
 		.innerJoin(product, eq(project.productId, product.id))
 		.innerJoin(contentBrief, eq(contentBrief.projectId, project.id))
-		.where(and(eq(project.id, input.projectId), eq(project.workspaceId, actor.workspaceId), eq(product.workspaceId, actor.workspaceId)))
+		.where(
+			and(
+				eq(project.id, input.projectId),
+				eq(project.workspaceId, actor.workspaceId),
+				eq(product.workspaceId, actor.workspaceId),
+			),
+		)
 		.limit(1)
 		.for("update", { of: project });
-	if (!projectRecord) throw new ScriptGenerationError("GENERATION_NOT_FOUND", "Project was not found in this workspace.");
+	if (!projectRecord)
+		throw new ScriptGenerationError(
+			"GENERATION_NOT_FOUND",
+			"Project was not found in this workspace.",
+		);
 
 	const facts = await transaction
 		.select({
@@ -255,47 +366,180 @@ async function prepareInTransaction(
 			expiresAt: productFact.expiresAt,
 		})
 		.from(productFact)
-		.where(and(eq(productFact.workspaceId, actor.workspaceId), eq(productFact.productId, projectRecord.productId)))
+		.where(
+			and(
+				eq(productFact.workspaceId, actor.workspaceId),
+				eq(productFact.productId, projectRecord.productId),
+			),
+		)
 		.orderBy(productFact.id)
 		.for("update", { of: productFact });
+
+	const [channelSettingsRecord] = await transaction
+		.select()
+		.from(channelSettings)
+		.where(eq(channelSettings.workspaceId, actor.workspaceId))
+		.limit(1);
+	const parsedChannelSettings = channelSettingsSchema.safeParse(
+		channelSettingsRecord
+			? {
+					niche: channelSettingsRecord.niche,
+					targetAudience: channelSettingsRecord.targetAudience,
+					tone: channelSettingsRecord.tone,
+					contentPillar: channelSettingsRecord.contentPillar,
+					defaultCta: channelSettingsRecord.defaultCta,
+					affiliateDisclosure: channelSettingsRecord.affiliateDisclosure,
+					avoidWords: channelSettingsRecord.avoidWords,
+				}
+			: undefined,
+	);
+	if (!parsedChannelSettings.success) {
+		throw new ScriptGenerationError(
+			"CHANNEL_SETTINGS_INCOMPLETE",
+			"Channel Settings must be complete before generation.",
+		);
+	}
+
+	const mediaRecords = await transaction
+		.select()
+		.from(mediaMetadata)
+		.where(
+			and(
+				eq(mediaMetadata.workspaceId, actor.workspaceId),
+				eq(mediaMetadata.projectId, input.projectId),
+			),
+		)
+		.orderBy(mediaMetadata.id);
+	const mediaSnapshots = mediaRecords.flatMap((record) => {
+		const parsed = mediaMetadataSchema.safeParse({
+			id: record.id,
+			mediaType: record.mediaType,
+			aspectRatio: record.aspectRatio,
+			durationSeconds: record.durationSeconds,
+			usageRights: record.usageRights,
+			status: record.status,
+			sceneSuitability: record.sceneSuitability,
+			tags: record.tags,
+			reference: {
+				displayName: record.displayName,
+				referenceUrl: record.referenceUrl,
+			},
+		});
+		return parsed.success ? [parsed.data] : [];
+	});
+	const [outputRulesRecord] = await transaction
+		.select()
+		.from(outputRules)
+		.where(eq(outputRules.workspaceId, actor.workspaceId))
+		.limit(1);
+	const parsedOutputRules = outputRulesSchema.safeParse(
+		outputRulesRecord
+			? {
+					language: outputRulesRecord.language,
+					aspectRatio: outputRulesRecord.aspectRatio,
+					subtitleSafeArea: outputRulesRecord.subtitleSafeArea,
+					claimLimit: outputRulesRecord.claimLimit,
+					requireFinalCta: outputRulesRecord.requireFinalCta,
+				}
+			: defaultOutputRules,
+	);
+	if (!parsedOutputRules.success) {
+		throw new ScriptGenerationError(
+			"CHANNEL_SETTINGS_INCOMPLETE",
+			"Output Rules are invalid or incomplete.",
+		);
+	}
 
 	const today = resolveBusinessToday();
 	let parentOutput: PartialScriptDraft | null = null;
 	if (input.mode === "repair" && input.parentGenerationId) {
-		const parent = await findScriptGenerationInTransaction(transaction, actor, input.parentGenerationId);
-		if (!parent || parent.projectId !== input.projectId || parent.status !== "partial" || !parent.outputJson) {
-			throw new ScriptGenerationError("GENERATION_INVALID_TRANSITION", "Repair parent must be a usable partial generation.");
+		const parent = await findScriptGenerationInTransaction(
+			transaction,
+			actor,
+			input.parentGenerationId,
+		);
+		if (
+			!parent ||
+			parent.projectId !== input.projectId ||
+			parent.status !== "partial" ||
+			!parent.outputJson
+		) {
+			throw new ScriptGenerationError(
+				"GENERATION_INVALID_TRANSITION",
+				"Repair parent must be a usable partial generation.",
+			);
 		}
 		const requestedSections = input.repairSections ?? [];
 		const invalidSections = parent.invalidSections as ScriptGenerationSection[];
-		if (requestedSections.length === 0 || new Set(requestedSections).size !== requestedSections.length || requestedSections.some((section) => !invalidSections.includes(section))) {
-			throw new ScriptGenerationError("INVALID_REPAIR_SECTIONS", "Repair sections must be a unique subset of the parent invalid sections.");
+		if (
+			requestedSections.length === 0 ||
+			new Set(requestedSections).size !== requestedSections.length ||
+			requestedSections.some((section) => !invalidSections.includes(section))
+		) {
+			throw new ScriptGenerationError(
+				"INVALID_REPAIR_SECTIONS",
+				"Repair sections must be a unique subset of the parent invalid sections.",
+			);
 		}
 		const invalidated = await transaction
 			.select({ id: factDependency.id })
 			.from(factDependency)
-			.where(and(eq(factDependency.workspaceId, actor.workspaceId), eq(factDependency.dependentType, "script_generation"), eq(factDependency.dependentId, input.parentGenerationId), isNotNull(factDependency.invalidatedAt)))
+			.where(
+				and(
+					eq(factDependency.workspaceId, actor.workspaceId),
+					eq(factDependency.dependentType, "script_generation"),
+					eq(factDependency.dependentId, input.parentGenerationId),
+					isNotNull(factDependency.invalidatedAt),
+				),
+			)
 			.limit(1);
-		if (invalidated.length > 0) throw new ScriptGenerationError("BASE_GENERATION_INVALIDATED", "Repair parent depends on invalidated Product Facts.");
+		if (invalidated.length > 0)
+			throw new ScriptGenerationError(
+				"BASE_GENERATION_INVALIDATED",
+				"Repair parent depends on invalidated Product Facts.",
+			);
 		parentOutput = parent.outputJson as PartialScriptDraft;
 	}
 
-	const snapshot = createSnapshot(projectRecord, facts, today, {
-		mode: input.mode,
-		repair: input.mode === "repair" ? {
-			parentGenerationId: input.parentGenerationId as string,
-			sections: sortedSections(input.repairSections ?? []),
-			baseOutput: parentOutput as PartialScriptDraft,
-		} : null,
-	});
-	if (new TextEncoder().encode(canonicalizeJson(snapshot)).byteLength > 128 * 1024) {
-		throw new ScriptGenerationError("INVALID_GENERATION_OUTPUT", "Generation input snapshot is too large.");
+	const snapshot = createSnapshot(
+		projectRecord,
+		facts,
+		today,
+		{
+			mode: input.mode,
+			repair:
+				input.mode === "repair"
+					? {
+							parentGenerationId: input.parentGenerationId as string,
+							sections: sortedSections(input.repairSections ?? []),
+							baseOutput: parentOutput as PartialScriptDraft,
+						}
+					: null,
+		},
+		parsedChannelSettings.data,
+		mediaSnapshots,
+		parsedOutputRules.data,
+		config,
+	);
+	if (
+		new TextEncoder().encode(canonicalizeJson(snapshot)).byteLength >
+		128 * 1024
+	) {
+		throw new ScriptGenerationError(
+			"INVALID_GENERATION_OUTPUT",
+			"Generation input snapshot is too large.",
+		);
 	}
-	if (snapshot.facts.length === 0) throw new ScriptGenerationError("NO_USABLE_PRODUCT_FACTS", "No verified, eligible Product Facts are available for generation.");
+	if (snapshot.facts.length === 0)
+		throw new ScriptGenerationError(
+			"NO_USABLE_PRODUCT_FACTS",
+			"No verified, eligible Product Facts are available for generation.",
+		);
 
 	const prompt = renderScriptPrompt(snapshot);
 	const inputHash = sha256Hex(snapshot);
 	const promptHash = sha256Hex(canonicalPrompt(prompt));
+	if (options.persist === false) return { snapshot, inputHash, promptHash };
 	const [created] = await transaction
 		.insert(scriptGeneration)
 		.values({
@@ -327,54 +571,227 @@ async function prepareInTransaction(
 		dependentId: created.id,
 		facts: facts.flatMap((fact) => {
 			const evaluated = evaluateDbFact(fact, today);
-			return evaluated.usability === "blocked" ? [] : [{ id: fact.id, revision: fact.revision }];
+			return evaluated.usability === "blocked"
+				? []
+				: [{ id: fact.id, revision: fact.revision }];
 		}),
 	});
 	return created;
 }
 
+export async function buildScriptGenerationPreview(
+	actor: WorkspaceActor,
+	input: PrepareScriptGenerationInput,
+	serverConfig: ServerGenerationConfig,
+) {
+	const { idempotencyKey, intent } = assertPreparationInput(input);
+	const requestHash = hashClientGenerationIntent(intent);
+	const preview = await db.transaction((transaction) =>
+		prepareInTransaction(
+			transaction,
+			actor,
+			intent,
+			serverConfig,
+			requestHash,
+			idempotencyKey,
+			{ persist: false },
+		),
+	);
+	if (!preview || !("snapshot" in preview))
+		throw new ScriptGenerationError(
+			"GENERATION_INVALID_TRANSITION",
+			"Generation preview could not be built.",
+		);
+	return preview;
+}
+
 export async function prepareScriptGeneration(
 	actor: WorkspaceActor,
 	input: PrepareScriptGenerationInput,
-	serverConfig: Partial<ServerGenerationConfig> = {},
+	serverConfig: ServerGenerationConfig,
 ) {
 	const { idempotencyKey, intent } = assertPreparationInput(input);
-	const config: ScriptGenerationProviderConfig = {
-		provider: serverConfig.provider ?? "deterministic",
-		model: serverConfig.model ?? "foundation-deterministic-v1",
-		promptVersion: serverConfig.promptVersion ?? SCRIPT_PROMPT_VERSION,
-		outputSchemaVersion: serverConfig.outputSchemaVersion ?? SCRIPT_OUTPUT_SCHEMA_VERSION,
-	};
+	const config: ScriptGenerationProviderConfig = serverConfig;
 	const requestHash = hashClientGenerationIntent(intent);
-	const existing = await findScriptGenerationByIdempotencyKey(actor, idempotencyKey);
+	const existing = await findScriptGenerationByIdempotencyKey(
+		actor,
+		idempotencyKey,
+	);
 	if (existing) {
-		if (existing.requestHash !== requestHash) throw new ScriptGenerationError("IDEMPOTENCY_CONFLICT", "Idempotency key was already used for a different request.");
+		if (existing.requestHash !== requestHash)
+			throw new ScriptGenerationError(
+				"IDEMPOTENCY_CONFLICT",
+				"Idempotency key was already used for a different request.",
+			);
 		return existing;
 	}
 
-	const created = await db.transaction((transaction) => prepareInTransaction(transaction, actor, intent, config, requestHash, idempotencyKey));
+	const created = await db.transaction(
+		(transaction) =>
+			prepareInTransaction(
+				transaction,
+				actor,
+				intent,
+				config,
+				requestHash,
+				idempotencyKey,
+				{ persist: true },
+			) as Promise<typeof scriptGeneration.$inferSelect | undefined>,
+	);
 	if (created) return toScriptGenerationArtifact(created);
 
-	const retry = await findScriptGenerationByIdempotencyKey(actor, idempotencyKey);
+	const retry = await findScriptGenerationByIdempotencyKey(
+		actor,
+		idempotencyKey,
+	);
 	if (retry) {
-		if (retry.requestHash !== requestHash) throw new ScriptGenerationError("IDEMPOTENCY_CONFLICT", "Idempotency key was already used for a different request.");
+		if (retry.requestHash !== requestHash)
+			throw new ScriptGenerationError(
+				"IDEMPOTENCY_CONFLICT",
+				"Idempotency key was already used for a different request.",
+			);
 		return retry;
 	}
-	const pending = await import("./script-generation-repository").then(({ findPendingScriptGeneration }) => findPendingScriptGeneration(actor, intent.projectId));
-	if (pending) throw new ScriptGenerationError("GENERATION_ALREADY_IN_PROGRESS", "A generation is already pending for this project.");
-	throw new ScriptGenerationError("GENERATION_INVALID_TRANSITION", "Generation could not be created.");
+	const pending = await import("./script-generation-repository").then(
+		({ findPendingScriptGeneration }) =>
+			findPendingScriptGeneration(actor, intent.projectId),
+	);
+	if (pending)
+		throw new ScriptGenerationError(
+			"GENERATION_ALREADY_IN_PROGRESS",
+			"A generation is already pending for this project.",
+		);
+	throw new ScriptGenerationError(
+		"GENERATION_INVALID_TRANSITION",
+		"Generation could not be created.",
+	);
 }
 
 type FinalizeSuccess = { kind: "success"; result: TextProviderResult };
-type FinalizeFailure = { kind: "failure"; code: "AI_TIMEOUT" | "AI_TIMEOUT_UNCERTAIN" | "AI_PROVIDER_ERROR" | "GENERATION_INDETERMINATE" };
+type FinalizeFailure = {
+	kind: "failure";
+	code:
+		| "AI_TIMEOUT"
+		| "AI_TIMEOUT_UNCERTAIN"
+		| "AI_REQUEST_STATE_UNCERTAIN"
+		| "AI_PROVIDER_ERROR"
+		| "AI_INVALID_OUTPUT"
+		| "TEXT_PROVIDER_UNAVAILABLE"
+		| "COST_ESTIMATE_UNAVAILABLE"
+		| "GENERATION_INDETERMINATE";
+};
+
+function buildProviderRequest(generation: ScriptGenerationArtifact) {
+	const prompt = renderScriptPrompt(generation.inputSnapshot);
+	return {
+		messages: [
+			{ role: "system" as const, content: prompt.trustedInstructions },
+			{ role: "developer" as const, content: prompt.outputSchema },
+			{ role: "user" as const, content: prompt.untrustedInputData },
+		],
+		model: generation.model,
+		mode: generation.mode,
+		sections: generation.inputSnapshot.request.repair?.sections ?? [
+			...scriptGenerationSections,
+		],
+		idempotencyKey: generation.idempotencyKey,
+	};
+}
+
+export async function estimateScriptGenerationInput(
+	snapshot: ScriptGenerationInputSnapshot,
+	config: Required<ServerGenerationConfig>,
+	provider: TextProvider,
+) {
+	const prompt = renderScriptPrompt(snapshot);
+	const estimate = await provider.estimateCost({
+		messages: [
+			{ role: "system", content: prompt.trustedInstructions },
+			{ role: "developer", content: prompt.outputSchema },
+			{ role: "user", content: prompt.untrustedInputData },
+		],
+		model: config.model,
+		mode: snapshot.request.mode,
+		sections: snapshot.request.repair?.sections ?? [
+			...scriptGenerationSections,
+		],
+	});
+	if (estimate.estimatedCostMicros === null || !estimate.currency) {
+		throw new ScriptGenerationError(
+			"COST_ESTIMATE_UNAVAILABLE",
+			"Provider did not return a cost estimate.",
+		);
+	}
+	return estimate;
+}
+
+export async function estimatePreparedScriptGeneration(
+	generation: ScriptGenerationArtifact,
+	provider: TextProvider,
+): Promise<TextProviderEstimate> {
+	try {
+		const estimate = await provider.estimateCost(
+			buildProviderRequest(generation),
+		);
+		if (estimate.estimatedCostMicros === null || !estimate.currency) {
+			throw new ScriptGenerationError(
+				"COST_ESTIMATE_UNAVAILABLE",
+				"Provider did not return a cost estimate.",
+			);
+		}
+		return estimate;
+	} catch (error) {
+		if (error instanceof ScriptGenerationError) throw error;
+		throw new ScriptGenerationError(
+			"COST_ESTIMATE_UNAVAILABLE",
+			"Cost estimate is unavailable.",
+		);
+	}
+}
+
+export async function recordScriptGenerationEstimate(
+	actor: WorkspaceActor,
+	generationId: string,
+	estimate: TextProviderEstimate,
+) {
+	const [row] = await db
+		.update(scriptGeneration)
+		.set({
+			estimatedCostMicros: estimate.estimatedCostMicros,
+			currency: estimate.currency,
+		})
+		.where(
+			and(
+				eq(scriptGeneration.id, generationId),
+				eq(scriptGeneration.workspaceId, actor.workspaceId),
+				eq(scriptGeneration.status, "pending"),
+			),
+		)
+		.returning();
+	if (!row)
+		throw new ScriptGenerationError(
+			"GENERATION_NOT_FOUND",
+			"Generation was not found in this workspace.",
+		);
+	return toScriptGenerationArtifact(row);
+}
 
 export async function finalizeScriptGeneration(
 	actor: WorkspaceActor,
 	input: { generationId: string; outcome: FinalizeSuccess | FinalizeFailure },
 ) {
 	return db.transaction(async (transaction) => {
-		const row = await findScriptGenerationInTransaction(transaction, actor, input.generationId, { lock: true });
-		if (!row) throw new ScriptGenerationError("GENERATION_NOT_FOUND", "Generation was not found in this workspace.");
+		const row = await findScriptGenerationInTransaction(
+			transaction,
+			actor,
+			input.generationId,
+			{ lock: true },
+		);
+		if (!row)
+			throw new ScriptGenerationError(
+				"GENERATION_NOT_FOUND",
+				"Generation was not found in this workspace.",
+			);
 		if (row.status !== "pending") return toScriptGenerationArtifact(row);
 		const finishedAt = new Date();
 		let status: "completed" | "partial" | "failed" | "indeterminate" = "failed";
@@ -389,31 +806,78 @@ export async function finalizeScriptGeneration(
 		let actualCostMicros: bigint | null = null;
 		let currency: string | null = null;
 		if (input.outcome.kind === "failure") {
-			if (input.outcome.code === "GENERATION_INDETERMINATE" || input.outcome.code === "AI_TIMEOUT_UNCERTAIN") status = "indeterminate";
+			if (
+				input.outcome.code === "GENERATION_INDETERMINATE" ||
+				input.outcome.code === "AI_TIMEOUT_UNCERTAIN" ||
+				input.outcome.code === "AI_REQUEST_STATE_UNCERTAIN"
+			)
+				status = "indeterminate";
 			errorCode = input.outcome.code;
 			invalidSections = [...scriptGenerationSections];
 		} else {
 			const result = input.outcome.result;
 			const snapshot = row.inputSnapshotJson as ScriptGenerationInputSnapshot;
-			let validation = validateScriptDraftOutput(result.content, snapshot.project.durationSeconds);
+			let validation = validateScriptDraftOutput(
+				result.content,
+				snapshot.contentBrief.durationSeconds,
+				snapshot.outputRules.claimLimit,
+			);
 			if (row.mode === "repair" && snapshot.request.repair) {
-				const repairValidation = validateRepairScriptOutput(result.content, snapshot.request.repair.sections);
+				const repairValidation = validateRepairScriptOutput(
+					result.content,
+					snapshot.request.repair.sections,
+					snapshot.outputRules.claimLimit,
+				);
 				if (repairValidation.success && repairValidation.output) {
-					const merged = { ...snapshot.request.repair.baseOutput, ...repairValidation.output };
-					const mergedValidation = validateScriptDraftOutput(merged, snapshot.project.durationSeconds);
-					const preservesParentSections = snapshot.request.repair.baseOutput && snapshot.request.repair.sections.every((section) => mergedValidation.validSections.includes(section)) && (row.validSections as ScriptGenerationSection[]).every((section) => mergedValidation.validSections.includes(section));
-					validation = preservesParentSections && mergedValidation.status !== "failed" && snapshot.request.repair.sections.every((section) => mergedValidation.validSections.includes(section))
-						? mergedValidation
-						: { status: "failed", output: null, validSections: [], invalidSections: [...scriptGenerationSections], errorCode: "INVALID_GENERATION_OUTPUT" };
+					const merged = {
+						...snapshot.request.repair.baseOutput,
+						...repairValidation.output,
+					};
+					const mergedValidation = validateScriptDraftOutput(
+						merged,
+						snapshot.contentBrief.durationSeconds,
+						snapshot.outputRules.claimLimit,
+					);
+					const preservesParentSections =
+						snapshot.request.repair.baseOutput &&
+						snapshot.request.repair.sections.every((section) =>
+							mergedValidation.validSections.includes(section),
+						) &&
+						(row.validSections as ScriptGenerationSection[]).every((section) =>
+							mergedValidation.validSections.includes(section),
+						);
+					validation =
+						preservesParentSections &&
+						mergedValidation.status !== "failed" &&
+						snapshot.request.repair.sections.every((section) =>
+							mergedValidation.validSections.includes(section),
+						)
+							? mergedValidation
+							: {
+									status: "failed",
+									output: null,
+									validSections: [],
+									invalidSections: [...scriptGenerationSections],
+									errorCode: "INVALID_GENERATION_OUTPUT",
+								};
 				} else {
-					validation = { status: "failed", output: null, validSections: [], invalidSections: [...scriptGenerationSections], errorCode: "INVALID_GENERATION_OUTPUT" };
+					validation = {
+						status: "failed",
+						output: null,
+						validSections: [],
+						invalidSections: [...scriptGenerationSections],
+						errorCode: "INVALID_GENERATION_OUTPUT",
+					};
 				}
 			}
 			status = validation.status;
 			outputJson = validation.output;
 			validSections = validation.validSections;
 			invalidSections = validation.invalidSections;
-			errorCode = validation.errorCode;
+			errorCode =
+				validation.errorCode === "INVALID_GENERATION_OUTPUT"
+					? "AI_INVALID_OUTPUT"
+					: validation.errorCode;
 			providerRequestId = result.providerRequestId;
 			inputTokens = result.inputTokens;
 			outputTokens = result.outputTokens;
@@ -423,12 +887,38 @@ export async function finalizeScriptGeneration(
 		}
 		await transaction
 			.update(scriptGeneration)
-			.set({ status, outputJson, validSections, invalidSections, providerRequestId, inputTokens, outputTokens, estimatedCostMicros, actualCostMicros, currency, errorCode, finishedAt })
-			.where(and(eq(scriptGeneration.id, row.id), eq(scriptGeneration.workspaceId, actor.workspaceId), eq(scriptGeneration.status, "pending")));
+			.set({
+				status,
+				outputJson,
+				validSections,
+				invalidSections,
+				providerRequestId,
+				inputTokens,
+				outputTokens,
+				estimatedCostMicros,
+				actualCostMicros,
+				currency,
+				errorCode,
+				finishedAt,
+			})
+			.where(
+				and(
+					eq(scriptGeneration.id, row.id),
+					eq(scriptGeneration.workspaceId, actor.workspaceId),
+					eq(scriptGeneration.status, "pending"),
+				),
+			);
 		if (status === "failed") {
-			await detachFactDependenciesInTransaction(transaction, actor, { dependentType: "script_generation", dependentId: row.id });
+			await detachFactDependenciesInTransaction(transaction, actor, {
+				dependentType: "script_generation",
+				dependentId: row.id,
+			});
 		}
-		const finalRow = await findScriptGenerationInTransaction(transaction, actor, row.id);
+		const finalRow = await findScriptGenerationInTransaction(
+			transaction,
+			actor,
+			row.id,
+		);
 		if (!finalRow) throw new Error("Could not reload finalized generation.");
 		return toScriptGenerationArtifact(finalRow);
 	});
@@ -442,23 +932,23 @@ export async function runPreparedScriptGeneration(
 ) {
 	let result: TextProviderResult;
 	try {
-		const prompt = renderScriptPrompt(generation.inputSnapshot);
-		result = await provider.generate({
-			messages: [
-				{ role: "system", content: prompt.system },
-				{ role: "developer", content: prompt.developer },
-				{ role: "user", content: prompt.user },
-			],
-			model: generation.model,
-			mode: generation.mode,
-			sections: generation.inputSnapshot.request.repair?.sections ?? [...scriptGenerationSections],
-			idempotencyKey: generation.idempotencyKey,
-		});
+		result = await provider.generate(buildProviderRequest(generation));
 	} catch (error) {
-		const code: FinalizeFailure["code"] = error instanceof TextProviderError ? error.code : "AI_PROVIDER_ERROR";
-		return finalize(actor, { generationId: generation.id, outcome: { kind: "failure", code } });
+		const code: FinalizeFailure["code"] =
+			error instanceof TextProviderError
+				? error.code === "AI_TIMEOUT_UNCERTAIN"
+					? "AI_REQUEST_STATE_UNCERTAIN"
+					: error.code
+				: "AI_PROVIDER_ERROR";
+		return finalize(actor, {
+			generationId: generation.id,
+			outcome: { kind: "failure", code },
+		});
 	}
-	return finalize(actor, { generationId: generation.id, outcome: { kind: "success", result } });
+	return finalize(actor, {
+		generationId: generation.id,
+		outcome: { kind: "success", result },
+	});
 }
 
 export async function markScriptGenerationIndeterminate(
@@ -467,23 +957,74 @@ export async function markScriptGenerationIndeterminate(
 	policy: { expectedCreatedAt: Date; staleBefore: Date },
 ) {
 	return db.transaction(async (transaction) => {
-		const row = await findScriptGenerationInTransaction(transaction, actor, generationId, { lock: true });
-		if (!row) throw new ScriptGenerationError("GENERATION_NOT_FOUND", "Generation was not found in this workspace.");
+		const row = await findScriptGenerationInTransaction(
+			transaction,
+			actor,
+			generationId,
+			{ lock: true },
+		);
+		if (!row)
+			throw new ScriptGenerationError(
+				"GENERATION_NOT_FOUND",
+				"Generation was not found in this workspace.",
+			);
 		if (row.status !== "pending") return toScriptGenerationArtifact(row);
-		if (row.createdAt.getTime() !== policy.expectedCreatedAt.getTime() || row.createdAt > policy.staleBefore) {
-			throw new ScriptGenerationError("GENERATION_NOT_STALE", "Pending generation is not stale under the supplied server policy.");
+		if (
+			row.createdAt.getTime() !== policy.expectedCreatedAt.getTime() ||
+			row.createdAt > policy.staleBefore
+		) {
+			throw new ScriptGenerationError(
+				"GENERATION_NOT_STALE",
+				"Pending generation is not stale under the supplied server policy.",
+			);
 		}
 		await transaction
 			.update(scriptGeneration)
-			.set({ status: "indeterminate", outputJson: null, validSections: [], invalidSections: [...scriptGenerationSections], errorCode: "GENERATION_INDETERMINATE", finishedAt: new Date() })
-			.where(and(eq(scriptGeneration.id, row.id), eq(scriptGeneration.workspaceId, actor.workspaceId), eq(scriptGeneration.status, "pending")));
-		const finalRow = await findScriptGenerationInTransaction(transaction, actor, row.id);
-		if (!finalRow) throw new Error("Could not reload indeterminate generation.");
+			.set({
+				status: "indeterminate",
+				outputJson: null,
+				validSections: [],
+				invalidSections: [...scriptGenerationSections],
+				errorCode: "GENERATION_INDETERMINATE",
+				finishedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(scriptGeneration.id, row.id),
+					eq(scriptGeneration.workspaceId, actor.workspaceId),
+					eq(scriptGeneration.status, "pending"),
+				),
+			);
+		const finalRow = await findScriptGenerationInTransaction(
+			transaction,
+			actor,
+			row.id,
+		);
+		if (!finalRow)
+			throw new Error("Could not reload indeterminate generation.");
 		return toScriptGenerationArtifact(finalRow);
 	});
 }
 
-export async function getScriptGenerationReadModel(actor: WorkspaceActor, projectId: string): Promise<ScriptGenerationReadModel> {
+export async function getScriptGenerationReadModel(
+	actor: WorkspaceActor,
+	projectId: string,
+): Promise<ScriptGenerationReadModel> {
+	const [ownedProject] = await db
+		.select({ id: project.id })
+		.from(project)
+		.where(
+			and(
+				eq(project.id, projectId),
+				eq(project.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1);
+	if (!ownedProject)
+		throw new ScriptGenerationError(
+			"GENERATION_NOT_FOUND",
+			"Project was not found in this workspace.",
+		);
 	return listScriptGenerationReadModel(actor, projectId);
 }
 

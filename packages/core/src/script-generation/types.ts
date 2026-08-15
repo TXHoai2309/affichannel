@@ -1,5 +1,14 @@
-import type { FactAssessment, FactGenerationUsability } from "../product-fact/freshness";
+import type {
+	FactAssessment,
+	FactGenerationUsability,
+} from "../product-fact/freshness";
 import type { ProductFactType } from "../product-fact/types";
+import type {
+	AiSettings,
+	ChannelSettings,
+	MediaMetadataSnapshot,
+	OutputRules,
+} from "./input-contract";
 
 export const scriptGenerationStatuses = [
 	"pending",
@@ -26,7 +35,7 @@ export const scriptGenerationSections = [
 export type ScriptGenerationSection = (typeof scriptGenerationSections)[number];
 
 export type ClaimOccurrence =
-	| { section: "hook" }
+	| { section: "hook"; hookKey: string }
 	| { section: "voiceover"; segmentKey: string }
 	| { section: "scene"; sceneOrder: number }
 	| { section: "cta" }
@@ -35,7 +44,7 @@ export type ClaimOccurrence =
 export type ScriptDraft = {
 	schemaVersion: string;
 	language: string;
-	hook: { text: string };
+	hookVariants: Array<{ key: string; text: string }>;
 	voiceoverSegments: Array<{ key: string; text: string }>;
 	scenes: Array<{
 		order: number;
@@ -85,6 +94,8 @@ export type ScriptGenerationInputSnapshot = {
 	project: {
 		id: string;
 		name: string;
+	};
+	contentBrief: {
 		platform: "tiktok";
 		goal: string;
 		durationSeconds: number;
@@ -95,6 +106,13 @@ export type ScriptGenerationInputSnapshot = {
 		id: string;
 		name: string;
 		category: string | null;
+	};
+	channelSettings: ChannelSettings;
+	mediaMetadata: MediaMetadataSnapshot[];
+	outputRules: OutputRules;
+	generationConfig: Pick<AiSettings, "textProvider" | "textModel"> & {
+		promptVersion: string;
+		outputSchemaVersion: string;
 	};
 	facts: ScriptGenerationFactSnapshot[];
 };

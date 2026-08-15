@@ -211,7 +211,8 @@ MVP 0 hoàn thành khi slice này đạt end-to-end.
 
 Sau khi có dữ liệu sử dụng thực tế:
 
-1. Channel Settings và mặc định tái sử dụng.
+1. Channel Settings và mặc định tái sử dụng (contract/persistence đã được kéo sớm vào AFF-US-008
+   Phase 2A; UI quản lý vẫn để slice sau).
 2. Content lifecycle và lịch bảy ngày.
 3. Publication record và metric snapshot.
 4. Analytics mô tả và hiệu quả chi phí.

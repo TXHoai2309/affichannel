@@ -435,3 +435,29 @@ lock hoặc database transaction trong thời gian chờ mạng.
   foundation.
 - Database CHECK `script_generation_state_shape_check` khóa shape của completed/partial/failed;
   pending/indeterminate tiếp tục theo semantics DEC-015.
+
+## DEC-016 — Production AI input contract và cost preflight của AFF-US-008 Phase 2A
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-14
+
+### Quyết định
+
+- Channel Settings và AI provider/model settings là server-owned, scoped theo internal workspace;
+  generation không nhận provider/model từ client và thiếu Channel Settings sẽ bị chặn.
+- Snapshot v2 là bản ghi exact của Project, Content Brief, Product Facts usable, Channel Settings,
+  Media Metadata, Output Rules và config identity không chứa secret.
+- Output dùng `hookVariants` 3–5 item unique key; không có `selectedHook`; hook claim phải trỏ tới
+  `hookKey` cụ thể.
+- Provider phải expose cost estimate trước generate. Deterministic adapter chỉ là dev/test
+  registry entry; production thiếu live adapter/config thì fail closed. Không automatic retry.
+- `script_generation` tiếp tục là usage log duy nhất; không thêm bảng usage thứ hai.
+- Output Rules được giữ ở core contract với default `vi-VN`, `9:16`, `standard` safe-area semantic,
+  final CTA bắt buộc và claim limit nullable; numeric safe-area/claim cap không được tự phát minh.
+
+### Hệ quả
+
+Phase 2A thêm migration `0010` cho Channel Settings/AI Settings/Media Metadata và `0011` cho
+Output Rules, nhưng không
+thêm UI hoặc provider SDK. Script schema/prompt/snapshot bump v2 sạch vì chưa có shared output cần
+compatibility converter.

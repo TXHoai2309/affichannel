@@ -776,3 +776,35 @@ Tiếp theo:
 
 - Implement domain schemas/policy/hashing và generate/review migration theo file map foundation;
   không gọi live AI cho tới phase provider.
+
+### 2026-08-14 — AFF-US-008 Phase 2A backend/domain
+
+Mục tiêu:
+
+- Đưa input AI production về server-owned settings, mở rộng snapshot/output contract và khóa cost
+  preflight trước provider request.
+
+Thay đổi:
+
+- Thêm core schemas cho Channel Settings, AI Settings, Media Metadata và Output Rules.
+- Thêm bảng `channel_settings`, `ai_settings`, `media_metadata`, `output_rules` và migration
+  `0010_stormy_groot.sql`/`0011_keen_king_bedlam.sql`;
+  không apply shared Neon.
+- Bump `script-input.v2`, `script-draft.v2`, `script-prompt.v2`; đổi hook thành 3–5
+  `hookVariants`, validate unique key và hook claim locator.
+- Snapshot v2 lưu Content Brief tách khỏi Project, settings, media, rules và config identity;
+  prompt builder tách trusted instructions/output schema/untrusted input data.
+- Mở rộng TextProvider với `estimateCost()`, provider registry fail-closed production và protected
+  oRPC `estimate`, `generate`, `repair`, `getState`.
+
+Kiểm tra:
+
+- `pnpm check-types`: đạt.
+- `pnpm --filter web test`: 51/51 đạt.
+- `pnpm db:generate`: đạt, migration `0010` và `0011` đã review SQL; chain local đã apply tới `0011`.
+- Integration runtime chưa claim pass vì Neon serverless driver chưa kết nối Docker localhost;
+  không dùng test driver mới nếu chưa sạch.
+
+Trạng thái:
+
+- Phase 2A backend/domain ready for review; chưa đánh dấu AFF-US-008 Done. Chưa commit/push/merge/deploy.

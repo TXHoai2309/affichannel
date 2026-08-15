@@ -316,3 +316,11 @@ AFF-US-008 foundation hardening: repair chỉ sửa các section invalid của p
 server-side và tạo child bất biến; `requestHash` chỉ nhận client intent để replay không phụ thuộc
 provider config. Generated output là untrusted, phải strict-validate cross-reference/hashtag và
 state shape; live provider/API/UI vẫn chưa thuộc slice này.
+
+## AFF-US-008 Phase 2A — AI input và cost visibility
+
+Script generation chỉ được thực hiện khi workspace có Channel Settings đầy đủ và server đã resolve
+provider/model. Input snapshot phải ghi lại Product Facts usable cùng revision/freshness, Content
+Brief, Channel Settings, Media Metadata và Output Rules. Draft có 3–5 hook variants để người dùng
+chọn ở phase editor sau; AI không tự chọn hook và không tự phê duyệt claim. Mọi request tốn phí phải
+có cost estimate trước khi gửi provider; thiếu cấu hình hoặc estimate phải dừng an toàn.

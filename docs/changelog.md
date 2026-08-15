@@ -107,6 +107,15 @@ sử dụng Semantic Versioning.
   hashtag validation; DB state-shape CHECK; concurrency/failure integration smoke coverage.
 - Chưa thêm live AI SDK, API generate, Script Studio hay ScriptVersion.
 
+### AFF-US-008 Phase 2A — đang triển khai
+
+- Thêm Channel Settings/AI Settings/Output Rules theo workspace, Media Metadata tối thiểu và
+  migration `0010`/`0011`.
+- Bump structured output/snapshot/prompt lên v2; `hook` đơn thành 3–5 `hookVariants` có key.
+- Thêm server-owned production input snapshot, prompt role separation, provider cost estimate và
+  protected oRPC estimate/generate/repair/getState.
+- Chưa có live provider SDK, UI, ScriptVersion, Fact Lock hay migration shared Neon.
+
 ## 0.0.0 — 2026-08-10
 
 ### Đã thêm
