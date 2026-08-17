@@ -29,6 +29,7 @@ import type {
 import type {
 	PartialScriptDraft,
 	ScriptGenerationArtifact,
+	ScriptGenerationContext,
 	ScriptGenerationInputSnapshot,
 	ScriptGenerationMode,
 	ScriptGenerationReadModel,
@@ -1124,22 +1125,221 @@ export async function getScriptGenerationReadModel(
 	actor: WorkspaceActor,
 	projectId: string,
 ): Promise<ScriptGenerationReadModel> {
-	const [ownedProject] = await db
-		.select({ id: project.id })
+	const context = await getScriptGenerationContext(actor, projectId);
+	const readModel = await listScriptGenerationReadModel(actor, projectId);
+	return { context, ...readModel };
+}
+
+export async function getScriptGenerationContext(
+	actor: WorkspaceActor,
+	projectId: string,
+): Promise<ScriptGenerationContext> {
+	const [projectRecord] = await db
+		.select({
+			id: project.id,
+			name: project.name,
+			productId: product.id,
+			productName: product.name,
+			productCategory: product.category,
+			platform: contentBrief.platform,
+			goal: contentBrief.goal,
+			durationSeconds: contentBrief.durationSeconds,
+			angle: contentBrief.angle,
+			description: contentBrief.description,
+		})
 		.from(project)
+		.innerJoin(product, eq(project.productId, product.id))
+		.innerJoin(contentBrief, eq(contentBrief.projectId, project.id))
 		.where(
 			and(
 				eq(project.id, projectId),
 				eq(project.workspaceId, actor.workspaceId),
+				eq(product.workspaceId, actor.workspaceId),
 			),
 		)
 		.limit(1);
-	if (!ownedProject)
+	if (!projectRecord)
 		throw new ScriptGenerationError(
 			"GENERATION_NOT_FOUND",
 			"Project was not found in this workspace.",
 		);
-	return listScriptGenerationReadModel(actor, projectId);
+
+	const [
+		facts,
+		channelSettingsRows,
+		mediaRecords,
+		outputRulesRows,
+		aiSettingsRows,
+	] = await Promise.all([
+		db
+			.select({
+				id: productFact.id,
+				revision: productFact.revision,
+				content: productFact.content,
+				type: productFact.type,
+				status: productFact.status,
+				sourceType: productFact.sourceType,
+				sourceLabel: productFact.sourceLabel,
+				sourceUrl: productFact.sourceUrl,
+				confirmedAt: productFact.confirmedAt,
+				expiresAt: productFact.expiresAt,
+			})
+			.from(productFact)
+			.where(
+				and(
+					eq(productFact.workspaceId, actor.workspaceId),
+					eq(productFact.productId, projectRecord.productId),
+				),
+			)
+			.orderBy(productFact.id),
+		db
+			.select()
+			.from(channelSettings)
+			.where(eq(channelSettings.workspaceId, actor.workspaceId))
+			.limit(1),
+		db
+			.select()
+			.from(mediaMetadata)
+			.where(
+				and(
+					eq(mediaMetadata.workspaceId, actor.workspaceId),
+					eq(mediaMetadata.projectId, projectId),
+				),
+			)
+			.orderBy(mediaMetadata.id),
+		db
+			.select()
+			.from(outputRules)
+			.where(eq(outputRules.workspaceId, actor.workspaceId))
+			.limit(1),
+		db
+			.select({
+				textProvider: aiSettings.textProvider,
+				textModel: aiSettings.textModel,
+			})
+			.from(aiSettings)
+			.where(eq(aiSettings.workspaceId, actor.workspaceId))
+			.limit(1),
+	]);
+
+	const today = resolveBusinessToday();
+	const contextFacts = facts.map((fact) => {
+		const evaluated = evaluateDbFact(fact, today);
+		return {
+			id: fact.id,
+			revision: fact.revision,
+			content: fact.content,
+			type: fact.type as ScriptGenerationContext["facts"][number]["type"],
+			assessment: evaluated.assessment,
+			generationUsability: evaluated.usability,
+			source: {
+				type: fact.sourceType,
+				label: fact.sourceLabel,
+				url: fact.sourceUrl,
+				confirmedAt: fact.confirmedAt,
+				expiresAt: fact.expiresAt,
+			},
+		};
+	});
+
+	const channelSettingsRecord = channelSettingsRows[0];
+	const parsedChannelSettings = channelSettingsSchema.safeParse(
+		channelSettingsRecord
+			? {
+					niche: channelSettingsRecord.niche,
+					targetAudience: channelSettingsRecord.targetAudience,
+					tone: channelSettingsRecord.tone,
+					contentPillar: channelSettingsRecord.contentPillar,
+					defaultCta: channelSettingsRecord.defaultCta,
+					affiliateDisclosure: channelSettingsRecord.affiliateDisclosure,
+					avoidWords: channelSettingsRecord.avoidWords,
+				}
+			: undefined,
+	);
+
+	const mediaSnapshots = mediaRecords.flatMap((record) => {
+		const parsed = mediaMetadataSchema.safeParse({
+			id: record.id,
+			mediaType: record.mediaType,
+			aspectRatio: record.aspectRatio,
+			durationSeconds: record.durationSeconds,
+			usageRights: record.usageRights,
+			status: record.status,
+			sceneSuitability: record.sceneSuitability,
+			tags: record.tags,
+			reference: {
+				displayName: record.displayName,
+				referenceUrl: record.referenceUrl,
+			},
+		});
+		return parsed.success && isUsableMediaMetadata(parsed.data)
+			? [parsed.data]
+			: [];
+	});
+
+	const outputRulesRecord = outputRulesRows[0];
+	const parsedOutputRules = outputRulesSchema.safeParse(
+		outputRulesRecord
+			? {
+					language: outputRulesRecord.language,
+					aspectRatio: outputRulesRecord.aspectRatio,
+					subtitleSafeArea: outputRulesRecord.subtitleSafeArea,
+					claimLimit: outputRulesRecord.claimLimit,
+					requireFinalCta: outputRulesRecord.requireFinalCta,
+				}
+			: defaultOutputRules,
+	);
+	const aiSettingsRecord = aiSettingsRows[0];
+
+	let generationConfig: ScriptGenerationContext["generationConfig"];
+	const parsedAiSettings = aiSettingsSchema.safeParse(aiSettingsRecord);
+	if (parsedAiSettings.success) {
+		generationConfig = {
+			textProvider: parsedAiSettings.data.textProvider,
+			textModel: parsedAiSettings.data.textModel,
+			promptVersion: SCRIPT_PROMPT_VERSION,
+			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		};
+	} else if (!aiSettingsRecord) {
+		generationConfig = {
+			textProvider: env.TEXT_AI_DEFAULT_PROVIDER,
+			textModel: env.TEXT_AI_DEFAULT_MODEL,
+			promptVersion: SCRIPT_PROMPT_VERSION,
+			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		};
+	} else {
+		generationConfig = {
+			textProvider: aiSettingsRecord.textProvider?.trim() || "Chưa cấu hình",
+			textModel: aiSettingsRecord.textModel?.trim() || "Chưa cấu hình",
+			promptVersion: SCRIPT_PROMPT_VERSION,
+			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		};
+	}
+
+	return {
+		project: { id: projectRecord.id, name: projectRecord.name },
+		contentBrief: {
+			platform: projectRecord.platform as "tiktok",
+			goal: projectRecord.goal,
+			durationSeconds: projectRecord.durationSeconds,
+			angle: projectRecord.angle,
+			description: normalizeDescription(projectRecord.description),
+		},
+		product: {
+			id: projectRecord.productId,
+			name: projectRecord.productName,
+			category: projectRecord.productCategory,
+		},
+		channelSettings: parsedChannelSettings.success
+			? parsedChannelSettings.data
+			: null,
+		mediaMetadata: mediaSnapshots,
+		outputRules: parsedOutputRules.success
+			? parsedOutputRules.data
+			: defaultOutputRules,
+		generationConfig,
+		facts: contextFacts,
+	};
 }
 
 export { findScriptGeneration };

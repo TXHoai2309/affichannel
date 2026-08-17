@@ -1,7 +1,7 @@
 import type {
 	ScriptGenerationArtifact,
+	ScriptGenerationArtifactReadModel,
 	ScriptGenerationMode,
-	ScriptGenerationReadModel,
 	ScriptGenerationSection,
 	ScriptGenerationStatus,
 } from "@affichannel/core/script-generation/types";
@@ -25,7 +25,8 @@ function toArtifact(row: ScriptGenerationRow): ScriptGenerationArtifact {
 		model: row.model,
 		promptVersion: row.promptVersion,
 		outputSchemaVersion: row.outputSchemaVersion,
-		inputSnapshot: row.inputSnapshotJson as ScriptGenerationArtifact["inputSnapshot"],
+		inputSnapshot:
+			row.inputSnapshotJson as ScriptGenerationArtifact["inputSnapshot"],
 		inputHash: row.inputHash,
 		promptHash: row.promptHash,
 		status: row.status as ScriptGenerationStatus,
@@ -108,7 +109,12 @@ export async function findScriptGeneration(
 	const [row] = await db
 		.select()
 		.from(scriptGeneration)
-		.where(and(eq(scriptGeneration.workspaceId, actor.workspaceId), eq(scriptGeneration.id, generationId)))
+		.where(
+			and(
+				eq(scriptGeneration.workspaceId, actor.workspaceId),
+				eq(scriptGeneration.id, generationId),
+			),
+		)
 		.limit(1);
 	return row ? toArtifact(row) : undefined;
 }
@@ -116,7 +122,7 @@ export async function findScriptGeneration(
 export async function listScriptGenerationReadModel(
 	actor: WorkspaceActor,
 	projectId: string,
-): Promise<ScriptGenerationReadModel> {
+): Promise<ScriptGenerationArtifactReadModel> {
 	const rows = await db
 		.select()
 		.from(scriptGeneration)
@@ -150,7 +156,9 @@ export async function listScriptGenerationReadModel(
 				eq(factDependency.dependentId, latestUsableArtifact.id),
 			),
 		);
-	const invalidatedFactCount = dependencies.filter((item) => item.invalidatedAt !== null).length;
+	const invalidatedFactCount = dependencies.filter(
+		(item) => item.invalidatedAt !== null,
+	).length;
 	return {
 		latestRequest,
 		latestUsableArtifact,

@@ -50,6 +50,64 @@ test.describe("AFF-US-004 project creation", () => {
 				.match(/\/projects\/([0-9a-f-]{36})\/product$/i)?.[1];
 			expect(projectId).toBeTruthy();
 
+			await page.route("**/api/rpc/scriptGeneration/getState", (route) =>
+				route.fulfill({
+					status: 200,
+					contentType: "application/json",
+					body: JSON.stringify({
+						json: {
+							context: {
+								project: { id: projectId, name: projectName },
+								contentBrief: {
+									platform: "tiktok",
+									goal: "Kiểm tra luồng tạo project",
+									durationSeconds: 30,
+									angle: "Kiểm tra persistence của content brief",
+									description: null,
+								},
+								product: {
+									id: "e2e-product",
+									name: productName,
+									category: null,
+								},
+								channelSettings: null,
+								mediaMetadata: [],
+								outputRules: {
+									language: "vi-VN",
+									aspectRatio: "9:16",
+									subtitleSafeArea: "standard",
+									claimLimit: null,
+									requireFinalCta: true,
+								},
+								generationConfig: {
+									textProvider: "deterministic",
+									textModel: "e2e-model",
+									promptVersion: "test-prompt",
+									outputSchemaVersion: "test-output",
+								},
+								facts: [],
+							},
+							latestRequest: null,
+							latestUsableArtifact: null,
+							dependencyState: null,
+						},
+					}),
+				}),
+			);
+			await page.goto(`/projects/${projectId}/content`);
+			await expect(
+				page.getByRole("heading", { name: "Script Studio" }),
+			).toBeVisible();
+			await expect(
+				page
+					.getByText("Chưa có Product Facts đủ điều kiện để tạo kịch bản.")
+					.first(),
+			).toBeVisible();
+			await expect(
+				page.getByRole("button", { name: "Tạo kịch bản" }).first(),
+			).toBeDisabled();
+			await page.goto(`/projects/${projectId}/product`);
+
 			const [persistedProject] = await db
 				.select({
 					id: project.id,

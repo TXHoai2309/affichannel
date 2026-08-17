@@ -1,4 +1,4 @@
-import ProjectStepPage from "@/features/project-navigation/project-step-page";
+import ScriptStudio from "@/features/script-generation/script-studio";
 
 export default async function ContentStepPage({
 	params,
@@ -6,5 +6,5 @@ export default async function ContentStepPage({
 	params: Promise<{ projectId: string }>;
 }) {
 	const { projectId } = await params;
-	return <ProjectStepPage projectId={projectId} stepKey="content" />;
+	return <ScriptStudio projectId={projectId} />;
 }

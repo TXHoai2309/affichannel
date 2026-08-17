@@ -142,6 +142,17 @@ sử dụng Semantic Versioning.
   cập nhật audit pricing/model và kết luận không thêm `anthropic-version` khi relay không
   yêu cầu.
 
+### AFF-US-008 Phase 3 — Script Studio UI
+
+- Thay placeholder Content route bằng Script Studio với context đầu vào, estimate, generate,
+  trạng thái polling, output bất biến, partial repair và copy actions.
+- Giữ tách biệt `latestRequest`/`latestUsableArtifact`, map lỗi provider sang copy an toàn,
+  chặn Generate khi không có Product Facts usable và ghi rõ claims chưa qua Fact Lock.
+- Bổ sung context read model server-side có workspace authorization; chỉ đưa media
+  `ready + owned|licensed` vào context. Không thêm migration và không gọi live AI trong tests.
+- Runtime DB integration của Phase 2A/2B vẫn pending vì Neon branch hiện thiếu bảng tương ứng;
+  E2E UI Content dùng mock boundary, không migrate shared Neon.
+
 ## 0.0.0 — 2026-08-10
 
 ### Đã thêm

@@ -150,13 +150,26 @@ export type ScriptGenerationArtifact = {
 	createdAt: Date;
 };
 
+export type ScriptGenerationContext = Omit<
+	ScriptGenerationInputSnapshot,
+	"snapshotVersion" | "request" | "channelSettings"
+> & {
+	channelSettings: ChannelSettings | null;
+};
+
 export type ScriptGenerationDependencyState = {
 	state: "current" | "invalidated";
 	invalidatedFactCount: number;
 };
 
 export type ScriptGenerationReadModel = {
+	context: ScriptGenerationContext;
 	latestRequest: ScriptGenerationArtifact | null;
 	latestUsableArtifact: ScriptGenerationArtifact | null;
 	dependencyState: ScriptGenerationDependencyState | null;
 };
+
+export type ScriptGenerationArtifactReadModel = Omit<
+	ScriptGenerationReadModel,
+	"context"
+>;

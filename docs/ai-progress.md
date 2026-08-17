@@ -902,3 +902,17 @@ Kiểm tra:
   `42P01 relation "channel_settings"/"script_generation" does not exist`; cleanup cũng
   không tạo được dữ liệu. Không migrate shared Neon trong task này.
 - Authenticated E2E chạy thật `12 passed`; không phát sinh regression từ Phase 2B.
+
+### 2026-08-16 — AFF-US-008 Phase 3 Script Studio UI
+
+- Thay placeholder `/projects/[projectId]/content` bằng Script Studio production UI với
+  context read-only, estimate, generate, polling terminal-state, empty/completed/partial/
+  failed/indeterminate và repair theo section.
+- Giữ invariant `latestRequest` tách khỏi `latestUsableArtifact`: request mới pending/failed/
+  indeterminate không che artifact usable cũ. Claims hiển thị `Chưa qua Fact Lock`; không có
+  selectedHook, editor, Fact Lock, TTS hoặc Video AI.
+- Bổ sung authorized context read model tối thiểu cho Product Facts/freshness/evidence,
+  Channel Settings, Content Brief, Product, usable media, Output Rules và AI config; không thêm
+  schema hoặc migration.
+- Unit/state tests đạt `13 files / 79 tests`; authenticated E2E UI Content dùng mock `getState`
+  vì Neon runtime còn thiếu bảng Phase 2A/2B. Không gọi lại live AI smoke.
