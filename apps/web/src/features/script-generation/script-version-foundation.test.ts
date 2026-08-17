@@ -1,6 +1,7 @@
 import type { ScriptVersionEditableSnapshot } from "@affichannel/core";
 import {
 	hasClaimRelevantScriptVersionChanges,
+	hasStableScriptVersionStructure,
 	mergeScriptVersionAutosave,
 	validateScriptVersionDraft,
 	validateScriptVersionForFactLock,
@@ -60,17 +61,11 @@ describe("AFF-US-009 ScriptVersion foundation", () => {
 		expect(validateScriptVersionForFactLock(selected).success).toBe(true);
 	});
 
-	it("marks claim-dependent content stale while preserving metadata owned by the server", () => {
+	it("marks claim-dependent content stale while preserving server metadata", () => {
 		const edited = {
 			...snapshot,
 			voiceoverSegments: [
 				{ key: "intro", text: "Mình đã kiểm tra kỹ sản phẩm." },
-			],
-			claims: [
-				{
-					text: "client must not replace this",
-					occurrence: { section: "voiceover" as const, segmentKey: "intro" },
-				},
 			],
 			claimsSourceRevision: 999,
 			claimsStatus: "current" as const,
@@ -78,6 +73,8 @@ describe("AFF-US-009 ScriptVersion foundation", () => {
 
 		expect(hasClaimRelevantScriptVersionChanges(snapshot, edited)).toBe(true);
 		const merged = mergeScriptVersionAutosave(snapshot, edited);
+		expect(merged).not.toBeNull();
+		if (!merged) throw new Error("Expected an allowed autosave edit.");
 		expect(merged.claims).toEqual(snapshot.claims);
 		expect(merged.claimsSourceRevision).toBe(1);
 		expect(merged.claimsStatus).toBe("stale");
@@ -122,17 +119,150 @@ describe("AFF-US-009 ScriptVersion foundation", () => {
 	it.each(claimRelevantEdits)("marks %s stale", (_label, edit) => {
 		const edited = edit(snapshot);
 		expect(hasClaimRelevantScriptVersionChanges(snapshot, edited)).toBe(true);
-		expect(mergeScriptVersionAutosave(snapshot, edited).claimsStatus).toBe(
-			"stale",
-		);
+		const merged = mergeScriptVersionAutosave(snapshot, edited);
+		expect(merged?.claimsStatus).toBe("stale");
 	});
 
 	it("does not stale claims for a hashtag-only edit", () => {
 		const edited = { ...snapshot, hashtags: ["#review", "#tai-nghe"] };
 		expect(hasClaimRelevantScriptVersionChanges(snapshot, edited)).toBe(false);
-		expect(mergeScriptVersionAutosave(snapshot, edited).claimsStatus).toBe(
+		expect(mergeScriptVersionAutosave(snapshot, edited)?.claimsStatus).toBe(
 			"current",
 		);
+	});
+
+	const allowedEdits: Array<
+		[
+			string,
+			(current: ScriptVersionEditableSnapshot) => ScriptVersionEditableSnapshot,
+		]
+	> = [
+		[
+			"hook text",
+			(current) => ({
+				...current,
+				hookVariants: [
+					{ ...current.hookVariants[0], text: "Hook đã chỉnh sửa" },
+					...current.hookVariants.slice(1),
+				],
+			}),
+		],
+		["selected hook", (current) => ({ ...current, selectedHookKey: "hook-1" })],
+		[
+			"voiceover text",
+			(current) => ({
+				...current,
+				voiceoverSegments: [{ key: "intro", text: "Voiceover đã chỉnh sửa" }],
+			}),
+		],
+		[
+			"scene duration",
+			(current) => ({
+				...current,
+				scenes: [{ ...current.scenes[0], durationSeconds: 8 }],
+			}),
+		],
+		[
+			"scene visual direction",
+			(current) => ({
+				...current,
+				scenes: [{ ...current.scenes[0], visualDirection: "Cảnh mới" }],
+			}),
+		],
+		[
+			"scene on-screen text",
+			(current) => ({
+				...current,
+				scenes: [{ ...current.scenes[0], onScreenText: null }],
+			}),
+		],
+		["CTA", (current) => ({ ...current, cta: { text: "CTA mới" } })],
+		["caption", (current) => ({ ...current, caption: "Caption mới" })],
+		["hashtags", (current) => ({ ...current, hashtags: ["#moi"] })],
+		["disclosure", (current) => ({ ...current, disclosure: "Disclosure mới" })],
+	];
+
+	it.each(allowedEdits)(
+		"merges allowed %s edits and validates the result",
+		(_label, edit) => {
+			const submitted = edit(snapshot);
+			expect(validateScriptVersionDraft(submitted).success).toBe(true);
+			expect(hasStableScriptVersionStructure(snapshot, submitted)).toBe(true);
+			const merged = mergeScriptVersionAutosave(snapshot, submitted);
+			expect(merged).not.toBeNull();
+			if (!merged) throw new Error("Expected an allowed autosave edit.");
+			expect(validateScriptVersionDraft(merged).success).toBe(true);
+		},
+	);
+
+	const structuralTampering: Array<
+		[
+			string,
+			(current: ScriptVersionEditableSnapshot) => ScriptVersionEditableSnapshot,
+		]
+	> = [
+		[
+			"hook key",
+			(current) => ({
+				...current,
+				hookVariants: [
+					{ ...current.hookVariants[0], key: "hook-tampered" },
+					...current.hookVariants.slice(1),
+				],
+			}),
+		],
+		[
+			"voiceover key and scene reference",
+			(current) => ({
+				...current,
+				voiceoverSegments: [{ key: "voiceover-tampered", text: "Voiceover" }],
+				scenes: [
+					{
+						...current.scenes[0],
+						voiceoverSegmentKeys: ["voiceover-tampered"],
+					},
+				],
+			}),
+		],
+		[
+			"scene structure",
+			(current) => ({
+				...current,
+				scenes: [
+					...current.scenes,
+					{
+						order: 2,
+						durationSeconds: 5,
+						visualDirection: "Cảnh thêm",
+						onScreenText: null,
+						voiceoverSegmentKeys: [],
+					},
+				],
+			}),
+		],
+		[
+			"claims list and occurrence",
+			(current) => ({
+				...current,
+				claims: [{ text: "Client claim", occurrence: { section: "cta" } }],
+			}),
+		],
+		["language", (current) => ({ ...current, language: "en-US" })],
+	];
+
+	it.each(structuralTampering)(
+		"rejects %s structural tampering",
+		(_label, edit) => {
+			const submitted = edit(snapshot);
+			expect(validateScriptVersionDraft(submitted).success).toBe(true);
+			expect(hasStableScriptVersionStructure(snapshot, submitted)).toBe(false);
+			expect(mergeScriptVersionAutosave(snapshot, submitted)).toBeNull();
+		},
+	);
+
+	it("rejects schema-version tampering at the request boundary", () => {
+		const submitted = { ...snapshot, schemaVersion: "script-draft.v1" };
+		expect(validateScriptVersionDraft(submitted).success).toBe(false);
 	});
 
 	it("rejects duplicate keys, broken references, and non-sequential scenes", () => {

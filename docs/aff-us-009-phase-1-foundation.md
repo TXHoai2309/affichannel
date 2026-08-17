@@ -2,6 +2,7 @@
 
 Ngày thực hiện: 2026-08-17  
 Phạm vi: schema, canonical snapshot, validator, initialize, getCurrent và full-snapshot autosave.
+Hardening: explicit server-side merge, structural tamper rejection và final validation trước CAS update.
 
 Phase này chưa triển khai editor UI, debounce ở browser, version-history UI, Save Version/Restore,
 Fact Lock execution, TTS hoặc audio.
@@ -75,9 +76,19 @@ khi chưa initialize; không đọc trực tiếp từ generated output.
 
 ## G. Autosave
 
-`scriptVersion.autosave` nhận full editable snapshot và `baseRevision`. Server validate snapshot,
-giữ lại schema/language/claims/claims source revision do server sở hữu, rồi tăng revision bằng conditional
-update. Hashtag-only edit không stale claims; claim-relevant edit stale claims.
+`scriptVersion.autosave` nhận full editable snapshot và `baseRevision`. Server validate request snapshot,
+đối chiếu cấu trúc bất biến với snapshot authoritative hiện tại rồi merge tường minh chỉ các field được
+phép sửa:
+
+- editable: selected hook, hook/voiceover text, scene duration/visual direction/on-screen text, CTA,
+  caption, hashtags và disclosure;
+- server-owned: schema version/language, hook key, voiceover key, scene order/reference, claims list
+  và claim occurrence, claims source revision/status metadata.
+
+Nếu key, order, reference, claims, language hoặc cấu trúc scene thay đổi, server trả
+`INVALID_SCRIPT_VERSION_SNAPSHOT`; không silent normalize. Sau merge, server chạy lại
+`validateScriptVersionDraft()` trước conditional update. Chỉ khi validation cuối cùng đạt mới tăng revision.
+Hashtag-only edit không stale claims; claim-relevant edit stale claims.
 
 ## H. Conflict proof
 
@@ -104,19 +115,23 @@ Repository luôn scope bằng `actor.workspaceId`; router resolve actor từ aut
 ## L. Runtime DB proof
 
 `pnpm test:integration:script-version` đã pass trên Neon hiện tại với fixture tạm và cleanup trong
-`finally`, chứng minh initialize, idempotency, concurrent convergence, getCurrent/reopen, autosave,
-conflict, claims stale, immutable saved row, invalidated dependency guard và workspace scope.
+`finally`, chứng minh initialize, idempotency, concurrent convergence, getCurrent/reopen, explicit
+autosave merge, structural tamper rejection, final snapshot validation, conflict, claims stale,
+immutable saved row, invalidated dependency guard và workspace scope.
 
 ## M. Tests/results
 
 - `pnpm check-types`: pass, 5/5 package tasks;
-- `pnpm --filter web test`: pass, 14 files / 95 tests;
-- `pnpm test:integration:script-version`: pass;
-- `pnpm --filter web test:e2e`: một full run pass 16/16; lần rerun cuối gặp lại flaky
-  AFF-US-004 `page.goBack()` (15 pass/1 fail), trong khi chạy riêng `project-create.spec.ts`
-  pass. Đây là test/routing nền ngoài file thay đổi của US009 và cần harden riêng.
+- `pnpm --filter web test`: pass, 14 files / 111 tests, gồm allowed-edit, structural-tamper,
+  server-metadata và final-validation regression tests;
+- `pnpm test:integration:script-version`: pass trên Neon với fixture cleanup;
 - `pnpm build`: pass;
-- `pnpm db:generate`: pass, no schema changes;
+- `pnpm db:generate`: pass, `No schema changes, nothing to migrate`;
+- full `pnpm --filter web test:e2e`: 15 pass / 1 fail. Failure nằm ở test nền US005
+  `product-management.spec.ts`, sau edit không tìm thấy heading Product đã đổi tên;
+- isolated `project-create.spec.ts`: vẫn tái hiện regression AFF-US-004 ở browser Back, URL còn
+  `/projects/{id}` thay vì `/projects/{id}/product`; full run khác có lúc pass, nên đây là flake/regression
+  nền ngoài US009;
 - scoped Biome và `git diff --check`: pass.
 
 ## N. Regression US8
@@ -130,7 +145,9 @@ freshness/dependency rules của US7 hoặc ScriptGeneration provider/runtime.
 - không nhận workspace ID từ client;
 - không expose generic workflow mutation;
 - output generated được validate trước khi trở thành editable snapshot;
-- saved version immutable ở autosave boundary.
+- saved version immutable ở autosave boundary;
+- client không thể thay claims, claim occurrence, key/reference/order hoặc server metadata bằng autosave;
+- snapshot sau merge được validate lại trước khi ghi DB.
 
 ## P. Files changed
 
@@ -145,12 +162,11 @@ freshness/dependency rules của US7 hoặc ScriptGeneration provider/runtime.
 
 ## Q. Remaining debt
 
-Phase 2 còn cần editor theo segment, browser debounce, Save Version, history/restore UI/API,
-restore immutable child, downstream invalidation closure và authenticated UI proof. Phase 1 chưa
-triển khai các phần đó theo phạm vi đã chốt.
+Phase 2 còn cần editor theo segment và browser autosave debounce. Phase 3 còn cần version history và
+restore. US10 còn cần claim refresh và Fact Lock. Các phần này không thuộc hardening Phase 1.
 
 ## R. Status
 
-**AFF-US-009 Phase 1 ScriptVersion Foundation is ready for review.**
+**AFF-US-009 Phase 1 ScriptVersion Foundation is ready for final acceptance.**
 
 Không triển khai US10, US11 hoặc các feature tương lai trong phase này.

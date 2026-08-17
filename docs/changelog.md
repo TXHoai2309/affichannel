@@ -200,6 +200,13 @@ sử dụng Semantic Versioning.
 - Full regression: 14 web test files/95 unit tests, check-types, build, db:generate, scoped Biome
   và diff check pass. Một full E2E run đạt 16/16; rerun cuối lặp lại flaky AFF-US-004
   `page.goBack()` (test chạy riêng pass), cần harden ngoài scope US009.
+- Phase 1 hardening: autosave đối chiếu stable structure server-side, merge tường minh chỉ editable
+  fields, reject `INVALID_SCRIPT_VERSION_SNAPSHOT` khi client sửa key/order/reference/claims/language
+  hoặc metadata structure, và validate snapshot cuối trước CAS update. Bổ sung unit/integration proof
+  cho hook/voiceover/scene/claim tampering, allowed edits, metadata preservation và `onScreenText: null`.
+- Hardening verification: 14 web test files/111 tests, check-types, ScriptVersion integration, build,
+  `db:generate` no schema changes, scoped Biome và diff check pass. Full E2E hiện 15 pass/1 fail do
+  regression ngoài scope ở US005 Product Management; isolated US004 vẫn tái hiện flake browser Back.
 - Phase 2 editor/history/restore, Fact Lock, TTS/audio và các US sau chưa triển khai.
 
 ## 0.0.0 — 2026-08-10

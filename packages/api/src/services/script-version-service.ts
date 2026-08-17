@@ -122,6 +122,13 @@ export async function autosaveScriptVersion(
 		current.editableSnapshot,
 		parsed.data as ScriptVersionEditableSnapshot,
 	);
+	if (!nextSnapshot) {
+		throw new ScriptVersionError("INVALID_SCRIPT_VERSION_SNAPSHOT");
+	}
+	const finalValidation = validateScriptVersionDraft(nextSnapshot);
+	if (!finalValidation.success) {
+		throw new ScriptVersionError("INVALID_SCRIPT_VERSION_SNAPSHOT");
+	}
 	const updated = await updateDraftScriptVersion({
 		actor,
 		scriptVersionId: input.scriptVersionId,

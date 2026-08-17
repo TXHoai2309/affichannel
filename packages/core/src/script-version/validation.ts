@@ -71,15 +71,71 @@ export function hasClaimRelevantScriptVersionChanges(
 	);
 }
 
+function stableScriptVersionStructure(snapshot: ScriptVersionEditableSnapshot) {
+	return {
+		schemaVersion: snapshot.schemaVersion,
+		language: snapshot.language,
+		hookKeys: snapshot.hookVariants.map((variant) => variant.key),
+		voiceoverKeys: snapshot.voiceoverSegments.map((segment) => segment.key),
+		scenes: snapshot.scenes.map((scene) => ({
+			order: scene.order,
+			voiceoverSegmentKeys: scene.voiceoverSegmentKeys,
+		})),
+		claims: snapshot.claims,
+	};
+}
+
+export function hasStableScriptVersionStructure(
+	previous: ScriptVersionEditableSnapshot,
+	next: ScriptVersionEditableSnapshot,
+) {
+	return (
+		canonicalizeJson(stableScriptVersionStructure(previous)) ===
+		canonicalizeJson(stableScriptVersionStructure(next))
+	);
+}
+
 export function mergeScriptVersionAutosave(
 	previous: ScriptVersionEditableSnapshot,
 	submitted: ScriptVersionEditableSnapshot,
-) {
+): ScriptVersionEditableSnapshot | null {
+	if (!hasStableScriptVersionStructure(previous, submitted)) return null;
+
 	const claimsStale = hasClaimRelevantScriptVersionChanges(previous, submitted);
+	const hookVariants = [];
+	for (const [index, variant] of previous.hookVariants.entries()) {
+		const submittedVariant = submitted.hookVariants[index];
+		if (!submittedVariant) return null;
+		hookVariants.push({ key: variant.key, text: submittedVariant.text });
+	}
+	const voiceoverSegments = [];
+	for (const [index, segment] of previous.voiceoverSegments.entries()) {
+		const submittedSegment = submitted.voiceoverSegments[index];
+		if (!submittedSegment) return null;
+		voiceoverSegments.push({ key: segment.key, text: submittedSegment.text });
+	}
+	const scenes = [];
+	for (const [index, scene] of previous.scenes.entries()) {
+		const submittedScene = submitted.scenes[index];
+		if (!submittedScene) return null;
+		scenes.push({
+			...scene,
+			durationSeconds: submittedScene.durationSeconds,
+			visualDirection: submittedScene.visualDirection,
+			onScreenText: submittedScene.onScreenText,
+		});
+	}
 	return {
-		...submitted,
 		schemaVersion: previous.schemaVersion,
 		language: previous.language,
+		hookVariants,
+		selectedHookKey: submitted.selectedHookKey,
+		voiceoverSegments,
+		scenes,
+		cta: { text: submitted.cta.text },
+		caption: submitted.caption,
+		hashtags: submitted.hashtags,
+		disclosure: submitted.disclosure,
 		claims: previous.claims,
 		claimsSourceRevision: previous.claimsSourceRevision,
 		claimsStatus: claimsStale ? "stale" : previous.claimsStatus,

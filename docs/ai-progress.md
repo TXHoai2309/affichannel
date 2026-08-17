@@ -1002,4 +1002,30 @@ Trạng thái: **AFF-US-009 Phase 0 contract is ready for acceptance. Phase 1 ma
   lần rerun cuối lặp lại flaky AFF-US-004 `page.goBack()` (15 pass/1 fail), còn chạy riêng test
   project-create pass. Đây là regression test nền ngoài file US009 và cần harden riêng.
 
-Trạng thái: **AFF-US-009 Phase 1 ScriptVersion Foundation is ready for review.**
+### 2026-08-17 — AFF-US-009 Phase 1 hardening
+
+- Root cause: autosave trước đây validate snapshot client rồi spread toàn bộ snapshot và chỉ khôi phục
+  một phần metadata. Client có thể đổi key/reference/claim occurrence đồng thời để tạo canonical snapshot
+  cuối không còn nhất quán.
+- Đã thêm stable-structure guard cho schema version/language, hook key, voiceover key, scene order và
+  voiceover reference, cùng claims list/occurrence. Structural tampering trả
+  `INVALID_SCRIPT_VERSION_SNAPSHOT`, không silent normalize.
+- Đã đổi sang explicit server-side merge: chỉ nhận selected hook, text, scene editable fields, CTA,
+  caption, hashtags và disclosure; claims cùng metadata server-owned được giữ từ snapshot authoritative.
+  `validateScriptVersionDraft()` chạy lại trên snapshot sau merge trước CAS update.
+- Bổ sung unit/integration regression cho tamper hook/voiceover/scene/claims/language, allowed edits,
+  metadata preservation, final validation, conflict/immutability/authorization và claims stale matrix.
+- Không tạo/sửa migration, không chạy migration, không đổi Neon hoặc Product Facts/US007/US008 logic.
+
+Kiểm tra:
+
+- `pnpm check-types`: đạt, 5/5 package tasks.
+- `pnpm --filter web test`: đạt, 14 files / 111 tests.
+- `pnpm test:integration:script-version`: đạt, fixture cleanup trong `finally`.
+- `pnpm build`: đạt; `pnpm db:generate`: đạt, không có schema change.
+- Full authenticated E2E: 15 pass/1 fail ở regression ngoài scope US005 Product Management.
+- Isolated AFF-US-004 `project-create.spec.ts`: vẫn fail tại browser Back, URL giữ
+  `/projects/{id}`; không sửa trong US009.
+- Scoped Biome và `git diff --check`: đạt.
+
+Trạng thái: **AFF-US-009 Phase 1 ScriptVersion Foundation is ready for final acceptance.**

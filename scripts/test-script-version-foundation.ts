@@ -379,14 +379,35 @@ async function run() {
 			throw new Error("Conflict changed the authoritative snapshot.");
 		}
 
+		await expectError(
+			() =>
+				autosaveScriptVersion(actor, {
+					scriptVersionId: initialized.id,
+					baseRevision: reopened.revision,
+					editableSnapshot: {
+						...reopened.editableSnapshot,
+						language: "en-US",
+						claims: [{ text: "client claim", occurrence: { section: "cta" } }],
+						claimsSourceRevision: 999,
+						claimsStatus: "current",
+					},
+				}),
+			"INVALID_SCRIPT_VERSION_SNAPSHOT",
+		);
+		const afterMetadataTamper = await getCurrentScriptVersion(
+			actor,
+			primaryProjectId,
+		);
+		if (afterMetadataTamper?.revision !== reopened.revision) {
+			throw new Error("Rejected metadata tampering changed the draft.");
+		}
+
 		const metadataProtected = await autosaveScriptVersion(actor, {
 			scriptVersionId: initialized.id,
 			baseRevision: reopened.revision,
 			editableSnapshot: {
 				...reopened.editableSnapshot,
-				schemaVersion: "script-draft.v2",
-				language: "en-US",
-				claims: [{ text: "client claim", occurrence: { section: "cta" } }],
+				hashtags: ["#metadata"],
 				claimsSourceRevision: 999,
 				claimsStatus: "current",
 			},
@@ -398,6 +419,85 @@ async function run() {
 			metadataProtected.editableSnapshot.claimsStatus !== "stale"
 		) {
 			throw new Error("Client changed server-owned ScriptVersion metadata.");
+		}
+
+		const structuralTampering: Array<
+			[
+				string,
+				(
+					current: ScriptVersionEditableSnapshot,
+				) => ScriptVersionEditableSnapshot,
+			]
+		> = [
+			[
+				"hook key",
+				(current) => ({
+					...current,
+					hookVariants: [
+						{ ...current.hookVariants[0], key: "hook-tampered" },
+						...current.hookVariants.slice(1),
+					],
+				}),
+			],
+			[
+				"voiceover key and scene reference",
+				(current) => ({
+					...current,
+					voiceoverSegments: [{ key: "voiceover-tampered", text: "Voiceover" }],
+					scenes: [
+						{
+							...current.scenes[0],
+							voiceoverSegmentKeys: ["voiceover-tampered"],
+						},
+					],
+				}),
+			],
+			[
+				"scene structure",
+				(current) => ({
+					...current,
+					scenes: [
+						...current.scenes,
+						{
+							order: current.scenes.length + 1,
+							durationSeconds: 5,
+							visualDirection: "Cảnh thêm",
+							onScreenText: null,
+							voiceoverSegmentKeys: [],
+						},
+					],
+				}),
+			],
+			[
+				"claims and occurrence",
+				(current) => ({
+					...current,
+					claims: [{ text: "Client claim", occurrence: { section: "cta" } }],
+				}),
+			],
+			["language", (current) => ({ ...current, language: "en-US" })],
+		];
+		for (const [label, edit] of structuralTampering) {
+			const before = await getCurrentScriptVersion(actor, primaryProjectId);
+			if (!before) throw new Error(`Missing draft before ${label} tampering.`);
+			await expectError(
+				() =>
+					autosaveScriptVersion(actor, {
+						scriptVersionId: before.id,
+						baseRevision: before.revision,
+						editableSnapshot: edit(before.editableSnapshot),
+					}),
+				"INVALID_SCRIPT_VERSION_SNAPSHOT",
+			);
+			const after = await getCurrentScriptVersion(actor, primaryProjectId);
+			if (
+				!after ||
+				after.revision !== before.revision ||
+				JSON.stringify(after.editableSnapshot) !==
+					JSON.stringify(before.editableSnapshot)
+			) {
+				throw new Error(`${label} tampering changed the persisted draft.`);
+			}
 		}
 		const idempotent = await initializeScriptVersion(actor, {
 			projectId: primaryProjectId,
@@ -568,7 +668,7 @@ async function run() {
 		}
 
 		console.log(
-			"AFF-US-009 Phase 1 runtime proof passed: initialize, idempotency, concurrent convergence, getCurrent, autosave revision/conflict, claims stale, immutable saved version, invalidation guard, and workspace scope.",
+			"AFF-US-009 Phase 1 runtime proof passed: initialize, idempotency, concurrent convergence, getCurrent, explicit autosave merge, structural tamper rejection, final snapshot validation, claims stale, immutable saved version, invalidation guard, and workspace scope.",
 		);
 	} finally {
 		await cleanup();
