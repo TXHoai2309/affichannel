@@ -171,7 +171,8 @@ AFF-US-008 triển khai theo thứ tự schema/refinement → deterministic prov
 disclosure và candidate claim riêng; completed/partial artifact được lưu và provider failure không
 che artifact usable trước đó.
 
-AFF-US-009 mới thêm editor, autosave, selection, immutable `ScriptVersion`, history và restore.
+AFF-US-009 đã hoàn thành editor, autosave, selection, immutable `ScriptVersion`, history và
+restore theo Phase 0/1/2/3; saved history vẫn read-only và Restore dùng optimistic concurrency.
 US8 không tự advance workflow hoặc tạo Fact Lock. Contract foundation được chốt tại DEC-015 và
 `docs/aff-us-008-foundation.md`.
 

@@ -250,6 +250,149 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 		}
 	});
 
+	test("saves immutable history, previews a version, and restores it with confirmation", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const artifact = createArtifact(
+			fixture,
+			"generation-editor-history",
+			"completed",
+			createOutput("Cảnh history"),
+		);
+		const state = createReadModel(fixture, artifact, artifact, "current");
+		let draft: ScriptVersionFixture | null = null;
+		let savedVersions: ScriptVersionFixture[] = [];
+
+		try {
+			await mockState(page, () => state);
+			await page.route(
+				"**/api/rpc/scriptGeneration/estimate",
+				async (route) => {
+					await fulfillJson(route, null);
+				},
+			);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/initialize", async (route) => {
+				draft = createScriptVersion(fixture, artifact);
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/autosave", async (route) => {
+				const payload = route.request().postDataJSON().json as {
+					editableSnapshot: ScriptVersionFixture["editableSnapshot"];
+				};
+				if (!draft) throw new Error("Expected a draft before autosave.");
+				draft = {
+					...draft,
+					revision: draft.revision + 1,
+					editableSnapshot: {
+						...payload.editableSnapshot,
+						claimsStatus: "stale",
+					},
+				};
+				await fulfillJson(route, draft);
+			});
+			await page.route(
+				"**/api/rpc/scriptVersion/saveVersion",
+				async (route) => {
+					if (!draft) throw new Error("Expected a draft before save version.");
+					const versionNumber = savedVersions.length + 1;
+					const saved = {
+						...draft,
+						id: `saved-version-${versionNumber}`,
+						status: "saved" as const,
+						versionNumber,
+						savedAt: `2026-08-17T00:0${versionNumber}:00.000Z`,
+					};
+					savedVersions = [...savedVersions, saved];
+					await fulfillJson(route, saved);
+				},
+			);
+			await page.route(
+				"**/api/rpc/scriptVersion/listHistory",
+				async (route) => {
+					await fulfillJson(
+						route,
+						savedVersions
+							.slice()
+							.reverse()
+							.map(({ editableSnapshot: _snapshot, ...item }) => item),
+					);
+				},
+			);
+			await page.route("**/api/rpc/scriptVersion/getVersion", async (route) => {
+				const versionId = route.request().postDataJSON().json
+					.versionId as string;
+				await fulfillJson(
+					route,
+					savedVersions.find((version) => version.id === versionId) ?? null,
+				);
+			});
+			await page.route("**/api/rpc/scriptVersion/restore", async (route) => {
+				const versionId = route.request().postDataJSON().json
+					.versionId as string;
+				const target = savedVersions.find(
+					(version) => version.id === versionId,
+				);
+				if (!draft || !target) throw new Error("Expected restore target.");
+				draft = {
+					...draft,
+					revision: draft.revision + 1,
+					restoredFromVersionId: target.id,
+					editableSnapshot: target.editableSnapshot,
+				};
+				await fulfillJson(route, draft);
+			});
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Bắt đầu chỉnh sửa" }).click();
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await page.getByLabel("Voiceover đoạn 1").fill("Voiceover phiên bản 1");
+			await page.getByRole("button", { name: "Lưu phiên bản" }).click();
+			await expect(
+				page.getByText("Đã lưu phiên bản script").first(),
+			).toBeVisible();
+			await expect(page.getByText("Bản lưu #1")).toBeVisible();
+
+			await page
+				.getByRole("button", { name: "Đóng lịch sử phiên bản" })
+				.click();
+			await page.getByLabel("Voiceover đoạn 1").fill("Voiceover phiên bản 2");
+			await page.getByRole("button", { name: "Lưu phiên bản" }).click();
+			await expect(
+				page.getByText("Đã lưu phiên bản script").first(),
+			).toBeVisible();
+			await expect(page.getByText("Bản lưu #2")).toBeVisible();
+			await expect(page.getByText("Bản lưu #1")).toBeVisible();
+
+			await page.getByRole("button", { name: /Bản lưu #1/ }).click();
+			await expect(page.getByTestId("saved-version-read-only")).toBeVisible();
+			await expect(page.getByText("Voiceover phiên bản 1")).toBeVisible();
+			await page.getByRole("button", { name: "Khôi phục" }).click();
+			await expect(
+				page.getByRole("heading", { name: "Khôi phục bản lưu?" }),
+			).toBeVisible();
+			await page.getByRole("button", { name: "Khôi phục bản này" }).click();
+			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
+				"Voiceover phiên bản 1",
+			);
+
+			await page.reload();
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
+				"Voiceover phiên bản 1",
+			);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
 	test("keeps local edits when the same draft is refetched in the background", async ({
 		page,
 	}) => {
@@ -438,8 +581,16 @@ type ProjectFixture = {
 
 type ScriptVersionFixture = Omit<
 	ReturnType<typeof createScriptVersion>,
-	"editableSnapshot"
+	| "editableSnapshot"
+	| "status"
+	| "versionNumber"
+	| "savedAt"
+	| "restoredFromVersionId"
 > & {
+	status: "draft" | "saved";
+	versionNumber: number | null;
+	savedAt: string | null;
+	restoredFromVersionId: string | null;
 	editableSnapshot: ReturnType<typeof createOutput> & {
 		selectedHookKey: string | null;
 		claimsSourceRevision: number;

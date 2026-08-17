@@ -290,4 +290,63 @@ describe("Script Editor autosave controller", () => {
 			editableSnapshot: { caption: "B" },
 		});
 	});
+
+	it("flush waits for the latest revision before a version-save action continues", async () => {
+		vi.useFakeTimers();
+		let resolveFirst:
+			| ((result: {
+					revision: number;
+					editableSnapshot: ScriptVersionEditableSnapshot;
+			  }) => void)
+			| undefined;
+		const save = vi
+			.fn()
+			.mockImplementationOnce(
+				(_request: {
+					baseRevision: number;
+					editableSnapshot: ScriptVersionEditableSnapshot;
+				}) =>
+					new Promise((resolve) => {
+						resolveFirst = resolve;
+					}),
+			)
+			.mockImplementation(async (request) => ({
+				revision: request.baseRevision + 1,
+				editableSnapshot: request.editableSnapshot,
+			}));
+		const controller = createScriptAutosaveController({
+			scriptVersionId: "draft-1",
+			initialSnapshot: snapshot,
+			initialRevision: 1,
+			save,
+		});
+
+		controller.updateSnapshot((current) => ({ ...current, caption: "A" }));
+		await vi.advanceTimersByTimeAsync(SCRIPT_AUTOSAVE_DEBOUNCE_MS);
+		controller.updateSnapshot((current) => ({ ...current, caption: "B" }));
+		const flushed = controller.flush();
+		let settled = false;
+		void flushed.then(() => {
+			settled = true;
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(settled).toBe(false);
+
+		resolveFirst?.({
+			revision: 2,
+			editableSnapshot: { ...snapshot, caption: "A" },
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(save).toHaveBeenCalledTimes(2);
+		expect(save.mock.calls[1]?.[0]).toMatchObject({
+			baseRevision: 2,
+			editableSnapshot: { caption: "B" },
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		await expect(flushed).resolves.toMatchObject({
+			baseRevision: 3,
+			dirty: false,
+			status: "saved",
+		});
+	});
 });

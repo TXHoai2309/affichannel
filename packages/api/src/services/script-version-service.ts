@@ -8,10 +8,15 @@ import {
 import {
 	findCurrentScriptVersion,
 	findInitializeSource,
+	findSavedScriptVersion,
 	findScriptVersion,
+	hasAccessibleProject,
 	hasInvalidatedSourceDependency,
 	insertScriptVersionDraft,
 	isUniqueViolation,
+	listScriptVersionHistory,
+	restoreScriptVersionRecord,
+	saveScriptVersionRecord,
 	updateDraftScriptVersion,
 } from "./script-version-repository";
 import type { WorkspaceActor } from "./workspace";
@@ -149,4 +154,73 @@ export async function autosaveScriptVersion(
 			latestRevision: latest.revision,
 		},
 	);
+}
+
+function throwScriptVersionMutationError(
+	result:
+		| { kind: "not_found" }
+		| { kind: "immutable" }
+		| { kind: "invalid_snapshot" }
+		| { kind: "conflict"; latestRevision: number },
+): never {
+	if (result.kind === "not_found") {
+		throw new ScriptVersionError("SCRIPT_VERSION_NOT_FOUND");
+	}
+	if (result.kind === "immutable") {
+		throw new ScriptVersionError("SCRIPT_VERSION_IMMUTABLE");
+	}
+	if (result.kind === "invalid_snapshot") {
+		throw new ScriptVersionError("INVALID_SCRIPT_VERSION_SNAPSHOT");
+	}
+	throw new ScriptVersionError(
+		"SCRIPT_VERSION_CONFLICT",
+		"SCRIPT_VERSION_CONFLICT",
+		{ latestRevision: result.latestRevision },
+	);
+}
+
+export async function saveScriptVersion(
+	actor: WorkspaceActor,
+	input: { scriptVersionId: string; baseRevision: number },
+) {
+	const result = await saveScriptVersionRecord({ actor, ...input });
+	if (result.kind !== "success") throwScriptVersionMutationError(result);
+	return result.record;
+}
+
+export async function listScriptVersionHistoryForProject(
+	actor: WorkspaceActor,
+	projectId: string,
+) {
+	if (!(await hasAccessibleProject(actor, projectId))) {
+		throw new ScriptVersionError("SCRIPT_VERSION_NOT_FOUND");
+	}
+	return listScriptVersionHistory(actor, projectId);
+}
+
+export async function getSavedScriptVersion(
+	actor: WorkspaceActor,
+	input: { projectId: string; versionId: string },
+) {
+	const record = await findSavedScriptVersion(
+		actor,
+		input.projectId,
+		input.versionId,
+	);
+	if (!record) throw new ScriptVersionError("SCRIPT_VERSION_NOT_FOUND");
+	return record;
+}
+
+export async function restoreScriptVersion(
+	actor: WorkspaceActor,
+	input: { scriptVersionId: string; versionId: string; baseRevision: number },
+) {
+	const result = await restoreScriptVersionRecord({
+		actor,
+		draftId: input.scriptVersionId,
+		savedVersionId: input.versionId,
+		baseRevision: input.baseRevision,
+	});
+	if (result.kind !== "success") throwScriptVersionMutationError(result);
+	return result.record;
 }

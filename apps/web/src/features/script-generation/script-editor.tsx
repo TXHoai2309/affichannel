@@ -4,6 +4,7 @@ import { validateScriptVersionForFactLock } from "@affichannel/core";
 import type { ScriptGenerationArtifact } from "@affichannel/core/script-generation/types";
 import type {
 	ScriptVersionEditableSnapshot,
+	ScriptVersionHistoryItem,
 	ScriptVersionReadModel,
 } from "@affichannel/core/script-version/types";
 import { Badge } from "@affichannel/ui/components/badge";
@@ -15,20 +16,47 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@affichannel/ui/components/card";
+import {
+	Dialog,
+	DialogBackdrop,
+	DialogClose,
+	DialogDescription,
+	DialogPopup,
+	DialogPortal,
+	DialogTitle,
+} from "@affichannel/ui/components/dialog";
+import {
+	Drawer,
+	DrawerBackdrop,
+	DrawerClose,
+	DrawerDescription,
+	DrawerPopup,
+	DrawerPortal,
+	DrawerTitle,
+} from "@affichannel/ui/components/drawer";
 import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
 import { Textarea } from "@affichannel/ui/components/textarea";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import {
 	AlertTriangle,
 	Check,
 	CircleAlert,
 	Clock3,
+	Eye,
+	History,
 	LockKeyhole,
 	RefreshCw,
+	RotateCcw,
+	Save,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
+
+import { orpc } from "@/utils/orpc";
 
 import {
+	getScriptVersionErrorCode,
 	getScriptVersionErrorMessage,
 	type ScriptAutosaveRequest,
 	type ScriptAutosaveResult,
@@ -194,6 +222,229 @@ function formatOccurrence(
 	return occurrence.section === "cta" ? "CTA" : "Caption";
 }
 
+function formatVersionDate(value: string | Date | null) {
+	if (!value) return "Chưa có thời điểm";
+	return new Intl.DateTimeFormat("vi-VN", {
+		dateStyle: "medium",
+		timeStyle: "short",
+	}).format(new Date(value));
+}
+
+function ReadOnlyVersion({
+	snapshot,
+}: {
+	snapshot: ScriptVersionEditableSnapshot;
+}) {
+	return (
+		<div className="space-y-4" data-testid="saved-version-read-only">
+			<div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-blue-950 text-sm">
+				<div className="flex items-center gap-2 font-medium">
+					<Eye aria-hidden="true" className="size-4" />
+					Bản lưu chỉ đọc
+				</div>
+				<p className="mt-1 text-xs">
+					Đây là snapshot lịch sử. Hãy dùng Restore để đưa nội dung vào bản nháp
+					hiện tại.
+				</p>
+			</div>
+			<div className="space-y-3">
+				<div className="rounded-xl border p-3">
+					<p className="font-medium text-sm">Hook</p>
+					<div className="mt-2 space-y-2">
+						{snapshot.hookVariants.map((hook, index) => (
+							<div
+								className="rounded-lg bg-muted/40 p-2 text-sm"
+								key={hook.key}
+							>
+								<span className="font-medium">Hook {index + 1}: </span>
+								{hook.text}
+							</div>
+						))}
+					</div>
+				</div>
+				<div className="rounded-xl border p-3">
+					<p className="font-medium text-sm">Voiceover</p>
+					<div className="mt-2 space-y-2">
+						{snapshot.voiceoverSegments.map((segment, index) => (
+							<p
+								className="rounded-lg bg-muted/40 p-2 text-sm"
+								key={segment.key}
+							>
+								<span className="font-medium">Đoạn {index + 1}: </span>
+								{segment.text}
+							</p>
+						))}
+					</div>
+				</div>
+				<div className="rounded-xl border p-3">
+					<p className="font-medium text-sm">Scenes</p>
+					<div className="mt-2 space-y-2">
+						{snapshot.scenes.map((scene) => (
+							<div
+								className="rounded-lg bg-muted/40 p-2 text-sm"
+								key={scene.order}
+							>
+								<p className="font-medium">Cảnh {scene.order}</p>
+								<p className="mt-1">{scene.visualDirection}</p>
+								{scene.onScreenText ? (
+									<p className="mt-1 text-muted-foreground">
+										Text: {scene.onScreenText}
+									</p>
+								) : null}
+							</div>
+						))}
+					</div>
+				</div>
+				<div className="grid gap-3 sm:grid-cols-2">
+					<div className="rounded-xl border p-3">
+						<p className="font-medium text-sm">CTA</p>
+						<p className="mt-1 whitespace-pre-wrap text-sm">
+							{snapshot.cta.text}
+						</p>
+					</div>
+					<div className="rounded-xl border p-3">
+						<p className="font-medium text-sm">Caption</p>
+						<p className="mt-1 whitespace-pre-wrap text-sm">
+							{snapshot.caption}
+						</p>
+					</div>
+				</div>
+				<div className="rounded-xl border p-3">
+					<p className="font-medium text-sm">Hashtags & disclosure</p>
+					<p className="mt-1 text-sm">
+						{snapshot.hashtags.join(" ") || "Không có hashtag"}
+					</p>
+					<p className="mt-2 whitespace-pre-wrap text-muted-foreground text-sm">
+						{snapshot.disclosure}
+					</p>
+				</div>
+			</div>
+		</div>
+	);
+}
+
+function HistoryDrawer({
+	open,
+	onOpenChange,
+	items,
+	loading,
+	selected,
+	selectedLoading,
+	onSelect,
+	onRestore,
+	restorePending,
+}: {
+	open: boolean;
+	onOpenChange: (open: boolean) => void;
+	items: ScriptVersionHistoryItem[];
+	loading: boolean;
+	selected: ScriptVersionReadModel | null;
+	selectedLoading: boolean;
+	onSelect: (versionId: string) => void;
+	onRestore: (version: ScriptVersionReadModel) => void;
+	restorePending: boolean;
+}) {
+	return (
+		<Drawer open={open} onOpenChange={onOpenChange}>
+			<DrawerPortal>
+				<DrawerBackdrop />
+				<DrawerPopup className="w-[min(48rem,calc(100%-1rem))] overflow-y-auto">
+					<div className="flex items-start justify-between gap-4">
+						<div>
+							<DrawerTitle>Lịch sử phiên bản</DrawerTitle>
+							<DrawerDescription>
+								Các bản đã lưu là immutable và được sắp xếp từ mới nhất.
+							</DrawerDescription>
+						</div>
+						<DrawerClose
+							aria-label="Đóng lịch sử phiên bản"
+							render={<Button size="icon" variant="ghost" />}
+						>
+							<span aria-hidden="true">×</span>
+						</DrawerClose>
+					</div>
+					<div className="mt-6 grid gap-5 lg:grid-cols-[minmax(13rem,0.75fr)_minmax(0,1.25fr)]">
+						<div className="space-y-2">
+							<p className="font-medium text-sm">Bản đã lưu</p>
+							{loading ? (
+								<p className="text-muted-foreground text-sm">
+									Đang tải lịch sử...
+								</p>
+							) : items.length === 0 ? (
+								<p className="rounded-xl border border-dashed p-4 text-muted-foreground text-sm">
+									Chưa có bản lưu nào.
+								</p>
+							) : (
+								items.map((item) => (
+									<button
+										className={`w-full rounded-xl border p-3 text-left transition-colors hover:bg-muted/50 ${
+											selected?.id === item.id
+												? "border-primary bg-primary/5"
+												: ""
+										}`}
+										key={item.id}
+										onClick={() => onSelect(item.id)}
+										type="button"
+									>
+										<div className="flex items-center justify-between gap-2">
+											<span className="font-medium text-sm">
+												Bản lưu #{item.versionNumber}
+											</span>
+											<Badge variant="outline">Đã lưu</Badge>
+										</div>
+										<p className="mt-1 text-muted-foreground text-xs">
+											{formatVersionDate(item.savedAt)}
+										</p>
+									</button>
+								))
+							)}
+						</div>
+						<div>
+							{selectedLoading ? (
+								<p className="text-muted-foreground text-sm">
+									Đang tải snapshot...
+								</p>
+							) : selected ? (
+								<div className="space-y-4">
+									<div className="flex flex-wrap items-center justify-between gap-3">
+										<div>
+											<p className="font-semibold">
+												Bản lưu #{selected.versionNumber}
+											</p>
+											<p className="text-muted-foreground text-xs">
+												{formatVersionDate(selected.savedAt)} · Revision{" "}
+												{selected.revision}
+											</p>
+										</div>
+										<Button
+											disabled={restorePending}
+											onClick={() => onRestore(selected)}
+											type="button"
+											variant="outline"
+										>
+											{restorePending ? (
+												<RefreshCw className="animate-spin" />
+											) : (
+												<RotateCcw />
+											)}
+											Khôi phục
+										</Button>
+									</div>
+									<ReadOnlyVersion snapshot={selected.editableSnapshot} />
+								</div>
+							) : (
+								<p className="text-muted-foreground text-sm">
+									Chọn một bản lưu để xem.
+								</p>
+							)}
+						</div>
+					</div>
+				</DrawerPopup>
+			</DrawerPortal>
+		</Drawer>
+	);
+}
+
 export default function ScriptEditor({
 	draft,
 	sourceArtifact,
@@ -210,8 +461,30 @@ export default function ScriptEditor({
 	const { state } = autosave;
 	const [reloadPending, setReloadPending] = useState(false);
 	const [reloadError, setReloadError] = useState<string | null>(null);
+	const [historyOpen, setHistoryOpen] = useState(false);
+	const [selectedVersion, setSelectedVersion] =
+		useState<ScriptVersionReadModel | null>(null);
+	const [restoreTarget, setRestoreTarget] =
+		useState<ScriptVersionReadModel | null>(null);
 	const [durationInputs, setDurationInputs] = useState<Record<number, string>>(
 		{},
+	);
+	const historyQuery = useQuery(
+		orpc.scriptVersion.listHistory.queryOptions({
+			input: { projectId: draft.projectId },
+			enabled: historyOpen,
+			meta: { suppressGlobalErrorToast: true },
+			retry: false,
+		}),
+	);
+	const getVersionMutation = useMutation(
+		orpc.scriptVersion.getVersion.mutationOptions(),
+	);
+	const saveVersionMutation = useMutation(
+		orpc.scriptVersion.saveVersion.mutationOptions(),
+	);
+	const restoreMutation = useMutation(
+		orpc.scriptVersion.restore.mutationOptions(),
 	);
 	const readiness = validateScriptVersionForFactLock(state.snapshot).success;
 	const sourceLabel =
@@ -265,6 +538,86 @@ export default function ScriptEditor({
 		}
 	}
 
+	async function openHistory() {
+		setHistoryOpen(true);
+		await historyQuery.refetch();
+	}
+
+	async function selectVersion(versionId: string) {
+		try {
+			const version = await getVersionMutation.mutateAsync({
+				projectId: draft.projectId,
+				versionId,
+			});
+			setSelectedVersion(version as ScriptVersionReadModel);
+		} catch (error) {
+			toast.error(
+				getScriptVersionErrorMessage(error) || "Không thể tải bản lưu.",
+			);
+		}
+	}
+
+	async function saveVersion() {
+		if (saveVersionMutation.isPending) return;
+		const flushed = await autosave.flush();
+		if (flushed.status !== "saved" || flushed.dirty) {
+			toast.error(
+				flushed.status === "conflict"
+					? "Có xung đột. Hãy tải bản mới nhất trước khi lưu phiên bản."
+					: "Chưa thể lưu phiên bản vì bản nháp chưa được autosave thành công.",
+			);
+			return;
+		}
+		try {
+			await saveVersionMutation.mutateAsync({
+				scriptVersionId: draft.id,
+				baseRevision: flushed.baseRevision,
+			});
+			toast.success("Đã lưu phiên bản script");
+			setHistoryOpen(true);
+			await historyQuery.refetch();
+		} catch (error) {
+			toast.error(getScriptVersionErrorMessage(error));
+		}
+	}
+
+	async function requestRestore(version: ScriptVersionReadModel) {
+		const flushed = await autosave.flush();
+		if (flushed.status !== "saved" || flushed.dirty) {
+			toast.error(
+				flushed.status === "conflict"
+					? "Có xung đột. Hãy tải bản mới nhất trước khi khôi phục."
+					: "Không thể khôi phục khi bản nháp chưa được lưu thành công.",
+			);
+			return;
+		}
+		setRestoreTarget(version);
+	}
+
+	async function restoreVersion() {
+		if (!restoreTarget || restoreMutation.isPending) return;
+		try {
+			const restored = await restoreMutation.mutateAsync({
+				scriptVersionId: draft.id,
+				versionId: restoreTarget.id,
+				baseRevision: autosave.state.baseRevision,
+			});
+			autosave.resetFromServer(
+				(restored as ScriptVersionReadModel).editableSnapshot,
+				(restored as ScriptVersionReadModel).revision,
+			);
+			setRestoreTarget(null);
+			toast.success(`Đã khôi phục bản lưu #${restored.versionNumber}`);
+			await historyQuery.refetch();
+		} catch (error) {
+			if (getScriptVersionErrorCode(error) === "SCRIPT_VERSION_CONFLICT") {
+				toast.error("Bản nháp đã thay đổi. Hãy tải bản mới nhất rồi thử lại.");
+			} else {
+				toast.error(getScriptVersionErrorMessage(error));
+			}
+		}
+	}
+
 	return (
 		<div className="mx-auto w-full max-w-7xl space-y-5">
 			<header className="flex flex-col gap-4 rounded-2xl border border-affi-blue-border bg-card p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between">
@@ -283,7 +636,35 @@ export default function ScriptEditor({
 						<span>Revision: {state.baseRevision}</span>
 					</div>
 				</div>
-				<SaveIndicator status={state.status} onRetry={autosave.retry} />
+				<div className="flex flex-wrap items-center gap-2">
+					<Button
+						disabled={
+							state.status === "saving" ||
+							state.status === "error" ||
+							state.status === "conflict" ||
+							saveVersionMutation.isPending
+						}
+						onClick={() => void saveVersion()}
+						type="button"
+						variant="outline"
+					>
+						{saveVersionMutation.isPending ? (
+							<RefreshCw className="animate-spin" />
+						) : (
+							<Save />
+						)}
+						Lưu phiên bản
+					</Button>
+					<Button
+						onClick={() => void openHistory()}
+						type="button"
+						variant="outline"
+					>
+						<History />
+						Lịch sử
+					</Button>
+					<SaveIndicator status={state.status} onRetry={autosave.retry} />
+				</div>
 			</header>
 
 			{hasNewerGeneration ? (
@@ -640,6 +1021,59 @@ export default function ScriptEditor({
 					<ClaimsPanel snapshot={state.snapshot} />
 				</aside>
 			</div>
+
+			<HistoryDrawer
+				open={historyOpen}
+				onOpenChange={setHistoryOpen}
+				items={
+					(historyQuery.data as ScriptVersionHistoryItem[] | undefined) ?? []
+				}
+				loading={historyQuery.isPending || historyQuery.isFetching}
+				selected={selectedVersion}
+				selectedLoading={getVersionMutation.isPending}
+				onSelect={(versionId) => void selectVersion(versionId)}
+				onRestore={(version) => void requestRestore(version)}
+				restorePending={restoreMutation.isPending}
+			/>
+			<Dialog
+				open={restoreTarget !== null}
+				onOpenChange={(open) => {
+					if (!open && !restoreMutation.isPending) setRestoreTarget(null);
+				}}
+			>
+				<DialogPortal>
+					<DialogBackdrop />
+					<DialogPopup>
+						<DialogTitle>Khôi phục bản lưu?</DialogTitle>
+						<DialogDescription>
+							Bản nháp hiện tại sẽ được thay bằng snapshot của bản lưu #
+							{restoreTarget?.versionNumber}. Lịch sử phiên bản vẫn được giữ
+							nguyên và thao tác này dùng revision hiện tại để tránh ghi đè thay
+							đổi từ phiên khác.
+						</DialogDescription>
+						<div className="mt-6 flex justify-end gap-2">
+							<DialogClose
+								disabled={restoreMutation.isPending}
+								render={<Button variant="outline" />}
+							>
+								Hủy
+							</DialogClose>
+							<Button
+								disabled={restoreMutation.isPending}
+								onClick={() => void restoreVersion()}
+								type="button"
+							>
+								{restoreMutation.isPending ? (
+									<RefreshCw className="animate-spin" />
+								) : (
+									<RotateCcw />
+								)}
+								Khôi phục bản này
+							</Button>
+						</div>
+					</DialogPopup>
+				</DialogPortal>
+			</Dialog>
 		</div>
 	);
 }

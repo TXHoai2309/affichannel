@@ -33,3 +33,19 @@ export type ScriptVersionReadModel = {
 	updatedAt: Date;
 	savedAt: Date | null;
 };
+
+export type ScriptVersionHistoryItem = Pick<
+	ScriptVersionReadModel,
+	| "id"
+	| "workspaceId"
+	| "projectId"
+	| "sourceGenerationId"
+	| "versionNumber"
+	| "restoredFromVersionId"
+	| "createdByUserId"
+	| "createdAt"
+	| "updatedAt"
+	| "savedAt"
+> & {
+	status: "saved";
+};

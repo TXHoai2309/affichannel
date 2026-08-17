@@ -25,8 +25,12 @@ const {
 const { and, eq, inArray } = await import("drizzle-orm");
 const {
 	autosaveScriptVersion,
+	getSavedScriptVersion,
 	getCurrentScriptVersion,
 	initializeScriptVersion,
+	listScriptVersionHistoryForProject,
+	restoreScriptVersion,
+	saveScriptVersion,
 } = await import("../packages/api/src/services/script-version-service");
 const { getWorkspaceActor } = await import(
 	"../packages/api/src/services/workspace"
@@ -561,6 +565,159 @@ async function run() {
 			"SCRIPT_VERSION_IMMUTABLE",
 		);
 
+		const historyProjectId = await createFixtureProject(actor, "history");
+		const historyGenerationId = await createCompletedGeneration(
+			actor,
+			historyProjectId,
+			"history",
+		);
+		const historyDraft = await initializeScriptVersion(actor, {
+			projectId: historyProjectId,
+			sourceGenerationId: historyGenerationId,
+		});
+		const savedV1 = await saveScriptVersion(actor, {
+			scriptVersionId: historyDraft.id,
+			baseRevision: historyDraft.revision,
+		});
+		if (
+			savedV1.status !== "saved" ||
+			savedV1.versionNumber !== 1 ||
+			savedV1.revision !== 1 ||
+			savedV1.sourceGenerationId !== historyGenerationId
+		) {
+			throw new Error("Save Version did not create immutable saved version 1.");
+		}
+		const historyItemsAfterV1 = await listScriptVersionHistoryForProject(
+			actor,
+			historyProjectId,
+		);
+		if (
+			historyItemsAfterV1.length !== 1 ||
+			historyItemsAfterV1[0]?.id !== savedV1.id
+		) {
+			throw new Error(
+				"History list did not return saved version 1 newest first.",
+			);
+		}
+		const loadedV1 = await getSavedScriptVersion(actor, {
+			projectId: historyProjectId,
+			versionId: savedV1.id,
+		});
+		if (
+			loadedV1.editableSnapshot.caption !== savedV1.editableSnapshot.caption
+		) {
+			throw new Error("Get Version did not return the immutable snapshot.");
+		}
+		const historyDraftV2 = await autosaveScriptVersion(actor, {
+			scriptVersionId: historyDraft.id,
+			baseRevision: historyDraft.revision,
+			editableSnapshot: {
+				...historyDraft.editableSnapshot,
+				hashtags: ["#history", "#v2"],
+			},
+		});
+		const savedV2 = await saveScriptVersion(actor, {
+			scriptVersionId: historyDraft.id,
+			baseRevision: historyDraftV2.revision,
+		});
+		if (savedV2.versionNumber !== 2 || savedV2.revision !== 2) {
+			throw new Error("Second Save Version did not allocate version 2.");
+		}
+		const historyItemsAfterV2 = await listScriptVersionHistoryForProject(
+			actor,
+			historyProjectId,
+		);
+		if (
+			historyItemsAfterV2.map((item) => item.versionNumber).join(",") !== "2,1"
+		) {
+			throw new Error("History list is not newest first after version 2.");
+		}
+		await expectError(
+			() =>
+				saveScriptVersion(actor, {
+					scriptVersionId: historyDraft.id,
+					baseRevision: historyDraft.revision,
+				}),
+			"SCRIPT_VERSION_CONFLICT",
+		);
+		const restoredHistory = await restoreScriptVersion(actor, {
+			scriptVersionId: historyDraft.id,
+			versionId: savedV1.id,
+			baseRevision: historyDraftV2.revision,
+		});
+		if (
+			restoredHistory.status !== "draft" ||
+			restoredHistory.revision !== 3 ||
+			restoredHistory.restoredFromVersionId !== savedV1.id ||
+			restoredHistory.editableSnapshot.hashtags.join(",") !== "#review" ||
+			restoredHistory.editableSnapshot.claimsSourceRevision !== 3
+		) {
+			throw new Error(
+				"Restore did not copy the snapshot or normalize current claims.",
+			);
+		}
+		const historyAfterRestore = await listScriptVersionHistoryForProject(
+			actor,
+			historyProjectId,
+		);
+		if (
+			historyAfterRestore.length !== 2 ||
+			historyAfterRestore[0]?.versionNumber !== 2 ||
+			historyAfterRestore[1]?.versionNumber !== 1
+		) {
+			throw new Error("Restore mutated or removed immutable history.");
+		}
+		const reopenedAfterRestore = await getCurrentScriptVersion(
+			actor,
+			historyProjectId,
+		);
+		if (
+			reopenedAfterRestore?.revision !== 3 ||
+			reopenedAfterRestore?.editableSnapshot.hashtags.join(",") !== "#review"
+		) {
+			throw new Error("Restored draft did not persist after re-query.");
+		}
+		await expectError(
+			() =>
+				restoreScriptVersion(actor, {
+					scriptVersionId: historyDraft.id,
+					versionId: savedV1.id,
+					baseRevision: 2,
+				}),
+			"SCRIPT_VERSION_CONFLICT",
+		);
+		const staleRestore = await restoreScriptVersion(actor, {
+			scriptVersionId: initialized.id,
+			versionId: saved.id,
+			baseRevision: metadataProtected.revision,
+		});
+		if (
+			staleRestore.editableSnapshot.claimsStatus !== "stale" ||
+			staleRestore.editableSnapshot.claimsSourceRevision !== 1
+		) {
+			throw new Error("Restore incorrectly refreshed stale claims metadata.");
+		}
+		const outsideHistoryActor = {
+			...actor,
+			workspaceId: "workspace-outside-scope",
+		};
+		await expectError(
+			() =>
+				listScriptVersionHistoryForProject(
+					outsideHistoryActor,
+					historyProjectId,
+				),
+			"SCRIPT_VERSION_NOT_FOUND",
+		);
+		await expectError(
+			() =>
+				getSavedScriptVersion(outsideHistoryActor, {
+					projectId: historyProjectId,
+					versionId: savedV1.id,
+				}),
+			"SCRIPT_VERSION_NOT_FOUND",
+		);
+
 		const concurrentProjectId = await createFixtureProject(actor, "concurrent");
 		const concurrentGenerationId = await createCompletedGeneration(
 			actor,
@@ -668,7 +825,7 @@ async function run() {
 		}
 
 		console.log(
-			"AFF-US-009 Phase 1 runtime proof passed: initialize, idempotency, concurrent convergence, getCurrent, explicit autosave merge, structural tamper rejection, final snapshot validation, claims stale, immutable saved version, invalidation guard, and workspace scope.",
+			"AFF-US-009 Phase 3 runtime proof passed: Save Version, immutable history, newest-first list, Get Version, restore CAS, current/stale claims semantics, immutable saved rows, invalidation guard, and workspace scope.",
 		);
 	} finally {
 		await cleanup();

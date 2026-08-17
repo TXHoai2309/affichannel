@@ -10,6 +10,9 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- AFF-US-009 Phase 3: Save Version immutable, history newest-first, saved snapshot read-only,
+  Get Version và Restore có optimistic concurrency; UI drawer/dialog và authenticated E2E
+  cho save, preview, restore, reload persistence.
 - DEC-015 và foundation AFF-US-008: persisted `ScriptGeneration`, immutable repair lineage,
   Fact revision snapshot/dependency atomic, idempotency, pending concurrency và latest usable
   artifact read model; chưa thêm provider/API/UI.

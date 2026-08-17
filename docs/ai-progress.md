@@ -1,6 +1,35 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-007 đã hoàn thành sau hardening và fix regression TC-021 trên branch
+- Trạng thái: AFF-US-009 Phase 3 đã hoàn thành phần History/Save Version/Restore trên branch
+  hiện tại; chưa commit/push/merge/deploy.
+- Cập nhật lần cuối: 2026-08-17
+
+## 2026-08-17 — Hoàn thiện AFF-US-009 Phase 3
+
+Đã thêm protected API `scriptVersion.saveVersion`, `listHistory`, `getVersion` và `restore`.
+Save Version lấy snapshot draft authoritative ở server, validate canonical snapshot, lock project
+row trong transaction và cấp version number an toàn; saved history immutable. Restore dùng
+`baseRevision`, lock cùng aggregate, chỉ copy vào draft, tăng revision và giữ source generation
+pinned. Claims current được normalize theo revision mới, claims stale giữ nguyên stale/source revision.
+
+UI Script Editor có nút Lưu phiên bản, drawer lịch sử newest-first, snapshot read-only và dialog
+xác nhận Restore. Nút Save Version flush autosave trước; dirty/error/conflict không được đi tiếp.
+Autosave controller có Promise flush để chờ cả request đang bay và edit mới nhất.
+
+Đã bổ sung integration proof cho save/history/get/restore, immutable history, CAS conflict,
+cross-workspace authorization và claims current/stale; authenticated E2E cho save v1/v2, preview,
+restore và reload persistence. Schema Phase 1 đủ nên không tạo migration.
+
+Kiểm tra tại thời điểm cập nhật:
+
+- `pnpm check-types`: đạt.
+- `pnpm --filter web test`: 15 file / 120 test đạt.
+- `pnpm test:integration:script-version`: đạt trên Neon và cleanup fixture.
+- `pnpm --filter web test:e2e`: 21/21 đạt, 0 failed, 0 skipped.
+
+Tài liệu chi tiết: `docs/aff-us-009-phase-3-history-restore.md`.
+
+- Mốc lịch sử trước Phase 3: AFF-US-007 đã hoàn thành sau hardening và fix regression TC-021 trên branch
   `feat/us006-product-facts`; chưa commit/push/merge/deploy.
 - Cập nhật lần cuối: 2026-08-13
 
@@ -8,7 +37,7 @@ File này ghi lại công việc đáng kể do AI agent thực hiện. Đây kh
 thought hoặc bản sao terminal. Mỗi bản ghi chỉ tóm tắt mục tiêu, thay đổi, bằng
 chứng kiểm tra, quyết định, blocker và hành động an toàn tiếp theo.
 
-## Mục tiêu hiện tại
+## Mốc tiến độ trước AFF-US-009
 
 AFF-US-007 Fact Freshness & Dependency Invalidation đã hoàn thành trên branch
 `feat/us006-product-facts`; TC-021 verified Feature không source đã được sửa và xác nhận.

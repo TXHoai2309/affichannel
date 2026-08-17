@@ -32,6 +32,8 @@ export type ScriptAutosaveResult = {
 	editableSnapshot: ScriptVersionEditableSnapshot;
 };
 
+type ScriptAutosaveFlushResult = Promise<ScriptAutosaveState>;
+
 type AutosaveControllerOptions = {
 	scriptVersionId: string;
 	initialSnapshot: ScriptVersionEditableSnapshot;
@@ -48,7 +50,7 @@ export type ScriptAutosaveController = {
 			current: ScriptVersionEditableSnapshot,
 		) => ScriptVersionEditableSnapshot,
 	) => void;
-	flush: () => void;
+	flush: () => ScriptAutosaveFlushResult;
 	retry: () => void;
 	resetFromServer: (
 		snapshot: ScriptVersionEditableSnapshot,
@@ -127,6 +129,8 @@ export function createScriptAutosaveController(
 	let epoch = 0;
 	let disposed = false;
 	let closing = false;
+	let flushRequested = false;
+	let flushWaiters: Array<(nextState: ScriptAutosaveState) => void> = [];
 	let state: ScriptAutosaveState = {
 		snapshot: options.initialSnapshot,
 		baseRevision: options.initialRevision,
@@ -157,6 +161,14 @@ export function createScriptAutosaveController(
 			timer = undefined;
 			void startSave();
 		}, debounceMs);
+	}
+
+	function resolveFlushWaiters() {
+		if (flushWaiters.length === 0) return;
+		const waiters = flushWaiters;
+		flushWaiters = [];
+		flushRequested = false;
+		for (const resolve of waiters) resolve(state);
 	}
 
 	async function startSave() {
@@ -198,10 +210,11 @@ export function createScriptAutosaveController(
 			};
 			emit();
 			if (localChanged) {
-				if (closing) void startSave();
+				if (closing || flushRequested) void startSave();
 				else schedule();
-			} else if (closing) {
-				finishClosing();
+			} else {
+				resolveFlushWaiters();
+				if (closing) finishClosing();
 			}
 		} catch (error) {
 			inFlight = false;
@@ -225,6 +238,7 @@ export function createScriptAutosaveController(
 			}
 			if (closing) finishClosing();
 			else emit();
+			resolveFlushWaiters();
 		}
 	}
 
@@ -256,7 +270,24 @@ export function createScriptAutosaveController(
 		},
 		flush() {
 			clearTimer();
-			void startSave();
+			if (disposed || (!inFlight && !state.dirty)) {
+				return Promise.resolve(state);
+			}
+			const result = new Promise<ScriptAutosaveState>((resolve) => {
+				flushWaiters.push(resolve);
+			});
+			flushRequested = true;
+			if (
+				!inFlight &&
+				state.dirty &&
+				state.status !== "conflict" &&
+				state.status !== "error"
+			) {
+				void startSave();
+			} else if (!inFlight) {
+				resolveFlushWaiters();
+			}
+			return result;
 		},
 		retry() {
 			if (state.status !== "error") return;
@@ -277,6 +308,7 @@ export function createScriptAutosaveController(
 				dirty: false,
 				status: "saved",
 			};
+			resolveFlushWaiters();
 			emit();
 		},
 		dispose({ flush = false } = {}) {
