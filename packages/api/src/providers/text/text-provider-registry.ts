@@ -1,3 +1,4 @@
+import type { FactLockInputSnapshot } from "@affichannel/core/fact-lock/types";
 import type { ScriptGenerationInputSnapshot } from "@affichannel/core/script-generation/types";
 import { env } from "@affichannel/env/server";
 
@@ -13,6 +14,7 @@ import type { TextProvider } from "./text-provider";
 export type TextProviderResolutionOptions = {
 	allowDeterministic: boolean;
 	apikeyfun?: ApikeyFunTextProviderOptions;
+	factLockSnapshot?: FactLockInputSnapshot;
 };
 
 function resolveApikeyFunPricing(): ApikeyFunPricing | null {
@@ -56,11 +58,14 @@ function resolveApikeyFunOptions(
 
 export function resolveTextProvider(
 	providerName: string,
-	snapshot: ScriptGenerationInputSnapshot,
+	snapshot: ScriptGenerationInputSnapshot | null,
 	options: TextProviderResolutionOptions,
 ): TextProvider | undefined {
 	if (providerName === "deterministic" && options.allowDeterministic) {
-		return new DeterministicTextProvider({ snapshot });
+		return new DeterministicTextProvider({
+			snapshot: snapshot ?? undefined,
+			factLockSnapshot: options.factLockSnapshot,
+		});
 	}
 	if (providerName === "apikeyfun") {
 		const providerOptions = resolveApikeyFunOptions(options);

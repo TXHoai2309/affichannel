@@ -2,6 +2,7 @@ import {
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
 	ScriptGenerationError,
 } from "@affichannel/core";
+import type { FactLockInputSnapshot } from "@affichannel/core/fact-lock/types";
 import type { ScriptGenerationInputSnapshot } from "@affichannel/core/script-generation/types";
 import {
 	type TextProvider,
@@ -15,7 +16,8 @@ import {
 
 export type DeterministicTextProviderOptions = {
 	scenario?: TextProviderScenario;
-	snapshot: ScriptGenerationInputSnapshot;
+	snapshot?: ScriptGenerationInputSnapshot;
+	factLockSnapshot?: FactLockInputSnapshot;
 };
 
 function createDraft(snapshot: ScriptGenerationInputSnapshot) {
@@ -82,11 +84,13 @@ function createDraft(snapshot: ScriptGenerationInputSnapshot) {
 export class DeterministicTextProvider implements TextProvider {
 	readonly name = "deterministic";
 	private readonly scenario: TextProviderScenario;
-	private readonly snapshot: ScriptGenerationInputSnapshot;
+	private readonly snapshot?: ScriptGenerationInputSnapshot;
+	private readonly factLockSnapshot?: FactLockInputSnapshot;
 
 	constructor(options: DeterministicTextProviderOptions) {
 		this.scenario = options.scenario ?? "valid";
 		this.snapshot = options.snapshot;
+		this.factLockSnapshot = options.factLockSnapshot;
 	}
 
 	async estimateCost(
@@ -141,6 +145,73 @@ export class DeterministicTextProvider implements TextProvider {
 				currency: "VND",
 			};
 		}
+		if (request.operation === "fact-lock") {
+			const snapshot =
+				this.factLockSnapshot ??
+				(request.factLockSnapshot as FactLockInputSnapshot | undefined);
+			if (!snapshot)
+				throw new TextProviderError(
+					"AI_PROVIDER_ERROR",
+					"Fact Lock snapshot is missing.",
+				);
+			const occurrence = snapshot.scriptVersion.snapshot.selectedHookKey
+				? {
+						section: "hook" as const,
+						hookKey: snapshot.scriptVersion.snapshot.selectedHookKey,
+					}
+				: {
+						section: "voiceover" as const,
+						segmentKey:
+							snapshot.scriptVersion.snapshot.voiceoverSegments[0]?.key ?? "",
+					};
+			const occurrenceText =
+				occurrence.section === "hook"
+					? snapshot.scriptVersion.snapshot.hookVariants.find(
+							(item) => item.key === occurrence.hookKey,
+						)?.text
+					: snapshot.scriptVersion.snapshot.voiceoverSegments[0]?.text;
+			const output = {
+				schemaVersion: "fact-lock-output.v1",
+				claims: occurrenceText
+					? [
+							{
+								claimKey: "claim-1",
+								claimText: occurrenceText,
+								occurrence,
+								classificationStatus: "SUPPORTED",
+								reason: "Claim được đối chiếu với Product Fact trong snapshot.",
+								confidence: 1,
+								suggestionText: null,
+								factMappings: snapshot.productFacts[0]
+									? [
+											{
+												factId: snapshot.productFacts[0].id,
+												relation: "supports",
+											},
+										]
+									: [],
+							},
+						]
+					: [],
+			};
+			return {
+				content: output,
+				providerRequestId: `det-fact-lock-${request.idempotencyKey}`,
+				inputTokens: request.messages.reduce(
+					(total, message) => total + message.content.length,
+					0,
+				),
+				outputTokens: JSON.stringify(output).length,
+				estimatedCostMicros: BigInt(0),
+				actualCostMicros: BigInt(0),
+				currency: "VND",
+			};
+		}
+		if (!this.snapshot)
+			throw new TextProviderError(
+				"AI_PROVIDER_ERROR",
+				"Script generation snapshot is missing.",
+			);
 		const draft = createDraft(this.snapshot);
 		const fullContent =
 			this.scenario === "partial"

@@ -640,9 +640,11 @@ hoặc Product Fact thay đổi.
 
 ### Hệ quả
 
-- Phase 1 mới tạo `fact_lock_run`, `fact_lock_claim` và mapping Fact snapshot sau
-  khi schema recommendation được review; Phase 0 không tạo migration hoặc đổi Neon.
+- Phase 1 tạo `fact_lock_run`, `fact_lock_claim` và mapping Fact snapshot bằng
+  migration additive sau khi schema recommendation được review; Phase 0 vẫn không
+  tạo migration hoặc đổi Neon.
 - Chi tiết state machine, occurrence, semantic validation, stale precedence,
   idempotency, gate và Phase 1 schema recommendation nằm tại
   `docs/aff-us-010-phase-0-contract-hardening.md`.
-- Fact Lock, Voice, Render provider/runtime và UI chưa được triển khai trong Phase 0.
+- Phase 1 đã triển khai Fact Lock provider/runtime nền tảng và protected read/run API;
+  Fact Lock Review UI, Voice, Render provider/runtime và TTS vẫn ngoài phạm vi.

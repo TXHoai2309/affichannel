@@ -144,7 +144,7 @@ Schema đầu tiên chỉ thêm những gì vertical slice hiện tại cần:
 - `product_fact`.
 - `project`.
 - `script_generation` khi bắt đầu AFF-US-008; `script_version` chỉ thêm ở AFF-US-009.
-- `fact_check_run` và `claim_review` khi bắt đầu Fact Lock.
+- `fact_lock_run`, `fact_lock_claim` và `fact_lock_claim_fact` khi bắt đầu AFF-US-010.
 
 Quy tắc chung:
 

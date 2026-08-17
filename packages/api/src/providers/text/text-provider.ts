@@ -18,6 +18,8 @@ export type TextProviderRequest = {
 	mode: "full" | "repair";
 	sections: string[];
 	idempotencyKey: string;
+	operation?: "script-generation" | "fact-lock";
+	factLockSnapshot?: unknown;
 };
 
 export type TextProviderResult = {
@@ -38,6 +40,7 @@ export type TextProviderEstimateRequest = {
 	model: string;
 	mode: "full" | "repair";
 	sections: string[];
+	operation?: "script-generation" | "fact-lock";
 };
 
 export type TextProviderEstimate = {

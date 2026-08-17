@@ -24,6 +24,7 @@
 		"test:integration:script-generation": "tsx scripts/test-script-generation-foundation.ts",
 		"test:integration:script-generation-live": "tsx scripts/test-script-generation-live.ts",
 		"test:integration:script-version": "tsx scripts/test-script-version-foundation.ts",
+		"test:integration:fact-lock": "tsx scripts/test-fact-lock.ts",
 		"deploy:setup": "vercel link",
 		"dev:vercel": "vercel dev -L",
 		"env:preview": "tsx scripts/sync-vercel-env.ts preview",

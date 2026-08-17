@@ -1,7 +1,7 @@
 # AFF-US-010 — Phase 0 Contract Hardening
 
 Ngày: 2026-08-17  
-Trạng thái: Contract ready for Phase 1 acceptance
+Trạng thái: Phase 0 accepted / ready for Phase 1
 
 Phase 0 chỉ khóa contract và invariant cho Fact Lock. Không tạo schema, migration,
 provider/runtime DB, UI hoặc TTS/Voice/Render. Tài liệu này là source of truth cho

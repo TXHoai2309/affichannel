@@ -7,6 +7,7 @@ export * from "./product-fact/errors";
 export * from "./product-fact/freshness";
 export * from "./product-fact/types";
 export * from "./product-fact/validation";
+export * from "./fact-lock";
 export * from "./project/project-service";
 export * from "./project/project-types";
 export * from "./project/project-validation";

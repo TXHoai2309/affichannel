@@ -191,7 +191,9 @@ AFF-US-010 Phase 0 contract hardening (2026-08-17) đã khóa validator split,
 claim classification/review state, persisted/effective run status, revision và
 dependency semantics, input/hash/idempotency contract, deterministic
 `PROHIBITED` authority, resolution CAS và gate reason codes. Phase 1 mới tạo
-schema/runtime; Phase 0 không đổi Neon và không tạo migration.
+schema/runtime. Phase 1 foundation/classification đã apply additive migration,
+đưa protected run/getState và deterministic runtime proof vào source; Phase 2
+review UI/manual transition vẫn chờ acceptance.
 
 ```text
 Chạy kiểm tra → xem claim → liên kết bằng chứng → xử lý review → pass hoặc blocked

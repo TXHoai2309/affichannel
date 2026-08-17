@@ -1125,3 +1125,17 @@ Kiểm tra Phase 0: thêm unit regression cho stale pre-run validator và giữ 
 validator chặn stale.
 
 Trạng thái: **AFF-US-010 Phase 0 Contract Hardening is ready for acceptance.**
+
+### 2026-08-17 — AFF-US-010 Phase 1 Foundation & Classification
+
+- Audit migration state trên `DATABASE_URL_DIRECT`: Neon database/schema/ledger khớp
+  repo ở 0012; migration 0013 chỉ additive và đã apply thành công.
+- Thêm `fact_lock_run`, `fact_lock_claim`, `fact_lock_claim_fact`, API protected
+  `factLock.run/getState`, deterministic provider path, exact snapshot/hash/dependency
+  semantics và server-side classification/policy validation.
+- Bổ sung integration proof cho idempotency, pending uniqueness, failed/indeterminate,
+  latest applicable, Fact revision invalidation, Script revision race, reopen và
+  workspace scoping; không seed dữ liệu production ngoài fixture tạm có cleanup.
+- Phase 2 review UI, manual transitions, Voice/Render gate và TTS/audio vẫn chưa bắt đầu.
+
+Trạng thái: **AFF-US-010 Phase 1 Foundation & Classification is ready for acceptance.**
