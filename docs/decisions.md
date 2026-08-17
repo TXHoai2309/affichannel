@@ -602,3 +602,47 @@ Nếu editor update trực tiếp `script_generation.output_json`, identity củ
 
 Contract chi tiết, shape, race semantics và test matrix nằm tại
 `docs/aff-us-009-phase-0-contract-decisions.md`.
+
+## DEC-021 — Fact Lock contract hardening của AFF-US-010
+
+- Trạng thái: Đã chấp nhận cho Phase 0
+- Ngày: 2026-08-17
+
+### Bối cảnh
+
+Fact Lock phải kiểm tra claim trên `ScriptVersion` có thể đang mang candidate
+claims stale. Nếu dùng một validator yêu cầu `claimsStatus=current` trước khi
+chạy extraction thì không thể refresh claims một cách đúng revision. Đồng thời
+run history cần phân biệt persisted terminal status với effective stale do script
+hoặc Product Fact thay đổi.
+
+### Quyết định
+
+- Tách `validateScriptVersionForFactLockRun()` (cho phép `current | stale`) khỏi
+  `validateScriptVersionForFactLock()` (strict, bắt buộc `current`). Cả hai dùng
+  cùng structural/source validation.
+- Classification claim immutable trong finalized run: `SUPPORTED`, `NEEDS_REVIEW`,
+  `UNSUPPORTED`, `PROHIBITED`. Review state tách riêng:
+  `AUTO_PASSED`, `UNRESOLVED`, `MANUAL_APPROVED`; chỉ `NEEDS_REVIEW` được manual
+  approve.
+- Persisted Fact Lock run status chỉ là `pending`, `review_required`, `passed`,
+  `failed`, `indeterminate`. `stale` là effective read-model state, không mutate
+  historical row.
+- `ScriptVersion.revision`, `claimsSourceRevision` và
+  `FactLockRun.sourceScriptRevision` là ba khái niệm riêng. Claims metadata refresh
+  không sửa editable content, không tăng script revision và phải dùng CAS.
+- Fact Lock reuse `fact_dependency` với `dependentType='fact_lock'`; hash reuse
+  canonical JSON + SHA-256 của US8; không lưu raw provider output mặc định v1.
+- AI không phải authority duy nhất cho `PROHIBITED`; kết quả này cần server/core
+  deterministic policy confirmation, nếu không thì hạ thành `NEEDS_REVIEW`.
+- Resolution action dùng authorization, applicability và optimistic CAS; không mutate
+  Fact Lock audit claim. Gate downstream trả typed reason code và bắt buộc ở server.
+
+### Hệ quả
+
+- Phase 1 mới tạo `fact_lock_run`, `fact_lock_claim` và mapping Fact snapshot sau
+  khi schema recommendation được review; Phase 0 không tạo migration hoặc đổi Neon.
+- Chi tiết state machine, occurrence, semantic validation, stale precedence,
+  idempotency, gate và Phase 1 schema recommendation nằm tại
+  `docs/aff-us-010-phase-0-contract-hardening.md`.
+- Fact Lock, Voice, Render provider/runtime và UI chưa được triển khai trong Phase 0.

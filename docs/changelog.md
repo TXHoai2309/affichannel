@@ -40,6 +40,10 @@ sử dụng Semantic Versioning.
 
 ### Đã thay đổi
 
+- AFF-US-010 Phase 0: khóa contract Fact Lock, tách pre-run/strict ScriptVersion
+  validator, phân biệt persisted/effective stale, và chốt classification, idempotency,
+  dependency, CAS resolution cùng server-side gate reason codes; chưa tạo schema/migration,
+  chưa đổi Neon và chưa gọi provider/runtime.
 - AFF-US-004 regression TC-026A: `/projects/{id}` nay render Project Overview persisted thay vì
   redirect về current step; nút “Tổng quan project” từ `/product` hỗ trợ refresh và browser Back.
 - Cleanup sau AFF-US-003: user menu hiển thị identity từ session với fallback email; CI fail rõ ràng

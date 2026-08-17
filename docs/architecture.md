@@ -249,6 +249,14 @@ Chi tiết được khóa bởi DEC-015 và `docs/aff-us-008-foundation.md`.
 
 ## 12. Kiến trúc Fact Lock
 
+Contract hardening của AFF-US-010 được khóa tại
+`docs/aff-us-010-phase-0-contract-hardening.md`. Fact Lock run lưu persisted
+status (`pending`, `review_required`, `passed`, `failed`, `indeterminate`); `stale`
+là effective read-model state khi `ScriptVersion.revision` hoặc Product Fact
+dependency không còn khớp, không phải một trạng thái mutate lịch sử. Claims
+classification (`SUPPORTED`, `NEEDS_REVIEW`, `UNSUPPORTED`, `PROHIBITED`) tách khỏi
+review status và AI không phải authority duy nhất cho `PROHIBITED`.
+
 Fact Lock gồm các giai đoạn riêng:
 
 1. tách candidate claim từ script version bất biến;

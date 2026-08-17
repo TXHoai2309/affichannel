@@ -5,6 +5,7 @@ import {
 	mergeScriptVersionAutosave,
 	validateScriptVersionDraft,
 	validateScriptVersionForFactLock,
+	validateScriptVersionForFactLockRun,
 } from "@affichannel/core";
 import { describe, expect, it } from "vitest";
 
@@ -59,6 +60,17 @@ describe("AFF-US-009 ScriptVersion foundation", () => {
 		const stale = { ...selected, claimsStatus: "stale" as const };
 		expect(validateScriptVersionForFactLock(stale).success).toBe(false);
 		expect(validateScriptVersionForFactLock(selected).success).toBe(true);
+	});
+
+	it("allows a stale candidate-claim snapshot as Fact Lock run input", () => {
+		const stale = {
+			...snapshot,
+			selectedHookKey: "hook-1" as const,
+			claimsStatus: "stale" as const,
+		};
+
+		expect(validateScriptVersionForFactLockRun(stale).success).toBe(true);
+		expect(validateScriptVersionForFactLock(stale).success).toBe(false);
 	});
 
 	it("marks claim-dependent content stale while preserving server metadata", () => {

@@ -191,19 +191,22 @@ tăng giữa các snapshot và không cộng trực tiếp nhiều snapshot tíc
 
 ## 8. Hành vi Fact Lock
 
-Các trạng thái claim:
+Classification của claim trong một Fact Lock run:
 
 - `SUPPORTED`: có bằng chứng đủ và còn hiệu lực.
 - `NEEDS_REVIEW`: có khả năng được hỗ trợ nhưng wording, phạm vi, nguồn hoặc hạn
   hiệu lực cần con người xử lý rõ ràng.
 - `UNSUPPORTED`: không có Product Fact đủ hỗ trợ claim.
 - `PROHIBITED`: vi phạm quy tắc nội dung đang áp dụng và không được override.
-- `STALE`: script hoặc fact hỗ trợ đã thay đổi sau lần kiểm tra.
+- `STALE` không phải classification của claim. Đây là effective status của run
+  khi script revision hoặc Product Fact dependency không còn khớp snapshot; persisted
+  run history không bị mutate.
 
 Fact Lock run chỉ là `PASSED` khi:
 
 - áp dụng cho đúng script version hiện tại;
-- không có claim `UNSUPPORTED`, `PROHIBITED` hoặc `STALE`;
+- không có claim `UNSUPPORTED` hoặc `PROHIBITED`;
+- run không có effective status `STALE`;
 - mọi claim `NEEDS_REVIEW` đã có hành động xử lý được ghi lại;
 - mọi claim được hỗ trợ vẫn còn liên kết đến bằng chứng.
 

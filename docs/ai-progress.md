@@ -1101,3 +1101,27 @@ Kiểm tra focused hardening:
   AI provider.
 
 Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for final acceptance.**
+
+### 2026-08-17 — AFF-US-010 Phase 0 Contract Hardening
+
+- Audit DEC-005/014/015/020, Product Spec, Architecture, Roadmap, ScriptVersion,
+  Product Fact dependency và ScriptGeneration hashing; xác nhận có thể reuse
+  `fact_dependency` cho `fact_lock/voice/render`, transaction helpers và canonical
+  SHA-256 convention của US8.
+- Tách `validateScriptVersionForFactLockRun()` cho pre-run (`claimsStatus=current|stale`)
+  khỏi strict `validateScriptVersionForFactLock()` (`current` bắt buộc). Cả hai giữ
+  structural validation và selected hook/reference invariant.
+- Khóa Fact Lock contract: bốn immutable classifications, review transitions,
+  persisted/effective status với `stale` dẫn xuất, ba revision semantics, input/hash/
+  idempotency, semantic mapping/occurrence, server authority cho `PROHIBITED`, CAS
+  resolution và server-side gate reason codes.
+- Thêm DEC-021 và tài liệu source of truth tại
+  `docs/aff-us-010-phase-0-contract-hardening.md`; cập nhật Product Spec, Architecture
+  và Roadmap để không coi `STALE` là claim classification.
+- Không tạo schema/migration, không đổi Neon, không provider/runtime DB/UI và không bắt
+  đầu Phase 1.
+
+Kiểm tra Phase 0: thêm unit regression cho stale pre-run validator và giữ strict
+validator chặn stale.
+
+Trạng thái: **AFF-US-010 Phase 0 Contract Hardening is ready for acceptance.**

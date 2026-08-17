@@ -596,6 +596,7 @@ export default function ScriptEditor({
 
 	async function restoreVersion() {
 		if (!restoreTarget || restoreMutation.isPending) return;
+		const restoredVersionNumber = restoreTarget.versionNumber;
 		try {
 			const restored = await restoreMutation.mutateAsync({
 				scriptVersionId: draft.id,
@@ -607,7 +608,7 @@ export default function ScriptEditor({
 				(restored as ScriptVersionReadModel).revision,
 			);
 			setRestoreTarget(null);
-			toast.success(`Đã khôi phục bản lưu #${restored.versionNumber}`);
+			toast.success(`Đã khôi phục bản lưu #${restoredVersionNumber}`);
 			await historyQuery.refetch();
 		} catch (error) {
 			if (getScriptVersionErrorCode(error) === "SCRIPT_VERSION_CONFLICT") {

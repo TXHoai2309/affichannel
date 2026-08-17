@@ -7,8 +7,9 @@ export function validateScriptVersionDraft(raw: unknown) {
 	return scriptVersionEditableSnapshotSchema.safeParse(raw);
 }
 
-export function validateScriptVersionForFactLock(
+function validateScriptVersionForFactLockState(
 	snapshot: ScriptVersionEditableSnapshot,
+	options: { requireCurrentClaims: boolean },
 ) {
 	const result = scriptVersionEditableSnapshotSchema.safeParse(snapshot);
 	if (!result.success) return result;
@@ -33,7 +34,7 @@ export function validateScriptVersionForFactLock(
 			message: "A hook must be selected before Fact Lock.",
 		});
 	}
-	if (result.data.claimsStatus !== "current") {
+	if (options.requireCurrentClaims && result.data.claimsStatus !== "current") {
 		issues.push({
 			code: "custom",
 			path: ["claimsStatus"],
@@ -47,6 +48,37 @@ export function validateScriptVersionForFactLock(
 		};
 	}
 	return result;
+}
+
+/**
+ * Validates the editable source before a Fact Lock run starts.
+ *
+ * A run may extract/refresh claims from a structurally valid script whose
+ * existing candidate claims are stale. The run itself pins the script
+ * revision and owns the new claim result, so `claimsStatus` is intentionally
+ * not a precondition here.
+ */
+export function validateScriptVersionForFactLockRun(
+	snapshot: ScriptVersionEditableSnapshot,
+) {
+	return validateScriptVersionForFactLockState(snapshot, {
+		requireCurrentClaims: false,
+	});
+}
+
+/**
+ * Validates the script after Fact Lock claim extraction/refresh.
+ *
+ * This is the strict readiness validator for downstream gates. Existing
+ * claims must be current and the script must still satisfy the same
+ * structural requirements as the pre-run validator.
+ */
+export function validateScriptVersionForFactLock(
+	snapshot: ScriptVersionEditableSnapshot,
+) {
+	return validateScriptVersionForFactLockState(snapshot, {
+		requireCurrentClaims: true,
+	});
 }
 
 function claimRelevantContent(snapshot: ScriptVersionEditableSnapshot) {

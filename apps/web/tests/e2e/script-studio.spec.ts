@@ -339,6 +339,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 				if (!draft || !target) throw new Error("Expected restore target.");
 				draft = {
 					...draft,
+					versionNumber: null,
 					revision: draft.revision + 1,
 					restoredFromVersionId: target.id,
 					editableSnapshot: target.editableSnapshot,
@@ -369,24 +370,30 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			await expect(page.getByText("Bản lưu #2")).toBeVisible();
 			await expect(page.getByText("Bản lưu #1")).toBeVisible();
 
-			await page.getByRole("button", { name: /Bản lưu #1/ }).click();
+			await page.getByRole("button", { name: /Bản lưu #2/ }).click();
 			await expect(page.getByTestId("saved-version-read-only")).toBeVisible();
-			await expect(page.getByText("Voiceover phiên bản 1")).toBeVisible();
+			await expect(
+				page
+					.getByTestId("saved-version-read-only")
+					.getByText("Voiceover phiên bản 2"),
+			).toBeVisible();
 			await page.getByRole("button", { name: "Khôi phục" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Khôi phục bản lưu?" }),
 			).toBeVisible();
 			await page.getByRole("button", { name: "Khôi phục bản này" }).click();
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
-				"Voiceover phiên bản 1",
+				"Voiceover phiên bản 2",
 			);
+			await expect(page.getByText("Đã khôi phục bản lưu #2")).toBeVisible();
+			await expect(page.getByText(/#null/)).toHaveCount(0);
 
 			await page.reload();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
-				"Voiceover phiên bản 1",
+				"Voiceover phiên bản 2",
 			);
 		} finally {
 			await deleteProjectFixture(fixture);
