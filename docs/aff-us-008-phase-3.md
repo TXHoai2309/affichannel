@@ -1,7 +1,7 @@
 # AFF-US-008 Phase 3 — Script Studio UI
 
-Ngày: 2026-08-16  
-Trạng thái: ready for review, chưa đánh dấu AFF-US-008 Done
+Ngày: 2026-08-17
+Trạng thái: ready for final acceptance review, chưa đánh dấu AFF-US-008 Done
 
 ## A. Audit
 
@@ -26,6 +26,8 @@ read-model context tối thiểu ở server.
 - `packages/api/src/services/script-generation-repository.ts`: trả artifact read model độc lập
   với context.
 - `apps/web/tests/e2e/project-create.spec.ts`: authenticated UI coverage cho Content empty state.
+- `apps/web/tests/e2e/script-studio.spec.ts`: mocked authenticated coverage cho completed/refresh,
+  current partial repair và invalidated partial không repair.
 
 Không thêm ScriptVersion, editor, autosave, Fact Lock, TTS, Video AI, workflow auto-advance
 hoặc migration.
@@ -64,7 +66,7 @@ Frontend không gọi provider và không gửi provider/model override. Không 
 | empty | Empty state, không fake/sample output; Generate chỉ enabled khi context đủ |
 | pending | Progress nhẹ, khóa Generate, vẫn giữ artifact cũ nếu có |
 | completed | Render đầy đủ các section hợp lệ |
-| partial | Render section hợp lệ, đánh dấu section lỗi và cho repair từng section |
+| partial | Render section hợp lệ, đánh dấu section lỗi; chỉ repair khi dependency state là `current` |
 | failed | Copy tiếng Việt an toàn, không raw provider error, không tự retry |
 | indeterminate | Cảnh báo riêng về delivery chưa xác định, không tự retry |
 
@@ -72,11 +74,14 @@ Frontend không gọi provider và không gửi provider/model override. Không 
 
 Output chỉ lấy từ `model.latestUsableArtifact`, còn status lấy từ `model.latestRequest`.
 Vì vậy request mới pending, failed hoặc indeterminate không thể làm trắng hoặc che artifact
-completed/partial usable trước đó. Pure tests cover các trường hợp pending/failed/indeterminate.
+completed/partial usable trước đó. Pure tests cover pending/failed/indeterminate, gồm partial
+usable artifact trong case indeterminate.
 
 ## H. Repair proof
 
-Với partial artifact, UI chỉ hiện `Tạo lại phần này` cho `invalidSections`. Action gọi
+Với partial artifact, UI chỉ hiện `Tạo lại phần này` cho `invalidSections` khi
+`dependencyState.state = current`. Artifact đã invalidated vẫn hiển thị content và warning,
+nhưng không có Repair CTA; user được hướng dẫn tạo generation mới. Repair gọi
 `scriptGeneration.repair` với idempotency key mới và parent generation id; UI không mutate
 parent. Sau khi server tạo child, state được refetch để child usable trở thành output hiện tại.
 
@@ -98,22 +103,25 @@ Context và artifact đều workspace-scoped ở server.
 Đã chạy trong vòng này:
 
 - `pnpm check-types` — đạt, 5/5 packages.
-- `pnpm --filter web test` — đạt, 13 files / 79 tests.
+- `pnpm --filter web test` — đạt, 13 files / 83 tests.
 - Scoped Biome cho các file source/test thay đổi — đạt.
-- `git diff --check` — cần chạy lại sau khi hoàn tất docs.
+- `git diff --check` — đạt.
 
 Pure state tests kiểm tra empty/facts, estimate loading/success/error, cost currency-safe,
 safe error copy và latest usable invariant. Không gọi live AI trong test suite.
 
 ## L. Authenticated E2E
 
-Test UI Content được bổ sung vào authenticated `project-create.spec.ts`: tạo project, mở
-Content, kiểm tra Script Studio/empty state và Generate bị khóa khi không có facts usable,
-sau đó quay lại các assertion overview cũ.
+Authenticated E2E gồm `project-create.spec.ts` và `script-studio.spec.ts`: tạo project, mở
+Content, kiểm tra empty state/Generate guard, mocked Generate → completed → refresh, partial
+→ repair → child artifact và invalidated partial không có Repair CTA.
 
 Do Neon runtime hiện tại thiếu các bảng Phase 2A/2B (`channel_settings`, `media_metadata`,
-và trước đó `script_generation`), test Content dùng mock response ở boundary `getState` để
-không gọi paid AI và vẫn kiểm tra UI. Đây là coverage UI, chưa phải runtime DB integration.
+và trước đó `script_generation`), test Script Studio dùng mock response ở boundary `getState`,
+`estimate`, `generate`, `repair` để không gọi paid AI và vẫn kiểm tra UI. Đây là coverage UI,
+chưa phải runtime DB integration.
+
+Kết quả authenticated full suite: `15 passed`, `0 failed`, `0 skipped`.
 
 ## M. Migration
 
@@ -133,3 +141,15 @@ Phase 3.
 
 ScriptVersion, Fact Lock, TTS và Video AI vẫn để các US sau.
 
+## Phase 3 hardening — 2026-08-17
+
+- Thêm helper readiness từ read model: Generate/Estimate chỉ hoạt động khi có usable Product
+  Facts và Channel Settings hiện diện; không copy freshness hoặc validation business rule vào UI.
+- Repair được gate bởi `partial + invalidSections + dependencyState=current`. Artifact partial
+  đã invalidated vẫn render output cũ, có warning Product Facts đã thay đổi và chỉ hướng dẫn
+  tạo generation mới.
+- Đổi indeterminate badge sang warning và generic page-load error không còn suy đoán not-found/
+  authorization từ mọi lỗi tải dữ liệu.
+- Thêm authenticated mocked E2E cho completed/refresh, partial repair child và invalidated
+  partial. Full suite đạt `15/15`; unit đạt `83/83`.
+- Không có schema change, migration mới hoặc live AI call.

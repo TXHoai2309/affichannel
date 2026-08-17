@@ -6,12 +6,15 @@ import type {
 import { describe, expect, it } from "vitest";
 
 import {
+	canRepairSection,
 	formatEstimatedCost,
 	getEstimateViewState,
 	getLatestUsableArtifact,
 	getScriptGenerationErrorMessage,
 	getStudioStatus,
 	hasUsableFacts,
+	isGenerationContextReady,
+	isLatestUsableArtifactInvalidated,
 } from "./script-studio-state";
 
 const context: ScriptGenerationContext = {
@@ -173,6 +176,44 @@ describe("Script Studio state", () => {
 			id: "generation-a",
 			status: "partial",
 		});
+	});
+
+	it("blocks repair when a partial artifact is invalidated", () => {
+		const model = makeModel({
+			latestUsableArtifact: makeArtifact({
+				status: "partial",
+				invalidSections: ["scenes"],
+			}),
+			dependencyState: { state: "invalidated", invalidatedFactCount: 1 },
+		});
+
+		expect(isLatestUsableArtifactInvalidated(model)).toBe(true);
+		expect(canRepairSection(model, "scenes")).toBe(false);
+	});
+
+	it("allows repair for an invalid section while dependency is current", () => {
+		const model = makeModel({
+			latestUsableArtifact: makeArtifact({
+				status: "partial",
+				invalidSections: ["scenes"],
+			}),
+			dependencyState: { state: "current", invalidatedFactCount: 0 },
+		});
+
+		expect(isLatestUsableArtifactInvalidated(model)).toBe(false);
+		expect(canRepairSection(model, "scenes")).toBe(true);
+		expect(canRepairSection(model, "claims")).toBe(false);
+	});
+
+	it("only enables generation context when facts and channel settings are ready", () => {
+		expect(isGenerationContextReady(makeModel())).toBe(true);
+		expect(
+			isGenerationContextReady(
+				makeModel({
+					context: { ...context, channelSettings: null },
+				}),
+			),
+		).toBe(false);
 	});
 
 	it("blocks generation when no Fact is usable", () => {

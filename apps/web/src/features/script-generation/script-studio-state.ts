@@ -1,6 +1,7 @@
 import type {
 	PartialScriptDraft,
 	ScriptGenerationArtifact,
+	ScriptGenerationDependencyState,
 	ScriptGenerationReadModel,
 	ScriptGenerationSection,
 	ScriptGenerationStatus,
@@ -70,6 +71,34 @@ export function hasUsableFacts(model: ScriptGenerationReadModel) {
 export function hasWarningFacts(model: ScriptGenerationReadModel) {
 	return model.context.facts.some(
 		(fact) => fact.generationUsability === "allowed_with_warning",
+	);
+}
+
+export function isGenerationContextReady(model: ScriptGenerationReadModel) {
+	return hasUsableFacts(model) && model.context.channelSettings !== null;
+}
+
+export function isLatestUsableArtifactInvalidated(
+	model: ScriptGenerationReadModel,
+) {
+	return model.dependencyState?.state === "invalidated";
+}
+
+export function isRepairableDependencyState(
+	dependencyState: ScriptGenerationDependencyState | null,
+) {
+	return dependencyState?.state === "current";
+}
+
+export function canRepairSection(
+	model: ScriptGenerationReadModel,
+	section: ScriptGenerationSection,
+) {
+	const artifact = model.latestUsableArtifact;
+	return Boolean(
+		artifact?.status === "partial" &&
+			isRepairableDependencyState(model.dependencyState) &&
+			artifact.invalidSections.includes(section),
 	);
 }
 

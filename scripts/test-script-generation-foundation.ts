@@ -12,7 +12,7 @@ if (process.env.AFF_US008_DATABASE_URL) {
 	process.env.DATABASE_URL_DIRECT = process.env.AFF_US008_DATABASE_URL;
 }
 
-const { eq, inArray, like } = await import("drizzle-orm");
+const { eq, inArray } = await import("drizzle-orm");
 const {
 	db,
 	aiSettings,
@@ -75,6 +75,7 @@ const fixtures = [1, 2, 3].map((index) => ({
 	projectId: `${prefix}_project_${index}`,
 	factId: `${prefix}_fact_${index}`,
 }));
+const recoveryFactId = `${prefix}_fact_recovery`;
 const foundationConfig = {
 	provider: "deterministic",
 	model: "foundation-deterministic-v2",
@@ -168,6 +169,10 @@ try {
 			content: "Pin dùng 20 giờ",
 			type: "specification",
 			status: "verified",
+			sourceType: "official",
+			sourceLabel: "Integration fixture source",
+			sourceUrl: "https://example.com/integration-fact",
+			confirmedAt: "2026-08-15",
 			createdByUserId: userAId,
 			updatedByUserId: userAId,
 		});
@@ -371,6 +376,21 @@ try {
 			}),
 		"BASE_GENERATION_INVALIDATED",
 	);
+	await db.insert(productFact).values({
+		id: recoveryFactId,
+		workspaceId: workspaceAId,
+		productId: first.productId,
+		revision: 1,
+		content: "Có chế độ chống ồn chủ động",
+		type: "feature",
+		status: "verified",
+		sourceType: "official",
+		sourceLabel: "Integration recovery fixture",
+		sourceUrl: "https://example.com/integration-recovery-fact",
+		confirmedAt: "2026-08-15",
+		createdByUserId: userAId,
+		updatedByUserId: userAId,
+	});
 
 	const second = fixtures[1];
 	const differentKeyRace = await Promise.allSettled([
@@ -510,13 +530,9 @@ try {
 		"Indeterminate generation must retain dependencies.",
 	);
 
-	const crossWorkspaceRead = await getScriptGenerationReadModel(
-		actorB,
-		first.projectId,
-	);
-	assert(
-		crossWorkspaceRead.latestRequest === null,
-		"Cross-workspace read must not disclose the generation.",
+	await expectCode(
+		() => getScriptGenerationReadModel(actorB, first.projectId),
+		"GENERATION_NOT_FOUND",
 	);
 	await expectCode(
 		() =>
@@ -533,27 +549,41 @@ try {
 	console.log("US008 script-generation foundation integration checks passed.");
 } finally {
 	try {
-		await db
-			.delete(factInvalidationEvent)
-			.where(like(factInvalidationEvent.dependentId, `${prefix}%`));
-		await db
-			.delete(factDependency)
-			.where(like(factDependency.dependentId, `${prefix}%`));
-		await db
-			.delete(scriptGeneration)
-			.where(like(scriptGeneration.id, `${prefix}%`));
+		const generationRows = await db
+			.select({ id: scriptGeneration.id })
+			.from(scriptGeneration)
+			.where(
+				inArray(
+					scriptGeneration.projectId,
+					fixtures.map((fixture) => fixture.projectId),
+				),
+			);
+		const generationIds = generationRows.map((row) => row.id);
+		if (generationIds.length > 0) {
+			await db
+				.delete(factInvalidationEvent)
+				.where(inArray(factInvalidationEvent.dependentId, generationIds));
+			await db
+				.delete(factDependency)
+				.where(inArray(factDependency.dependentId, generationIds));
+			await db
+				.delete(scriptGeneration)
+				.where(inArray(scriptGeneration.id, generationIds));
+		}
 		await db.delete(productFactHistory).where(
 			inArray(
 				productFactHistory.productId,
 				fixtures.map((fixture) => fixture.productId),
 			),
 		);
-		await db.delete(productFact).where(
-			inArray(
-				productFact.id,
-				fixtures.map((fixture) => fixture.factId),
-			),
-		);
+		await db
+			.delete(productFact)
+			.where(
+				inArray(productFact.id, [
+					...fixtures.map((fixture) => fixture.factId),
+					recoveryFactId,
+				]),
+			);
 		await db.delete(contentBrief).where(
 			inArray(
 				contentBrief.projectId,

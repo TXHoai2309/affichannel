@@ -914,5 +914,51 @@ Kiểm tra:
 - Bổ sung authorized context read model tối thiểu cho Product Facts/freshness/evidence,
   Channel Settings, Content Brief, Product, usable media, Output Rules và AI config; không thêm
   schema hoặc migration.
-- Unit/state tests đạt `13 files / 79 tests`; authenticated E2E UI Content dùng mock `getState`
+- Unit/state tests đạt `13 files / 83 tests`; authenticated E2E UI Content dùng mock `getState`
   vì Neon runtime còn thiếu bảng Phase 2A/2B. Không gọi lại live AI smoke.
+
+### 2026-08-17 — AFF-US-008 Phase 3 hardening
+
+- Repair UI chỉ hoạt động khi artifact `partial`, section nằm trong `invalidSections` và
+  read model trả `dependencyState.state = current`. Partial artifact đã invalidated vẫn giữ
+  content cũ, hiển thị cảnh báo và hướng dẫn tạo generation mới; không gọi repair.
+- Estimate/Generate dùng readiness state từ context, indeterminate dùng warning semantics,
+  page-load error dùng copy generic không suy đoán authorization.
+- Thêm mocked authenticated E2E cho Generate → completed → refresh, Partial → Repair → child
+  artifact và invalidated partial không Repair. Full E2E đạt `15 passed`, `0 failed`, `0 skipped`;
+  web unit đạt `83 passed`.
+- Không migration, không đổi runtime DB debt và không gọi live AI.
+
+### 2026-08-17 — AFF-US-008 Final Runtime Integration
+
+Mục tiêu:
+
+- Chạy migration 0006–0011 trên đúng Neon database hiện tại sau khi audit an toàn.
+- Chứng minh runtime production của `getState`, `estimate`, `generate`, persistence, dependency,
+  invalidation, idempotency, concurrency và immutable repair.
+
+Kết quả:
+
+- Neon project `shy-bird-50440649`, branch `br-long-flower-azjrci1g`, database `neondb`, schema
+  `public` đã apply đủ migration 0000–0011. Không đổi URL, không tạo branch, không reset/drop data.
+- Audit migration không phát hiện DROP TABLE/COLUMN, TRUNCATE, DELETE FROM hoặc data rewrite nguy hiểm;
+  các DROP CONSTRAINT đều là bước thay constraint mở rộng, không có dữ liệu bị rewrite.
+- Deterministic foundation integration pass toàn bộ idempotency, concurrency, failure/indeterminate,
+  dependency, invalidation, latest usable và immutable repair scenarios.
+- Authenticated runtime E2E không mock RPC: production getState + estimate + deterministic generate,
+  DB persistence, exact Fact revision snapshot, dependency registration và reopen đều pass.
+- Sau cleanup, các bảng runtime/fixture và settings tạm đều về 0 row.
+
+Kiểm tra:
+
+- `pnpm check-types`: pass, 5/5 package tasks.
+- `pnpm --filter web test`: pass, 13 files / 83 tests.
+- `pnpm test:integration:script-generation`: pass.
+- `pnpm --filter web test:e2e`: pass, 16/16, failed 0, skipped 0.
+- `pnpm build`, `pnpm db:generate`, scoped Biome và `git diff --check`: pass.
+- `AFFICHANNEL_LIVE_AI_SMOKE=0`: `FULL-PATH LIVE SMOKE SKIPPED`, không tự bật và không gọi live AI.
+
+Trạng thái:
+
+- **AFF-US-008 is ready to be marked DONE.**
+- Không triển khai US9/US10; ScriptVersion, Fact Lock, TTS và Video AI vẫn để backlog sau.

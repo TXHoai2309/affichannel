@@ -153,6 +153,30 @@ sử dụng Semantic Versioning.
 - Runtime DB integration của Phase 2A/2B vẫn pending vì Neon branch hiện thiếu bảng tương ứng;
   E2E UI Content dùng mock boundary, không migrate shared Neon.
 
+### AFF-US-008 Phase 3 hardening
+
+- Chặn Repair khi `dependencyState` đã invalidated; artifact cũ vẫn hiển thị warning và hướng
+  dẫn tạo generation mới. Repair chỉ mở cho partial artifact còn current dependency.
+- Đổi indeterminate sang warning semantics, chặn estimate khi context chưa sẵn sàng và dùng
+  generic error copy cho lỗi tải Script Studio.
+- Bổ sung mocked authenticated E2E cho completed/refresh, partial repair và invalidated partial;
+  full suite đạt `15/15`, không gọi paid AI và không thêm migration.
+
+### AFF-US-008 Final Runtime Integration — 2026-08-17
+
+- Apply migration 0006–0011 trên Neon database hiện tại sau pre-migration safety audit; không tạo
+  branch, không đổi URL, không reset/drop dữ liệu và không tạo migration mới.
+- Verify runtime tables `channel_settings`, `ai_settings`, `media_metadata`, `output_rules`,
+  `script_generation` cùng dependency/invalidation indexes, foreign keys và state constraints.
+- Thêm authenticated runtime E2E không mock RPC cho getState, estimate, deterministic generate,
+  DB persistence, Fact revision snapshot, dependency registration và reopen.
+- Foundation integration pass idempotency, pending uniqueness, concurrency, failed/indeterminate,
+  invalidation, latest usable và immutable repair child.
+- Full regression đạt `16/16` E2E, `83/83` web unit, check-types, build, db:generate, scoped Biome
+  và diff check; không còn skipped authenticated E2E.
+- Live full-path smoke được ghi `SKIPPED` vì `AFFICHANNEL_LIVE_AI_SMOKE=0`; không tự bật paid AI.
+- AFF-US-008 đủ điều kiện đánh dấu DONE; không triển khai US9/US10.
+
 ## 0.0.0 — 2026-08-10
 
 ### Đã thêm

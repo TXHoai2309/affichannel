@@ -47,6 +47,7 @@ import { toast } from "sonner";
 import { orpc } from "@/utils/orpc";
 
 import {
+	canRepairSection,
 	createIdempotencyKey,
 	formatDate,
 	formatEstimatedCost,
@@ -57,6 +58,8 @@ import {
 	getStudioStatus,
 	hasUsableFacts,
 	hasWarningFacts,
+	isGenerationContextReady,
+	isLatestUsableArtifactInvalidated,
 	isSectionValid,
 	SCRIPT_SECTION_LABELS,
 	SCRIPT_STATUS_LABELS,
@@ -127,11 +130,13 @@ function StatusBadge({
 			? "success"
 			: status === "partial"
 				? "warning"
-				: status === "failed" || status === "indeterminate"
+				: status === "failed"
 					? "destructive"
-					: status === "pending"
-						? "default"
-						: "outline";
+					: status === "indeterminate"
+						? "warning"
+						: status === "pending"
+							? "default"
+							: "outline";
 	return <Badge variant={variant}>{SCRIPT_STATUS_LABELS[status]}</Badge>;
 }
 
@@ -422,12 +427,14 @@ function ContextGroup({
 
 function EstimatePanel({
 	model,
+	estimateEnabled,
 	estimate,
 	estimateLoading,
 	estimateError,
 	onRetry,
 }: {
 	model: ScriptGenerationReadModel;
+	estimateEnabled: boolean;
 	estimate: {
 		estimatedCostMicros: bigint | number | string | null;
 		currency: string | null;
@@ -445,7 +452,7 @@ function EstimatePanel({
 		estimate?.currency,
 	);
 	const estimateState = getEstimateViewState({
-		enabled: hasUsableFacts(model),
+		enabled: estimateEnabled,
 		isFetching: estimateLoading,
 		isError: Boolean(estimateError),
 		hasData: Boolean(estimate),
@@ -461,7 +468,9 @@ function EstimatePanel({
 			<CardContent className="space-y-3">
 				{estimateState === "blocked" ? (
 					<p className="text-muted-foreground text-sm">
-						Thêm Product Fact đủ điều kiện để có thể ước tính và tạo kịch bản.
+						{hasUsableFacts(model)
+							? "Hoàn thiện Channel Settings để có thể ước tính và tạo kịch bản."
+							: "Thêm Product Fact đủ điều kiện để có thể ước tính và tạo kịch bản."}
 					</p>
 				) : estimateState === "loading" ? (
 					<div
@@ -586,7 +595,8 @@ function RequestNotice({
 		return (
 			<div
 				className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-amber-950 text-sm"
-				role="alert"
+				aria-live="polite"
+				role="status"
 			>
 				<p className="flex items-center gap-2 font-semibold">
 					<TriangleAlert aria-hidden="true" className="size-4" /> Trạng thái yêu
@@ -675,16 +685,18 @@ function OutputCard({
 
 function ScriptOutput({
 	artifact,
+	canRepair,
 	onRepair,
 	repairPending,
 }: {
 	artifact: ScriptGenerationArtifact;
+	canRepair: (section: ScriptGenerationSection) => boolean;
 	onRepair: (section: ScriptGenerationSection) => void;
 	repairPending: boolean;
 }) {
 	const output = artifact.output;
 	const repair = (section: ScriptGenerationSection) =>
-		artifact.invalidSections.includes(section)
+		canRepair(section) && artifact.invalidSections.includes(section)
 			? () => onRepair(section)
 			: undefined;
 	return (
@@ -940,6 +952,51 @@ function EmptyOutput({
 	);
 }
 
+function InvalidatedArtifactNotice({
+	canGenerate,
+	isPartial,
+	onGenerate,
+}: {
+	canGenerate: boolean;
+	isPartial: boolean;
+	onGenerate: () => void;
+}) {
+	return (
+		<div
+			aria-live="polite"
+			className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-950"
+			role="status"
+		>
+			<div className="flex items-start gap-3">
+				<TriangleAlert aria-hidden="true" className="mt-0.5 size-5 shrink-0" />
+				<div className="min-w-0 flex-1">
+					<p className="font-semibold text-sm">Product Facts đã thay đổi</p>
+					<p className="mt-1 text-sm">
+						Kịch bản này được tạo từ phiên bản Product Facts cũ nên không còn
+						phản ánh dữ liệu hiện tại.
+					</p>
+					{isPartial ? (
+						<p className="mt-1 text-sm">
+							Không thể tạo lại riêng phần lỗi của kịch bản cũ. Hãy tạo một kịch
+							bản mới để sử dụng dữ liệu hiện tại.
+						</p>
+					) : null}
+					<Button
+						className="mt-3"
+						disabled={!canGenerate}
+						onClick={onGenerate}
+						size="sm"
+						variant="outline"
+					>
+						<Sparkles aria-hidden="true" />
+						Tạo kịch bản mới
+					</Button>
+				</div>
+			</div>
+		</div>
+	);
+}
+
 function ErrorPanel({ onRetry }: { onRetry: () => void }) {
 	return (
 		<div
@@ -948,7 +1005,7 @@ function ErrorPanel({ onRetry }: { onRetry: () => void }) {
 		>
 			<h2 className="font-semibold text-lg">Không thể tải Script Studio</h2>
 			<p className="mt-2 text-sm">
-				Project không tồn tại hoặc bạn không có quyền truy cập.
+				Đã xảy ra lỗi khi tải dữ liệu. Vui lòng thử lại.
 			</p>
 			<Button className="mt-5" onClick={onRetry} variant="outline">
 				Thử lại
@@ -975,7 +1032,7 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	const estimateQuery = useQuery(
 		orpc.scriptGeneration.estimate.queryOptions({
 			input: { projectId },
-			enabled: Boolean(model && hasUsableFacts(model)),
+			enabled: Boolean(model && isGenerationContextReady(model)),
 			meta: { suppressGlobalErrorToast: true },
 			retry: false,
 			staleTime: 30_000,
@@ -995,10 +1052,8 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	const latestUsableArtifact = getLatestUsableArtifact(model);
 	const status = getStudioStatus(model);
 	const hasPendingRequest = model.latestRequest?.status === "pending";
-	const channelSettingsReady = model.context.channelSettings !== null;
 	const canGenerate =
-		hasUsableFacts(model) &&
-		channelSettingsReady &&
+		isGenerationContextReady(model) &&
 		estimateQuery.isSuccess &&
 		!hasPendingRequest &&
 		!generateMutation.isPending &&
@@ -1023,8 +1078,8 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	}
 
 	async function repairSection(section: ScriptGenerationSection) {
-		if (latestUsableArtifact?.status !== "partial") return;
-		if (!latestUsableArtifact.invalidSections.includes(section)) return;
+		if (!model || !canRepairSection(model, section)) return;
+		if (!latestUsableArtifact) return;
 		setActionError(null);
 		try {
 			await repairMutation.mutateAsync({
@@ -1078,6 +1133,7 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 				<div className="space-y-5 xl:sticky xl:top-5">
 					<ContextPanel model={model} />
 					<EstimatePanel
+						estimateEnabled={isGenerationContextReady(model)}
 						estimate={
 							estimateQuery.data
 								? {
@@ -1113,6 +1169,13 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 					</div>
 					{latestUsableArtifact ? (
 						<>
+							{isLatestUsableArtifactInvalidated(model) ? (
+								<InvalidatedArtifactNotice
+									canGenerate={canGenerate}
+									isPartial={latestUsableArtifact.status === "partial"}
+									onGenerate={() => void generateScript()}
+								/>
+							) : null}
 							{latestUsableArtifact.status === "partial" ? (
 								<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 text-sm">
 									<p className="font-medium">Kịch bản hoàn thành một phần.</p>
@@ -1124,6 +1187,7 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 							) : null}
 							<ScriptOutput
 								artifact={latestUsableArtifact}
+								canRepair={(section) => canRepairSection(model, section)}
 								onRepair={(section) => void repairSection(section)}
 								repairPending={repairMutation.isPending}
 							/>

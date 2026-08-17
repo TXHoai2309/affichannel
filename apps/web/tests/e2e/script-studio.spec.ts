@@ -1,0 +1,427 @@
+import { randomUUID } from "node:crypto";
+import { db, product, project } from "@affichannel/db";
+import { expect, type Page, type Route, test } from "@playwright/test";
+import { eq } from "drizzle-orm";
+
+const fixedAccountEmail = process.env.E2E_AUTH_EMAIL;
+const fixedAccountPassword = process.env.E2E_AUTH_PASSWORD;
+
+const SCRIPT_SECTIONS = [
+	"hook",
+	"voiceover",
+	"scenes",
+	"cta",
+	"caption",
+	"hashtags",
+	"disclosure",
+	"claims",
+] as const;
+
+test.describe("AFF-US-008 Script Studio", () => {
+	test.beforeEach(async () => {
+		test.skip(
+			!fixedAccountEmail || !fixedAccountPassword,
+			"Set E2E_AUTH_EMAIL and E2E_AUTH_PASSWORD.",
+		);
+	});
+
+	test("generates a completed script and keeps it after refresh", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		let state = createReadModel(fixture, null, null, "current");
+		const completedArtifact = createArtifact(
+			fixture,
+			"generation-completed",
+			"completed",
+			createOutput("Cảnh đã tạo"),
+		);
+
+		try {
+			await mockState(page, () => state);
+			await mockEstimate(page);
+			await page.route(
+				"**/api/rpc/scriptGeneration/generate",
+				async (route) => {
+					state = createReadModel(
+						fixture,
+						completedArtifact,
+						completedArtifact,
+						"current",
+					);
+					await fulfillJson(route, completedArtifact);
+				},
+			);
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await expect(page.getByText("Chi phí ước tính")).toBeVisible();
+			await page
+				.getByRole("button", { name: "Tạo kịch bản", exact: true })
+				.first()
+				.click();
+
+			await expectScriptOutput(page, "Cảnh đã tạo");
+			await page.reload();
+			await expectScriptOutput(page, "Cảnh đã tạo");
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
+	test("repairs a current partial artifact through repair and keeps parent content", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const parentArtifact = createArtifact(
+			fixture,
+			"generation-partial",
+			"partial",
+			createOutput("Cảnh cũ cần tạo lại"),
+		);
+		let state = createReadModel(
+			fixture,
+			parentArtifact,
+			parentArtifact,
+			"current",
+		);
+		let repairPayload: unknown;
+		const childArtifact = createArtifact(
+			fixture,
+			"generation-repaired",
+			"completed",
+			createOutput("Cảnh đã được sửa"),
+			parentArtifact.id,
+		);
+
+		try {
+			await mockState(page, () => state);
+			await mockEstimate(page);
+			await page.route("**/api/rpc/scriptGeneration/repair", async (route) => {
+				repairPayload = route.request().postDataJSON();
+				state = createReadModel(
+					fixture,
+					childArtifact,
+					childArtifact,
+					"current",
+				);
+				await fulfillJson(route, childArtifact);
+			});
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await expect(page.getByText("Scenes", { exact: true })).toBeVisible();
+			await expect(
+				page.getByText("Cần tạo lại", { exact: true }),
+			).toBeVisible();
+			await expect(
+				page.getByRole("button", { name: "Tạo lại phần này" }),
+			).toBeVisible();
+
+			await page.getByRole("button", { name: "Tạo lại phần này" }).click();
+			await expectScriptOutput(page, "Cảnh đã được sửa");
+			expect(JSON.stringify(repairPayload)).toContain(parentArtifact.id);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
+	test("keeps an invalidated partial artifact visible without a repair CTA", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const invalidatedArtifact = createArtifact(
+			fixture,
+			"generation-invalidated",
+			"partial",
+			createOutput("Cảnh từ dữ liệu cũ"),
+		);
+		const state = createReadModel(
+			fixture,
+			invalidatedArtifact,
+			invalidatedArtifact,
+			"invalidated",
+		);
+
+		try {
+			await mockState(page, () => state);
+			await mockEstimate(page);
+			await page.goto(`/projects/${fixture.projectId}/content`);
+
+			await expect(
+				page.getByText("Product Facts đã thay đổi", { exact: true }).last(),
+			).toBeVisible();
+			await expect(
+				page
+					.getByRole("status")
+					.getByText("Không thể tạo lại riêng phần lỗi của kịch bản cũ."),
+			).toBeVisible();
+			await expect(
+				page.getByRole("button", { name: "Tạo lại phần này" }),
+			).toHaveCount(0);
+			await expect(
+				page.getByRole("button", { name: "Tạo kịch bản mới" }),
+			).toBeVisible();
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+});
+
+type ProjectFixture = {
+	projectId: string;
+	projectName: string;
+	productName: string;
+};
+
+function createContext(fixture: ProjectFixture) {
+	return {
+		project: { id: fixture.projectId, name: fixture.projectName },
+		contentBrief: {
+			platform: "tiktok",
+			goal: "Tạo nội dung chuyển đổi",
+			durationSeconds: 30,
+			angle: "Trải nghiệm thật",
+			description: null,
+		},
+		product: {
+			id: "e2e-product",
+			name: fixture.productName,
+			category: "Thiết bị công nghệ",
+		},
+		channelSettings: {
+			niche: "Công nghệ",
+			targetAudience: "Người mua online",
+			tone: "Tự nhiên",
+			contentPillar: "Review",
+			defaultCta: "Xem thêm",
+			affiliateDisclosure: "Đây là nội dung tiếp thị liên kết.",
+			avoidWords: [],
+		},
+		mediaMetadata: [],
+		outputRules: {
+			language: "vi-VN",
+			aspectRatio: "9:16",
+			subtitleSafeArea: "standard",
+			claimLimit: null,
+			requireFinalCta: true,
+		},
+		generationConfig: {
+			textProvider: "deterministic",
+			textModel: "e2e-model",
+			promptVersion: "test-prompt",
+			outputSchemaVersion: "test-output",
+		},
+		facts: [
+			{
+				id: "e2e-fact",
+				revision: 1,
+				content: "Sản phẩm có thiết kế nhẹ và dễ sử dụng.",
+				type: "feature",
+				assessment: {
+					verification: "verified",
+					evidence: "complete",
+					freshness: "fresh",
+					freshnessReason: "within_policy",
+				},
+				generationUsability: "allowed",
+				source: {
+					type: "official",
+					label: "Nguồn chính thức",
+					url: null,
+					confirmedAt: "2026-08-17",
+					expiresAt: null,
+				},
+			},
+		],
+	};
+}
+
+function createOutput(sceneText: string) {
+	return {
+		schemaVersion: "script-draft.v2",
+		language: "vi-VN",
+		hookVariants: [
+			{ key: "hook-1", text: "Bạn có đang chọn sai tai nghe?" },
+			{ key: "hook-2", text: "Một thay đổi nhỏ cho trải nghiệm nghe tốt hơn." },
+			{ key: "hook-3", text: "Mình đã thử mẫu tai nghe này trong một tuần." },
+		],
+		voiceoverSegments: [
+			{
+				key: "segment-1",
+				text: "Thiết kế nhẹ nên dùng cả ngày vẫn thoải mái.",
+			},
+		],
+		scenes: [
+			{
+				order: 1,
+				durationSeconds: 4,
+				visualDirection: sceneText,
+				onScreenText: "Nhẹ và dễ dùng",
+				voiceoverSegmentKeys: ["segment-1"],
+			},
+		],
+		cta: { text: "Xem sản phẩm qua link bên dưới." },
+		caption: "Một lựa chọn nhẹ nhàng cho nhu cầu nghe hằng ngày.",
+		hashtags: ["#review", "#tainghe", "#affiliatemarketing"],
+		disclosure: "Đây là nội dung tiếp thị liên kết.",
+		claims: [
+			{
+				text: "Tai nghe có thiết kế nhẹ.",
+				occurrence: { section: "voiceover", segmentKey: "segment-1" },
+			},
+		],
+	};
+}
+
+function createArtifact(
+	fixture: ProjectFixture,
+	id: string,
+	status: "completed" | "partial",
+	output: ReturnType<typeof createOutput>,
+	parentGenerationId: string | null = null,
+) {
+	const invalidSections = status === "partial" ? ["scenes"] : [];
+	const validSections = SCRIPT_SECTIONS.filter(
+		(section) => !invalidSections.includes(section),
+	);
+	return {
+		id,
+		workspaceId: "e2e-workspace",
+		projectId: fixture.projectId,
+		createdByUserId: "e2e-user",
+		idempotencyKey: `e2e-${id}`,
+		requestHash: `request-${id}`,
+		parentGenerationId,
+		mode: parentGenerationId ? "repair" : "full",
+		provider: "deterministic",
+		model: "e2e-model",
+		promptVersion: "test-prompt",
+		outputSchemaVersion: "test-output",
+		inputSnapshot: {
+			snapshotVersion: "script-input.v2",
+			request: { mode: parentGenerationId ? "repair" : "full", repair: null },
+			...createContext(fixture),
+		},
+		inputHash: `input-${id}`,
+		promptHash: `prompt-${id}`,
+		status,
+		output,
+		validSections,
+		invalidSections,
+		providerRequestId: `provider-${id}`,
+		inputTokens: 100,
+		outputTokens: 200,
+		estimatedCostMicros: "27000",
+		actualCostMicros: "27000",
+		currency: "USD",
+		errorCode: null,
+		finishedAt: "2026-08-17T00:00:00.000Z",
+		createdAt: "2026-08-17T00:00:00.000Z",
+	};
+}
+
+function createReadModel(
+	fixture: ProjectFixture,
+	latestRequest: ReturnType<typeof createArtifact> | null,
+	latestUsableArtifact: ReturnType<typeof createArtifact> | null,
+	dependencyState: "current" | "invalidated",
+) {
+	return {
+		context: createContext(fixture),
+		latestRequest,
+		latestUsableArtifact,
+		dependencyState: latestUsableArtifact
+			? {
+					state: dependencyState,
+					invalidatedFactCount: dependencyState === "invalidated" ? 1 : 0,
+				}
+			: null,
+	};
+}
+
+async function mockState(page: Page, getState: () => unknown) {
+	await page.route("**/api/rpc/scriptGeneration/getState", async (route) => {
+		await fulfillJson(route, getState());
+	});
+}
+
+async function mockEstimate(page: Page) {
+	await page.route("**/api/rpc/scriptGeneration/estimate", async (route) => {
+		await fulfillJson(route, {
+			provider: "deterministic",
+			model: "e2e-model",
+			estimatedCostMicros: "27000",
+			currency: "USD",
+			inputTokens: 100,
+			pricingBasis: "e2e-pricing",
+		});
+	});
+}
+
+async function fulfillJson(route: Route, value: unknown) {
+	await route.fulfill({
+		status: 200,
+		contentType: "application/json",
+		body: JSON.stringify({ json: value }),
+	});
+}
+
+async function expectScriptOutput(page: Page, sceneText: string) {
+	for (const heading of [
+		"Hook variants",
+		"Voiceover",
+		"Scenes",
+		"CTA",
+		"Caption",
+		"Hashtags",
+		"Disclosure affiliate",
+		"Candidate claims",
+	]) {
+		await expect(page.getByText(heading, { exact: true })).toBeVisible();
+	}
+	await expect(page.getByText("Chưa qua Fact Lock")).toBeVisible();
+	await expect(page.getByText(sceneText)).toBeVisible();
+}
+
+async function createProject(page: Page): Promise<ProjectFixture> {
+	const suffix = randomUUID().slice(0, 8);
+	const projectName = `E2E Script Studio project ${suffix}`;
+	const productName = `E2E Script Studio product ${suffix}`;
+
+	await signIn(page);
+	await page.goto("/projects/new");
+	await page.getByRole("button", { name: "Tạo sản phẩm" }).click();
+	await page.getByLabel("Tên sản phẩm mới").fill(productName);
+	await page.getByRole("button", { name: "Tạo", exact: true }).click();
+	await page.getByLabel("Tên dự án").fill(projectName);
+	await page.getByLabel("Mục tiêu").fill("Tạo nội dung chuyển đổi");
+	await page.getByLabel("Góc tiếp cận").fill("Trải nghiệm thật");
+	await page.getByRole("button", { name: "Tạo dự án" }).click();
+	await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\/product$/i);
+
+	return {
+		projectId: page
+			.url()
+			.match(/\/projects\/([0-9a-f-]{36})\/product$/i)?.[1] as string,
+		projectName,
+		productName,
+	};
+}
+
+async function deleteProjectFixture(fixture: ProjectFixture) {
+	await db.delete(project).where(eq(project.id, fixture.projectId));
+	const [createdProduct] = await db
+		.select({ id: product.id })
+		.from(product)
+		.where(eq(product.name, fixture.productName))
+		.limit(1);
+	if (createdProduct)
+		await db.delete(product).where(eq(product.id, createdProduct.id));
+}
+
+async function signIn(page: Page) {
+	await page.goto("/login");
+	await page.getByLabel("Email").fill(fixedAccountEmail as string);
+	await page.getByLabel("Mật khẩu").fill(fixedAccountPassword as string);
+	await page.getByRole("button", { name: "Đăng nhập" }).click();
+	await expect(page).toHaveURL(/\/dashboard$/);
+}
