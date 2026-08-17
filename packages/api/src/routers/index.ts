@@ -6,6 +6,7 @@ import { productRouter } from "./product";
 import { productFactRouter } from "./product-fact";
 import { projectRouter } from "./project";
 import { scriptGenerationRouter } from "./script-generation";
+import { scriptVersionRouter } from "./script-version";
 import { settingsRouter } from "./settings";
 
 export const appRouter = {
@@ -23,6 +24,7 @@ export const appRouter = {
 	productFact: productFactRouter,
 	project: projectRouter,
 	scriptGeneration: scriptGenerationRouter,
+	scriptVersion: scriptVersionRouter,
 	settings: settingsRouter,
 };
 export type AppRouter = typeof appRouter;

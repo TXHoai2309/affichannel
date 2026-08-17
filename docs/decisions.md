@@ -553,3 +553,52 @@ integration và authenticated/live smoke vẫn là phần deferred; không đán
 - Không có automatic retry trong adapter hoặc smoke runner.
 - Pricing dùng config versioned server-side; public pricing chỉ là evidence cấu hình,
   không được scrape tại runtime.
+
+## DEC-020 — ScriptVersion editable document và concurrency contract của AFF-US-009
+
+- Trạng thái: Đã chấp nhận cho Phase 0
+- Ngày: 2026-08-17
+
+### Bối cảnh
+
+`ScriptGeneration` của AFF-US-008 là generated AI artifact bất biến sau terminal state, còn
+AFF-US-009 cần cho người dùng chọn hook, chỉnh text/scene, autosave và lưu lịch sử trước Fact Lock.
+Nếu editor update trực tiếp `script_generation.output_json`, identity của AI artifact và script đã
+được người dùng kiểm soát sẽ bị trộn lẫn.
+
+### Quyết định
+
+- `ScriptVersion` là aggregate riêng, pinned tới đúng `sourceGenerationId`; không update
+  `script_generation.output_json` và không tự rebase khi có generation AI mới.
+- `editableSnapshotJson` là source of truth duy nhất của nội dung editable trong US9 v1. Không tạo
+  `script_segment`/`script_scene` làm nguồn dữ liệu thứ hai.
+- Mỗi workspace/project có tối đa một current draft (`status=draft`, `versionNumber=null`). Saved
+  version (`status=saved`, `versionNumber` tuần tự) là immutable; draft tiếp tục tồn tại sau Save
+  Version.
+- Initialize chỉ nhận generation `completed`, usable và chưa invalidated. Concurrent initialize
+  phải được bảo vệ bởi DB uniqueness + transaction và trả cùng draft thay vì tạo duplicate.
+- Autosave, Save Version và Restore đều dùng `baseRevision`. Autosave v1 gửi full editable snapshot,
+  không patch/merge. Revision mismatch trả `SCRIPT_VERSION_CONFLICT`; không last-write-wins hoặc
+  silent overwrite.
+- Restore copy saved snapshot vào current draft, tăng draft revision và ghi
+  `restoredFromVersionId`; saved history không bị mutate.
+- Snapshot giữ shape `ScriptDraft v2` hiện tại với thêm `selectedHookKey`, `claimsSourceRevision` và
+  `claimsStatus`. Field canonical vẫn là `claims`, không tạo alias `candidateClaims`.
+- Claim-relevant edit làm claims stale; không auto-regenerate và không chạy Fact Lock. Hashtags,
+  visual direction và duration giữ policy current ở v1 như matrix trong contract document.
+- `validateScriptVersionDraft()` cho phép intermediate editing state; validator strict
+  `validateScriptVersionForFactLock()` đặt trong core để US10 dùng lại.
+- Phase 0 không mở rộng `fact_dependency`, không tạo generic dependency/audio table và không tạo
+  TTS. Downstream tương lai phải lưu `sourceScriptVersionId` + `sourceScriptRevision` và stale khi
+  revision khác current.
+
+### Hệ quả
+
+- Phase 1 cần migration cho ScriptVersion, partial unique draft, saved version numbering và các
+  foreign key/check/index liên quan; migration chỉ được tạo khi bắt đầu implementation vertical slice.
+- Phase 2 giữ route `/projects/[projectId]/content` và nâng Script Studio sang editor.
+- Phase 3 mới triển khai history/restore/invalidation closure và runtime/E2E proof.
+- Fact Lock, TTS, audio artifact, AI regenerate và realtime collaboration vẫn ngoài AFF-US-009.
+
+Contract chi tiết, shape, race semantics và test matrix nằm tại
+`docs/aff-us-009-phase-0-contract-decisions.md`.

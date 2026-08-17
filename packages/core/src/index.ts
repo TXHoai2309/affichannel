@@ -16,4 +16,5 @@ export * from "./script-generation/input-contract";
 export * from "./script-generation/policy";
 export * from "./script-generation/schema";
 export * from "./script-generation/types";
+export * from "./script-version";
 export * from "./workspace";

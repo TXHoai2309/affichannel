@@ -85,6 +85,13 @@
       "when": 1786706650612,
       "tag": "0011_keen_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1786937738191,
+      "tag": "0012_unusual_prowler",
+      "breakpoints": true
     }
   ]
 }

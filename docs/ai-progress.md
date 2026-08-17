@@ -962,3 +962,44 @@ Trạng thái:
 
 - **AFF-US-008 is ready to be marked DONE.**
 - Không triển khai US9/US10; ScriptVersion, Fact Lock, TTS và Video AI vẫn để backlog sau.
+
+### 2026-08-17 — AFF-US-009 Phase 0 Contract Decisions
+
+- Audit DEC-005/014/015, architecture, product spec, roadmap và toàn bộ AFF-US-008; xác nhận
+  `ScriptGeneration` là generated artifact immutable và `ScriptVersion` là boundary riêng cho
+  human-edited script trước Fact Lock.
+- Chốt `script_version.editable_snapshot_json` là canonical source of truth; không tạo segment/scene
+  normalized source trong v1.
+- Chốt lifecycle draft mutable + saved immutable, một draft/project, Save Version giữ draft hiện tại,
+  Restore copy vào draft và không mutate history.
+- Chốt full-snapshot autosave với `baseRevision`, `SCRIPT_VERSION_CONFLICT`, không silent overwrite,
+  không merge; initialize race phải được bảo vệ bằng DB uniqueness + transaction.
+- Chốt source generation pinned, claims dùng field `claims` theo ScriptDraft v2 với
+  `claimsSourceRevision`/`claimsStatus`, cùng claim invalidation matrix; downstream tương lai dùng
+  `sourceScriptVersionId`/`sourceScriptRevision`.
+- Chốt draft validator và strict Fact-Lock readiness validator trong core; không implement Fact Lock,
+  audio/TTS, UI, migration hoặc Neon change ở Phase 0.
+- Thêm DEC-020 và contract artifact tại `docs/aff-us-009-phase-0-contract-decisions.md`.
+
+Trạng thái: **AFF-US-009 Phase 0 contract is ready for acceptance. Phase 1 may begin.**
+
+### 2026-08-17 — AFF-US-009 Phase 1 ScriptVersion Foundation
+
+- Thêm `script_version` aggregate và migration additive `0012_unusual_prowler.sql`; giữ
+  `script_generation` immutable, canonical source là `editable_snapshot_json`, có partial unique
+  current draft, saved-number unique, status-shape/revision checks và FK/index cần thiết.
+- Thêm core snapshot contract/validator, strict Fact-Lock readiness validator, claims stale matrix
+  và server-owned merge semantics; chưa triển khai editor, Fact Lock, TTS/audio hoặc history UI.
+- Thêm protected `scriptVersion.initialize`, `getCurrent`, `autosave`; initialize pin completed
+  generation chưa invalidated, cùng source idempotent, source khác bị reject, full snapshot autosave
+  dùng `baseRevision` và conflict không silent overwrite.
+- Neon safety audit pass: project `shy-bird-50440649`, branch `br-long-flower-azjrci1g`, database
+  `neondb`, schema `public`; 0012 không có destructive DDL và đã apply thành công; không đổi URL,
+  không tạo branch/reset/drop data, fixture integration cleanup về 0 row.
+- Runtime integration pass initialize/concurrency/idempotency/getCurrent/autosave/conflict/claims
+  stale/immutable/invalidation/authorization; unit 14 files/95 tests, check-types, build,
+  db:generate, scoped Biome và diff check pass. Authenticated E2E có một full run 16/16 pass;
+  lần rerun cuối lặp lại flaky AFF-US-004 `page.goBack()` (15 pass/1 fail), còn chạy riêng test
+  project-create pass. Đây là regression test nền ngoài file US009 và cần harden riêng.
+
+Trạng thái: **AFF-US-009 Phase 1 ScriptVersion Foundation is ready for review.**

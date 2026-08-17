@@ -177,6 +177,31 @@ sử dụng Semantic Versioning.
 - Live full-path smoke được ghi `SKIPPED` vì `AFFICHANNEL_LIVE_AI_SMOKE=0`; không tự bật paid AI.
 - AFF-US-008 đủ điều kiện đánh dấu DONE; không triển khai US9/US10.
 
+### AFF-US-009 Phase 0 — Contract Decisions — 2026-08-17
+
+- Chốt boundary `ScriptGeneration` immutable của US8 và `ScriptVersion` human-editable của US9;
+  không mutate `script_generation.output_json`.
+- Chốt `editableSnapshotJson` là canonical source of truth, không tạo segment/scene normalized
+  source trong US9 v1.
+- Chốt draft mutable, saved version immutable, Save Version giữ draft hiện tại, Restore không mutate
+  history và mọi write dùng optimistic `baseRevision` conflict.
+- Chốt source generation pinned, claims stale theo revision/matrix và downstream future dùng
+  `sourceScriptVersionId`/`sourceScriptRevision`.
+- Chốt Phase 0 không tạo migration, không đổi Neon, không implement editor, Fact Lock hoặc TTS/audio.
+
+### AFF-US-009 Phase 1 — ScriptVersion Foundation — 2026-08-17
+
+- Thêm `script_version` làm boundary editable riêng cho script, giữ generated artifact US8 immutable;
+  snapshot dùng `ScriptDraft v2` + selected hook + claims revision/status.
+- Thêm initialize/getCurrent/full-snapshot autosave với optimistic revision conflict, current-draft
+  uniqueness, source pinning, stale claims semantics và workspace authorization.
+- Apply migration 0012 trên Neon hiện tại sau safety audit additive; không tạo Neon branch, không
+  reset/drop data hoặc đổi credential. Thêm runtime integration fixture có cleanup và validator tests.
+- Full regression: 14 web test files/95 unit tests, check-types, build, db:generate, scoped Biome
+  và diff check pass. Một full E2E run đạt 16/16; rerun cuối lặp lại flaky AFF-US-004
+  `page.goBack()` (test chạy riêng pass), cần harden ngoài scope US009.
+- Phase 2 editor/history/restore, Fact Lock, TTS/audio và các US sau chưa triển khai.
+
 ## 0.0.0 — 2026-08-10
 
 ### Đã thêm

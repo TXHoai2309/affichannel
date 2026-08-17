@@ -153,3 +153,25 @@ ScriptVersion, Fact Lock, TTS và Video AI vẫn để các US sau.
 - Thêm authenticated mocked E2E cho completed/refresh, partial repair child và invalidated
   partial. Full suite đạt `15/15`; unit đạt `83/83`.
 - Không có schema change, migration mới hoặc live AI call.
+
+## Final Runtime Integration — 2026-08-17
+
+Phần blocker runtime được xử lý sau Phase 3 hardening:
+
+- Pre-migration audit pass trên Neon project `shy-bird-50440649`, branch
+  `br-long-flower-azjrci1g`, database `neondb`, schema `public`; migration 0006–0011 đã apply
+  thành công và chạy lại idempotent.
+- Production authenticated E2E đã chạy thật, không mock RPC: `getState`, `estimate`, deterministic
+  `generate`, persistence, exact Product Fact revision snapshot, dependency registration và reopen.
+- Foundation integration pass idempotency/concurrency, pending uniqueness, failed/indeterminate,
+  invalidation và immutable repair child.
+- Full suite hiện tại: `16 passed`, `0 failed`, `0 skipped`; unit `83 passed`; check-types/build/
+  db:generate/scoped Biome/diff check đều pass.
+- `AFFICHANNEL_LIVE_AI_SMOKE=0`, nên full-path live smoke được ghi `SKIPPED` đúng cấu hình; không
+  tự bật và không gọi paid AI.
+- Fixture và settings tạm đã cleanup; các bảng runtime liên quan được verify không còn row fixture.
+
+Các mục ScriptVersion, Fact Lock, TTS và Video AI vẫn ngoài scope US008. Chi tiết bằng chứng A–Q
+được ghi tại [`docs/aff-us-008-final-runtime-integration.md`](./aff-us-008-final-runtime-integration.md).
+
+Trạng thái đề xuất: **AFF-US-008 is ready to be marked DONE.**
