@@ -230,3 +230,15 @@ sử dụng Semantic Versioning.
 - Regression fix AFF-US-006/007: schema API nhận `null`/rỗng cho URL nguồn của Fact optional;
   verified feature/specification/policy/other không còn bị chặn trước persistence, nhưng vẫn
   hiển thị badge `Thiếu căn cứ` và bị block generation như contract.
+
+### AFF-US-009 Phase 2 — Script Editor & Autosave UI — 2026-08-17
+
+- Thêm Script Editor trên `/projects/[projectId]/content` cho draft hiện tại, gồm chọn/sửa hook,
+  voiceover, scene fields, CTA, caption, hashtags, disclosure và claims read-only.
+- Thêm autosave full snapshot phía client: debounce 1000ms, một request in-flight, giữ edit local
+  khi response cũ về, trạng thái dirty/saving/saved/error/conflict và explicit reload khi conflict.
+- Generation AI mới chỉ tạo notice; không auto-rebase/ghi đè draft. Không có structural controls,
+  Fact Lock execution, TTS/audio, schema change, migration hoặc paid AI call từ editor.
+- Bổ sung unit controller tests và authenticated mocked E2E cho initialize, edit, autosave, reload,
+  claims stale/current boundary và newer-generation notice.
+- Phase 3 history/restore chưa triển khai.

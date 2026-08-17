@@ -164,12 +164,155 @@ test.describe("AFF-US-008 Script Studio", () => {
 			await deleteProjectFixture(fixture);
 		}
 	});
+
+	test("opens the editor, autosaves edits, and restores them after refresh", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const completedArtifact = createArtifact(
+			fixture,
+			"generation-editor",
+			"completed",
+			createOutput("Cảnh để chỉnh sửa"),
+		);
+		const state = createReadModel(
+			fixture,
+			completedArtifact,
+			completedArtifact,
+			"current",
+		);
+		let draft: ScriptVersionFixture | null = null;
+		let autosaveCount = 0;
+
+		try {
+			await mockState(page, () => state);
+			await mockEstimate(page);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/initialize", async (route) => {
+				draft = createScriptVersion(fixture, completedArtifact);
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/autosave", async (route) => {
+				const payload = route.request().postDataJSON().json as {
+					editableSnapshot: ScriptVersionFixture["editableSnapshot"];
+				};
+				autosaveCount += 1;
+				if (draft) {
+					draft = {
+						...draft,
+						revision: draft.revision + 1,
+						editableSnapshot: {
+							...payload.editableSnapshot,
+							claimsStatus: "stale",
+						},
+					};
+				}
+				await fulfillJson(route, draft);
+			});
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Bắt đầu chỉnh sửa" }).click();
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			const hookTwo = page.getByRole("radio", { name: "Hook 2" });
+			await hookTwo.click();
+			await expect(hookTwo).toHaveAttribute("aria-checked", "true");
+			await page
+				.getByLabel("Voiceover đoạn 1")
+				.fill("Voiceover đã được chỉnh sửa trong editor.");
+			await expect(
+				page.getByText("Có thay đổi chưa lưu").first(),
+			).toBeVisible();
+			await expect(page.getByText("Đã lưu").first()).toBeVisible({
+				timeout: 5_000,
+			});
+			expect(autosaveCount).toBe(1);
+			await expect(
+				page.getByText("Claims cần cập nhật trước Fact Lock"),
+			).toBeVisible();
+
+			await page.reload();
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await expect(page.getByRole("radio", { name: "Hook 2" })).toHaveAttribute(
+				"aria-checked",
+				"true",
+			);
+			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
+				"Voiceover đã được chỉnh sửa trong editor.",
+			);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
+	test("keeps a draft when a newer AI generation appears", async ({ page }) => {
+		const fixture = await createProject(page);
+		const originalArtifact = createArtifact(
+			fixture,
+			"generation-editor-original",
+			"completed",
+			createOutput("Bản AI ban đầu"),
+		);
+		const newerArtifact = createArtifact(
+			fixture,
+			"generation-editor-newer",
+			"completed",
+			createOutput("Bản AI mới hơn"),
+		);
+		const state = createReadModel(
+			fixture,
+			newerArtifact,
+			newerArtifact,
+			"current",
+		);
+		const draft = createScriptVersion(fixture, originalArtifact);
+
+		try {
+			await mockState(page, () => state);
+			await page.route(
+				"**/api/rpc/scriptGeneration/estimate",
+				async (route) => {
+					await fulfillJson(route, null);
+				},
+			);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				await fulfillJson(route, draft);
+			});
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await expect(page.getByText("Có bản AI mới")).toBeVisible();
+			await expect(page.getByLabel("Nội dung Hook 1")).toHaveValue(
+				originalArtifact.output.hookVariants[0].text,
+			);
+			await expect(
+				page.getByRole("button", { name: "Tạo kịch bản", exact: true }),
+			).toHaveCount(0);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
 });
 
 type ProjectFixture = {
 	projectId: string;
 	projectName: string;
 	productName: string;
+};
+
+type ScriptVersionFixture = Omit<
+	ReturnType<typeof createScriptVersion>,
+	"editableSnapshot"
+> & {
+	editableSnapshot: ReturnType<typeof createOutput> & {
+		selectedHookKey: string | null;
+		claimsSourceRevision: number;
+		claimsStatus: "current" | "stale";
+	};
 };
 
 function createContext(fixture: ProjectFixture) {
@@ -316,6 +459,32 @@ function createArtifact(
 		errorCode: null,
 		finishedAt: "2026-08-17T00:00:00.000Z",
 		createdAt: "2026-08-17T00:00:00.000Z",
+	};
+}
+
+function createScriptVersion(
+	fixture: ProjectFixture,
+	artifact: ReturnType<typeof createArtifact>,
+) {
+	return {
+		id: `script-version-${fixture.projectId}`,
+		workspaceId: "e2e-workspace",
+		projectId: fixture.projectId,
+		sourceGenerationId: artifact.id,
+		status: "draft" as const,
+		versionNumber: null,
+		editableSnapshot: {
+			...artifact.output,
+			selectedHookKey: "hook-1",
+			claimsSourceRevision: 1,
+			claimsStatus: "current" as const,
+		},
+		revision: 1,
+		restoredFromVersionId: null,
+		createdByUserId: "e2e-user",
+		createdAt: "2026-08-17T00:00:00.000Z",
+		updatedAt: "2026-08-17T00:00:00.000Z",
+		savedAt: null,
 	};
 }
 

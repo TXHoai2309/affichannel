@@ -5,6 +5,7 @@ import type {
 	ScriptGenerationReadModel,
 	ScriptGenerationSection,
 } from "@affichannel/core/script-generation/types";
+import type { ScriptVersionReadModel } from "@affichannel/core/script-version/types";
 import { Badge } from "@affichannel/ui/components/badge";
 import { Button } from "@affichannel/ui/components/button";
 import {
@@ -45,7 +46,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { orpc } from "@/utils/orpc";
-
+import ScriptEditor from "./script-editor";
+import {
+	getScriptVersionErrorCode,
+	getScriptVersionErrorMessage,
+} from "./script-editor-autosave";
 import {
 	canRepairSection,
 	createIdempotencyKey,
@@ -56,6 +61,7 @@ import {
 	getLatestUsableArtifact,
 	getScriptGenerationErrorMessage,
 	getStudioStatus,
+	hasNewerScriptGeneration,
 	hasUsableFacts,
 	hasWarningFacts,
 	isGenerationContextReady,
@@ -1029,10 +1035,24 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		}),
 	);
 	const model = stateQuery.data as ScriptGenerationReadModel | undefined;
+	const scriptVersionQuery = useQuery(
+		orpc.scriptVersion.getCurrent.queryOptions({
+			input: { projectId },
+			meta: { suppressGlobalErrorToast: true },
+			retry: false,
+			staleTime: 0,
+		}),
+	);
+	const currentDraft = scriptVersionQuery.data as
+		| ScriptVersionReadModel
+		| null
+		| undefined;
 	const estimateQuery = useQuery(
 		orpc.scriptGeneration.estimate.queryOptions({
 			input: { projectId },
-			enabled: Boolean(model && isGenerationContextReady(model)),
+			enabled: Boolean(
+				model && !currentDraft && isGenerationContextReady(model),
+			),
 			meta: { suppressGlobalErrorToast: true },
 			retry: false,
 			staleTime: 30_000,
@@ -1044,10 +1064,23 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	const repairMutation = useMutation(
 		orpc.scriptGeneration.repair.mutationOptions(),
 	);
+	const initializeMutation = useMutation(
+		orpc.scriptVersion.initialize.mutationOptions(),
+	);
+	const autosaveMutation = useMutation(
+		orpc.scriptVersion.autosave.mutationOptions(),
+	);
 
-	if (stateQuery.isPending) return <StudioSkeleton />;
-	if (stateQuery.isError || !model)
-		return <ErrorPanel onRetry={() => void stateQuery.refetch()} />;
+	if (stateQuery.isPending || scriptVersionQuery.isPending)
+		return <StudioSkeleton />;
+	if (stateQuery.isError || scriptVersionQuery.isError || !model)
+		return (
+			<ErrorPanel
+				onRetry={() =>
+					void Promise.all([stateQuery.refetch(), scriptVersionQuery.refetch()])
+				}
+			/>
+		);
 
 	const latestUsableArtifact = getLatestUsableArtifact(model);
 	const status = getStudioStatus(model);
@@ -1058,6 +1091,11 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		!hasPendingRequest &&
 		!generateMutation.isPending &&
 		!repairMutation.isPending;
+	const canInitialize = Boolean(
+		latestUsableArtifact?.status === "completed" &&
+			model.dependencyState?.state !== "invalidated" &&
+			!initializeMutation.isPending,
+	);
 
 	async function refreshState() {
 		await stateQuery.refetch();
@@ -1094,6 +1132,47 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		}
 	}
 
+	async function initializeEditor() {
+		if (!latestUsableArtifact || !canInitialize) return;
+		setActionError(null);
+		try {
+			await initializeMutation.mutateAsync({
+				projectId,
+				sourceGenerationId: latestUsableArtifact.id,
+			});
+			await scriptVersionQuery.refetch();
+		} catch (error) {
+			if (
+				getScriptVersionErrorCode(error) ===
+				"SCRIPT_VERSION_DRAFT_ALREADY_EXISTS"
+			) {
+				await scriptVersionQuery.refetch();
+				return;
+			}
+			setActionError(getScriptVersionErrorMessage(error));
+		}
+	}
+
+	async function reloadCurrentDraft() {
+		const result = await scriptVersionQuery.refetch();
+		return (result.data as ScriptVersionReadModel | null | undefined) ?? null;
+	}
+
+	if (currentDraft) {
+		return (
+			<ScriptEditor
+				draft={currentDraft}
+				sourceArtifact={latestUsableArtifact}
+				hasNewerGeneration={hasNewerScriptGeneration(
+					currentDraft,
+					latestUsableArtifact,
+				)}
+				onReloadLatest={reloadCurrentDraft}
+				save={(request) => autosaveMutation.mutateAsync(request)}
+			/>
+		);
+	}
+
 	return (
 		<div className="mx-auto w-full max-w-7xl space-y-5">
 			<header className="flex flex-col gap-4 rounded-2xl border border-affi-blue-border bg-card p-5 shadow-sm sm:flex-row sm:items-start sm:justify-between">
@@ -1115,7 +1194,23 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 							Bản dùng được: {formatDate(latestUsableArtifact.createdAt)}
 						</span>
 					) : null}
-					<Button disabled={!canGenerate} onClick={() => void generateScript()}>
+					{latestUsableArtifact?.status === "completed" ? (
+						<Button
+							disabled={!canInitialize}
+							onClick={() => void initializeEditor()}
+							type="button"
+						>
+							{initializeMutation.isPending ? (
+								<RefreshCw aria-hidden="true" className="animate-spin" />
+							) : null}
+							Bắt đầu chỉnh sửa
+						</Button>
+					) : null}
+					<Button
+						disabled={!canGenerate}
+						onClick={() => void generateScript()}
+						type="button"
+					>
 						{generateMutation.isPending || hasPendingRequest ? (
 							<RefreshCw aria-hidden="true" className="animate-spin" />
 						) : (

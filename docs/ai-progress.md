@@ -1029,3 +1029,26 @@ Kiểm tra:
 - Scoped Biome và `git diff --check`: đạt.
 
 Trạng thái: **AFF-US-009 Phase 1 ScriptVersion Foundation is ready for final acceptance.**
+
+### 2026-08-17 — AFF-US-009 Phase 2 Script Editor & Autosave UI
+
+- Dùng lại `/projects/[projectId]/content`: draft chưa tồn tại vẫn là Script Studio read-only;
+  `Bắt đầu chỉnh sửa` gọi initialize với completed usable generation được pin. Draft hiện tại mở
+  Script Editor, không tự rebase hoặc auto-apply generation AI mới.
+- Thêm editor cho selected hook, hook/voiceover text, scene duration/visual direction/on-screen
+  text, CTA, caption, hashtags và disclosure. Key/order/reference/claims/occurrence giữ read-only;
+  không có add/delete/reorder structural control và không gọi paid AI từ editor.
+- Thêm local autosave controller full snapshot với debounce chính xác 1000ms, một request in-flight,
+  sequencing giữ local edits trong request trước, revision/server metadata update, error retry và
+  conflict pause + explicit `Tải bản mới nhất`.
+- Hiển thị claims current/stale, Fact Lock readiness read-only và notice generation mới mà không
+  thay đổi draft. Không tạo schema/migration hoặc đổi backend Phase 1.
+- Bổ sung unit controller tests và authenticated mocked E2E cho initialize/edit/autosave/reload,
+  claims stale và newer-generation notice. Tài liệu chi tiết tại
+  `docs/aff-us-009-phase-2-editor-autosave.md`.
+- Verification: web unit `15 files / 116 tests` pass, ScriptVersion integration pass, focused
+  Script Studio E2E `5/5` pass; full authenticated E2E `17 pass / 1 fail` do regression AFF-US-004
+  browser Back ngoài scope. Check-types, build, db:generate, Biome và diff check pass.
+- Phase 3 history/restore, Fact Lock, TTS/audio và các US sau chưa triển khai.
+
+Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for review.**

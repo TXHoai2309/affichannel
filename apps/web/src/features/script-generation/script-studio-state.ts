@@ -6,6 +6,7 @@ import type {
 	ScriptGenerationSection,
 	ScriptGenerationStatus,
 } from "@affichannel/core/script-generation/types";
+import type { ScriptVersionReadModel } from "@affichannel/core/script-version/types";
 
 export const SCRIPT_SECTION_LABELS: Record<ScriptGenerationSection, string> = {
 	hook: "Hook variants",
@@ -82,6 +83,17 @@ export function isLatestUsableArtifactInvalidated(
 	model: ScriptGenerationReadModel,
 ) {
 	return model.dependencyState?.state === "invalidated";
+}
+
+export function hasNewerScriptGeneration(
+	draft: ScriptVersionReadModel | null,
+	latestUsableArtifact: ScriptGenerationArtifact | null,
+) {
+	return Boolean(
+		draft &&
+			latestUsableArtifact &&
+			draft.sourceGenerationId !== latestUsableArtifact.id,
+	);
 }
 
 export function isRepairableDependencyState(

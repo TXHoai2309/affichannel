@@ -3,6 +3,7 @@ import type {
 	ScriptGenerationContext,
 	ScriptGenerationReadModel,
 } from "@affichannel/core/script-generation/types";
+import type { ScriptVersionReadModel } from "@affichannel/core/script-version/types";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -12,6 +13,7 @@ import {
 	getLatestUsableArtifact,
 	getScriptGenerationErrorMessage,
 	getStudioStatus,
+	hasNewerScriptGeneration,
 	hasUsableFacts,
 	isGenerationContextReady,
 	isLatestUsableArtifactInvalidated,
@@ -142,6 +144,31 @@ describe("Script Studio state", () => {
 
 		expect(getStudioStatus(model)).toBe("pending");
 		expect(getLatestUsableArtifact(model)?.id).toBe("generation-a");
+	});
+
+	it("detects a newer generation without changing the current ScriptVersion draft", () => {
+		const draft = {
+			id: "draft-1",
+			workspaceId: "workspace-1",
+			projectId: "project-1",
+			sourceGenerationId: "generation-a",
+			status: "draft" as const,
+			versionNumber: null,
+			editableSnapshot: {},
+			revision: 3,
+			restoredFromVersionId: null,
+			createdByUserId: "user-1",
+			createdAt: new Date("2026-08-17T00:00:00.000Z"),
+			updatedAt: new Date("2026-08-17T00:00:00.000Z"),
+			savedAt: null,
+		} as ScriptVersionReadModel;
+		const newer = makeArtifact({ id: "generation-b" });
+
+		expect(hasNewerScriptGeneration(draft, newer)).toBe(true);
+		expect(
+			hasNewerScriptGeneration(draft, makeArtifact({ id: "generation-a" })),
+		).toBe(false);
+		expect(hasNewerScriptGeneration(null, newer)).toBe(false);
 	});
 
 	it.each(["failed", "indeterminate"] as const)(
