@@ -17,7 +17,7 @@ const SCRIPT_SECTIONS = [
 	"claims",
 ] as const;
 
-test.describe("AFF-US-008 Script Studio", () => {
+test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 	test.beforeEach(async () => {
 		test.skip(
 			!fixedAccountEmail || !fixedAccountPassword,
@@ -244,6 +244,138 @@ test.describe("AFF-US-008 Script Studio", () => {
 			);
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
 				"Voiceover đã được chỉnh sửa trong editor.",
+			);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
+	test("keeps local edits when the same draft is refetched in the background", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const artifact = createArtifact(
+			fixture,
+			"generation-editor-refetch",
+			"completed",
+			createOutput("Cảnh refetch"),
+		);
+		const state = createReadModel(fixture, artifact, artifact, "current");
+		const initialDraft = createScriptVersion(fixture, artifact);
+		let serverDraft: ScriptVersionFixture = initialDraft;
+		let getCurrentCount = 0;
+		let backgroundPage: Page | null = null;
+
+		try {
+			await mockState(page, () => state);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				getCurrentCount += 1;
+				await fulfillJson(route, serverDraft);
+			});
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await expect.poll(() => getCurrentCount).toBeGreaterThan(0);
+
+			await page
+				.getByLabel("Voiceover đoạn 1")
+				.fill("Nội dung local vẫn phải được giữ lại.");
+			serverDraft = {
+				...serverDraft,
+				revision: serverDraft.revision + 1,
+				editableSnapshot: {
+					...serverDraft.editableSnapshot,
+					voiceoverSegments: [
+						{ key: "segment-1", text: "Nội dung từ background refetch." },
+					],
+				},
+			};
+
+			const previousGetCurrentCount = getCurrentCount;
+			backgroundPage = await page.context().newPage();
+			await backgroundPage.goto("about:blank");
+			await backgroundPage.bringToFront();
+			await page.bringToFront();
+			await page.evaluate(() => {
+				Object.defineProperty(navigator, "onLine", {
+					configurable: true,
+					value: false,
+				});
+				window.dispatchEvent(new Event("offline"));
+				Object.defineProperty(navigator, "onLine", {
+					configurable: true,
+					value: true,
+				});
+				window.dispatchEvent(new Event("online"));
+			});
+			await expect
+				.poll(() => getCurrentCount)
+				.toBeGreaterThan(previousGetCurrentCount);
+			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
+				"Nội dung local vẫn phải được giữ lại.",
+			);
+		} finally {
+			await backgroundPage?.close();
+			await deleteProjectFixture(fixture);
+		}
+	});
+
+	test("flushes dirty edits before normal in-app navigation", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const artifact = createArtifact(
+			fixture,
+			"generation-editor-navigation",
+			"completed",
+			createOutput("Cảnh navigation"),
+		);
+		const state = createReadModel(fixture, artifact, artifact, "current");
+		let draft: ScriptVersionFixture = createScriptVersion(fixture, artifact);
+		let autosaveCount = 0;
+
+		try {
+			await mockState(page, () => state);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/autosave", async (route) => {
+				const payload = route.request().postDataJSON().json as {
+					editableSnapshot: ScriptVersionFixture["editableSnapshot"];
+				};
+				autosaveCount += 1;
+				draft = {
+					...draft,
+					revision: draft.revision + 1,
+					editableSnapshot: payload.editableSnapshot,
+				};
+				await fulfillJson(route, draft);
+			});
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await page
+				.getByLabel("Voiceover đoạn 1")
+				.fill("Nội dung được flush trước khi rời trang.");
+
+			const autosaveRequest = page.waitForRequest(
+				"**/api/rpc/scriptVersion/autosave",
+			);
+			await page.locator('a[href="/dashboard"]').first().click();
+			await expect(page).toHaveURL(/\/dashboard$/);
+			await autosaveRequest;
+			expect(autosaveCount).toBe(1);
+			expect(draft.editableSnapshot.voiceoverSegments[0]?.text).toBe(
+				"Nội dung được flush trước khi rời trang.",
+			);
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
+				"Nội dung được flush trước khi rời trang.",
 			);
 		} finally {
 			await deleteProjectFixture(fixture);

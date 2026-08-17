@@ -1052,3 +1052,23 @@ Trạng thái: **AFF-US-009 Phase 1 ScriptVersion Foundation is ready for final 
 - Phase 3 history/restore, Fact Lock, TTS/audio và các US sau chưa triển khai.
 
 Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for review.**
+
+### 2026-08-17 — AFF-US-009 Phase 2 final hardening
+
+- Sửa quyền sở hữu state: `useScriptAutosave` chỉ tạo controller mới khi
+  `scriptVersionId` đổi; cùng draft ID nhận refetch/revision mới không reset local working
+  snapshot. `Tải bản mới nhất` vẫn là hành động duy nhất thay local snapshot.
+- Sửa lifecycle navigation: unmount điều hướng nội bộ best-effort flush dirty snapshot; request A
+  đang chạy không làm mất edit B, B được gửi tiếp với base revision từ response A. Deferred cleanup
+  giữ an toàn cho React Strict Mode và không tạo duplicate request.
+- Bổ sung 3 unit regression và 2 authenticated mocked E2E: same-ID background refetch, clean/dirty
+  navigation flush và in-flight A → B.
+
+Kiểm tra focused hardening:
+
+- Autosave unit: 7/7 đạt.
+- Script Studio E2E: 7/7 đạt, gồm refetch ownership và navigation flush.
+- Không tạo migration, không đổi schema/backend semantics, không chạm Product Facts/US007 hoặc
+  AI provider.
+
+Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for final acceptance.**

@@ -191,4 +191,103 @@ describe("Script Editor autosave controller", () => {
 			snapshot: { caption: "Bản mới nhất" },
 		});
 	});
+
+	it("flushes pending dirty state when navigation disposes the editor", async () => {
+		vi.useFakeTimers();
+		const save = vi.fn(async (request) => ({
+			revision: request.baseRevision + 1,
+			editableSnapshot: request.editableSnapshot,
+		}));
+		const controller = createScriptAutosaveController({
+			scriptVersionId: "draft-1",
+			initialSnapshot: snapshot,
+			initialRevision: 5,
+			save,
+		});
+
+		controller.updateSnapshot((current) => ({
+			...current,
+			voiceoverSegments: [{ key: "intro", text: "Edit trước navigation" }],
+		}));
+		await vi.advanceTimersByTimeAsync(500);
+		controller.dispose({ flush: true });
+
+		expect(save).toHaveBeenCalledTimes(1);
+		expect(save.mock.calls[0]?.[0]).toMatchObject({
+			baseRevision: 5,
+			editableSnapshot: {
+				voiceoverSegments: [{ text: "Edit trước navigation" }],
+			},
+		});
+		await vi.advanceTimersByTimeAsync(0);
+		expect(controller.getState().baseRevision).toBe(6);
+	});
+
+	it("does not save a clean editor during navigation", async () => {
+		vi.useFakeTimers();
+		const save = vi.fn(async (request) => ({
+			revision: request.baseRevision + 1,
+			editableSnapshot: request.editableSnapshot,
+		}));
+		const controller = createScriptAutosaveController({
+			scriptVersionId: "draft-1",
+			initialSnapshot: snapshot,
+			initialRevision: 1,
+			save,
+		});
+
+		controller.dispose({ flush: true });
+		await vi.advanceTimersByTimeAsync(SCRIPT_AUTOSAVE_DEBOUNCE_MS);
+
+		expect(save).not.toHaveBeenCalled();
+	});
+
+	it("flushes newer edits after an in-flight save completes", async () => {
+		vi.useFakeTimers();
+		let resolveFirst:
+			| ((result: {
+					revision: number;
+					editableSnapshot: ScriptVersionEditableSnapshot;
+			  }) => void)
+			| undefined;
+		const save = vi
+			.fn()
+			.mockImplementationOnce(
+				(_request: {
+					baseRevision: number;
+					editableSnapshot: ScriptVersionEditableSnapshot;
+				}) =>
+					new Promise((resolve) => {
+						resolveFirst = resolve;
+					}),
+			)
+			.mockImplementation(async (request) => ({
+				revision: request.baseRevision + 1,
+				editableSnapshot: request.editableSnapshot,
+			}));
+		const controller = createScriptAutosaveController({
+			scriptVersionId: "draft-1",
+			initialSnapshot: snapshot,
+			initialRevision: 1,
+			save,
+		});
+
+		controller.updateSnapshot((current) => ({ ...current, caption: "A" }));
+		await vi.advanceTimersByTimeAsync(SCRIPT_AUTOSAVE_DEBOUNCE_MS);
+		controller.updateSnapshot((current) => ({ ...current, caption: "B" }));
+		controller.dispose({ flush: true });
+		expect(save).toHaveBeenCalledTimes(1);
+
+		resolveFirst?.({
+			revision: 2,
+			editableSnapshot: { ...snapshot, caption: "A" },
+		});
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(save).toHaveBeenCalledTimes(2);
+		expect(save.mock.calls[1]?.[0]).toMatchObject({
+			baseRevision: 2,
+			editableSnapshot: { caption: "B" },
+		});
+	});
 });

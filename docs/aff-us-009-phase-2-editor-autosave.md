@@ -44,6 +44,19 @@ Local editor state tách khỏi TanStack Query cache để giữ caret/focus ổ
 - `SCRIPT_VERSION_CONFLICT` chuyển sang `conflict`, dừng autosave và giữ nguyên local edits;
 - chỉ nút `Tải bản mới nhất` mới refetch rồi thay thế local snapshot.
 
+### C1. Quyền sở hữu local state sau hardening
+
+Sau khi editor mount, controller local là owner của working snapshot. Refetch nền của
+`scriptVersion.getCurrent`, thay đổi `updatedAt` hoặc `revision` trong props với cùng
+`scriptVersionId` không được reset nội dung đang sửa, caret hoặc trạng thái dirty. Một draft ID
+mới tạo controller mới; thay thế snapshot của cùng draft chỉ xảy ra qua thao tác rõ ràng
+`Tải bản mới nhất`.
+
+Khi unmount do điều hướng nội bộ trong app, editor best-effort flush thay đổi dirty ngay lập tức
+thay vì chờ debounce 1000ms. Nếu request A đang in-flight và local đã có edit B, response A cập
+nhật base revision rồi controller gửi tiếp B với revision mới. Đây là bảo đảm cho navigation trong
+app; không mở rộng thành cam kết chống mất dữ liệu khi đóng tab, kill process hoặc mất mạng.
+
 Server-side merge/structural guard và claims stale semantics vẫn thuộc Phase 1; UI không tự sửa
 claims hoặc tự rebase khi có generation mới.
 
@@ -56,20 +69,22 @@ hiển thị readiness read-only; execution nằm ở phase sau.
 ## E. Verification
 
 Unit controller tests chứng minh debounce 1000ms, coalescing, không chạy concurrent, giữ local
-edit trong request cũ, cập nhật base revision, conflict pause và explicit reload.
+edit trong request cũ, cập nhật base revision, conflict pause, explicit reload, flush khi unmount,
+editor sạch không tạo request và flush edit B sau khi request A hoàn tất.
 
 Authenticated E2E chứng minh initialize → editor → chọn hook → sửa voiceover → autosave → claims
-stale → refresh/reopen vẫn giữ snapshot, cùng notice khi generation mới xuất hiện. Test không gọi
-paid AI và chỉ mock RPC boundary cho editor UI.
+stale → refresh/reopen vẫn giữ snapshot, cùng notice khi generation mới xuất hiện. Regression E2E
+bổ sung refetch nền cùng draft ID không ghi đè local edit và điều hướng nội bộ flush được dirty
+snapshot trước khi rời route. Test không gọi paid AI và chỉ mock RPC boundary cho editor UI.
 
 Kết quả verification:
 
-- `pnpm --filter web test`: 15 files, 116 tests passed;
+- `pnpm --filter web test`: 15 files, 119 tests passed;
 - `pnpm test:integration:script-version`: pass toàn bộ Phase 1 runtime proof;
-- focused Script Studio E2E: 5 passed;
-- full authenticated E2E: 17 passed, 1 failed ở regression AFF-US-004 browser Back ngoài scope,
-  URL giữ `/projects/{id}` thay vì `/projects/{id}/product`;
-- `pnpm check-types`, `pnpm build`, `pnpm db:generate`, scoped Biome và `git diff --check`: pass;
+- focused Script Studio E2E: 7 passed, gồm refetch ownership và navigation flush;
+- full authenticated E2E: 20 passed, 0 failed, 0 skipped;
+- `pnpm check-types`, `pnpm build`, `pnpm db:generate` (no schema changes), scoped Biome và
+  `git diff --check`: pass;
 - không tạo migration, không thay Neon/database và không gọi paid AI.
 
 ## F. Files chính
@@ -83,7 +98,7 @@ Kết quả verification:
 
 ## G. Status
 
-Phase 2 verification is complete for the editor scope. Phase 3 version history/restore chưa được
-triển khai trong phạm vi này.
+Phase 2 verification và final hardening đã hoàn tất trong editor scope. Phase 3 version
+history/restore chưa được triển khai trong phạm vi này.
 
-**AFF-US-009 Phase 2 Script Editor & Autosave is ready for review.**
+**AFF-US-009 Phase 2 Script Editor & Autosave is ready for final acceptance.**

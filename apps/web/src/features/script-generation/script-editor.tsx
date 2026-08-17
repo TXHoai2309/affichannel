@@ -26,7 +26,7 @@ import {
 	LockKeyhole,
 	RefreshCw,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
 	getScriptVersionErrorMessage,
@@ -208,17 +208,11 @@ export default function ScriptEditor({
 		save,
 	});
 	const { state } = autosave;
-	const [selectedHookKey, setSelectedHookKey] = useState(
-		draft.editableSnapshot.selectedHookKey,
-	);
 	const [reloadPending, setReloadPending] = useState(false);
 	const [reloadError, setReloadError] = useState<string | null>(null);
 	const [durationInputs, setDurationInputs] = useState<Record<number, string>>(
 		{},
 	);
-	useEffect(() => {
-		setSelectedHookKey(draft.editableSnapshot.selectedHookKey);
-	}, [draft.editableSnapshot.selectedHookKey]);
 	const readiness = validateScriptVersionForFactLock(state.snapshot).success;
 	const sourceLabel =
 		sourceArtifact?.id === draft.sourceGenerationId
@@ -263,7 +257,6 @@ export default function ScriptEditor({
 				setReloadError("Không tìm thấy bản nháp hiện tại.");
 				return;
 			}
-			setSelectedHookKey(latest.editableSnapshot.selectedHookKey);
 			autosave.resetFromServer(latest.editableSnapshot, latest.revision);
 		} catch {
 			setReloadError("Không thể tải bản mới nhất. Hãy thử lại.");
@@ -370,18 +363,17 @@ export default function ScriptEditor({
 							{state.snapshot.hookVariants.map((hook, index) => (
 								<div
 									className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${
-										selectedHookKey === hook.key
+										state.snapshot.selectedHookKey === hook.key
 											? "border-primary bg-primary/5"
 											: ""
 									}`}
 									key={hook.key}
 								>
 									<Button
-										aria-checked={selectedHookKey === hook.key}
+										aria-checked={state.snapshot.selectedHookKey === hook.key}
 										aria-label={`Hook ${index + 1}`}
 										className="mt-0.5 shrink-0"
 										onClick={() => {
-											setSelectedHookKey(hook.key);
 											updateSnapshot((current) => ({
 												...current,
 												selectedHookKey: hook.key,
@@ -395,7 +387,7 @@ export default function ScriptEditor({
 										<span
 											aria-hidden="true"
 											className={`size-2.5 rounded-full ${
-												selectedHookKey === hook.key
+												state.snapshot.selectedHookKey === hook.key
 													? "bg-primary"
 													: "bg-muted-foreground/30"
 											}`}

@@ -1040,6 +1040,8 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 			input: { projectId },
 			meta: { suppressGlobalErrorToast: true },
 			retry: false,
+			refetchOnReconnect: true,
+			refetchOnWindowFocus: true,
 			staleTime: 0,
 		}),
 	);

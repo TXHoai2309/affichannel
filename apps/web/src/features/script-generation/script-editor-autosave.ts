@@ -54,7 +54,7 @@ export type ScriptAutosaveController = {
 		snapshot: ScriptVersionEditableSnapshot,
 		revision: number,
 	) => void;
-	dispose: () => void;
+	dispose: (options?: { flush?: boolean }) => void;
 };
 
 function getRecord(value: unknown): Record<string, unknown> | null {
@@ -126,6 +126,7 @@ export function createScriptAutosaveController(
 	let sequence = 0;
 	let epoch = 0;
 	let disposed = false;
+	let closing = false;
 	let state: ScriptAutosaveState = {
 		snapshot: options.initialSnapshot,
 		baseRevision: options.initialRevision,
@@ -134,7 +135,7 @@ export function createScriptAutosaveController(
 	};
 
 	function emit() {
-		if (!disposed) options.onStateChange?.(state);
+		if (!disposed && !closing) options.onStateChange?.(state);
 	}
 
 	function clearTimer() {
@@ -144,7 +145,13 @@ export function createScriptAutosaveController(
 
 	function schedule() {
 		clearTimer();
-		if (disposed || inFlight || state.status === "conflict" || !state.dirty)
+		if (
+			disposed ||
+			closing ||
+			inFlight ||
+			state.status === "conflict" ||
+			!state.dirty
+		)
 			return;
 		timer = setTimeout(() => {
 			timer = undefined;
@@ -190,7 +197,12 @@ export function createScriptAutosaveController(
 				latestRevision: undefined,
 			};
 			emit();
-			if (localChanged) schedule();
+			if (localChanged) {
+				if (closing) void startSave();
+				else schedule();
+			} else if (closing) {
+				finishClosing();
+			}
 		} catch (error) {
 			inFlight = false;
 			if (disposed || requestEpoch !== epoch) return;
@@ -211,13 +223,23 @@ export function createScriptAutosaveController(
 					errorCode: code,
 				};
 			}
-			emit();
+			if (closing) finishClosing();
+			else emit();
 		}
+	}
+
+	function finishClosing() {
+		if (!closing || disposed || inFlight || timer !== undefined) return;
+		disposed = true;
+		closing = false;
+		epoch += 1;
+		clearTimer();
 	}
 
 	return {
 		getState: () => state,
 		updateSnapshot(updater) {
+			if (disposed || closing) return;
 			sequence += 1;
 			const nextSnapshot = updater(state.snapshot);
 			state = {
@@ -244,8 +266,10 @@ export function createScriptAutosaveController(
 			void startSave();
 		},
 		resetFromServer(snapshot, revision) {
+			if (disposed) return;
 			epoch += 1;
 			sequence += 1;
+			closing = false;
 			clearTimer();
 			state = {
 				snapshot,
@@ -255,10 +279,23 @@ export function createScriptAutosaveController(
 			};
 			emit();
 		},
-		dispose() {
-			disposed = true;
-			epoch += 1;
+		dispose({ flush = false } = {}) {
+			if (disposed) return;
+			if (!flush) {
+				disposed = true;
+				epoch += 1;
+				clearTimer();
+				return;
+			}
+
+			closing = true;
 			clearTimer();
+			if (inFlight) return;
+			if (state.dirty && state.status !== "conflict") {
+				void startSave();
+				return;
+			}
+			finishClosing();
 		},
 	};
 }
@@ -271,60 +308,52 @@ export function useScriptAutosave(options: {
 }) {
 	const saveRef = useRef(options.save);
 	saveRef.current = options.save;
-	const initialSnapshotRef = useRef(options.initialSnapshot);
-	initialSnapshotRef.current = options.initialSnapshot;
-	const serverIdentityRef = useRef({
-		scriptVersionId: options.scriptVersionId,
-		revision: options.initialRevision,
-	});
-	const [state, setState] = useState<ScriptAutosaveState>(() => ({
-		snapshot: options.initialSnapshot,
-		baseRevision: options.initialRevision,
-		dirty: false,
-		status: "saved",
-	}));
-	const controllerRef = useRef<ScriptAutosaveController | null>(null);
+	const [, forceRender] = useState(0);
+	const controllerRef = useRef<{
+		scriptVersionId: string;
+		controller: ScriptAutosaveController;
+	} | null>(null);
+	const mountedControllerRef = useRef<ScriptAutosaveController | null>(null);
 	const lifecycleRef = useRef(0);
-	if (!controllerRef.current) {
-		controllerRef.current = createScriptAutosaveController({
+	if (
+		!controllerRef.current ||
+		controllerRef.current.scriptVersionId !== options.scriptVersionId
+	) {
+		controllerRef.current = {
 			scriptVersionId: options.scriptVersionId,
-			initialSnapshot: options.initialSnapshot,
-			initialRevision: options.initialRevision,
-			save: (request) => saveRef.current(request),
-			onStateChange: setState,
-		});
+			controller: createScriptAutosaveController({
+				scriptVersionId: options.scriptVersionId,
+				initialSnapshot: options.initialSnapshot,
+				initialRevision: options.initialRevision,
+				save: (request) => saveRef.current(request),
+				onStateChange: () => forceRender((current) => current + 1),
+			}),
+		};
 	}
 	const controller = controllerRef.current;
 
 	useEffect(() => {
-		const identityChanged =
-			serverIdentityRef.current.scriptVersionId !== options.scriptVersionId ||
-			serverIdentityRef.current.revision !== options.initialRevision;
-		serverIdentityRef.current = {
-			scriptVersionId: options.scriptVersionId,
-			revision: options.initialRevision,
-		};
-		if (!identityChanged) return;
-		controller.resetFromServer(
-			initialSnapshotRef.current,
-			options.initialRevision,
-		);
-	}, [controller, options.initialRevision, options.scriptVersionId]);
+		const previousController = mountedControllerRef.current;
+		if (previousController && previousController !== controller.controller) {
+			previousController.dispose({ flush: true });
+		}
+		mountedControllerRef.current = controller.controller;
 
-	useEffect(() => {
 		const lifecycle = ++lifecycleRef.current;
 		return () => {
 			queueMicrotask(() => {
-				if (lifecycleRef.current === lifecycle) controller.dispose();
+				if (lifecycleRef.current === lifecycle) {
+					controller.controller.dispose({ flush: true });
+				}
 			});
 		};
 	}, [controller]);
 
 	return {
-		state,
-		updateSnapshot: controller.updateSnapshot,
-		flush: controller.flush,
-		retry: controller.retry,
-		resetFromServer: controller.resetFromServer,
+		state: controller.controller.getState(),
+		updateSnapshot: controller.controller.updateSnapshot,
+		flush: controller.controller.flush,
+		retry: controller.controller.retry,
+		resetFromServer: controller.controller.resetFromServer,
 	};
 }

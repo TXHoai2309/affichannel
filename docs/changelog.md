@@ -242,3 +242,17 @@ sử dụng Semantic Versioning.
 - Bổ sung unit controller tests và authenticated mocked E2E cho initialize, edit, autosave, reload,
   claims stale/current boundary và newer-generation notice.
 - Phase 3 history/restore chưa triển khai.
+
+### AFF-US-009 Phase 2 final hardening — 2026-08-17
+
+- Controller local giữ quyền sở hữu working snapshot sau khi mount; refetch nền hoặc `revision`
+  mới của cùng `scriptVersionId` không reset local edits. Chỉ draft ID mới hoặc thao tác
+  `Tải bản mới nhất` mới thay snapshot.
+- Điều hướng nội bộ best-effort flush dirty autosave ngay khi unmount; nếu A đang in-flight và
+  local có B mới hơn, A hoàn tất trước rồi B được gửi với base revision mới. Strict Mode cleanup
+  giả không tạo duplicate request.
+- Thêm regression unit/E2E cho same-ID refetch, clean navigation, dirty navigation flush và
+  in-flight A → B; không thay đổi schema, migration, backend semantics, Product Facts, US007 hoặc
+  AI provider.
+
+Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for final acceptance.**
