@@ -34,6 +34,8 @@ const {
 	executeFactLockRun,
 	finalizeFactLockRun,
 	getFactLockState,
+	manualApproveFactLockClaim,
+	mutateFactLockClaimSourceAndRefresh,
 	prepareFactLockRun,
 	runPreparedFactLock,
 } = await import("../packages/api/src/services/fact-lock-service.ts");
@@ -169,13 +171,14 @@ function supportedOutput(
 		factId: string;
 		relation: "supports" | "related" | "contradicts";
 	}>,
+	claimText = "Pin dùng 20 giờ trong một lần sạc.",
 ) {
 	return {
 		schemaVersion: "fact-lock-output.v1",
 		claims: [
 			{
 				claimKey: "claim-supported",
-				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				claimText,
 				occurrence: { section: "voiceover" as const, segmentKey: "intro" },
 				classificationStatus: "SUPPORTED" as const,
 				reason: "Khớp Product Fact.",
@@ -201,19 +204,44 @@ function needsReviewOutput(
 		factId: string;
 		relation: "supports" | "related" | "contradicts";
 	}> = [],
+	claimText = "Pin dùng 20 giờ trong một lần sạc.",
 ) {
 	return {
 		schemaVersion: "fact-lock-output.v1",
 		claims: [
 			{
 				claimKey: "claim-review",
-				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				claimText,
 				occurrence: { section: "voiceover", segmentKey: "intro" },
 				classificationStatus: "NEEDS_REVIEW",
 				reason: "Cần kiểm tra lại cách diễn đạt.",
 				confidence: null,
 				suggestionText: "Đối chiếu với nguồn chính thức.",
 				factMappings,
+			},
+		],
+	};
+}
+
+function needsReviewAtOccurrence(input: {
+	claimText: string;
+	occurrence:
+		| { section: "voiceover"; segmentKey: string }
+		| { section: "scene"; sceneOrder: number };
+	suggestionText?: string;
+}) {
+	return {
+		schemaVersion: "fact-lock-output.v1",
+		claims: [
+			{
+				claimKey: "claim-review",
+				claimText: input.claimText,
+				occurrence: input.occurrence,
+				classificationStatus: "NEEDS_REVIEW" as const,
+				reason: "Cần kiểm tra lại cách diễn đạt.",
+				confidence: null,
+				suggestionText: input.suggestionText ?? null,
+				factMappings: [],
 			},
 		],
 	};
@@ -613,6 +641,46 @@ try {
 			.limit(1)
 	)[0];
 	assert(reviewClaimRow, "Review claim fixture was not persisted.");
+	await expectCode(
+		() =>
+			manualApproveFactLockClaim(actorB, {
+				projectId: fixtureA.projectId,
+				factLockRunId: reviewRun.id,
+				claimId: reviewClaimRow.id,
+				scriptVersionId: fixtureA.scriptVersionId,
+				baseRevision: 1,
+			}),
+		"FACT_LOCK_NOT_FOUND",
+	);
+	const approvedState = await manualApproveFactLockClaim(actorA, {
+		projectId: fixtureA.projectId,
+		factLockRunId: reviewRun.id,
+		claimId: reviewClaimRow.id,
+		scriptVersionId: fixtureA.scriptVersionId,
+		baseRevision: 1,
+		reviewNote: "Đã đối chiếu nguồn chính thức.",
+	});
+	const approvedClaim = approvedState.latestRequest?.claims.find(
+		(claim) => claim.id === reviewClaimRow.id,
+	);
+	assert(
+		approvedState.latestRequest?.status === "passed" &&
+			approvedClaim?.classificationStatus === "NEEDS_REVIEW" &&
+			approvedClaim.reviewStatus === "MANUAL_APPROVED" &&
+			approvedClaim.reviewNote === "Đã đối chiếu nguồn chính thức.",
+		"Manual approve service did not atomically persist review metadata and passed status.",
+	);
+	await expectCode(
+		() =>
+			manualApproveFactLockClaim(actorA, {
+				projectId: fixtureA.projectId,
+				factLockRunId: reviewRun.id,
+				claimId: reviewClaimRow.id,
+				scriptVersionId: fixtureA.scriptVersionId,
+				baseRevision: 1,
+			}),
+		"FACT_LOCK_CLAIM_NOT_REVIEWABLE",
+	);
 	const reviewedAt = new Date();
 	await db
 		.update(factLockClaim)
@@ -680,6 +748,131 @@ try {
 		.update(factLockClaim)
 		.set({ classificationStatus: "NEEDS_REVIEW", reviewStatus: "UNRESOLVED" })
 		.where(eq(factLockClaim.id, reviewClaimRow.id));
+	await db
+		.update(factLockRun)
+		.set({ status: "review_required" })
+		.where(eq(factLockRun.id, reviewRun.id));
+
+	const editRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			idempotencyKey: `${prefix}_resolution_edit`,
+		},
+		config,
+	);
+	const editResult = await runPreparedFactLock(
+		actorA,
+		editRun,
+		fakeProvider(
+			needsReviewAtOccurrence({
+				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+			}),
+		),
+	);
+	assert(
+		editResult.status === "review_required",
+		"Edit resolution fixture did not require review.",
+	);
+	const editClaimId = editResult.claims[0]?.id;
+	assert(editClaimId, "Edit resolution claim has no persisted id.");
+	const editedState = await mutateFactLockClaimSourceAndRefresh(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			factLockRunId: editRun.id,
+			claimId: editClaimId,
+			scriptVersionId: fixtureA.scriptVersionId,
+			baseRevision: 1,
+		},
+		{ action: "edit", newText: "Pin đã được kiểm chứng ở mức 20 giờ." },
+	);
+	assert(
+		editedState.currentScriptVersion?.revision === 2 &&
+			editedState.latestRequest?.effectiveStatus === "stale" &&
+			(
+				editedState.currentScriptVersion as unknown as {
+					claimsStatus: string;
+				}
+			).claimsStatus === "stale",
+		"Editing a claim did not CAS the draft and invalidate the old run.",
+	);
+
+	const suggestionRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			idempotencyKey: `${prefix}_resolution_suggestion`,
+		},
+		config,
+	);
+	const suggestionResult = await runPreparedFactLock(
+		actorA,
+		suggestionRun,
+		fakeProvider(
+			needsReviewAtOccurrence({
+				claimText: "Pin đã được kiểm chứng ở mức 20 giờ.",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+				suggestionText: "Thời lượng pin được công bố là 20 giờ.",
+			}),
+		),
+	);
+	const suggestionClaimId = suggestionResult.claims[0]?.id;
+	assert(suggestionClaimId, "Suggestion resolution claim has no persisted id.");
+	const suggestedState = await mutateFactLockClaimSourceAndRefresh(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			factLockRunId: suggestionRun.id,
+			claimId: suggestionClaimId,
+			scriptVersionId: fixtureA.scriptVersionId,
+			baseRevision: 2,
+		},
+		{ action: "suggestion", newText: "Thời lượng pin được công bố là 20 giờ." },
+	);
+	assert(
+		suggestedState.currentScriptVersion?.revision === 3 &&
+			suggestedState.latestRequest?.effectiveStatus === "stale",
+		"Applying a stored suggestion did not persist and invalidate the old run.",
+	);
+
+	const deleteRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			idempotencyKey: `${prefix}_resolution_delete`,
+		},
+		config,
+	);
+	const deleteResult = await runPreparedFactLock(
+		actorA,
+		deleteRun,
+		fakeProvider(
+			needsReviewAtOccurrence({
+				claimText: "Pin 20 giờ",
+				occurrence: { section: "scene", sceneOrder: 1 },
+			}),
+		),
+	);
+	const deleteClaimId = deleteResult.claims[0]?.id;
+	assert(deleteClaimId, "Delete resolution claim has no persisted id.");
+	const deletedState = await mutateFactLockClaimSourceAndRefresh(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			factLockRunId: deleteRun.id,
+			claimId: deleteClaimId,
+			scriptVersionId: fixtureA.scriptVersionId,
+			baseRevision: 3,
+		},
+		{ action: "delete" },
+	);
+	assert(
+		deletedState.currentScriptVersion?.revision === 4 &&
+			deletedState.latestRequest?.effectiveStatus === "stale",
+		"Deleting a scene claim did not persist an immutable-safe source mutation.",
+	);
 
 	await db.insert(productFact).values([
 		{
@@ -725,10 +918,13 @@ try {
 		actorA,
 		multiRevisionRun,
 		fakeProvider(
-			supportedOutput([
-				{ factId: fixtureA.multiFactAId, relation: "supports" },
-				{ factId: fixtureA.multiFactBId, relation: "supports" },
-			]),
+			supportedOutput(
+				[
+					{ factId: fixtureA.multiFactAId, relation: "supports" },
+					{ factId: fixtureA.multiFactBId, relation: "supports" },
+				],
+				"Thời lượng pin được công bố là 20 giờ.",
+			),
 		),
 	);
 	const multiMappings = multiRevisionResult.claims[0]?.factMappings ?? [];
@@ -756,9 +952,10 @@ try {
 		actorA,
 		relatedRun,
 		fakeProvider(
-			needsReviewOutput([
-				{ factId: fixtureA.multiFactAId, relation: "related" },
-			]),
+			needsReviewOutput(
+				[{ factId: fixtureA.multiFactAId, relation: "related" }],
+				"Thời lượng pin được công bố là 20 giờ.",
+			),
 		),
 	);
 	assert(

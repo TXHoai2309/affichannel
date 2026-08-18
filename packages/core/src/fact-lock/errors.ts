@@ -8,15 +8,31 @@ export const factLockErrorCodes = [
 	"FACT_LOCK_PROVIDER_NOT_CONFIGURED",
 	"FACT_LOCK_PROVIDER_UNAVAILABLE",
 	"FACT_LOCK_COST_ESTIMATE_UNAVAILABLE",
+	"FACT_LOCK_STALE",
+	"FACT_LOCK_CONFLICT",
+	"FACT_LOCK_CLAIM_NOT_FOUND",
+	"FACT_LOCK_CLAIM_NOT_REVIEWABLE",
+	"FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+	"FACT_LOCK_CLAIM_SOURCE_MISMATCH",
+	"FACT_LOCK_CLAIM_SUGGESTION_UNAVAILABLE",
+	"FACT_LOCK_SCRIPT_VERSION_NOT_FOUND",
+	"FACT_LOCK_SCRIPT_VERSION_IMMUTABLE",
+	"FACT_LOCK_EDIT_INVALID",
 ] as const;
 export type FactLockErrorCode = (typeof factLockErrorCodes)[number];
 
 export class FactLockError extends Error {
 	readonly code: FactLockErrorCode;
+	readonly metadata: Record<string, unknown> | undefined;
 
-	constructor(code: FactLockErrorCode, message: string = code) {
+	constructor(
+		code: FactLockErrorCode,
+		message: string = code,
+		metadata?: Record<string, unknown>,
+	) {
 		super(message);
 		this.name = "FactLockError";
 		this.code = code;
+		this.metadata = metadata;
 	}
 }

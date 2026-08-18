@@ -272,3 +272,16 @@ sử dụng Semantic Versioning.
   AI provider.
 
 Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for final acceptance.**
+
+### AFF-US-010 Phase 2 — Fact Lock Review & Resolution — 2026-08-18
+
+- Thêm Review UI responsive tại `/projects/[projectId]/fact-lock`: claims list, filter,
+  classification/review status, reason/confidence, suggestion và Product Facts evidence
+  theo revision snapshot.
+- Thêm manual approve, edit source, safe delete và apply stored suggestion qua
+  workspace-scoped transactional API với optimistic CAS; run cũ tự chuyển effective
+  stale sau khi ScriptVersion hoặc Product Fact thay đổi.
+- Thêm UI/unit, integration và authenticated E2E proof; không tạo migration, không
+  đổi schema, không triển khai FactLockGate/Voice/Render/TTS.
+
+Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.**

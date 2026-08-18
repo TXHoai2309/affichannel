@@ -1161,3 +1161,34 @@ Trạng thái: **AFF-US-010 Phase 0 Contract Hardening is ready for acceptance.*
 - Phase 2 review UI, manual transitions, Voice/Render gate và TTS/audio vẫn chưa bắt đầu.
 
 Trạng thái: **AFF-US-010 Phase 1 Foundation & Classification is ready for acceptance.**
+
+### 2026-08-18 — AFF-US-010 Phase 2 Fact Lock Review & Resolution
+
+- Thêm `/projects/[projectId]/fact-lock` với three-pane Review responsive: claims,
+  review detail và Product Facts evidence theo exact `factId + factRevision` snapshot.
+- Thêm protected business actions `manualApprove`, `editClaimSource`,
+  `deleteClaimSource` và `applySuggestion`. Manual approve giữ classification
+  `NEEDS_REVIEW`, ghi reviewer/time/note và atomically chuyển run sang `passed` khi đủ
+  claim resolved. Source mutation dùng exact occurrence locator, CAS revision, không
+  mutate Fact Lock audit và làm run cũ effective stale.
+- Không tạo migration/schema change, không đụng Product Facts/US007, không triển khai
+  FactLockGate, Voice/Render, TTS hoặc US sau.
+- Bổ sung core resolution helper, UI state tests, Fact Lock integration proof và
+  authenticated E2E fixture cho load/approve/refresh/reopen; mọi fixture có cleanup.
+
+Kiểm tra Phase 2:
+
+- `pnpm check-types`: đạt, 5/5 package tasks.
+- `pnpm --filter web test`: đạt, 17 files / 130 tests.
+- `pnpm test:integration:fact-lock`: đạt, gồm resolution proof.
+- Authenticated focused E2E `fact-lock-review.spec.ts`: 1/1 pass, 0 skipped, 0 failed;
+  browser console error check pass.
+- Full authenticated E2E rerun: 22/22 pass, 0 skipped, 0 failed; gồm test AFF-US-010
+  load/approve/refresh/reopen. Một số log `ECONNRESET`/Drawer warning hiện hữu ở các
+  suite Script Editor nhưng không làm test fail và không nằm trong route Phase 2.
+- `pnpm --filter web build`: đạt, route `/projects/[projectId]/fact-lock` được build
+  dynamic thành công.
+- `pnpm db:generate`: đạt, `No schema changes, nothing to migrate`.
+- Scoped Biome và `git diff --check`: đạt; test artifacts đã restore về baseline.
+
+Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.**

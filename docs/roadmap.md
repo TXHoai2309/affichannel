@@ -193,7 +193,17 @@ dependency semantics, input/hash/idempotency contract, deterministic
 `PROHIBITED` authority, resolution CAS và gate reason codes. Phase 1 mới tạo
 schema/runtime. Phase 1 foundation/classification đã apply additive migration,
 đưa protected run/getState và deterministic runtime proof vào source; Phase 2
-review UI/manual transition vẫn chờ acceptance.
+review UI/manual transition đã triển khai và đang chờ final acceptance. Phase 2
+không tạo migration mới: dùng read model Fact Lock hiện có, Product Fact snapshot
+theo mapping revision và ScriptVersion CAS.
+
+AFF-US-010 Phase 2 (2026-08-18) đã thêm `/projects/[projectId]/fact-lock` với
+three-pane Review: claim list, review detail và Product Facts evidence. Manual
+approve giữ nguyên classification `NEEDS_REVIEW`, ghi reviewer/time/note và chỉ
+chuyển run sang `passed` khi mọi claim resolved. Edit/delete/apply suggestion là
+business mutations transactional, exact occurrence + optimistic `baseRevision`,
+không mutate claim audit và làm run cũ effective `stale`. Voice/Render gate,
+FactLockGate, TTS và US sau vẫn chưa triển khai.
 
 ```text
 Chạy kiểm tra → xem claim → liên kết bằng chứng → xử lý review → pass hoặc blocked

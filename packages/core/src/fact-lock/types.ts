@@ -107,6 +107,7 @@ export type FactLockStoredClaim = Omit<
 	FactLockProviderClaim,
 	"factMappings"
 > & {
+	id: string | null;
 	reviewStatus: FactLockReviewStatus;
 	checkedAt: Date;
 	reviewedByUserId: string | null;
@@ -134,6 +135,7 @@ export type FactLockReadModel = {
 		createdAt: Date;
 		finishedAt: Date | null;
 		errorCode: string | null;
+		facts: FactLockProductFactSnapshot[];
 		claims: FactLockStoredClaim[];
 	} | null;
 	latestApplicableRun: FactLockReadModel["latestRequest"];

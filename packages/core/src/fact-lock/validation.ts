@@ -179,6 +179,7 @@ export function validateFactLockProviderOutput(
 		}
 		claims.push({
 			...claim,
+			id: null,
 			classificationStatus,
 			reviewStatus: reviewStatus(classificationStatus),
 			checkedAt: new Date(),

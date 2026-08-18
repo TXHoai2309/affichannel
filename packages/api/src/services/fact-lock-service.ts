@@ -9,6 +9,8 @@ import {
 	FACT_LOCK_PROMPT_VERSION,
 	FACT_LOCK_SNAPSHOT_VERSION,
 	FactLockError,
+	type FactLockSourceMutation,
+	mutateFactLockClaimSource,
 	outputRulesSchema,
 	resolveBusinessToday,
 	validateFactLockProviderOutput,
@@ -40,7 +42,7 @@ import {
 	project,
 	scriptVersion,
 } from "@affichannel/db";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type {
 	TextProvider,
 	TextProviderEstimate,
@@ -607,6 +609,7 @@ async function loadClaims(
 		byClaim.set(mapping.claimId, list);
 	}
 	return claims.map((claim) => ({
+		id: claim.id,
 		claimKey: claim.claimKey,
 		claimText: claim.claimText,
 		occurrence: claim.occurrenceJson as FactLockStoredClaim["occurrence"],
@@ -867,10 +870,7 @@ export async function finalizeFactLockRun(
 		if (!final) throw new Error("Could not reload Fact Lock run.");
 		return {
 			...toArtifact(final),
-			claims:
-				claims.length > 0
-					? claims
-					: await loadClaims(transaction, actor, final.id),
+			claims: await loadClaims(transaction, actor, final.id),
 		};
 	});
 }
@@ -1001,6 +1001,8 @@ export async function getFactLockState(
 					createdAt: item.run.createdAt,
 					finishedAt: item.run.finishedAt,
 					errorCode: item.run.errorCode,
+					facts: (item.run.inputSnapshotJson as FactLockInputSnapshot)
+						.productFacts,
 					claims: item.claims,
 				}
 			: null;
@@ -1029,6 +1031,264 @@ export async function getFactLockState(
 		latestApplicableRun,
 		effectiveStatus: latestRequest?.effectiveStatus ?? null,
 	};
+}
+
+type FactLockTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+type FactLockResolutionInput = {
+	projectId: string;
+	factLockRunId: string;
+	claimId: string;
+	scriptVersionId: string;
+	baseRevision: number;
+};
+
+async function lockResolutionProject(
+	transaction: FactLockTransaction,
+	actor: WorkspaceActor,
+	projectId: string,
+) {
+	const [record] = await transaction
+		.select({ id: project.id })
+		.from(project)
+		.where(
+			and(
+				eq(project.id, projectId),
+				eq(project.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1)
+		.for("update", { of: project });
+	if (!record)
+		throw new FactLockError(
+			"FACT_LOCK_NOT_FOUND",
+			"Project không tồn tại trong workspace.",
+		);
+}
+
+async function lockResolutionRun(
+	transaction: FactLockTransaction,
+	actor: WorkspaceActor,
+	input: FactLockResolutionInput,
+) {
+	const [run] = await transaction
+		.select()
+		.from(factLockRun)
+		.where(
+			and(
+				eq(factLockRun.id, input.factLockRunId),
+				eq(factLockRun.projectId, input.projectId),
+				eq(factLockRun.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1)
+		.for("update", { of: factLockRun });
+	if (!run)
+		throw new FactLockError(
+			"FACT_LOCK_NOT_FOUND",
+			"Fact Lock run không tồn tại trong project.",
+		);
+	return run;
+}
+
+async function lockResolutionDraft(
+	transaction: FactLockTransaction,
+	actor: WorkspaceActor,
+	input: FactLockResolutionInput,
+) {
+	const [draft] = await transaction
+		.select()
+		.from(scriptVersion)
+		.where(
+			and(
+				eq(scriptVersion.id, input.scriptVersionId),
+				eq(scriptVersion.projectId, input.projectId),
+				eq(scriptVersion.workspaceId, actor.workspaceId),
+				eq(scriptVersion.status, "draft"),
+			),
+		)
+		.limit(1)
+		.for("update", { of: scriptVersion });
+	if (!draft)
+		throw new FactLockError(
+			"FACT_LOCK_SCRIPT_VERSION_NOT_FOUND",
+			"Không tìm thấy ScriptVersion draft hiện tại.",
+		);
+	return draft;
+}
+
+async function lockResolutionClaim(
+	transaction: FactLockTransaction,
+	actor: WorkspaceActor,
+	input: FactLockResolutionInput,
+) {
+	const [claim] = await transaction
+		.select()
+		.from(factLockClaim)
+		.where(
+			and(
+				eq(factLockClaim.id, input.claimId),
+				eq(factLockClaim.runId, input.factLockRunId),
+				eq(factLockClaim.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1)
+		.for("update", { of: factLockClaim });
+	if (!claim)
+		throw new FactLockError(
+			"FACT_LOCK_CLAIM_NOT_FOUND",
+			"Không tìm thấy claim trong Fact Lock run.",
+		);
+	return claim;
+}
+
+function assertResolutionRunIsCurrent(
+	run: typeof factLockRun.$inferSelect,
+	draft: typeof scriptVersion.$inferSelect,
+	input: FactLockResolutionInput,
+	dependenciesCurrent: boolean,
+) {
+	if (run.scriptVersionId !== input.scriptVersionId)
+		throw new FactLockError(
+			"FACT_LOCK_CLAIM_SOURCE_MISMATCH",
+			"Claim không thuộc ScriptVersion hiện tại.",
+		);
+	if (run.status !== "review_required" && run.status !== "passed")
+		throw new FactLockError(
+			"FACT_LOCK_CLAIM_NOT_REVIEWABLE",
+			"Fact Lock run hiện tại chưa có kết quả để xử lý.",
+		);
+	if (!dependenciesCurrent || draft.revision !== run.sourceScriptRevision)
+		throw new FactLockError(
+			"FACT_LOCK_STALE",
+			"Fact Lock đã lỗi thời. Hãy chạy lại Fact Lock trước khi xử lý claim.",
+		);
+	if (draft.revision !== input.baseRevision)
+		throw new FactLockError(
+			"FACT_LOCK_CONFLICT",
+			"Script đã thay đổi. Hãy tải lại trước khi xử lý claim.",
+			{ latestRevision: draft.revision },
+		);
+}
+
+export async function manualApproveFactLockClaim(
+	actor: WorkspaceActor,
+	input: FactLockResolutionInput & { reviewNote?: string | null },
+) {
+	await db.transaction(async (transaction) => {
+		await lockResolutionProject(transaction, actor, input.projectId);
+		const run = await lockResolutionRun(transaction, actor, input);
+		const draft = await lockResolutionDraft(transaction, actor, input);
+		const dependenciesCurrent = await dependenciesAreCurrent(
+			transaction,
+			actor,
+			run,
+		);
+		assertResolutionRunIsCurrent(run, draft, input, dependenciesCurrent);
+		const claim = await lockResolutionClaim(transaction, actor, input);
+		if (
+			claim.classificationStatus !== "NEEDS_REVIEW" ||
+			claim.reviewStatus !== "UNRESOLVED"
+		)
+			throw new FactLockError(
+				"FACT_LOCK_CLAIM_NOT_REVIEWABLE",
+				"Claim này không còn cần duyệt thủ công.",
+			);
+		const reviewedAt = new Date();
+		const reviewNote = input.reviewNote?.trim() || null;
+		const [updated] = await transaction
+			.update(factLockClaim)
+			.set({
+				reviewStatus: "MANUAL_APPROVED",
+				reviewedByUserId: actor.userId,
+				reviewedAt,
+				reviewNote,
+			})
+			.where(
+				and(
+					eq(factLockClaim.id, input.claimId),
+					eq(factLockClaim.workspaceId, actor.workspaceId),
+					eq(factLockClaim.reviewStatus, "UNRESOLVED"),
+					eq(factLockClaim.classificationStatus, "NEEDS_REVIEW"),
+				),
+			)
+			.returning({ id: factLockClaim.id });
+		if (!updated)
+			throw new FactLockError(
+				"FACT_LOCK_CONFLICT",
+				"Claim vừa được xử lý bởi một thao tác khác.",
+			);
+		const claims = await loadClaims(transaction, actor, run.id);
+		if (deriveFactLockRunStatus(claims) === "passed")
+			await transaction
+				.update(factLockRun)
+				.set({ status: "passed" })
+				.where(
+					and(
+						eq(factLockRun.id, run.id),
+						eq(factLockRun.workspaceId, actor.workspaceId),
+						eq(factLockRun.status, "review_required"),
+					),
+				);
+	});
+	return getFactLockState(actor, input.projectId);
+}
+
+export async function mutateFactLockClaimSourceAndRefresh(
+	actor: WorkspaceActor,
+	input: FactLockResolutionInput,
+	mutation: FactLockSourceMutation,
+) {
+	await db.transaction(async (transaction) => {
+		await lockResolutionProject(transaction, actor, input.projectId);
+		const run = await lockResolutionRun(transaction, actor, input);
+		const draft = await lockResolutionDraft(transaction, actor, input);
+		const dependenciesCurrent = await dependenciesAreCurrent(
+			transaction,
+			actor,
+			run,
+		);
+		assertResolutionRunIsCurrent(run, draft, input, dependenciesCurrent);
+		const claim = await lockResolutionClaim(transaction, actor, input);
+		if (mutation.action === "suggestion" && !claim.suggestionText?.trim())
+			throw new FactLockError(
+				"FACT_LOCK_CLAIM_SUGGESTION_UNAVAILABLE",
+				"Claim này chưa có đề xuất để áp dụng.",
+			);
+		const result = mutateFactLockClaimSource(
+			draft.editableSnapshotJson as ScriptVersionEditableSnapshot,
+			{
+				claimText: claim.claimText,
+				occurrence: claim.occurrenceJson as FactLockStoredClaim["occurrence"],
+			},
+			mutation.action === "suggestion"
+				? { action: "suggestion", newText: claim.suggestionText as string }
+				: mutation,
+		);
+		if (!result.success) throw new FactLockError(result.code, result.message);
+		const [updated] = await transaction
+			.update(scriptVersion)
+			.set({
+				editableSnapshotJson: result.snapshot,
+				revision: sql`${scriptVersion.revision} + 1`,
+				updatedAt: new Date(),
+			})
+			.where(
+				and(
+					eq(scriptVersion.id, draft.id),
+					eq(scriptVersion.workspaceId, actor.workspaceId),
+					eq(scriptVersion.status, "draft"),
+					eq(scriptVersion.revision, input.baseRevision),
+				),
+			)
+			.returning({ revision: scriptVersion.revision });
+		if (!updated)
+			throw new FactLockError(
+				"FACT_LOCK_CONFLICT",
+				"Script đã thay đổi. Hãy tải lại trước khi xử lý claim.",
+			);
+	});
+	return getFactLockState(actor, input.projectId);
 }
 
 export async function executeFactLockRun(

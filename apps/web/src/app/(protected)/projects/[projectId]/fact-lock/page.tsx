@@ -1,4 +1,4 @@
-import ProjectStepPage from "@/features/project-navigation/project-step-page";
+import FactLockReview from "@/features/fact-lock/fact-lock-review";
 
 export default async function FactLockStepPage({
 	params,
@@ -6,5 +6,5 @@ export default async function FactLockStepPage({
 	params: Promise<{ projectId: string }>;
 }) {
 	const { projectId } = await params;
-	return <ProjectStepPage projectId={projectId} stepKey="fact-lock" />;
+	return <FactLockReview projectId={projectId} />;
 }
