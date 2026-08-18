@@ -40,8 +40,8 @@ export type FactLockReviewStatus = (typeof factLockReviewStatuses)[number];
 
 export const factLockFactRelations = [
 	"supports",
+	"related",
 	"contradicts",
-	"context",
 ] as const;
 export type FactLockFactRelation = (typeof factLockFactRelations)[number];
 
@@ -109,7 +109,9 @@ export type FactLockStoredClaim = Omit<
 > & {
 	reviewStatus: FactLockReviewStatus;
 	checkedAt: Date;
-	factRevision: number | null;
+	reviewedByUserId: string | null;
+	reviewedAt: Date | null;
+	reviewNote: string | null;
 	factMappings: Array<{
 		factId: string;
 		factRevision: number;

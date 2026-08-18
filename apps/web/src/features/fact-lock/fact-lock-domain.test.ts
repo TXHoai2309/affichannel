@@ -1,6 +1,7 @@
 import type { FactLockInputSnapshot } from "@affichannel/core/fact-lock/types";
 import {
 	deriveFactLockEffectiveStatus,
+	deriveFactLockRunStatus,
 	validateFactLockProviderOutput,
 } from "@affichannel/core/fact-lock/validation";
 import { describe, expect, it } from "vitest";
@@ -104,7 +105,9 @@ describe("AFF-US-010 Fact Lock foundation", () => {
 			expect(result.claims[0]).toMatchObject({
 				classificationStatus: "SUPPORTED",
 				reviewStatus: "AUTO_PASSED",
-				factRevision: 2,
+				reviewedByUserId: null,
+				reviewedAt: null,
+				reviewNote: null,
 			});
 			expect(result.claims[0].factMappings[0]).toMatchObject({
 				factId: "fact-1",
@@ -160,6 +163,33 @@ describe("AFF-US-010 Fact Lock foundation", () => {
 			expect(result.claims[0].classificationStatus).toBe("NEEDS_REVIEW");
 	});
 
+	it("treats a manually approved review claim as resolved", () => {
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "SUPPORTED", reviewStatus: "AUTO_PASSED" },
+				{
+					classificationStatus: "NEEDS_REVIEW",
+					reviewStatus: "MANUAL_APPROVED",
+				},
+			]),
+		).toBe("passed");
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "NEEDS_REVIEW", reviewStatus: "UNRESOLVED" },
+			]),
+		).toBe("review_required");
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "UNSUPPORTED", reviewStatus: "UNRESOLVED" },
+			]),
+		).toBe("review_required");
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "PROHIBITED", reviewStatus: "UNRESOLVED" },
+			]),
+		).toBe("review_required");
+	});
+
 	it("rejects invented Facts and claims that are not exact occurrence text", () => {
 		expect(
 			validateFactLockProviderOutput(
@@ -172,6 +202,15 @@ describe("AFF-US-010 Fact Lock foundation", () => {
 		expect(
 			validateFactLockProviderOutput(
 				output({ claimText: "Nội dung không có trong script." }),
+				snapshot,
+			).success,
+		).toBe(false);
+		expect(
+			validateFactLockProviderOutput(
+				output({
+					classificationStatus: "NEEDS_REVIEW",
+					factMappings: [{ factId: "fact-1", relation: "context" }],
+				}),
 				snapshot,
 			).success,
 		).toBe(false);

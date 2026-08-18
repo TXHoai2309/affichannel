@@ -14,6 +14,8 @@ const {
 	db,
 	factDependency,
 	factInvalidationEvent,
+	factLockClaim,
+	factLockClaimFact,
 	factLockRun,
 	outputRules,
 	product,
@@ -74,6 +76,8 @@ const fixtureA = {
 	productId: randomUUID(),
 	projectId: randomUUID(),
 	factId: randomUUID(),
+	multiFactAId: randomUUID(),
+	multiFactBId: randomUUID(),
 	generationId: randomUUID(),
 	scriptVersionId: randomUUID(),
 };
@@ -81,6 +85,8 @@ const fixtureB = {
 	productId: randomUUID(),
 	projectId: randomUUID(),
 	factId: randomUUID(),
+	multiFactAId: randomUUID(),
+	multiFactBId: randomUUID(),
 	generationId: randomUUID(),
 	scriptVersionId: randomUUID(),
 };
@@ -126,7 +132,13 @@ function draft() {
 	};
 }
 
-function fakeProvider(content: unknown): TextProvider {
+function fakeProvider(
+	content: unknown,
+	options: {
+		callCount?: { value: number };
+		onGenerate?: () => void | Promise<void>;
+	} = {},
+): TextProvider {
 	const result = (request: TextProviderRequest): TextProviderResult => ({
 		content,
 		providerRequestId: `fake-${request.idempotencyKey}`,
@@ -144,11 +156,52 @@ function fakeProvider(content: unknown): TextProvider {
 			inputTokens: 10,
 			pricingBasis: "integration",
 		}),
-		generate: async (request) => result(request),
+		generate: async (request) => {
+			if (options.callCount) options.callCount.value += 1;
+			await options.onGenerate?.();
+			return result(request);
+		},
 	};
 }
 
-function needsReviewOutput() {
+function supportedOutput(
+	factMappings: Array<{
+		factId: string;
+		relation: "supports" | "related" | "contradicts";
+	}>,
+) {
+	return {
+		schemaVersion: "fact-lock-output.v1",
+		claims: [
+			{
+				claimKey: "claim-supported",
+				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				occurrence: { section: "voiceover" as const, segmentKey: "intro" },
+				classificationStatus: "SUPPORTED" as const,
+				reason: "Khớp Product Fact.",
+				confidence: 1,
+				suggestionText: null,
+				factMappings,
+			},
+		],
+	};
+}
+
+async function expectDbFailure(action: () => Promise<unknown>) {
+	await action().then(
+		() => {
+			throw new Error("Expected database constraint failure.");
+		},
+		() => undefined,
+	);
+}
+
+function needsReviewOutput(
+	factMappings: Array<{
+		factId: string;
+		relation: "supports" | "related" | "contradicts";
+	}> = [],
+) {
 	return {
 		schemaVersion: "fact-lock-output.v1",
 		claims: [
@@ -160,7 +213,7 @@ function needsReviewOutput() {
 				reason: "Cần kiểm tra lại cách diễn đạt.",
 				confidence: null,
 				suggestionText: "Đối chiếu với nguồn chính thức.",
-				factMappings: [],
+				factMappings,
 			},
 		],
 	};
@@ -343,6 +396,84 @@ try {
 		replay.id === first.id,
 		"Same idempotency key did not replay the same run.",
 	);
+
+	const concurrentRun = await prepareFactLockRun(
+		actorA,
+		{ projectId: fixtureA.projectId, idempotencyKey: `${prefix}_concurrent` },
+		config,
+	);
+	const concurrentCalls = { value: 0 };
+	let releaseProvider!: () => void;
+	const providerRelease = new Promise<void>((resolve) => {
+		releaseProvider = resolve;
+	});
+	let resolveProviderStarted!: () => void;
+	const providerStarted = new Promise<void>((resolve) => {
+		resolveProviderStarted = resolve;
+	});
+	const controlledProvider = fakeProvider(
+		supportedOutput([{ factId: fixtureA.factId, relation: "supports" }]),
+		{
+			callCount: concurrentCalls,
+			onGenerate: async () => {
+				resolveProviderStarted();
+				await providerRelease;
+			},
+		},
+	);
+	const ownerPromise = runPreparedFactLock(
+		actorA,
+		concurrentRun,
+		controlledProvider,
+	);
+	await providerStarted;
+	const observer = await runPreparedFactLock(
+		actorA,
+		concurrentRun,
+		controlledProvider,
+	);
+	assert(
+		observer.id === concurrentRun.id &&
+			observer.status === "pending" &&
+			concurrentCalls.value === 1,
+		"Concurrent same-key caller did not observe the owned pending run.",
+	);
+	releaseProvider();
+	const owner = await ownerPromise;
+	assert(
+		owner.status === "passed" && concurrentCalls.value === 1,
+		"Concurrent same-key execution called the provider more than once.",
+	);
+	const concurrentRows = await db
+		.select()
+		.from(factLockRun)
+		.where(
+			and(
+				eq(factLockRun.workspaceId, workspaceAId),
+				eq(factLockRun.idempotencyKey, `${prefix}_concurrent`),
+			),
+		);
+	assert(
+		concurrentRows.length === 1,
+		"Concurrent requests created duplicate DB runs.",
+	);
+	const concurrentClaims = await db
+		.select()
+		.from(factLockClaim)
+		.where(eq(factLockClaim.runId, concurrentRun.id));
+	assert(
+		concurrentClaims.length === 1,
+		"Concurrent requests created duplicate claims.",
+	);
+	const completedObserver = await runPreparedFactLock(
+		actorA,
+		concurrentRun,
+		controlledProvider,
+	);
+	assert(
+		completedObserver.id === concurrentRun.id && concurrentCalls.value === 1,
+		"Completed same-key replay called the provider again.",
+	);
 	await expectCode(
 		() =>
 			prepareFactLockRun(
@@ -375,6 +506,32 @@ try {
 		outcome: { kind: "failure", code: "AI_PROVIDER_ERROR" },
 	});
 
+	const staleClaimRun = await prepareFactLockRun(
+		actorA,
+		{ projectId: fixtureA.projectId, idempotencyKey: `${prefix}_stale_claim` },
+		config,
+	);
+	await db
+		.update(factLockRun)
+		.set({ executionClaimedAt: new Date(Date.now() - 10 * 60 * 1000) })
+		.where(eq(factLockRun.id, staleClaimRun.id));
+	const staleClaimCalls = { value: 0 };
+	const reconciledStaleClaim = await runPreparedFactLock(
+		actorA,
+		staleClaimRun,
+		fakeProvider(
+			supportedOutput([{ factId: fixtureA.factId, relation: "supports" }]),
+			{
+				callCount: staleClaimCalls,
+			},
+		),
+	);
+	assert(
+		reconciledStaleClaim.status === "indeterminate" &&
+			staleClaimCalls.value === 0,
+		"Stale execution claim was retried instead of conservatively becoming indeterminate.",
+	);
+
 	const failedRun = await prepareFactLockRun(
 		actorA,
 		{ projectId: fixtureA.projectId, idempotencyKey: `${prefix}_failed` },
@@ -400,7 +557,7 @@ try {
 	const afterFailed = await getFactLockState(actorA, fixtureA.projectId);
 	assert(
 		afterFailed.latestRequest?.id === failed.id &&
-			afterFailed.latestApplicableRun?.id === first.id,
+			afterFailed.latestApplicableRun?.id === concurrentRun.id,
 		"Failed request must not replace the latest usable passed run.",
 	);
 
@@ -429,7 +586,7 @@ try {
 	const afterIndeterminate = await getFactLockState(actorA, fixtureA.projectId);
 	assert(
 		afterIndeterminate.latestRequest?.id === indeterminate.id &&
-			afterIndeterminate.latestApplicableRun?.id === first.id,
+			afterIndeterminate.latestApplicableRun?.id === concurrentRun.id,
 		"Indeterminate request must not replace the latest usable passed run.",
 	);
 
@@ -448,6 +605,197 @@ try {
 			review.claims[0]?.reviewStatus === "UNRESOLVED",
 		"NEEDS_REVIEW was not persisted as review_required/unresolved.",
 	);
+	const reviewClaimRow = (
+		await db
+			.select()
+			.from(factLockClaim)
+			.where(eq(factLockClaim.runId, reviewRun.id))
+			.limit(1)
+	)[0];
+	assert(reviewClaimRow, "Review claim fixture was not persisted.");
+	const reviewedAt = new Date();
+	await db
+		.update(factLockClaim)
+		.set({
+			reviewStatus: "MANUAL_APPROVED",
+			reviewedByUserId: userAId,
+			reviewedAt,
+			reviewNote: "Đã đối chiếu nguồn chính thức.",
+		})
+		.where(eq(factLockClaim.id, reviewClaimRow.id));
+	const approvedReviewClaim = (
+		await db
+			.select()
+			.from(factLockClaim)
+			.where(eq(factLockClaim.id, reviewClaimRow.id))
+			.limit(1)
+	)[0];
+	assert(
+		approvedReviewClaim?.reviewStatus === "MANUAL_APPROVED" &&
+			approvedReviewClaim.reviewedByUserId === userAId &&
+			approvedReviewClaim.reviewedAt !== null,
+		"Manual review metadata did not persist.",
+	);
+	await expectDbFailure(() =>
+		db
+			.update(factLockClaim)
+			.set({ reviewedByUserId: null, reviewedAt: null })
+			.where(eq(factLockClaim.id, reviewClaimRow.id)),
+	);
+	await expectDbFailure(() =>
+		db
+			.update(factLockClaim)
+			.set({ classificationStatus: "UNSUPPORTED" })
+			.where(eq(factLockClaim.id, reviewClaimRow.id)),
+	);
+	await expectDbFailure(() =>
+		db
+			.update(factLockClaim)
+			.set({ classificationStatus: "PROHIBITED" })
+			.where(eq(factLockClaim.id, reviewClaimRow.id)),
+	);
+	await db
+		.update(factLockClaim)
+		.set({
+			classificationStatus: "SUPPORTED",
+			reviewStatus: "AUTO_PASSED",
+			reviewedByUserId: null,
+			reviewedAt: null,
+			reviewNote: null,
+		})
+		.where(eq(factLockClaim.id, reviewClaimRow.id));
+	await expectDbFailure(() =>
+		db
+			.update(factLockClaim)
+			.set({ reviewedByUserId: userAId, reviewedAt })
+			.where(eq(factLockClaim.id, reviewClaimRow.id)),
+	);
+	await expectDbFailure(() =>
+		db
+			.update(factLockClaim)
+			.set({ reviewStatus: "UNRESOLVED" })
+			.where(eq(factLockClaim.id, reviewClaimRow.id)),
+	);
+	await db
+		.update(factLockClaim)
+		.set({ classificationStatus: "NEEDS_REVIEW", reviewStatus: "UNRESOLVED" })
+		.where(eq(factLockClaim.id, reviewClaimRow.id));
+
+	await db.insert(productFact).values([
+		{
+			id: fixtureA.multiFactAId,
+			workspaceId: workspaceAId,
+			productId: fixtureA.productId,
+			revision: 2,
+			content: "Vỏ nhôm chắc chắn.",
+			type: "specification",
+			status: "verified",
+			sourceType: "official",
+			sourceLabel: "Integration source A",
+			sourceUrl: "https://example.com/fact-a",
+			confirmedAt: "2026-08-15",
+			createdByUserId: userAId,
+			updatedByUserId: userAId,
+		},
+		{
+			id: fixtureA.multiFactBId,
+			workspaceId: workspaceAId,
+			productId: fixtureA.productId,
+			revision: 7,
+			content: "Có hộp sạc nhỏ gọn.",
+			type: "feature",
+			status: "verified",
+			sourceType: "official",
+			sourceLabel: "Integration source B",
+			sourceUrl: "https://example.com/fact-b",
+			confirmedAt: "2026-08-15",
+			createdByUserId: userAId,
+			updatedByUserId: userAId,
+		},
+	]);
+	const multiRevisionRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureA.projectId,
+			idempotencyKey: `${prefix}_multi_revision`,
+		},
+		config,
+	);
+	const multiRevisionResult = await runPreparedFactLock(
+		actorA,
+		multiRevisionRun,
+		fakeProvider(
+			supportedOutput([
+				{ factId: fixtureA.multiFactAId, relation: "supports" },
+				{ factId: fixtureA.multiFactBId, relation: "supports" },
+			]),
+		),
+	);
+	const multiMappings = multiRevisionResult.claims[0]?.factMappings ?? [];
+	assert(
+		multiRevisionResult.status === "passed" &&
+			multiMappings.some(
+				(mapping) =>
+					mapping.factId === fixtureA.multiFactAId &&
+					mapping.factRevision === 2,
+			) &&
+			multiMappings.some(
+				(mapping) =>
+					mapping.factId === fixtureA.multiFactBId &&
+					mapping.factRevision === 7,
+			) &&
+			!("factRevision" in (multiRevisionResult.claims[0] ?? {})),
+		"Fact revisions were not preserved per mapping without a top-level claim revision.",
+	);
+	const relatedRun = await prepareFactLockRun(
+		actorA,
+		{ projectId: fixtureA.projectId, idempotencyKey: `${prefix}_related` },
+		config,
+	);
+	const relatedResult = await runPreparedFactLock(
+		actorA,
+		relatedRun,
+		fakeProvider(
+			needsReviewOutput([
+				{ factId: fixtureA.multiFactAId, relation: "related" },
+			]),
+		),
+	);
+	assert(
+		relatedResult.claims[0]?.factMappings[0]?.relation === "related",
+		"Canonical related relation did not persist/read back.",
+	);
+	const relatedClaimRow = (
+		await db
+			.select({ id: factLockClaim.id })
+			.from(factLockClaim)
+			.where(eq(factLockClaim.runId, relatedRun.id))
+			.limit(1)
+	)[0];
+	const relatedMapping = relatedClaimRow
+		? (
+				await db
+					.select()
+					.from(factLockClaimFact)
+					.where(eq(factLockClaimFact.claimId, relatedClaimRow.id))
+					.limit(1)
+			)[0]
+		: undefined;
+	if (relatedMapping) {
+		await expectDbFailure(() =>
+			db
+				.update(factLockClaimFact)
+				.set({ relation: "context" })
+				.where(
+					and(
+						eq(factLockClaimFact.claimId, relatedMapping.claimId),
+						eq(factLockClaimFact.factId, relatedMapping.factId),
+						eq(factLockClaimFact.factRevision, relatedMapping.factRevision),
+						eq(factLockClaimFact.relation, relatedMapping.relation),
+					),
+				),
+		);
+	}
 
 	const raceRun = await prepareFactLockRun(
 		actorA,
@@ -550,7 +898,11 @@ try {
 		await db.delete(productFact).where(
 			inArray(
 				productFact.id,
-				fixtures.map((fixture) => fixture.factId),
+				fixtures.flatMap((fixture) => [
+					fixture.factId,
+					fixture.multiFactAId,
+					fixture.multiFactBId,
+				]),
 			),
 		);
 		await db.delete(scriptVersion).where(

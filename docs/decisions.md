@@ -6,6 +6,33 @@
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
 
+## DEC-022 — Fact Lock execution ownership và review evidence
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-18
+
+### Bối cảnh
+
+Một pending Fact Lock có thể được nhiều request cùng quan sát trong khoảng thời
+gian provider đang chạy. Nếu mỗi request tự gọi provider, cùng một intent có thể
+tạo nhiều side effect và nhiều chi phí. Review state cũng cần được bảo vệ ở cả
+database boundary, không chỉ ở UI.
+
+### Quyết định
+
+`fact_lock_run.execution_claimed_at` được dùng làm execution ownership bằng một
+UPDATE atomic. Chỉ owner gọi estimate/provider; claim quá timeout chuyển run sang
+`indeterminate`, không tự retry. Relation canonical là `supports`, `related`,
+`contradicts`; Fact revision chỉ nằm ở mapping. Database chỉ cho phép review
+combination hợp lệ và yêu cầu reviewer metadata cho `MANUAL_APPROVED`.
+
+### Hệ quả
+
+Replay và concurrent request không gọi provider lần hai. Crash sau claim được xử
+lý bảo thủ, nên người dùng phải tạo idempotency key mới sau khi run indeterminate.
+Migration 0014 chỉ thêm cột/constraint và chuyển dữ liệu `context` sang `related`;
+không sửa migration cũ hoặc reset dữ liệu.
+
 ## Mẫu quyết định
 
 ```text

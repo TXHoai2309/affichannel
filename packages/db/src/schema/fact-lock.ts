@@ -50,6 +50,9 @@ export const factLockRun = pgTable(
 		currency: text("currency"),
 		errorCode: text("error_code"),
 		errorMessage: text("error_message"),
+		executionClaimedAt: timestamp("execution_claimed_at", {
+			withTimezone: true,
+		}),
 		createdByUserId: text("created_by_user_id")
 			.notNull()
 			.references(() => user.id, { onDelete: "restrict" }),
@@ -145,6 +148,8 @@ export const factLockClaim = pgTable(
 		reviewedByUserId: text("reviewed_by_user_id").references(() => user.id, {
 			onDelete: "restrict",
 		}),
+		reviewedAt: timestamp("reviewed_at", { withTimezone: true }),
+		reviewNote: text("review_note"),
 		createdAt: timestamp("created_at", { withTimezone: true })
 			.defaultNow()
 			.notNull(),
@@ -156,7 +161,7 @@ export const factLockClaim = pgTable(
 		),
 		check(
 			"fact_lock_claim_review_check",
-			sql`(${table.classificationStatus} = 'SUPPORTED' and ${table.reviewStatus} = 'AUTO_PASSED') or (${table.classificationStatus} in ('NEEDS_REVIEW', 'UNSUPPORTED', 'PROHIBITED') and ${table.reviewStatus} in ('UNRESOLVED', 'MANUAL_APPROVED'))`,
+			sql`(${table.classificationStatus} = 'SUPPORTED' and ${table.reviewStatus} = 'AUTO_PASSED') or (${table.classificationStatus} = 'NEEDS_REVIEW' and ${table.reviewStatus} in ('UNRESOLVED', 'MANUAL_APPROVED')) or (${table.classificationStatus} in ('UNSUPPORTED', 'PROHIBITED') and ${table.reviewStatus} = 'UNRESOLVED')`,
 		),
 		check(
 			"fact_lock_claim_confidence_check",
@@ -165,6 +170,10 @@ export const factLockClaim = pgTable(
 		check(
 			"fact_lock_claim_revision_check",
 			sql`${table.factRevision} is null or ${table.factRevision} > 0`,
+		),
+		check(
+			"fact_lock_claim_review_metadata_check",
+			sql`((${table.reviewStatus} = 'MANUAL_APPROVED' and ${table.reviewedByUserId} is not null and ${table.reviewedAt} is not null) or (${table.reviewStatus} in ('AUTO_PASSED', 'UNRESOLVED') and ${table.reviewedByUserId} is null and ${table.reviewedAt} is null))`,
 		),
 		uniqueIndex("fact_lock_claim_run_key_unique").on(
 			table.runId,
@@ -207,7 +216,7 @@ export const factLockClaimFact = pgTable(
 		),
 		check(
 			"fact_lock_claim_fact_relation_check",
-			sql`${table.relation} in ('supports', 'contradicts', 'context')`,
+			sql`${table.relation} in ('supports', 'related', 'contradicts')`,
 		),
 		index("fact_lock_claim_fact_fact_revision_idx").on(
 			table.factId,

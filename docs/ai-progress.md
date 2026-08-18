@@ -1,5 +1,27 @@
 # Tiến trình AI agent
 
+- Trạng thái: AFF-US-010 Phase 1 đã harden và verify execution ownership, review
+  constraints, canonical Fact relation và per-mapping revision; chưa mở Phase 2.
+- Cập nhật lần cuối: 2026-08-18
+
+## 2026-08-18 — AFF-US-010 Phase 1 final hardening
+
+Đã chuẩn bị execution claim atomic cho pending Fact Lock để chỉ một request gọi
+provider; stale claim được kết thúc `indeterminate` bảo thủ. Đã siết review matrix
+và metadata constraint, đổi `context` legacy sang `related`, bỏ top-level Fact
+revision khỏi domain/read model và giữ revision trong từng mapping. Đã thêm regression
+proof cho concurrency, replay, stale claim, review matrix, relation và multi-revision.
+
+Đã pre-audit và apply migration additive `0014_fact_lock_phase_one_hardening.sql` trên
+Neon hiện tại. Ledger trước migrate ở 0013, không có dòng `context` hoặc review state
+không hợp lệ; không sửa migration 0013, không reset/drop dữ liệu, không gọi paid AI,
+không triển khai Phase 2.
+
+Verification cuối: check-types, web unit 127 tests, Fact Lock/ScriptVersion/
+ScriptGeneration integration, authenticated E2E 21/21 không skip, db:generate và
+git diff --check đạt. Build đã compile/type-check/static export thành công; wrapper
+Turbo không tự thoát sau summary nên cần theo dõi riêng exit code trong CI.
+
 - Trạng thái: AFF-US-009 Phase 3 đã hoàn thành phần History/Save Version/Restore trên branch
   hiện tại; chưa commit/push/merge/deploy.
 - Cập nhật lần cuối: 2026-08-17

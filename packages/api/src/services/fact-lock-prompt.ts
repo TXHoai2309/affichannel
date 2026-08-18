@@ -16,8 +16,8 @@ export function renderFactLockPrompt(snapshot: FactLockInputSnapshot) {
 			`Output schema ${FACT_LOCK_OUTPUT_SCHEMA_VERSION}. Root có đúng {schemaVersion, claims}.`,
 			"Mỗi claim có claimKey, claimText, occurrence, classificationStatus, reason, confidence, suggestionText, factMappings.",
 			"classificationStatus chỉ là SUPPORTED, NEEDS_REVIEW, UNSUPPORTED hoặc PROHIBITED.",
-			"factMappings dùng relation supports, contradicts hoặc context.",
-			"Không trả về reviewStatus, checkedAt hoặc factRevision; server sẽ tự suy ra.",
+			"factMappings dùng relation supports, related hoặc contradicts.",
+			"Không trả về reviewStatus, checkedAt hoặc fact revision; server sẽ pin revision trên từng mapping.",
 		].join("\n"),
 		untrustedInputData: canonicalizeJson(snapshot),
 	};

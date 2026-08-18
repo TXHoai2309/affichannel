@@ -182,15 +182,28 @@ export function validateFactLockProviderOutput(
 			classificationStatus,
 			reviewStatus: reviewStatus(classificationStatus),
 			checkedAt: new Date(),
-			factRevision: mappedFacts[0]?.factRevision ?? null,
+			reviewedByUserId: null,
+			reviewedAt: null,
+			reviewNote: null,
 			factMappings: mappedFacts as Array<{
 				factId: string;
 				factRevision: number;
-				relation: "supports" | "contradicts" | "context";
+				relation: "supports" | "related" | "contradicts";
 			}>,
 		});
 	}
 	return { success: true as const, claims };
+}
+
+export function isFactLockClaimResolved(
+	claim: Pick<FactLockStoredClaim, "classificationStatus" | "reviewStatus">,
+) {
+	return (
+		(claim.classificationStatus === "SUPPORTED" &&
+			claim.reviewStatus === "AUTO_PASSED") ||
+		(claim.classificationStatus === "NEEDS_REVIEW" &&
+			claim.reviewStatus === "MANUAL_APPROVED")
+	);
 }
 
 export function deriveFactLockRunStatus(
@@ -198,11 +211,7 @@ export function deriveFactLockRunStatus(
 		Pick<FactLockStoredClaim, "classificationStatus" | "reviewStatus">
 	>,
 ) {
-	return claims.every(
-		(claim) =>
-			claim.classificationStatus === "SUPPORTED" &&
-			claim.reviewStatus === "AUTO_PASSED",
-	)
+	return claims.every(isFactLockClaimResolved)
 		? ("passed" as const)
 		: ("review_required" as const);
 }

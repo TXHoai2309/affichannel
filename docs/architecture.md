@@ -271,6 +271,14 @@ LLM output là structured input không đáng tin cậy và phải qua schema va
 Model không được tự ghi trạng thái approved cuối cùng nếu thiếu server-side rule
 và kiểm tra bằng chứng.
 
+Trong runtime Phase 1, pending run phải giành execution claim bằng một UPDATE
+atomic trước khi estimate hoặc gọi provider. Request không giành được claim chỉ
+đọc kết quả hiện tại; stale claim kết thúc `indeterminate` bảo thủ và không retry.
+Relation lưu trong mapping dùng allow-list `supports | related | contradicts`.
+Fact revision là thuộc tính của từng mapping, không phải thuộc tính top-level của
+claim. Review metadata được lưu tại claim; `MANUAL_APPROVED` cần reviewer và
+`reviewed_at`, còn `AUTO_PASSED`/`UNRESOLVED` không có reviewer metadata.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

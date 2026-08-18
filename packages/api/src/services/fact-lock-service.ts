@@ -40,7 +40,7 @@ import {
 	project,
 	scriptVersion,
 } from "@affichannel/db";
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type {
 	TextProvider,
 	TextProviderEstimate,
@@ -88,6 +88,7 @@ export type FactLockRunArtifact = {
 	actualCostMicros: bigint | null;
 	currency: string | null;
 	errorCode: string | null;
+	executionClaimedAt: Date | null;
 	createdAt: Date;
 	finishedAt: Date | null;
 };
@@ -118,6 +119,7 @@ function toArtifact(row: typeof factLockRun.$inferSelect): FactLockRunArtifact {
 		actualCostMicros: row.actualCostMicros,
 		currency: row.currency,
 		errorCode: row.errorCode,
+		executionClaimedAt: row.executionClaimedAt,
 		createdAt: row.createdAt,
 		finishedAt: row.finishedAt,
 	};
@@ -592,7 +594,7 @@ async function loadClaims(
 		Array<{
 			factId: string;
 			factRevision: number;
-			relation: "supports" | "contradicts" | "context";
+			relation: "supports" | "related" | "contradicts";
 		}>
 	>();
 	for (const mapping of mappings) {
@@ -600,7 +602,7 @@ async function loadClaims(
 		list.push({
 			factId: mapping.factId,
 			factRevision: mapping.factRevision,
-			relation: mapping.relation as "supports" | "contradicts" | "context",
+			relation: mapping.relation as "supports" | "related" | "contradicts",
 		});
 		byClaim.set(mapping.claimId, list);
 	}
@@ -616,8 +618,70 @@ async function loadClaims(
 		factMappings: byClaim.get(claim.id) ?? [],
 		reviewStatus: claim.reviewStatus as FactLockStoredClaim["reviewStatus"],
 		checkedAt: claim.checkedAt,
-		factRevision: claim.factRevision,
+		reviewedByUserId: claim.reviewedByUserId,
+		reviewedAt: claim.reviewedAt,
+		reviewNote: claim.reviewNote,
 	}));
+}
+
+const FACT_LOCK_EXECUTION_CLAIM_TIMEOUT_MS = 5 * 60 * 1000;
+
+type FactLockExecutionClaim =
+	| { owner: true; run: FactLockRunArtifact }
+	| {
+			owner: false;
+			run: FactLockRunArtifact;
+			claims: FactLockStoredClaim[];
+			stale: boolean;
+	  };
+
+async function claimFactLockExecution(
+	actor: WorkspaceActor,
+	runId: string,
+): Promise<FactLockExecutionClaim> {
+	return db.transaction(async (transaction) => {
+		const now = new Date();
+		const [claimed] = await transaction
+			.update(factLockRun)
+			.set({ executionClaimedAt: now })
+			.where(
+				and(
+					eq(factLockRun.workspaceId, actor.workspaceId),
+					eq(factLockRun.id, runId),
+					eq(factLockRun.status, "pending"),
+					isNull(factLockRun.executionClaimedAt),
+				),
+			)
+			.returning();
+		if (claimed) return { owner: true as const, run: toArtifact(claimed) };
+
+		const [current] = await transaction
+			.select()
+			.from(factLockRun)
+			.where(
+				and(
+					eq(factLockRun.workspaceId, actor.workspaceId),
+					eq(factLockRun.id, runId),
+				),
+			)
+			.limit(1);
+		if (!current)
+			throw new FactLockError(
+				"FACT_LOCK_NOT_FOUND",
+				"Fact Lock run không tồn tại.",
+			);
+		const stale =
+			current.status === "pending" &&
+			current.executionClaimedAt !== null &&
+			now.getTime() - current.executionClaimedAt.getTime() >
+				FACT_LOCK_EXECUTION_CLAIM_TIMEOUT_MS;
+		return {
+			owner: false as const,
+			run: toArtifact(current),
+			claims: await loadClaims(transaction, actor, current.id),
+			stale,
+		};
+	});
 }
 
 export async function finalizeFactLockRun(
@@ -715,8 +779,10 @@ export async function finalizeFactLockRun(
 						reason: claim.reason,
 						confidence: claim.confidence,
 						suggestionText: claim.suggestionText,
-						factRevision: claim.factRevision,
 						checkedAt: claim.checkedAt,
+						reviewedByUserId: null,
+						reviewedAt: null,
+						reviewNote: null,
 					})
 					.returning({ id: factLockClaim.id });
 				if (!stored) throw new Error("Fact Lock claim insert returned no row.");
@@ -809,7 +875,7 @@ export async function finalizeFactLockRun(
 	});
 }
 
-export async function runPreparedFactLock(
+async function runClaimedFactLock(
 	actor: WorkspaceActor,
 	run: FactLockRunArtifact,
 	provider: TextProvider,
@@ -830,6 +896,28 @@ export async function runPreparedFactLock(
 		runId: run.id,
 		outcome: { kind: "success", result },
 	});
+}
+
+export async function runPreparedFactLock(
+	actor: WorkspaceActor,
+	run: FactLockRunArtifact,
+	provider: TextProvider,
+	finalize: typeof finalizeFactLockRun = finalizeFactLockRun,
+) {
+	const claim = await claimFactLockExecution(actor, run.id);
+	if (!claim.owner) {
+		if (claim.stale) {
+			return finalize(actor, {
+				runId: run.id,
+				outcome: {
+					kind: "failure",
+					code: "FACT_LOCK_EXECUTION_CLAIM_STALE_UNCERTAIN",
+				},
+			});
+		}
+		return { ...claim.run, claims: claim.claims };
+	}
+	return runClaimedFactLock(actor, claim.run, provider, finalize);
 }
 
 async function dependencyStateForRun(
@@ -946,22 +1034,54 @@ export async function getFactLockState(
 export async function executeFactLockRun(
 	actor: WorkspaceActor,
 	run: FactLockRunArtifact,
-	provider: TextProvider,
+	providerOrFactory: TextProvider | (() => TextProvider),
 ) {
+	const claim = await claimFactLockExecution(actor, run.id);
+	if (!claim.owner) {
+		if (claim.stale) {
+			return finalizeFactLockRun(actor, {
+				runId: run.id,
+				outcome: {
+					kind: "failure",
+					code: "FACT_LOCK_EXECUTION_CLAIM_STALE_UNCERTAIN",
+				},
+			});
+		}
+		return { ...claim.run, claims: claim.claims };
+	}
+
+	let provider: TextProvider;
+	try {
+		provider =
+			typeof providerOrFactory === "function"
+				? providerOrFactory()
+				: providerOrFactory;
+	} catch (error) {
+		const code =
+			error instanceof FactLockError
+				? error.code
+				: "FACT_LOCK_PROVIDER_UNAVAILABLE";
+		await finalizeFactLockRun(actor, {
+			runId: claim.run.id,
+			outcome: { kind: "failure", code },
+		});
+		throw error;
+	}
+
 	let estimate: TextProviderEstimate;
 	try {
-		estimate = await estimateFactLockRun(run, provider);
+		estimate = await estimateFactLockRun(claim.run, provider);
 	} catch (error) {
 		const code =
 			error instanceof FactLockError
 				? error.code
 				: "FACT_LOCK_COST_ESTIMATE_UNAVAILABLE";
 		await finalizeFactLockRun(actor, {
-			runId: run.id,
+			runId: claim.run.id,
 			outcome: { kind: "failure", code },
 		});
 		throw error;
 	}
-	const estimated = await recordFactLockEstimate(actor, run.id, estimate);
-	return runPreparedFactLock(actor, estimated, provider);
+	const estimated = await recordFactLockEstimate(actor, claim.run.id, estimate);
+	return runClaimedFactLock(actor, estimated, provider);
 }

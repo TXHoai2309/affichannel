@@ -16,6 +16,9 @@ sử dụng Semantic Versioning.
 - AFF-US-010 Phase 1 integration proof: deterministic provider persistence, mapping
   revision, latest usable sau failed/indeterminate, invalidation, script race,
   reopen persistence và workspace authorization.
+- AFF-US-010 Phase 1 hardening: atomic execution ownership chống duplicate provider,
+  stale claim -> indeterminate, review-state/metadata constraints, canonical relation
+  `related`, per-mapping Fact revision và migration additive 0014.
 - AFF-US-009 Phase 3: Save Version immutable, history newest-first, saved snapshot read-only,
   Get Version và Restore có optimistic concurrency; UI drawer/dialog và authenticated E2E
   cho save, preview, restore, reload persistence.

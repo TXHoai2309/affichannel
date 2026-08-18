@@ -6,7 +6,6 @@ import { protectedProcedure } from "../index";
 import { resolveTextProvider } from "../providers/text/text-provider-registry";
 import {
 	executeFactLockRun,
-	finalizeFactLockRun,
 	getFactLockState,
 	prepareFactLockRun,
 	resolveServerFactLockConfig,
@@ -52,35 +51,26 @@ export const factLockRouter = {
 				const config = await resolveServerFactLockConfig(actor);
 				run = await prepareFactLockRun(actor, input, config);
 				if (run.status !== "pending") return run;
-				if (config.provider === "apikeyfun" && !env.APIKEY_FUN_API_KEY) {
-					throw new FactLockError(
-						"FACT_LOCK_PROVIDER_NOT_CONFIGURED",
-						"Text provider chưa có API key server-side.",
-					);
-				}
-				const provider = resolveTextProvider(config.provider, null, {
-					allowDeterministic: env.NODE_ENV !== "production",
-					factLockSnapshot: run.inputSnapshot,
-				});
-				if (!provider) {
-					throw new FactLockError(
-						"FACT_LOCK_PROVIDER_UNAVAILABLE",
-						"Text provider không khả dụng.",
-					);
-				}
-				return await executeFactLockRun(actor, run, provider);
-			} catch (error) {
-				if (
-					run?.status === "pending" &&
-					error instanceof FactLockError &&
-					(error.code === "FACT_LOCK_PROVIDER_NOT_CONFIGURED" ||
-						error.code === "FACT_LOCK_PROVIDER_UNAVAILABLE")
-				) {
-					await finalizeFactLockRun(actor, {
-						runId: run.id,
-						outcome: { kind: "failure", code: error.code },
+				return await executeFactLockRun(actor, run, () => {
+					if (config.provider === "apikeyfun" && !env.APIKEY_FUN_API_KEY) {
+						throw new FactLockError(
+							"FACT_LOCK_PROVIDER_NOT_CONFIGURED",
+							"Text provider chưa có API key server-side.",
+						);
+					}
+					const provider = resolveTextProvider(config.provider, null, {
+						allowDeterministic: env.NODE_ENV !== "production",
+						factLockSnapshot: run?.inputSnapshot,
 					});
-				}
+					if (!provider) {
+						throw new FactLockError(
+							"FACT_LOCK_PROVIDER_UNAVAILABLE",
+							"Text provider không khả dụng.",
+						);
+					}
+					return provider;
+				});
+			} catch (error) {
 				return toFactLockOrpcError(error);
 			}
 		}),
