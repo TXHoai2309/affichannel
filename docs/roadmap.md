@@ -193,7 +193,7 @@ dependency semantics, input/hash/idempotency contract, deterministic
 `PROHIBITED` authority, resolution CAS và gate reason codes. Phase 1 mới tạo
 schema/runtime. Phase 1 foundation/classification đã apply additive migration,
 đưa protected run/getState và deterministic runtime proof vào source; Phase 2
-review UI/manual transition đã triển khai và đang chờ final acceptance. Phase 2
+review UI/manual transition và Phase 3 gate/runtime đã hoàn tất. Phase 2–3
 không tạo migration mới: dùng read model Fact Lock hiện có, Product Fact snapshot
 theo mapping revision và ScriptVersion CAS.
 
@@ -202,19 +202,27 @@ three-pane Review: claim list, review detail và Product Facts evidence. Manual
 approve giữ nguyên classification `NEEDS_REVIEW`, ghi reviewer/time/note và chỉ
 chuyển run sang `passed` khi mọi claim resolved. Edit/delete/apply suggestion là
 business mutations transactional, exact occurrence + optimistic `baseRevision`,
-không mutate claim audit và làm run cũ effective `stale`. Voice/Render gate,
-FactLockGate, TTS và US sau vẫn chưa triển khai.
+không mutate claim audit và làm run cũ effective `stale`.
 
 Phase 2 hardening bổ sung strict pre-run validation trước CAS cho safe delete: whole-field
 delete của selected hook, voiceover, CTA hoặc caption bắt buộc bị từ chối; optional
 `scene.onScreenText` vẫn có thể chuyển thành `null`. Không tạo migration 0015.
+
+Phase 3 thêm `FactLockGate.evaluate/assertPassed` server-side, protected
+`factLock.getGate` và locked state cho Voice, Video, Preview/Render. Gate resolve
+current ScriptVersion, strict readiness, exact script revision, active/current Fact
+dependencies và Product Fact status từ workspace actor; stale script được ưu tiên
+trước stale facts. Retry failed/indeterminate không che PASS cũ còn applicable. Vì
+chưa có TTS/render mutation nên không tạo dependency giả; mutation downstream sau này
+phải gọi `FactLockGate.assertPassed()` trong application service.
 
 ```text
 Chạy kiểm tra → xem claim → liên kết bằng chứng → xử lý review → pass hoặc blocked
 ```
 
 Acceptance Criteria tuân theo `product-spec.md`. TTS và Render bị khóa nếu
-version hiện tại chưa có run đạt.
+version hiện tại chưa có run đạt. Chi tiết Phase 3 tại
+`docs/aff-us-010-phase-3-gate-runtime.md`.
 
 ## 11. Slice 8 — Voice và media
 

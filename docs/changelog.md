@@ -294,3 +294,16 @@ Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.
 - Giữ nguyên khả năng xóa toàn bộ `scene.onScreenText` tùy chọn, đồng thời giữ immutable
   Fact Lock audit và optimistic revision semantics.
 - Không thay schema, migration, Fact Lock lifecycle, Product Facts hoặc AI provider.
+
+### AFF-US-010 Phase 3 — Fact Lock Gate & downstream runtime — 2026-08-18
+
+- Thêm `evaluateFactLockGate()` và server-side `FactLockGate.evaluate/assertPassed()`
+  với reason code typed, strict ScriptVersion readiness, exact script revision,
+  active/current Fact dependencies và Product Fact revision/status.
+- Thêm protected `factLock.getGate`; Voice, Video và Preview/Render direct route
+  hiển thị locked/unlocked state từ cùng một gate. Không tạo unlock boolean cạnh
+  `project_step_status`.
+- Retry failed/indeterminate không che PASS cũ còn applicable; script edit/restore
+  và Product Fact revision change khóa lại theo stale reason precedence.
+- Bổ sung core, integration và authenticated Playwright proof. Không tạo migration,
+  không thêm TTS/render artifact, không gọi paid AI và không triển khai US sau.

@@ -106,6 +106,51 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await cleanupReviewFixture(fixture);
 		}
 	});
+
+	test("opens Voice/Video/Preview only for a passed gate and relocks after script edit", async ({
+		page,
+	}) => {
+		const fixture = await seedReviewFixture("passed");
+		try {
+			await signIn(page);
+			await page.goto(`/projects/${fixture.projectId}/voice`);
+			await expect(
+				page.getByRole("heading", { name: "Giọng đọc" }),
+			).toBeVisible();
+			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+
+			await page.goto(`/projects/${fixture.projectId}/video`);
+			await expect(
+				page.getByRole("heading", { name: "Dựng video" }),
+			).toBeVisible();
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+
+			await page.goto(`/projects/${fixture.projectId}/preview`);
+			await expect(
+				page.getByRole("heading", { name: "Preview & Render" }),
+			).toBeVisible();
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await page.reload();
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+
+			await db
+				.update(scriptVersion)
+				.set({
+					revision: 2,
+					editableSnapshotJson: {
+						...fixture.scriptSnapshot,
+						claimsStatus: "stale",
+					},
+				})
+				.where(eq(scriptVersion.id, fixture.scriptVersionId));
+			await page.goto(`/projects/${fixture.projectId}/voice`);
+			await expect(page.getByText("Fact Lock đã cũ theo script")).toBeVisible();
+			await expect(page.getByText("Đang khóa")).toBeVisible();
+		} finally {
+			await cleanupReviewFixture(fixture);
+		}
+	});
 });
 
 type ReviewFixture = {
@@ -118,6 +163,7 @@ type ReviewFixture = {
 	runId: string;
 	claimId: string;
 	factContent: string;
+	scriptSnapshot: Record<string, unknown>;
 };
 
 async function signIn(page: Page) {
@@ -128,7 +174,9 @@ async function signIn(page: Page) {
 	await expect(page).toHaveURL(/\/dashboard$/);
 }
 
-async function seedReviewFixture(): Promise<ReviewFixture> {
+async function seedReviewFixture(
+	mode: "review_required" | "passed" = "review_required",
+): Promise<ReviewFixture> {
 	if (!fixedAccountEmail) throw new Error("E2E_AUTH_EMAIL is required.");
 	const [fixedUser] = await db
 		.select({ id: user.id })
@@ -180,7 +228,11 @@ async function seedReviewFixture(): Promise<ReviewFixture> {
 	const snapshot = {
 		schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
 		language: "vi-VN",
-		hookVariants: [{ key: "selected", text: "Tai nghe cho ngày dài." }],
+		hookVariants: [
+			{ key: "selected", text: "Tai nghe cho ngày dài." },
+			{ key: "benefit", text: "Một lựa chọn cho ngày dài." },
+			{ key: "problem", text: "Đang tìm tai nghe phù hợp?" },
+		],
 		selectedHookKey: "selected",
 		voiceoverSegments: [
 			{ key: "intro", text: "Pin dùng 20 giờ trong một lần sạc." },
@@ -282,6 +334,7 @@ async function seedReviewFixture(): Promise<ReviewFixture> {
 			requireFinalCta: true,
 		},
 	};
+	const passed = mode === "passed";
 	await db.insert(factLockRun).values({
 		id: runId,
 		workspaceId: actor.workspaceId,
@@ -297,7 +350,7 @@ async function seedReviewFixture(): Promise<ReviewFixture> {
 		model: "us010-e2e",
 		promptVersion: "fact-lock-prompt.v1",
 		outputSchemaVersion: "fact-lock-output.v1",
-		status: "review_required",
+		status: mode,
 		createdByUserId: actor.userId,
 		finishedAt: new Date(),
 	});
@@ -308,8 +361,8 @@ async function seedReviewFixture(): Promise<ReviewFixture> {
 		claimKey: "claim-review",
 		claimText: "Pin dùng 20 giờ trong một lần sạc.",
 		occurrenceJson: { section: "voiceover", segmentKey: "intro" },
-		classificationStatus: "NEEDS_REVIEW",
-		reviewStatus: "UNRESOLVED",
+		classificationStatus: passed ? "SUPPORTED" : "NEEDS_REVIEW",
+		reviewStatus: passed ? "AUTO_PASSED" : "UNRESOLVED",
 		reason: "Cần đối chiếu thêm với nguồn chính thức.",
 		confidence: 0.9,
 		suggestionText: "Pin được công bố ở mức 20 giờ.",
@@ -339,6 +392,7 @@ async function seedReviewFixture(): Promise<ReviewFixture> {
 		runId,
 		claimId,
 		factContent: fact.content,
+		scriptSnapshot: snapshot,
 	};
 }
 

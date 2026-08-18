@@ -4,6 +4,7 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { protectedProcedure } from "../index";
 import { resolveTextProvider } from "../providers/text/text-provider-registry";
+import { FactLockGate } from "../services/fact-lock-gate-service";
 import {
 	executeFactLockRun,
 	getFactLockState,
@@ -51,6 +52,11 @@ function toFactLockOrpcError(error: unknown): never {
 		error.code === "FACT_LOCK_CONFLICT" ||
 		error.code === "FACT_LOCK_CLAIM_NOT_REVIEWABLE"
 	)
+		throw new ORPCError("CONFLICT", {
+			message: error.code,
+			data: { code: error.code, ...error.metadata },
+		});
+	if (error.code === "FACT_LOCK_REQUIRED")
 		throw new ORPCError("CONFLICT", {
 			message: error.code,
 			data: { code: error.code, ...error.metadata },
@@ -108,6 +114,16 @@ export const factLockRouter = {
 			const actor = await requireWorkspaceActor(context.session.user.id);
 			try {
 				return await getFactLockState(actor, input.projectId);
+			} catch (error) {
+				return toFactLockOrpcError(error);
+			}
+		}),
+	getGate: protectedProcedure
+		.input(z.object({ projectId: idSchema }).strict())
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			try {
+				return await FactLockGate.evaluate(actor, input.projectId);
 			} catch (error) {
 				return toFactLockOrpcError(error);
 			}

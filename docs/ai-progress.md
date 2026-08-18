@@ -1207,3 +1207,28 @@ Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.
 - Không tạo schema/migration 0015, không đổi Neon, không bật paid AI và không bắt đầu Phase 3.
 
 Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for final acceptance.**
+
+### 2026-08-18 — AFF-US-010 Phase 3 Fact Lock Gate & downstream runtime
+
+- Thêm pure `evaluateFactLockGate()` và server application service
+  `FactLockGate.evaluate/assertPassed()`; gate tự resolve workspace/project/current
+  ScriptVersion, strict readiness, Fact Lock run, dependency state và Product Fact
+  revision/status. Client không được quyết định unlock.
+- Thêm protected `factLock.getGate`. Voice, Video và Preview/Render direct route
+  dùng cùng gate server-side để hiển thị locked/unlocked state; chưa có TTS/render
+  mutation nên không tạo dependency giả hoặc provider mới.
+- Bao phủ reason code, stale script/facts precedence, failed/indeterminate retry
+  không che PASS cũ, workspace isolation và Product Fact revision invalidation.
+- Không tạo schema/migration 0015, không sửa Product Facts/US007, không gọi paid AI.
+
+Verification Phase 3:
+
+- `pnpm check-types`: đạt, 5/5 package tasks.
+- `pnpm --filter web test`: đạt, 18 files / 137 tests.
+- `pnpm test:integration:fact-lock`: đạt, gồm `FactLockGate.evaluate/assertPassed`,
+  PASS retry semantics và `STALE_FACTS`.
+- Authenticated Playwright gate E2E: 1/1 pass; AFF-US-010 regression suite 3/3
+  pass, 0 skipped, 0 failed. Browser plugin không khả dụng nên dùng Playwright CLI.
+- Không migration; `db:generate`/build/Biome/diff check thực hiện ở final verification.
+
+Trạng thái: **AFF-US-010 Phase 3 Gate & Runtime is ready for final acceptance.**

@@ -1,3 +1,4 @@
+import { FactLockGate } from "@affichannel/api/services/fact-lock-gate-service";
 import { getProjectDetails } from "@affichannel/api/services/project-repository";
 import { getWorkspaceActor } from "@affichannel/api/services/workspace";
 import { auth } from "@affichannel/auth";
@@ -17,3 +18,10 @@ export const getProjectForCurrentUser = cache(async (projectId: string) => {
 	const actor = await getCurrentWorkspaceActor();
 	return actor ? getProjectDetails(actor.workspaceId, projectId) : undefined;
 });
+
+export const getFactLockGateForCurrentUser = cache(
+	async (projectId: string) => {
+		const actor = await getCurrentWorkspaceActor();
+		return actor ? FactLockGate.evaluate(actor, projectId) : undefined;
+	},
+);

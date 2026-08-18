@@ -1,15 +1,19 @@
+import type { FactLockGateResult } from "@affichannel/core";
 import { Button } from "@affichannel/ui/components/button";
 import type { Route } from "next";
 import Link from "next/link";
 
+import FactLockGatePanel from "@/features/fact-lock/fact-lock-gate-panel";
 import { getProjectStep, type ProjectStepKey } from "./project-steps";
 
 export default function ProjectStepPage({
 	projectId,
 	stepKey,
+	gate = null,
 }: {
 	projectId: string;
 	stepKey: ProjectStepKey;
+	gate?: FactLockGateResult | null;
 }) {
 	const step = getProjectStep(stepKey);
 
@@ -38,13 +42,24 @@ export default function ProjectStepPage({
 				</Button>
 			</div>
 
-			<div className="rounded-xl border border-dashed bg-card p-8">
-				<p className="font-medium">Feature đang được phát triển</p>
-				<p className="mt-2 max-w-xl text-muted-foreground text-sm">
-					US004 đã lưu dự án, content brief và workflow. Logic nghiệp vụ của
-					từng bước sẽ được nối ở các slice Product, Content và Media tương ứng.
-				</p>
-			</div>
+			{gate && (
+				<FactLockGatePanel
+					gate={gate}
+					projectId={projectId}
+					stepLabel={step.label}
+				/>
+			)}
+
+			{gate && !gate.allowed ? null : (
+				<div className="rounded-xl border border-dashed bg-card p-8">
+					<p className="font-medium">Feature đang được phát triển</p>
+					<p className="mt-2 max-w-xl text-muted-foreground text-sm">
+						US004 đã lưu dự án, content brief và workflow. Logic nghiệp vụ của
+						từng bước sẽ được nối ở các slice Product, Content và Media tương
+						ứng.
+					</p>
+				</div>
+			)}
 		</section>
 	);
 }

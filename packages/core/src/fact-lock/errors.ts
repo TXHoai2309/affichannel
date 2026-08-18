@@ -18,6 +18,7 @@ export const factLockErrorCodes = [
 	"FACT_LOCK_SCRIPT_VERSION_NOT_FOUND",
 	"FACT_LOCK_SCRIPT_VERSION_IMMUTABLE",
 	"FACT_LOCK_EDIT_INVALID",
+	"FACT_LOCK_REQUIRED",
 ] as const;
 export type FactLockErrorCode = (typeof factLockErrorCodes)[number];
 

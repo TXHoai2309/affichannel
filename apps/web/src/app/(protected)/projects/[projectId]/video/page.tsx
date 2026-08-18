@@ -1,4 +1,4 @@
-import ProjectStepPage from "@/features/project-navigation/project-step-page";
+import GatedProjectStepPage from "@/features/project-navigation/gated-project-step-page";
 
 export default async function VideoStepPage({
 	params,
@@ -6,5 +6,5 @@ export default async function VideoStepPage({
 	params: Promise<{ projectId: string }>;
 }) {
 	const { projectId } = await params;
-	return <ProjectStepPage projectId={projectId} stepKey="video" />;
+	return <GatedProjectStepPage projectId={projectId} stepKey="video" />;
 }

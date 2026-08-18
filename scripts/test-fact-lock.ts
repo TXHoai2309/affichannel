@@ -29,6 +29,9 @@ const {
 	workspaceMember,
 } = await import("@affichannel/db");
 const { FactLockError } = await import("@affichannel/core/fact-lock/errors");
+const { FactLockGate } = await import(
+	"../packages/api/src/services/fact-lock-gate-service.ts"
+);
 const { SCRIPT_OUTPUT_SCHEMA_VERSION } = await import("@affichannel/core");
 const {
 	executeFactLockRun,
@@ -403,6 +406,19 @@ try {
 		completed.claims[0]?.factMappings[0]?.factRevision === 1,
 		"Claim mapping did not pin exact Fact revision.",
 	);
+	const passedGate = await FactLockGate.evaluate(actorA, fixtureA.projectId);
+	assert(
+		passedGate.allowed && passedGate.reason === "FACT_LOCK_PASSED",
+		"FactLockGate did not open after a current passed run.",
+	);
+	const assertedGate = await FactLockGate.assertPassed(
+		actorA,
+		fixtureA.projectId,
+	);
+	assert(
+		assertedGate.allowed && assertedGate.reason === "FACT_LOCK_PASSED",
+		"FactLockGate.assertPassed did not accept the passed run.",
+	);
 	const dependency = await db
 		.select()
 		.from(factDependency)
@@ -589,6 +605,14 @@ try {
 			afterFailed.latestApplicableRun?.id === concurrentRun.id,
 		"Failed request must not replace the latest usable passed run.",
 	);
+	const gateAfterFailed = await FactLockGate.evaluate(
+		actorA,
+		fixtureA.projectId,
+	);
+	assert(
+		gateAfterFailed.allowed && gateAfterFailed.reason === "FACT_LOCK_PASSED",
+		"Failed retry incorrectly hid the applicable passed gate.",
+	);
 
 	const indeterminateRun = await prepareFactLockRun(
 		actorA,
@@ -617,6 +641,15 @@ try {
 		afterIndeterminate.latestRequest?.id === indeterminate.id &&
 			afterIndeterminate.latestApplicableRun?.id === concurrentRun.id,
 		"Indeterminate request must not replace the latest usable passed run.",
+	);
+	const gateAfterIndeterminate = await FactLockGate.evaluate(
+		actorA,
+		fixtureA.projectId,
+	);
+	assert(
+		gateAfterIndeterminate.allowed &&
+			gateAfterIndeterminate.reason === "FACT_LOCK_PASSED",
+		"Indeterminate retry incorrectly hid the applicable passed gate.",
 	);
 
 	const reviewRun = await prepareFactLockRun(
@@ -1195,6 +1228,10 @@ try {
 		() => getFactLockState(actorB, fixtureA.projectId),
 		"FACT_LOCK_NOT_FOUND",
 	);
+	await expectCode(
+		() => FactLockGate.evaluate(actorB, fixtureA.projectId),
+		"FACT_LOCK_NOT_FOUND",
+	);
 
 	const currentFact = await db
 		.select()
@@ -1226,6 +1263,75 @@ try {
 	assert(
 		invalidatedState.latestRequest?.effectiveStatus === "stale",
 		"Fact revision change did not invalidate the Fact Lock result.",
+	);
+
+	const fixtureBRun = await prepareFactLockRun(
+		actorA,
+		{ projectId: fixtureB.projectId, idempotencyKey: `${prefix}_gate_b` },
+		config,
+	);
+	const fixtureBResult = await runPreparedFactLock(
+		actorA,
+		fixtureBRun,
+		new DeterministicTextProvider({
+			factLockSnapshot: fixtureBRun.inputSnapshot,
+		}),
+	);
+	assert(
+		fixtureBResult.status === "passed",
+		"Gate facts fixture did not pass.",
+	);
+	const fixtureBPassedGate = await FactLockGate.evaluate(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		fixtureBPassedGate.allowed &&
+			fixtureBPassedGate.reason === "FACT_LOCK_PASSED",
+		"FactLockGate did not open for the independent facts fixture.",
+	);
+	const fixtureBFact = (
+		await db
+			.select()
+			.from(productFact)
+			.where(eq(productFact.id, fixtureB.factId))
+			.limit(1)
+	)[0];
+	assert(
+		fixtureBFact,
+		"Independent facts fixture disappeared before gate proof.",
+	);
+	await import("../packages/api/src/services/product-fact-service.ts").then(
+		({ updateProductFact }) =>
+			updateProductFact(actorA, {
+				id: fixtureB.factId,
+				expectedRevision: fixtureBFact.revision,
+				data: {
+					content: "Pin dùng 19 giờ trong một lần sạc.",
+					type: "specification",
+					status: "verified",
+					sourceType: "official",
+					sourceLabel: "Integration source",
+					sourceUrl: "https://example.com/fact",
+					confirmedAt: "2026-08-16",
+					expiresAt: null,
+					notes: null,
+				},
+				verificationIntent: "preserve",
+			}),
+	);
+	const fixtureBStaleFactsGate = await FactLockGate.evaluate(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		!fixtureBStaleFactsGate.allowed &&
+			fixtureBStaleFactsGate.reason === "FACT_LOCK_STALE_FACTS",
+		"FactLockGate did not block after a Product Fact revision change.",
+	);
+	await expectCode(
+		() => FactLockGate.assertPassed(actorA, fixtureB.projectId),
+		"FACT_LOCK_REQUIRED",
 	);
 
 	console.log("AFF-US-010 Fact Lock foundation integration checks passed.");
