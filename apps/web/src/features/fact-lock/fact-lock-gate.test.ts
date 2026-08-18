@@ -108,6 +108,70 @@ describe("FactLockGate", () => {
 		).toBe("FACT_LOCK_STALE_FACTS");
 	});
 
+	it("prefers a current PASS over a historical PASS", () => {
+		const historicalPass = run("passed", {
+			id: "run-pass-rev-1",
+			scriptVersionId: "script-1",
+			sourceScriptRevision: 3,
+			createdAt: "2026-08-18T00:01:00.000Z",
+		});
+		const currentPass = run("passed", {
+			id: "run-pass-rev-2",
+			createdAt: "2026-08-18T00:02:00.000Z",
+		});
+
+		expect(
+			evaluateFactLockGate(input({ runs: [historicalPass, currentPass] })),
+		).toMatchObject({
+			allowed: true,
+			reason: "FACT_LOCK_PASSED",
+			factLockRunId: currentPass.id,
+		});
+	});
+
+	it("uses historical PASS only when the current revision has no result", () => {
+		const historicalPass = run("passed", {
+			id: "run-pass-rev-1",
+			sourceScriptRevision: 3,
+		});
+
+		expect(
+			evaluateFactLockGate(input({ runs: [historicalPass] })),
+		).toMatchObject({
+			allowed: false,
+			reason: "FACT_LOCK_STALE_SCRIPT",
+			factLockRunId: historicalPass.id,
+		});
+	});
+
+	it("prefers a current failed or indeterminate retry over an old PASS", () => {
+		const historicalPass = run("passed", {
+			id: "run-pass-rev-1",
+			sourceScriptRevision: 3,
+			createdAt: "2026-08-18T00:01:00.000Z",
+		});
+		const currentFailed = run("failed", {
+			id: "run-failed-rev-2",
+			createdAt: "2026-08-18T00:02:00.000Z",
+		});
+		const currentIndeterminate = run("indeterminate", {
+			id: "run-indeterminate-rev-2",
+			createdAt: "2026-08-18T00:02:00.000Z",
+		});
+
+		expect(
+			evaluateFactLockGate(input({ runs: [historicalPass, currentFailed] })),
+		).toMatchObject({ allowed: false, reason: "FACT_LOCK_FAILED" });
+		expect(
+			evaluateFactLockGate(
+				input({ runs: [historicalPass, currentIndeterminate] }),
+			),
+		).toMatchObject({
+			allowed: false,
+			reason: "FACT_LOCK_INDETERMINATE",
+		});
+	});
+
 	it("does not hide an applicable PASS behind a failed or indeterminate retry", () => {
 		const passed = run("passed");
 		const failed = run("failed", {
@@ -124,6 +188,26 @@ describe("FactLockGate", () => {
 			allowed: true,
 			reason: "FACT_LOCK_PASSED",
 			factLockRunId: passed.id,
+		});
+	});
+
+	it("does not hide a new current PASS behind an older stale-facts result", () => {
+		const stalePass = run("passed", {
+			id: "run-stale-facts",
+			dependenciesCurrent: false,
+			createdAt: "2026-08-18T00:01:00.000Z",
+		});
+		const currentPass = run("passed", {
+			id: "run-current-facts",
+			createdAt: "2026-08-18T00:02:00.000Z",
+		});
+
+		expect(
+			evaluateFactLockGate(input({ runs: [stalePass, currentPass] })),
+		).toMatchObject({
+			allowed: true,
+			reason: "FACT_LOCK_PASSED",
+			factLockRunId: currentPass.id,
 		});
 	});
 

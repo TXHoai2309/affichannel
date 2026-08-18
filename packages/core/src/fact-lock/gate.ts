@@ -94,54 +94,56 @@ export function evaluateFactLockGate(
 			run.scriptVersionId === current.id &&
 			run.sourceScriptRevision === current.revision,
 	);
-	const resultBearingRuns = runs.filter(
+	const currentResultRuns = currentScriptRuns.filter(
 		(run) => run.status === "passed" || run.status === "review_required",
 	);
+	const historicalResultRuns = runs.filter(
+		(run) =>
+			(run.status === "passed" || run.status === "review_required") &&
+			(run.scriptVersionId !== current.id ||
+				run.sourceScriptRevision !== current.revision),
+	);
 
-	// A script edit/restore invalidates a result-bearing run before any retry
-	// status is considered. This keeps stale script state visible to the user.
-	const hasPriorResult = resultBearingRuns.length > 0;
-	if (
-		(input.currentScriptVersion.snapshot.claimsStatus !== "current" &&
-			hasPriorResult) ||
-		resultBearingRuns.some(
-			(run) =>
-				run.scriptVersionId !== current.id ||
-				run.sourceScriptRevision !== current.revision,
+	// Product Fact invalidation applies to a current result before any
+	// historical script result is considered. A historical run cannot make a
+	// valid current result stale by itself.
+	const latestCurrentResultRun = currentResultRuns[0];
+	if (latestCurrentResultRun && !latestCurrentResultRun.dependenciesCurrent)
+		return result("FACT_LOCK_STALE_FACTS", input, latestCurrentResultRun);
+
+	// A current applicable result wins over every historical result. This is
+	// the critical rule for PASS rev1 -> edit rev2 -> PASS rev2.
+	if (preRunValidation.success) {
+		if (
+			latestCurrentResultRun?.status === "passed" &&
+			latestCurrentResultRun.dependenciesCurrent
 		)
-	) {
-		return result("FACT_LOCK_STALE_SCRIPT", input, resultBearingRuns[0]);
+			return result("FACT_LOCK_PASSED", input, latestCurrentResultRun);
+
+		if (
+			latestCurrentResultRun?.status === "review_required" &&
+			latestCurrentResultRun.dependenciesCurrent
+		)
+			return result("FACT_LOCK_REVIEW_REQUIRED", input, latestCurrentResultRun);
 	}
 
-	const staleFactsRun = resultBearingRuns.find(
-		(run) =>
-			run.scriptVersionId === current.id &&
-			run.sourceScriptRevision === current.revision &&
-			!run.dependenciesCurrent,
-	);
-	if (staleFactsRun)
-		return result("FACT_LOCK_STALE_FACTS", input, staleFactsRun);
-
-	// A successful run remains usable when a later retry is failed or
-	// indeterminate. Prefer the newest applicable PASS over transient retries.
-	const passedRun = currentScriptRuns.find(
-		(run) => run.status === "passed" && run.dependenciesCurrent,
-	);
-	if (passedRun) return result("FACT_LOCK_PASSED", input, passedRun);
-
-	const reviewRun = currentScriptRuns.find(
-		(run) => run.status === "review_required" && run.dependenciesCurrent,
-	);
-	if (reviewRun) return result("FACT_LOCK_REVIEW_REQUIRED", input, reviewRun);
-
 	const latestCurrentRun = currentScriptRuns[0];
+	if (latestCurrentRun) {
+		if (latestCurrentRun.status === "pending")
+			return result("FACT_LOCK_PENDING", input, latestCurrentRun);
+		if (latestCurrentRun.status === "failed")
+			return result("FACT_LOCK_FAILED", input, latestCurrentRun);
+		if (latestCurrentRun.status === "indeterminate")
+			return result("FACT_LOCK_INDETERMINATE", input, latestCurrentRun);
+		if (!preRunValidation.success && currentResultRuns.length > 0)
+			return result("FACT_LOCK_STALE_SCRIPT", input, currentResultRuns[0]);
+	}
+
+	// Historical result runs explain why the current revision is stale only
+	// after all current revision requests have been evaluated.
+	if (historicalResultRuns.length > 0)
+		return result("FACT_LOCK_STALE_SCRIPT", input, historicalResultRuns[0]);
 	if (!latestCurrentRun) return result("FACT_LOCK_NOT_RUN", input);
-	if (latestCurrentRun.status === "pending")
-		return result("FACT_LOCK_PENDING", input, latestCurrentRun);
-	if (latestCurrentRun.status === "failed")
-		return result("FACT_LOCK_FAILED", input, latestCurrentRun);
-	if (latestCurrentRun.status === "indeterminate")
-		return result("FACT_LOCK_INDETERMINATE", input, latestCurrentRun);
 
 	return result("FACT_LOCK_NOT_RUN", input, latestCurrentRun);
 }

@@ -1,3 +1,4 @@
+import type { FactLockGateResult } from "@affichannel/core";
 import type {
 	PersistedProjectStepStatus,
 	ProjectStepKey,
@@ -117,4 +118,44 @@ export function getProjectStepStatusVariant(status: ProjectStepStatus) {
 	if (status === "blocked") return "destructive" as const;
 	if (status === "current") return "default" as const;
 	return "outline" as const;
+}
+
+export function getProjectStepDisplayStatus(
+	stepKey: ProjectStepKey,
+	workflowStatus: ProjectStepStatus,
+	factLockGate: FactLockGateResult | null | undefined,
+): ProjectStepStatus {
+	if (!factLockGate) return workflowStatus;
+	if (stepKey === "fact-lock")
+		return factLockGate.allowed ? "completed" : "blocked";
+	if (
+		(stepKey === "voice" || stepKey === "video" || stepKey === "preview") &&
+		!factLockGate.allowed
+	)
+		return "blocked";
+	return workflowStatus;
+}
+
+export function getProjectStepReadinessLabel(
+	stepKey: ProjectStepKey,
+	factLockGate: FactLockGateResult | null | undefined,
+) {
+	if (!factLockGate) return null;
+	if (stepKey === "fact-lock") {
+		if (factLockGate.allowed) return "Hoàn thành";
+		if (
+			factLockGate.reason === "FACT_LOCK_STALE_SCRIPT" ||
+			factLockGate.reason === "FACT_LOCK_STALE_FACTS" ||
+			factLockGate.reason === "FACT_LOCK_FAILED" ||
+			factLockGate.reason === "FACT_LOCK_INDETERMINATE"
+		)
+			return "Cần chạy lại";
+		if (factLockGate.reason === "FACT_LOCK_PENDING") return "Đang xử lý";
+		if (factLockGate.reason === "FACT_LOCK_REVIEW_REQUIRED")
+			return "Cần xem lại";
+		return "Chưa hoàn tất";
+	}
+	if (stepKey === "voice" || stepKey === "video" || stepKey === "preview")
+		return factLockGate.allowed ? "Có thể tiếp tục" : "Bị khóa";
+	return null;
 }

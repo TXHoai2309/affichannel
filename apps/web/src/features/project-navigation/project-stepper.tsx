@@ -1,5 +1,6 @@
 "use client";
 
+import type { FactLockGateResult } from "@affichannel/core";
 import { Badge } from "@affichannel/ui/components/badge";
 import { cn } from "@affichannel/ui/lib/utils";
 import {
@@ -16,6 +17,8 @@ import { usePathname } from "next/navigation";
 import {
 	DEMO_PROJECT_STEP_STATUSES,
 	getActiveProjectStepKey,
+	getProjectStepDisplayStatus,
+	getProjectStepReadinessLabel,
 	getProjectStepStatus,
 	getProjectStepStatusVariant,
 	type PersistedProjectStepStatus,
@@ -36,10 +39,12 @@ export default function ProjectStepper({
 	projectId,
 	currentStepKey = "fact-lock",
 	persistedStatuses = DEMO_PROJECT_STEP_STATUSES,
+	factLockGate = null,
 }: {
 	projectId: string;
 	currentStepKey?: ProjectStepKey;
 	persistedStatuses?: Record<ProjectStepKey, PersistedProjectStepStatus>;
+	factLockGate?: FactLockGateResult | null;
 }) {
 	const pathname = usePathname();
 	const activeStepKey = getActiveProjectStepKey(pathname, projectId);
@@ -83,10 +88,19 @@ export default function ProjectStepper({
 
 			<ol className="grid gap-2 md:grid-cols-7">
 				{PROJECT_STEPS.map((step) => {
-					const status = getProjectStepStatus(
+					const workflowStatus = getProjectStepStatus(
 						step.key,
 						currentStepKey,
 						persistedStatuses[step.key],
+					);
+					const status = getProjectStepDisplayStatus(
+						step.key,
+						workflowStatus,
+						factLockGate,
+					);
+					const readinessLabel = getProjectStepReadinessLabel(
+						step.key,
+						factLockGate,
 					);
 					const Icon = STATUS_ICONS[status];
 					const active = step.key === activeStepKey;
@@ -117,7 +131,7 @@ export default function ProjectStepper({
 								</span>
 								<span className="mt-3 font-medium text-sm">{step.label}</span>
 								<span className="mt-1 text-muted-foreground text-xs">
-									{PROJECT_STEP_STATUS_LABELS[status]}
+									{readinessLabel ?? PROJECT_STEP_STATUS_LABELS[status]}
 								</span>
 							</Link>
 						</li>

@@ -1290,6 +1290,68 @@ try {
 			fixtureBPassedGate.reason === "FACT_LOCK_PASSED",
 		"FactLockGate did not open for the independent facts fixture.",
 	);
+	const fixtureBScript = (
+		await db
+			.select()
+			.from(scriptVersion)
+			.where(eq(scriptVersion.id, fixtureB.scriptVersionId))
+			.limit(1)
+	)[0];
+	assert(
+		fixtureBScript,
+		"Independent script fixture disappeared before rerun.",
+	);
+	await db
+		.update(scriptVersion)
+		.set({
+			revision: 2,
+			editableSnapshotJson: {
+				...draft(),
+				selectedHookKey: "selected",
+				claimsSourceRevision: 2,
+				claimsStatus: "current",
+			},
+			updatedAt: new Date(),
+		})
+		.where(eq(scriptVersion.id, fixtureB.scriptVersionId));
+	const staleScriptAfterEdit = await FactLockGate.evaluate(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		!staleScriptAfterEdit.allowed &&
+			staleScriptAfterEdit.reason === "FACT_LOCK_STALE_SCRIPT" &&
+			staleScriptAfterEdit.factLockRunId === fixtureBResult.id,
+		"Historical PASS did not become stale after the script revision changed.",
+	);
+	const fixtureBScriptRerun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureB.projectId,
+			idempotencyKey: `${prefix}_gate_b_script_rerun`,
+		},
+		config,
+	);
+	const fixtureBScriptRerunResult = await runPreparedFactLock(
+		actorA,
+		fixtureBScriptRerun,
+		new DeterministicTextProvider({
+			factLockSnapshot: fixtureBScriptRerun.inputSnapshot,
+		}),
+	);
+	const reopenedAfterScriptRerun = await FactLockGate.evaluate(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		fixtureBScriptRerunResult.status === "passed" &&
+			fixtureBScriptRerunResult.sourceScriptRevision === 2 &&
+			reopenedAfterScriptRerun.allowed &&
+			reopenedAfterScriptRerun.reason === "FACT_LOCK_PASSED" &&
+			reopenedAfterScriptRerun.factLockRunId === fixtureBScriptRerunResult.id &&
+			reopenedAfterScriptRerun.currentScriptRevision === 2,
+		"Current PASS did not reopen the gate over the historical PASS.",
+	);
 	const fixtureBFact = (
 		await db
 			.select()
@@ -1317,7 +1379,7 @@ try {
 					expiresAt: null,
 					notes: null,
 				},
-				verificationIntent: "preserve",
+				verificationIntent: "verify",
 			}),
 	);
 	const fixtureBStaleFactsGate = await FactLockGate.evaluate(
@@ -1332,6 +1394,41 @@ try {
 	await expectCode(
 		() => FactLockGate.assertPassed(actorA, fixtureB.projectId),
 		"FACT_LOCK_REQUIRED",
+	);
+	const fixtureBFactRerun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureB.projectId,
+			idempotencyKey: `${prefix}_gate_b_fact_rerun`,
+		},
+		config,
+	);
+	const fixtureBFactRerunResult = await runPreparedFactLock(
+		actorA,
+		fixtureBFactRerun,
+		new DeterministicTextProvider({
+			factLockSnapshot: fixtureBFactRerun.inputSnapshot,
+		}),
+	);
+	const reopenedAfterFactRerun = await FactLockGate.evaluate(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		fixtureBFactRerunResult.status === "passed" &&
+			reopenedAfterFactRerun.allowed &&
+			reopenedAfterFactRerun.reason === "FACT_LOCK_PASSED" &&
+			reopenedAfterFactRerun.factLockRunId === fixtureBFactRerunResult.id,
+		"Fact Lock did not reopen after the current Product Fact revision was rerun.",
+	);
+	const assertedAfterFactRerun = await FactLockGate.assertPassed(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		assertedAfterFactRerun.allowed &&
+			assertedAfterFactRerun.reason === "FACT_LOCK_PASSED",
+		"FactLockGate.assertPassed did not reopen after the current Product Fact rerun.",
 	);
 
 	console.log("AFF-US-010 Fact Lock foundation integration checks passed.");

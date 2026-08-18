@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { SCRIPT_OUTPUT_SCHEMA_VERSION } from "@affichannel/core";
 import { createProject } from "@affichannel/core/project/project-service";
 import {
+	channelSettings,
 	db,
 	factDependency,
 	factLockClaim,
 	factLockClaimFact,
 	factLockRun,
+	outputRules,
 	product,
 	productFact,
 	productFactHistory,
@@ -16,7 +18,12 @@ import {
 	user,
 } from "@affichannel/db";
 import { expect, type Page, test } from "@playwright/test";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
+import { DeterministicTextProvider } from "../../../../packages/api/src/providers/text/deterministic-text-provider";
+import {
+	prepareFactLockRun,
+	runPreparedFactLock,
+} from "../../../../packages/api/src/services/fact-lock-service";
 import { createProductFact } from "../../../../packages/api/src/services/product-fact-service";
 import { createProduct } from "../../../../packages/api/src/services/product-service";
 import { createProjectRepository } from "../../../../packages/api/src/services/project-repository";
@@ -119,6 +126,11 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			).toBeVisible();
 			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await expect(
+				page
+					.getByRole("navigation", { name: "Các bước project" })
+					.getByText("Có thể tiếp tục"),
+			).toHaveCount(3);
 
 			await page.goto(`/projects/${fixture.projectId}/video`);
 			await expect(
@@ -134,19 +146,41 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await page.reload();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 
-			await db
-				.update(scriptVersion)
-				.set({
-					revision: 2,
-					editableSnapshotJson: {
-						...fixture.scriptSnapshot,
-						claimsStatus: "stale",
-					},
-				})
-				.where(eq(scriptVersion.id, fixture.scriptVersionId));
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page
+				.getByLabel("Voiceover đoạn 1")
+				.fill("Nội dung đã được chỉnh sửa để kiểm tra re-lock.");
+			await expect(page.getByText("Đã lưu").first()).toBeVisible({
+				timeout: 5_000,
+			});
+
 			await page.goto(`/projects/${fixture.projectId}/voice`);
 			await expect(page.getByText("Fact Lock đã cũ theo script")).toBeVisible();
 			await expect(page.getByText("Đang khóa")).toBeVisible();
+			await expect(
+				page
+					.getByRole("navigation", { name: "Các bước project" })
+					.getByText("Bị khóa"),
+			).toHaveCount(3);
+
+			await page.goto(`/projects/${fixture.projectId}/fact-lock`);
+			await rerunDeterministicFactLock(fixture);
+			await page.reload();
+			await expect(page.getByText("Đã chạy Fact Lock")).toHaveCount(0);
+			await page.goto(`/projects/${fixture.projectId}/voice`);
+			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await expect(
+				page
+					.getByRole("navigation", { name: "Các bước project" })
+					.getByText("Hoàn thành"),
+			).toHaveCount(3);
+			await page.goto(`/projects/${fixture.projectId}/video`);
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await page.goto(`/projects/${fixture.projectId}/preview`);
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await page.reload();
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 		} finally {
 			await cleanupReviewFixture(fixture);
 		}
@@ -162,6 +196,8 @@ type ReviewFixture = {
 	scriptVersionId: string;
 	runId: string;
 	claimId: string;
+	createdChannelSettingsId: string | null;
+	createdOutputRulesId: string | null;
 	factContent: string;
 	scriptSnapshot: Record<string, unknown>;
 };
@@ -187,6 +223,48 @@ async function seedReviewFixture(
 	const actor = await getWorkspaceActor(fixedUser.id);
 	if (!actor)
 		throw new Error("The fixed E2E account has no internal workspace.");
+	const [existingChannelSettings] = await db
+		.select({ id: channelSettings.id })
+		.from(channelSettings)
+		.where(eq(channelSettings.workspaceId, actor.workspaceId))
+		.limit(1);
+	const [existingOutputRules] = await db
+		.select({ id: outputRules.id })
+		.from(outputRules)
+		.where(eq(outputRules.workspaceId, actor.workspaceId))
+		.limit(1);
+	const createdChannelSettingsId = existingChannelSettings
+		? null
+		: randomUUID();
+	const createdOutputRulesId = existingOutputRules ? null : randomUUID();
+	if (createdChannelSettingsId) {
+		await db.insert(channelSettings).values({
+			id: createdChannelSettingsId,
+			workspaceId: actor.workspaceId,
+			niche: "Audio",
+			targetAudience: "Người nghe nhạc",
+			tone: "Tin cậy",
+			contentPillar: "Review",
+			defaultCta: "Xem thêm thông tin",
+			affiliateDisclosure: "Nội dung có liên kết affiliate.",
+			avoidWords: [],
+			createdByUserId: actor.userId,
+			updatedByUserId: actor.userId,
+		});
+	}
+	if (createdOutputRulesId) {
+		await db.insert(outputRules).values({
+			id: createdOutputRulesId,
+			workspaceId: actor.workspaceId,
+			language: "vi-VN",
+			aspectRatio: "9:16",
+			subtitleSafeArea: "standard",
+			claimLimit: null,
+			requireFinalCta: true,
+			createdByUserId: actor.userId,
+			updatedByUserId: actor.userId,
+		});
+	}
 
 	const productRecord = await createProduct(actor, {
 		name: `US010 Review Product ${Date.now()}`,
@@ -391,16 +469,26 @@ async function seedReviewFixture(
 		scriptVersionId,
 		runId,
 		claimId,
+		createdChannelSettingsId,
+		createdOutputRulesId,
 		factContent: fact.content,
 		scriptSnapshot: snapshot,
 	};
 }
 
 async function cleanupReviewFixture(fixture: ReviewFixture) {
-	await db
-		.delete(factDependency)
-		.where(eq(factDependency.dependentId, fixture.runId));
-	await db.delete(factLockRun).where(eq(factLockRun.id, fixture.runId));
+	const runIds = (
+		await db
+			.select({ id: factLockRun.id })
+			.from(factLockRun)
+			.where(eq(factLockRun.projectId, fixture.projectId))
+	).map((row) => row.id);
+	if (runIds.length > 0) {
+		await db
+			.delete(factDependency)
+			.where(inArray(factDependency.dependentId, runIds));
+		await db.delete(factLockRun).where(inArray(factLockRun.id, runIds));
+	}
 	await db
 		.delete(productFactHistory)
 		.where(eq(productFactHistory.productId, fixture.productId));
@@ -413,4 +501,37 @@ async function cleanupReviewFixture(fixture: ReviewFixture) {
 		.where(eq(scriptGeneration.id, fixture.generationId));
 	await db.delete(project).where(eq(project.id, fixture.projectId));
 	await db.delete(product).where(eq(product.id, fixture.productId));
+	if (fixture.createdOutputRulesId)
+		await db
+			.delete(outputRules)
+			.where(eq(outputRules.id, fixture.createdOutputRulesId));
+	if (fixture.createdChannelSettingsId)
+		await db
+			.delete(channelSettings)
+			.where(eq(channelSettings.id, fixture.createdChannelSettingsId));
+}
+
+async function rerunDeterministicFactLock(fixture: ReviewFixture) {
+	const prepared = await prepareFactLockRun(
+		fixture.actor,
+		{
+			projectId: fixture.projectId,
+			idempotencyKey: `us010-e2e-rerun-${randomUUID()}`,
+		},
+		{
+			provider: "deterministic",
+			model: "us010-e2e",
+			promptVersion: "fact-lock-prompt.v1",
+			outputSchemaVersion: "fact-lock-output.v1",
+		},
+	);
+	const result = await runPreparedFactLock(
+		fixture.actor,
+		prepared,
+		new DeterministicTextProvider({
+			factLockSnapshot: prepared.inputSnapshot,
+		}),
+	);
+	expect(result.status).toBe("passed");
+	expect(result.sourceScriptRevision).toBe(2);
 }

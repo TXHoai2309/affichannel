@@ -1,3 +1,4 @@
+import { evaluateFactLockGate } from "@affichannel/core";
 import type {
 	PersistedProjectStepStatus,
 	ProjectStepKey,
@@ -8,6 +9,7 @@ import type { ReactNode } from "react";
 import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
 import ProjectStepper from "@/features/project-navigation/project-stepper";
 import {
+	getFactLockGateForCurrentUser,
 	getCurrentWorkspaceActor,
 	getProjectForCurrentUser,
 } from "@/lib/project-loader";
@@ -33,6 +35,10 @@ export default async function ProjectLayout({
 			<div className="mx-auto w-full max-w-6xl space-y-6">
 				<ProjectStepper
 					currentStepKey={fixture.currentStepKey}
+					factLockGate={evaluateFactLockGate({
+						currentScriptVersion: null,
+						runs: [],
+					})}
 					projectId={fixture.id}
 				/>
 				{children}
@@ -46,6 +52,8 @@ export default async function ProjectLayout({
 		notFound();
 	}
 
+	const factLockGate = await getFactLockGateForCurrentUser(project.id);
+
 	const persistedStatuses = Object.fromEntries(
 		project.stepStatuses.map((step) => [step.stepKey, step.status]),
 	) as Record<ProjectStepKey, PersistedProjectStepStatus>;
@@ -54,6 +62,7 @@ export default async function ProjectLayout({
 		<div className="mx-auto w-full max-w-6xl space-y-6">
 			<ProjectStepper
 				currentStepKey={project.currentStepKey}
+				factLockGate={factLockGate ?? null}
 				persistedStatuses={persistedStatuses}
 				projectId={project.id}
 			/>
