@@ -205,6 +205,10 @@ business mutations transactional, exact occurrence + optimistic `baseRevision`,
 không mutate claim audit và làm run cũ effective `stale`. Voice/Render gate,
 FactLockGate, TTS và US sau vẫn chưa triển khai.
 
+Phase 2 hardening bổ sung strict pre-run validation trước CAS cho safe delete: whole-field
+delete của selected hook, voiceover, CTA hoặc caption bắt buộc bị từ chối; optional
+`scene.onScreenText` vẫn có thể chuyển thành `null`. Không tạo migration 0015.
+
 ```text
 Chạy kiểm tra → xem claim → liên kết bằng chứng → xử lý review → pass hoặc blocked
 ```

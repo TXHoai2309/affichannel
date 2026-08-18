@@ -1,6 +1,7 @@
 import type { ClaimOccurrence } from "../script-generation/types";
 import { scriptVersionEditableSnapshotSchema } from "../script-version/schema";
 import type { ScriptVersionEditableSnapshot } from "../script-version/types";
+import { validateScriptVersionForFactLockRun } from "../script-version/validation";
 import type { FactLockStoredClaim } from "./types";
 
 export type FactLockSourceMutation =
@@ -134,5 +135,15 @@ export function mutateFactLockClaimSource(
 					? "Xoá claim sẽ làm script không hợp lệ. Hãy sửa trực tiếp trong Script Editor."
 					: "Nội dung mới làm script không hợp lệ.",
 		};
+	if (mutation.action === "delete") {
+		const preRunValidation = validateScriptVersionForFactLockRun(parsed.data);
+		if (!preRunValidation.success)
+			return {
+				success: false,
+				code: "FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+				message:
+					"Không thể xóa tự động an toàn. Hãy chỉnh sửa đoạn chứa claim.",
+			};
+	}
 	return { success: true, snapshot: parsed.data };
 }

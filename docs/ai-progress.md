@@ -1179,12 +1179,12 @@ Trạng thái: **AFF-US-010 Phase 1 Foundation & Classification is ready for acc
 Kiểm tra Phase 2:
 
 - `pnpm check-types`: đạt, 5/5 package tasks.
-- `pnpm --filter web test`: đạt, 17 files / 130 tests.
+- `pnpm --filter web test`: đạt, 17 files / 131 tests.
 - `pnpm test:integration:fact-lock`: đạt, gồm resolution proof.
-- Authenticated focused E2E `fact-lock-review.spec.ts`: 1/1 pass, 0 skipped, 0 failed;
-  browser console error check pass.
-- Full authenticated E2E rerun: 22/22 pass, 0 skipped, 0 failed; gồm test AFF-US-010
-  load/approve/refresh/reopen. Một số log `ECONNRESET`/Drawer warning hiện hữu ở các
+- Authenticated focused E2E `fact-lock-review.spec.ts`: 2/2 pass, 0 skipped, 0 failed;
+  gồm unsafe whole-field delete error UX và browser console error check pass.
+- Full authenticated E2E rerun: 23/23 pass, 0 skipped, 0 failed; gồm test AFF-US-010
+  load/approve/refresh/reopen và unsafe whole-field delete. Một số log `ECONNRESET`/Drawer warning hiện hữu ở các
   suite Script Editor nhưng không làm test fail và không nằm trong route Phase 2.
 - `pnpm --filter web build`: đạt, route `/projects/[projectId]/fact-lock` được build
   dynamic thành công.
@@ -1192,3 +1192,18 @@ Kiểm tra Phase 2:
 - Scoped Biome và `git diff --check`: đạt; test artifacts đã restore về baseline.
 
 Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.**
+
+### 2026-08-18 — AFF-US-010 Phase 2 safe-delete hardening
+
+- Audit delete path xác nhận editable snapshot schema cho phép intermediate empty text ở
+  required fields; đây chưa đủ để đảm bảo ScriptVersion sẵn sàng chạy Fact Lock.
+- Thêm `validateScriptVersionForFactLockRun()` sau editable schema validation và trước CAS,
+  chỉ áp dụng cho action `delete`. Whole selected hook/voiceover/CTA/caption invalid bị trả
+  `FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT`; không update ScriptVersion, không tăng revision,
+  không mutate FactLockClaim/run. Optional `scene.onScreenText` delete vẫn thành công và
+  làm run cũ effective stale.
+- Bổ sung core unit, Fact Lock integration và authenticated E2E cho required whole-field
+  rejection, optional scene delete, DB immutability/rollback và actionable UI error.
+- Không tạo schema/migration 0015, không đổi Neon, không bật paid AI và không bắt đầu Phase 3.
+
+Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for final acceptance.**

@@ -1,3 +1,4 @@
+import { mutateFactLockClaimSource } from "@affichannel/core/fact-lock/resolution";
 import type { FactLockInputSnapshot } from "@affichannel/core/fact-lock/types";
 import {
 	deriveFactLockEffectiveStatus,
@@ -226,5 +227,66 @@ describe("AFF-US-010 Fact Lock foundation", () => {
 		expect(deriveFactLockEffectiveStatus("indeterminate", 4, 5, false)).toBe(
 			"indeterminate",
 		);
+	});
+
+	it("rejects whole required-field deletes but allows optional scene text removal", () => {
+		const editableSnapshot = snapshot.scriptVersion.snapshot;
+		const wholeVoiceover = mutateFactLockClaimSource(
+			editableSnapshot,
+			{
+				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+			},
+			{ action: "delete" },
+		);
+		const wholeHook = mutateFactLockClaimSource(
+			editableSnapshot,
+			{
+				claimText: "Bạn có biết tai nghe này có pin 20 giờ?",
+				occurrence: { section: "hook", hookKey: "selected" },
+			},
+			{ action: "delete" },
+		);
+		const optionalScene = mutateFactLockClaimSource(
+			editableSnapshot,
+			{
+				claimText: "Pin 20 giờ",
+				occurrence: { section: "scene", sceneOrder: 1 },
+			},
+			{ action: "delete" },
+		);
+		const partialDelete = mutateFactLockClaimSource(
+			{
+				...editableSnapshot,
+				voiceoverSegments: [
+					{
+						key: "intro",
+						text: "Pin dùng 20 giờ, phù hợp sử dụng cả ngày.",
+					},
+				],
+			},
+			{
+				claimText: "Pin dùng 20 giờ",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+			},
+			{ action: "delete" },
+		);
+
+		expect(wholeVoiceover).toMatchObject({
+			success: false,
+			code: "FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+		});
+		expect(wholeHook).toMatchObject({
+			success: false,
+			code: "FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+		});
+		expect(optionalScene.success).toBe(true);
+		if (optionalScene.success)
+			expect(optionalScene.snapshot.scenes[0]?.onScreenText).toBeNull();
+		expect(partialDelete.success).toBe(true);
+		if (partialDelete.success)
+			expect(partialDelete.snapshot.voiceoverSegments[0]?.text).toBe(
+				", phù hợp sử dụng cả ngày.",
+			);
 	});
 });

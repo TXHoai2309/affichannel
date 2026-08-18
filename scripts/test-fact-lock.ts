@@ -226,6 +226,7 @@ function needsReviewOutput(
 function needsReviewAtOccurrence(input: {
 	claimText: string;
 	occurrence:
+		| { section: "hook"; hookKey: string }
 		| { section: "voiceover"; segmentKey: string }
 		| { section: "scene"; sceneOrder: number };
 	suggestionText?: string;
@@ -857,6 +858,13 @@ try {
 	);
 	const deleteClaimId = deleteResult.claims[0]?.id;
 	assert(deleteClaimId, "Delete resolution claim has no persisted id.");
+	const deleteClaimBefore = (
+		await db
+			.select()
+			.from(factLockClaim)
+			.where(eq(factLockClaim.id, deleteClaimId))
+			.limit(1)
+	)[0];
 	const deletedState = await mutateFactLockClaimSourceAndRefresh(
 		actorA,
 		{
@@ -868,10 +876,167 @@ try {
 		},
 		{ action: "delete" },
 	);
+	const deletedDraft = (
+		await db
+			.select()
+			.from(scriptVersion)
+			.where(eq(scriptVersion.id, fixtureA.scriptVersionId))
+			.limit(1)
+	)[0];
+	const deleteClaimAfter = (
+		await db
+			.select()
+			.from(factLockClaim)
+			.where(eq(factLockClaim.id, deleteClaimId))
+			.limit(1)
+	)[0];
+	const deletedSnapshot = deletedDraft?.editableSnapshotJson as
+		| { scenes?: Array<{ onScreenText: string | null }> }
+		| undefined;
 	assert(
 		deletedState.currentScriptVersion?.revision === 4 &&
+			deletedSnapshot?.scenes?.[0]?.onScreenText === null &&
 			deletedState.latestRequest?.effectiveStatus === "stale",
 		"Deleting a scene claim did not persist an immutable-safe source mutation.",
+	);
+	assert(
+		deleteClaimBefore &&
+			deleteClaimAfter &&
+			JSON.stringify(deleteClaimBefore) === JSON.stringify(deleteClaimAfter),
+		"Successful source deletion mutated the immutable Fact Lock claim row.",
+	);
+
+	const voiceoverDeleteRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureB.projectId,
+			idempotencyKey: `${prefix}_resolution_delete_voiceover`,
+		},
+		config,
+	);
+	const voiceoverDeleteResult = await runPreparedFactLock(
+		actorA,
+		voiceoverDeleteRun,
+		fakeProvider(
+			needsReviewAtOccurrence({
+				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+			}),
+		),
+	);
+	const voiceoverDeleteClaimId = voiceoverDeleteResult.claims[0]?.id;
+	assert(voiceoverDeleteClaimId, "Voiceover delete claim has no persisted id.");
+	const voiceoverBefore = (
+		await db
+			.select()
+			.from(scriptVersion)
+			.where(eq(scriptVersion.id, fixtureB.scriptVersionId))
+			.limit(1)
+	)[0];
+	const voiceoverClaimBefore = (
+		await db
+			.select()
+			.from(factLockClaim)
+			.where(eq(factLockClaim.id, voiceoverDeleteClaimId))
+			.limit(1)
+	)[0];
+	await expectCode(
+		() =>
+			mutateFactLockClaimSourceAndRefresh(
+				actorA,
+				{
+					projectId: fixtureB.projectId,
+					factLockRunId: voiceoverDeleteRun.id,
+					claimId: voiceoverDeleteClaimId,
+					scriptVersionId: fixtureB.scriptVersionId,
+					baseRevision: 1,
+				},
+				{ action: "delete" },
+			),
+		"FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+	);
+	const voiceoverAfter = (
+		await db
+			.select()
+			.from(scriptVersion)
+			.where(eq(scriptVersion.id, fixtureB.scriptVersionId))
+			.limit(1)
+	)[0];
+	const voiceoverClaimAfter = (
+		await db
+			.select()
+			.from(factLockClaim)
+			.where(eq(factLockClaim.id, voiceoverDeleteClaimId))
+			.limit(1)
+	)[0];
+	assert(
+		voiceoverBefore &&
+			voiceoverAfter &&
+			voiceoverBefore.revision === 1 &&
+			voiceoverAfter.revision === 1 &&
+			JSON.stringify(voiceoverBefore.editableSnapshotJson) ===
+				JSON.stringify(voiceoverAfter.editableSnapshotJson) &&
+			voiceoverClaimBefore &&
+			voiceoverClaimAfter &&
+			JSON.stringify(voiceoverClaimBefore) ===
+				JSON.stringify(voiceoverClaimAfter),
+		"Whole voiceover delete partially mutated the database.",
+	);
+
+	const hookDeleteRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureB.projectId,
+			idempotencyKey: `${prefix}_resolution_delete_hook`,
+		},
+		config,
+	);
+	const hookDeleteResult = await runPreparedFactLock(
+		actorA,
+		hookDeleteRun,
+		fakeProvider(
+			needsReviewAtOccurrence({
+				claimText: "Bạn có biết tai nghe này có pin 20 giờ?",
+				occurrence: { section: "hook", hookKey: "selected" },
+			}),
+		),
+	);
+	const hookDeleteClaimId = hookDeleteResult.claims[0]?.id;
+	assert(hookDeleteClaimId, "Hook delete claim has no persisted id.");
+	await expectCode(
+		() =>
+			mutateFactLockClaimSourceAndRefresh(
+				actorA,
+				{
+					projectId: fixtureB.projectId,
+					factLockRunId: hookDeleteRun.id,
+					claimId: hookDeleteClaimId,
+					scriptVersionId: fixtureB.scriptVersionId,
+					baseRevision: 1,
+				},
+				{ action: "delete" },
+			),
+		"FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+	);
+	const hookAfter = (
+		await db
+			.select()
+			.from(scriptVersion)
+			.where(eq(scriptVersion.id, fixtureB.scriptVersionId))
+			.limit(1)
+	)[0];
+	const hookSnapshot = hookAfter?.editableSnapshotJson as
+		| {
+				selectedHookKey?: string;
+				hookVariants?: Array<{ key: string; text: string }>;
+		  }
+		| undefined;
+	assert(
+		hookSnapshot?.selectedHookKey === "selected" &&
+			hookSnapshot.hookVariants?.find((item) => item.key === "selected")
+				?.text === "Bạn có biết tai nghe này có pin 20 giờ?" &&
+			hookAfter?.revision === 1,
+		"Whole selected hook delete changed source or revision.",
 	);
 
 	await db.insert(productFact).values([

@@ -285,3 +285,12 @@ Trạng thái: **AFF-US-009 Phase 2 Script Editor & Autosave is ready for final 
   đổi schema, không triển khai FactLockGate/Voice/Render/TTS.
 
 Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.**
+
+### AFF-US-010 Phase 2 safe-delete hardening — 2026-08-18
+
+- Chặn xóa toàn bộ selected hook, voiceover, CTA hoặc caption nếu candidate ScriptVersion
+  không còn hợp lệ để chạy Fact Lock; người dùng nhận hướng dẫn chỉnh sửa trực tiếp trong
+  Script Editor.
+- Giữ nguyên khả năng xóa toàn bộ `scene.onScreenText` tùy chọn, đồng thời giữ immutable
+  Fact Lock audit và optimistic revision semantics.
+- Không thay schema, migration, Fact Lock lifecycle, Product Facts hoặc AI provider.

@@ -38,7 +38,12 @@ occurrence bằng exact source locator, không fuzzy replacement; draft tăng re
 
 Delete chỉ được thực hiện khi snapshot sau delete vẫn hợp lệ. Nếu locator không duy nhất
 hoặc delete làm script invalid, trả `FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT` và yêu cầu
-người dùng sửa trong Script Editor.
+người dùng sửa trong Script Editor. Delete chạy `scriptVersionEditableSnapshotSchema`
+trước, sau đó chạy thêm `validateScriptVersionForFactLockRun()` trước CAS để chặn whole-field
+delete làm rỗng hook đã chọn, voiceover, CTA hoặc caption bắt buộc. `scene.onScreenText` vẫn
+cho phép chuyển thành `null` theo contract hiện tại.
+Partial delete vẫn được chấp nhận khi phần text còn lại vượt qua cùng pre-run validator;
+không có fuzzy cleanup hoặc NLP replacement.
 
 ## Không tạo migration
 
@@ -48,11 +53,14 @@ dữ liệu production.
 
 ## Kiểm thử
 
-- Core/UI unit test kiểm tra summary/filter/action permissions và occurrence label.
+- Core/UI unit test kiểm tra summary/filter/action permissions, occurrence label và safe-delete
+  hardening cho whole voiceover/hook cùng optional scene text.
 - `scripts/test-fact-lock.ts` kiểm tra manual approve atomic, duplicate approve,
-  edit CAS/stale, apply stored suggestion, safe scene delete, idempotency/concurrency,
-  failed/indeterminate, dependency/revision invalidation và reopen persistence.
+  edit CAS/stale, apply stored suggestion, safe scene delete, whole voiceover/hook delete
+  rejection với revision/source/claim immutability, idempotency/concurrency, failed/indeterminate,
+  dependency/revision invalidation và reopen persistence.
 - Authenticated E2E seed fixture tạm, kiểm tra ba pane, evidence, manual approve,
-  refresh/reopen và browser console error; fixture cleanup trong `finally`.
+  refresh/reopen, actionable unsafe-delete error UX và browser console error; fixture cleanup
+  trong `finally`.
 - Không được đánh dấu toàn bộ AFF-US-010 DONE chỉ từ Phase 2; Phase 3/live proof và
   gate downstream vẫn là phạm vi riêng nếu backlog yêu cầu.

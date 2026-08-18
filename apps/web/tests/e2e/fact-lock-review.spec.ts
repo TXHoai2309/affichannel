@@ -74,6 +74,38 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await cleanupReviewFixture(fixture);
 		}
 	});
+
+	test("shows actionable feedback when whole-field delete is unsafe", async ({
+		page,
+	}) => {
+		const fixture = await seedReviewFixture();
+		try {
+			await signIn(page);
+			await page.goto(`/projects/${fixture.projectId}/fact-lock`);
+			await expect(
+				page.getByRole("heading", { name: "Fact Lock Review" }),
+			).toBeVisible();
+			await page.getByRole("button", { name: "Xoá", exact: true }).click();
+			await page
+				.getByRole("dialog")
+				.getByRole("button", { name: "Xoá claim" })
+				.click();
+			await expect(
+				page.getByText(
+					"Không thể xóa tự động an toàn. Hãy chỉnh sửa đoạn chứa claim.",
+				),
+			).toBeVisible();
+			await expect(page.getByText("Đã xoá claim khỏi script")).toHaveCount(0);
+			await expect(page.getByText("Review đã lỗi thời")).toHaveCount(0);
+			await page.reload();
+			await expect(page.getByText(fixture.factContent)).toBeVisible();
+			await expect(
+				page.getByText("Pin dùng 20 giờ trong một lần sạc.").first(),
+			).toBeVisible();
+		} finally {
+			await cleanupReviewFixture(fixture);
+		}
+	});
 });
 
 type ReviewFixture = {

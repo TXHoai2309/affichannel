@@ -106,7 +106,7 @@ const FACT_LOCK_ERROR_MESSAGES: Record<string, string> = {
 	FACT_LOCK_CLAIM_NOT_REVIEWABLE:
 		"Claim này vừa được xử lý hoặc không còn cần duyệt.",
 	FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT:
-		"Không thể xoá an toàn claim này. Hãy sửa trực tiếp trong Script Editor.",
+		"Không thể xóa tự động an toàn. Hãy chỉnh sửa đoạn chứa claim.",
 	FACT_LOCK_CLAIM_SOURCE_MISMATCH:
 		"Claim không còn khớp với script hiện tại. Hãy mở Script Editor để kiểm tra.",
 	FACT_LOCK_CLAIM_SUGGESTION_UNAVAILABLE:
