@@ -52,6 +52,7 @@ export const env = createEnv({
 			.min(256)
 			.max(64_000)
 			.default(8_192),
+		TTS_DEFAULT_PROVIDER: z.string().trim().min(1).default("apikeyfun"),
 		APIKEY_FUN_API_KEY: z.string().trim().min(1).optional(),
 		APIKEY_FUN_BASE_URL: z.url().optional(),
 		APIKEY_FUN_PRICING_VERSION: z.string().trim().min(1).optional(),

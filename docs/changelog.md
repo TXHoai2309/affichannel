@@ -14,6 +14,10 @@ sử dụng Semantic Versioning.
   server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
   transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có
   implementation, schema hoặc migration.
+- AFF-US-011 Phase 1: thêm `voice_config` migration `0015`, catalog server-owned
+  `ara/eve/leo/rex/sal`, protected `voice.listPresets/getConfig/saveConfig`,
+  validation, revision CAS, Fact Lock enforcement và workspace isolation. Chưa
+  có UI panel, preview binary hoặc paid TTS runtime.
 - AFF-US-010 Phase 1: thêm Fact Lock run/claim/mapping schema additive, deterministic
   classification validator, exact ScriptVersion/Product Fact snapshot, dependency
   registration, idempotent runtime API `factLock.run/getState` và read model stale.

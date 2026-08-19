@@ -1,8 +1,27 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-011 Phase 0 đã khóa contract/provider capability và chưa bắt đầu
-  Phase 1.
+- Trạng thái: AFF-US-011 Phase 1 Voice Foundation đã hoàn thành và Phase 2/3 chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-19
+
+## 2026-08-19 — AFF-US-011 Phase 1 Voice Foundation
+
+Đã triển khai `voice_config` với migration additive `0015_last_gunslinger.sql`,
+verified server-owned catalog `ara/eve/leo/rex/sal`, provider-neutral TTS contract
+và protected API `voice.listPresets`, `voice.getConfig`, `voice.saveConfig`.
+Save dùng server-owned provider `apikeyfun`, validation code contract, project row
+lock và revision CAS; get/save bắt buộc `FactLockGate.assertPassed(actor,
+projectId)`. Không có secret/audio/raw response trong schema và không có client
+provider override.
+
+Neon preflight/postflight khớp journal 0014→0015; `db:generate` sau migrate không
+còn schema changes. Unit, protected RPC, VoiceConfig integration, Fact Lock,
+ScriptVersion và ScriptGeneration integration đều đạt; web build và type-check
+đạt. Phase 1 không gọi TTS relay, không tạo preview binary, UI panel hoặc full
+voiceover artifact.
+
+Trạng thái: **AFF-US-011 Phase 1 Voice Foundation is ACCEPTED. Phase 2/3 chưa bắt đầu.**
+
+Tài liệu chi tiết: `docs/aff-us-011-phase-1-foundation.md`.
 
 ## 2026-08-19 — AFF-US-011 Phase 0 Contract & Architecture Freeze
 

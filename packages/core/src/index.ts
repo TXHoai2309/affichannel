@@ -1,3 +1,4 @@
+export * from "./fact-lock";
 export * from "./product/product-errors";
 export * from "./product/product-types";
 export * from "./product/validation";
@@ -7,7 +8,6 @@ export * from "./product-fact/errors";
 export * from "./product-fact/freshness";
 export * from "./product-fact/types";
 export * from "./product-fact/validation";
-export * from "./fact-lock";
 export * from "./project/project-service";
 export * from "./project/project-types";
 export * from "./project/project-validation";
@@ -18,4 +18,5 @@ export * from "./script-generation/policy";
 export * from "./script-generation/schema";
 export * from "./script-generation/types";
 export * from "./script-version";
+export * from "./voice";
 export * from "./workspace";

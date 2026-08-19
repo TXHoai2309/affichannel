@@ -12,4 +12,5 @@ export * from "./product-fact-history";
 export * from "./project";
 export * from "./script-generation";
 export * from "./script-version";
+export * from "./voice-config";
 export * from "./workspace";

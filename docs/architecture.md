@@ -303,6 +303,20 @@ và pricing relay hiện `UNVERIFIED`. Usage metadata chỉ reuse hạ tầng hi
 không tạo accounting subsystem riêng trong US11. Phase 0 không tạo schema,
 migration hoặc runtime implementation.
 
+### Phase 1 Voice Foundation
+
+Phase 1 thêm `voice_config` additive với identity duy nhất theo
+`(workspace_id, project_id)`. Core giữ catalog/validation provider-neutral; API
+giữ adapter boundary và resolve `TTS_DEFAULT_PROVIDER` ở server. Config API luôn
+resolve workspace/project từ `WorkspaceActor`, gọi server-side
+`FactLockGate.assertPassed(actor, projectId)`, rồi mới đọc/ghi dữ liệu.
+
+Create/update dùng transaction và optimistic revision CAS; client không được gửi
+provider, workspace, revision hoặc audit fields. Phase 1 không giữ transaction
+trong lúc chờ provider vì chưa có provider call; `ApiKeyFunTtsProvider.preview`
+chỉ là boundary deferred cho Phase 2. Chi tiết schema/API/test nằm tại
+`docs/aff-us-011-phase-1-foundation.md`.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

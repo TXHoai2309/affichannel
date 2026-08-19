@@ -9,6 +9,7 @@ import { projectRouter } from "./project";
 import { scriptGenerationRouter } from "./script-generation";
 import { scriptVersionRouter } from "./script-version";
 import { settingsRouter } from "./settings";
+import { voiceRouter } from "./voice";
 
 export const appRouter = {
 	healthCheck: publicProcedure.handler(() => {
@@ -28,6 +29,7 @@ export const appRouter = {
 	scriptGeneration: scriptGenerationRouter,
 	scriptVersion: scriptVersionRouter,
 	settings: settingsRouter,
+	voice: voiceRouter,
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;

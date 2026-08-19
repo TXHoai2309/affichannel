@@ -227,6 +227,10 @@ Production TTS của AFF-US-011 dùng APIKEY.FUN relay → Grok/xAI TTS qua
 catalog runtime nên catalog verified do server sở hữu. Chi tiết contract nằm tại
 `docs/aff-us-011-phase-0-contract-decisions.md`.
 
+Phase 1 foundation đã lưu current VoiceConfig bằng revision CAS và expose catalog,
+load/save API có Fact Lock/workspace authorization. UI panel, preview audio và
+full voiceover vẫn chưa mở trong phase này.
+
 ## 9. Các màn hình chính
 
 US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,

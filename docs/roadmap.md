@@ -238,14 +238,15 @@ voice là server-owned verified catalog. Chi tiết contract tại
 Trạng thái AFF-US-011:
 
 Phase 0 — Contract & Architecture ✅
-Phase 1 — Not started
+Phase 1 — Voice Foundation ✅
 Phase 2 — Not started
 Phase 3 — Not started
 
-Phase 0 không tạo schema/migration `0015`, không implement provider/API/UI và
-không gọi thêm paid TTS. Voice Studio vẫn bị khóa bởi Fact Lock cho tới khi run
-hiện tại đạt PASS; preview sau này phải gọi
-`FactLockGate.assertPassed(actor, projectId)` ở server.
+Phase 1 đã tạo migration additive `0015`, server-owned catalog, protected
+`voice.listPresets/getConfig/saveConfig`, validation, CAS và workspace isolation.
+`voice.getConfig/saveConfig` vẫn gọi `FactLockGate.assertPassed(actor, projectId)`
+ở server. Phase 1 không gọi paid TTS, không tạo UI hoặc audio artifact; Phase 2/3
+vẫn chưa bắt đầu. Chi tiết tại `docs/aff-us-011-phase-1-foundation.md`.
 
 - Test TTS tiếng Việt bằng script đại diện.
 - Tạo voice theo segment và cache bằng normalized input hash.
