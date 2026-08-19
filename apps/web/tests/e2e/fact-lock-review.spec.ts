@@ -16,6 +16,7 @@ import {
 	scriptGeneration,
 	scriptVersion,
 	user,
+	voiceConfig,
 } from "@affichannel/db";
 import { expect, type Page, test } from "@playwright/test";
 import { eq, inArray } from "drizzle-orm";
@@ -117,6 +118,7 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 	test("opens Voice/Video/Preview only for a passed gate and relocks after script edit", async ({
 		page,
 	}) => {
+		test.setTimeout(90_000);
 		const fixture = await seedReviewFixture("passed");
 		try {
 			await signIn(page);
@@ -126,8 +128,75 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await expect(
 				page.getByRole("heading", { name: "Giọng đọc" }),
 			).toBeVisible();
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
 			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await expect(page.getByRole("radio", { name: /Ara/ })).toBeChecked();
+			await expect(
+				page.getByRole("slider", { name: "Tốc độ giọng đọc" }),
+			).toHaveValue("1");
+
+			await page.getByText("Eve", { exact: true }).click();
+			await page.getByRole("slider", { name: "Tốc độ giọng đọc" }).fill("1.1");
+			await expect(page.getByText("Chưa lưu", { exact: true })).toBeVisible();
+			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
+			await expect(
+				page.getByText("Đã lưu", { exact: true }).first(),
+			).toBeVisible();
+			const [firstVoiceConfig] = await db
+				.select()
+				.from(voiceConfig)
+				.where(eq(voiceConfig.projectId, fixture.projectId));
+			expect(firstVoiceConfig?.voiceId).toBe("eve");
+			expect(firstVoiceConfig?.language).toBe("vi");
+			expect(firstVoiceConfig?.speed).toBeCloseTo(1.1);
+
+			await page.reload({ waitUntil: "commit" });
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
+			await expect(page.getByRole("radio", { name: /Eve/ })).toBeChecked();
+			await expect(
+				page.getByRole("slider", { name: "Tốc độ giọng đọc" }),
+			).toHaveValue("1.1");
+
+			const firstPreviewResponse = page.waitForResponse(
+				(response) =>
+					response
+						.url()
+						.includes(`/projects/${fixture.projectId}/voice/preview`) &&
+					response.request().method() === "POST",
+			);
+			await page.getByRole("button", { name: "Nghe thử" }).click();
+			const firstPreview = await firstPreviewResponse;
+			expect(firstPreview.status()).toBe(200);
+			expect(firstPreview.headers()["content-type"]).toContain("audio/mpeg");
+			await expect(
+				page.locator('audio[aria-label="Bản nghe thử giọng đọc"]'),
+			).toBeVisible();
+
+			await page.getByText("Ara", { exact: true }).click();
+			await expect(page.locator("audio")).toHaveCount(0);
+			await expect(page.getByText("Chưa lưu", { exact: true })).toBeVisible();
+			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
+			await expect(
+				page.getByText("Đã lưu", { exact: true }).first(),
+			).toBeVisible();
+			const secondPreviewResponse = page.waitForResponse(
+				(response) =>
+					response
+						.url()
+						.includes(`/projects/${fixture.projectId}/voice/preview`) &&
+					response.request().method() === "POST",
+			);
+			await page.getByRole("button", { name: "Nghe thử" }).click();
+			const secondPreview = await secondPreviewResponse;
+			expect(secondPreview.status()).toBe(200);
+			await expect(
+				page.locator('audio[aria-label="Bản nghe thử giọng đọc"]'),
+			).toBeVisible();
 			await expect(
 				page
 					.getByRole("navigation", { name: "Các bước project" })
@@ -159,6 +228,9 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await page.goto(`/projects/${fixture.projectId}/voice`, {
 				waitUntil: "commit",
 			});
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toHaveCount(0);
 			await expect(page.getByText("Fact Lock đã cũ theo script")).toBeVisible();
 			await expect(page.getByText("Đang khóa")).toBeVisible();
 			await expect(
@@ -172,8 +244,27 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await page.reload({ waitUntil: "commit" });
 			await expect(page.getByText("Đã chạy Fact Lock")).toHaveCount(0);
 			await openProjectStep(page, fixture.projectId, "voice");
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
 			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await expect(page.getByRole("radio", { name: /Ara/ })).toBeChecked();
+			await expect(
+				page.getByRole("slider", { name: "Tốc độ giọng đọc" }),
+			).toHaveValue("1.1");
+			const thirdPreviewResponse = page.waitForResponse(
+				(response) =>
+					response
+						.url()
+						.includes(`/projects/${fixture.projectId}/voice/preview`) &&
+					response.request().method() === "POST",
+			);
+			await page.getByRole("button", { name: "Nghe thử" }).click();
+			expect((await thirdPreviewResponse).status()).toBe(200);
+			await expect(
+				page.locator('audio[aria-label="Bản nghe thử giọng đọc"]'),
+			).toBeVisible();
 			await expect(
 				page
 					.getByRole("navigation", { name: "Các bước project" })
@@ -529,6 +620,9 @@ async function cleanupReviewFixture(fixture: ReviewFixture) {
 	await db
 		.delete(scriptGeneration)
 		.where(eq(scriptGeneration.id, fixture.generationId));
+	await db
+		.delete(voiceConfig)
+		.where(eq(voiceConfig.projectId, fixture.projectId));
 	await db.delete(project).where(eq(project.id, fixture.projectId));
 	await db.delete(product).where(eq(product.id, fixture.productId));
 	if (fixture.createdOutputRulesId)

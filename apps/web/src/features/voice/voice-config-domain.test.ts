@@ -62,15 +62,41 @@ describe("AFF-US-011 VoiceConfig domain", () => {
 	});
 
 	it("distinguishes malformed configuration input from speed range errors", () => {
-		expect(() =>
-			validateVoiceConfigFields({ voiceId: "ara", language: "vi" }),
-		).toThrowError(VoiceConfigError);
-		try {
-			validateVoiceConfigFields({ voiceId: "ara", language: "vi" });
-		} catch (error) {
-			expect((error as VoiceConfigError).code).toBe(
-				"VOICE_CONFIG_INPUT_INVALID",
+		for (const input of [
+			{ voiceId: "", language: "vi", speed: 1 },
+			{ voiceId: "eve", language: "", speed: 1 },
+			{ voiceId: "eve", language: "vi", speed: Number.NaN },
+			{ voiceId: "eve", language: "vi", speed: Number.POSITIVE_INFINITY },
+		]) {
+			expect(() => validateVoiceConfigFields(input)).toThrowError(
+				VoiceConfigError,
 			);
+			try {
+				validateVoiceConfigFields(input);
+			} catch (error) {
+				expect((error as VoiceConfigError).code).toBe(
+					"VOICE_CONFIG_INPUT_INVALID",
+				);
+			}
+		}
+	});
+
+	it("keeps finite numeric range errors separate from malformed numbers", () => {
+		for (const speed of [0.69, 1.51]) {
+			expect(() =>
+				validateVoiceConfigFields({ voiceId: "eve", language: "vi", speed }),
+			).toThrowError(VoiceConfigError);
+			try {
+				validateVoiceConfigFields({ voiceId: "eve", language: "vi", speed });
+			} catch (error) {
+				expect((error as VoiceConfigError).code).toBe("TTS_SPEED_OUT_OF_RANGE");
+			}
+		}
+
+		for (const speed of [0.7, 1, 1.5]) {
+			expect(
+				validateVoiceConfigFields({ voiceId: "eve", language: "vi", speed }),
+			).toEqual({ voiceId: "eve", language: "vi", speed });
 		}
 	});
 });

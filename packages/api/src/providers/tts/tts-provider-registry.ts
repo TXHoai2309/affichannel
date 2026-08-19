@@ -4,6 +4,7 @@ import {
 	ApiKeyFunTtsProvider,
 	type ApiKeyFunTtsProviderOptions,
 } from "./apikeyfun-tts-provider";
+import { DeterministicTtsProvider } from "./deterministic-tts-provider";
 import type { TtsProvider } from "./tts-provider";
 
 export type TtsProviderResolutionOptions = {
@@ -27,6 +28,9 @@ export function resolveTtsProvider(
 	options: TtsProviderResolutionOptions = {},
 ): TtsProvider | undefined {
 	if (providerName !== "apikeyfun") return undefined;
+	if (env.AFFICHANNEL_E2E_TTS_DETERMINISTIC === "1") {
+		return new DeterministicTtsProvider();
+	}
 	const providerOptions = resolveApikeyFunOptions(options);
 	return providerOptions
 		? new ApiKeyFunTtsProvider(providerOptions)

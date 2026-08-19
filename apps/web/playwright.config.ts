@@ -6,6 +6,10 @@ dotenv.config({
 	path: resolve(__dirname, ".env"),
 });
 
+// Authenticated E2E must never call paid TTS. The server registry sees this
+// explicit test-only flag and returns the deterministic adapter instead.
+process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC = "1";
+
 const e2eEmail = process.env.E2E_AUTH_EMAIL?.trim();
 const e2ePassword = process.env.E2E_AUTH_PASSWORD?.trim();
 

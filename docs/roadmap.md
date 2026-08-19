@@ -240,7 +240,7 @@ Trạng thái AFF-US-011:
 Phase 0 — Contract & Architecture ✅
 Phase 1 — Voice Foundation ✅
 Phase 2 — TTS Preview Runtime ✅
-Phase 3 — Not started
+Phase 3 — Voice Studio Configuration & Preview ✅
 
 Phase 1 đã tạo migration additive `0015`, server-owned catalog, protected
 `voice.listPresets/getConfig/saveConfig`, validation, CAS và workspace isolation.
@@ -248,9 +248,14 @@ Phase 1 đã tạo migration additive `0015`, server-owned catalog, protected
 ở server. Phase 1 không gọi paid TTS, không tạo UI hoặc audio artifact. Phase 2
 đã nối server-derived preview text, real provider adapter boundary, protected
 binary endpoint, timeout/MIME/size/error mapping và deterministic integration
-proof; không persist audio. UI Voice Studio và full voiceover vẫn thuộc Phase 3.
+proof; không persist audio. Phase 3 đã thêm Voice Studio client, dirty/CAS
+conflict UX, server-catalog preset/language/speed controls, protected binary
+preview, Blob URL cleanup, loading/error states và authenticated E2E qua nhiều
+preset với relock/reopen sau Fact Lock rerun. Full voiceover vẫn chưa thuộc
+phạm vi đã hoàn thành.
 Chi tiết tại `docs/aff-us-011-phase-1-foundation.md` và
-`docs/aff-us-011-phase-2-tts-preview-runtime.md`.
+`docs/aff-us-011-phase-2-tts-preview-runtime.md` và
+`docs/aff-us-011-phase-3-voice-studio.md`.
 
 - Test TTS tiếng Việt bằng script đại diện.
 - Tạo voice theo segment và cache bằng normalized input hash.

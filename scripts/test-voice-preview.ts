@@ -501,6 +501,19 @@ try {
 		"Product Fact rerun did not reopen preview.",
 	);
 
+	await db
+		.update(voiceConfig)
+		.set({ voiceId: "", updatedAt: new Date() })
+		.where(eq(voiceConfig.projectId, main.projectId));
+	await expectCode(
+		() => previewVoice(actor, main.projectId, { provider }),
+		"VOICE_CONFIG_INPUT_INVALID",
+	);
+	assert(
+		provider.callCount === passedPreviewCount + 2,
+		"Invalid persisted VoiceConfig invoked the provider.",
+	);
+
 	await expectCode(
 		() => previewVoice(otherActor, main.projectId, { provider }),
 		"FACT_LOCK_NOT_FOUND",

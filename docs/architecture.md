@@ -331,6 +331,25 @@ nhận arbitrary text/config và không persist audio. Phase 2 không thêm migr
 usage/billing schema, cache, UI, full voiceover hoặc render. Chi tiết tại
 `docs/aff-us-011-phase-2-tts-preview-runtime.md`.
 
+### Phase 3 Voice Studio
+
+Route Voice giữ server-rendered `GatedProjectStepPage` làm gate duy nhất và chỉ
+mount client `VoiceStudio` khi `FactLockGate` cho phép. Client query catalog và
+config qua protected oRPC, giữ draft local, hiển thị dirty state và gửi revision
+CAS khi save. Conflict không tự merge hoặc overwrite; người dùng phải tải lại
+config server.
+
+Preview client gọi protected binary route không body, kiểm tra status và
+canonical MIME, rồi tạo native audio player từ Blob. URL object cũ được revoke
+khi thay preview, draft đổi hoặc component unmount. Preview bị disable khi dirty
+hoặc chưa có persisted config. Loading và provider/domain/gate errors chỉ hiển
+thị copy an toàn ở UI; không đưa secret hoặc provider SDK vào client bundle.
+
+Playwright authenticated E2E dùng explicit deterministic TTS adapter qua env test
+flag; flag được giữ lại trước dotenv override trong env loader. Đây là test seam
+không phải production fallback, không gọi relay trả phí và không persist audio.
+Chi tiết tại `docs/aff-us-011-phase-3-voice-studio.md`.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

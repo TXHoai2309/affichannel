@@ -5,7 +5,12 @@ import { z } from "zod";
 // Next loads the app env file in development, but inherited shell variables can
 // otherwise win. When a local .env is present, keep app and migration runtime on
 // the same database. Hosted deployments have no local file, so their env stays.
+const inheritedDeterministicTtsFlag =
+	process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC;
 dotenv.config({ override: true });
+if (inheritedDeterministicTtsFlag !== undefined) {
+	process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC = inheritedDeterministicTtsFlag;
+}
 
 function getVercelOrigin() {
 	const vercelUrl =
@@ -68,6 +73,7 @@ export const env = createEnv({
 			.max(2_000)
 			.default(500),
 		AFFICHANNEL_LIVE_TTS_SMOKE: z.enum(["0", "1"]).default("0"),
+		AFFICHANNEL_E2E_TTS_DETERMINISTIC: z.enum(["0", "1"]).default("0"),
 		APIKEY_FUN_API_KEY: z.string().trim().min(1).optional(),
 		APIKEY_FUN_BASE_URL: z.url().optional(),
 		APIKEY_FUN_PRICING_VERSION: z.string().trim().min(1).optional(),

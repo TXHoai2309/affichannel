@@ -23,6 +23,11 @@ sử dụng Semantic Versioning.
   revision safety, protected `audio/mpeg` binary route, timeout/MIME/size/error
   mapping và deterministic preview integration. Chưa có UI panel, full voiceover,
   audio persistence hoặc live smoke mặc định.
+- AFF-US-011 Phase 3: thêm Voice Studio cho server-owned preset/language/speed,
+  explicit save với CAS conflict/reload UX, protected binary preview qua native
+  audio player, Blob URL cleanup, loading/error/locked states và authenticated
+  E2E deterministic không gọi paid TTS. Chưa có full voiceover, StepStatus
+  mutation hoặc audio artifact persistence.
 - AFF-US-010 Phase 1: thêm Fact Lock run/claim/mapping schema additive, deterministic
   classification validator, exact ScriptVersion/Product Fact snapshot, dependency
   registration, idempotent runtime API `factLock.run/getState` và read model stale.

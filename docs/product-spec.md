@@ -232,7 +232,12 @@ load/save API có Fact Lock/workspace authorization. UI panel, preview audio và
 full voiceover vẫn chưa mở trong phase này. Phase 2 đã bổ sung server-derived
 preview runtime qua protected binary endpoint; preview chỉ đọc ScriptVersion hiện
 tại sau Fact Lock PASS, không nhận arbitrary client text/config và không persist
-audio. UI Voice Studio và full voiceover vẫn thuộc Phase 3.
+audio. Phase 3 đã mở Voice Studio với server-owned preset/language/speed controls,
+dirty state, explicit save/CAS conflict reload, native audio preview và lỗi
+loading/timeout/provider unavailable. Dirty config không được preview; Blob URL
+được revoke khi thay thế, đổi draft hoặc unmount. Fact Lock stale khóa lại UI
+nhưng giữ config đã lưu; rerun PASS mở lại. Full voiceover và audio artifact
+vẫn chưa thuộc phase này.
 
 ## 9. Các màn hình chính
 

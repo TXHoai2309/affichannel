@@ -1,7 +1,30 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-011 Phase 2 TTS Preview Runtime đã triển khai; Phase 3 chưa bắt đầu.
+- Trạng thái: AFF-US-011 Phase 3 Voice Studio đã triển khai; AFF-US-011 hoàn tất trong phạm vi preview, full voiceover chưa làm.
 - Cập nhật lần cuối: 2026-08-19
+
+## 2026-08-19 — AFF-US-011 Phase 3 Voice Studio
+
+Đã nối route Voice qua server `GatedProjectStepPage` với client Voice Studio.
+UI tải server-owned catalog và VoiceConfig, dựng draft mặc định, chọn preset,
+language và speed, hiển thị dirty state, lưu explicit bằng revision CAS và có
+conflict/reload UX. Preview gọi protected binary endpoint không body, chuẩn hóa
+`audio/mpeg`, dùng native audio player và revoke Blob URL khi thay đổi preview,
+đổi draft hoặc unmount.
+
+Đã bổ sung loading/error/timeout/provider-unavailable/stale Fact Lock states và
+authenticated E2E deterministic adapter. E2E đã chứng minh save/reload, preview
+hai preset, Script edit → relock, Fact Lock rerun → mở lại và preview lại; không
+gọi paid TTS. Không thêm migration, không persist audio, không mutate StepStatus.
+
+Verification cuối: web 23 file/171 test, focused Voice E2E 1/1, full Playwright
+22/24; hai lỗi còn lại là Product Management edit heading và Script Studio
+Runtime fixture yêu cầu workspace settings rỗng, đều ngoài AFF-US-011.
+
+Trạng thái: **AFF-US-011 Phase 3 Voice Studio is ACCEPTED. AFF-US-011 hoàn tất
+trong phạm vi Configuration & Preview; full voiceover vẫn chưa bắt đầu.**
+
+Tài liệu chi tiết: `docs/aff-us-011-phase-3-voice-studio.md`.
 
 ## 2026-08-19 — AFF-US-011 Phase 2 TTS Preview Runtime
 
