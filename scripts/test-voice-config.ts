@@ -492,6 +492,17 @@ try {
 		() => getVoiceConfig(actorA, fixtureA.projectId),
 		"FACT_LOCK_REQUIRED",
 	);
+	await expectCode(
+		() =>
+			saveVoiceConfig(actorA, {
+				projectId: fixtureA.projectId,
+				baseRevision: revision,
+				voiceId: "ara",
+				language: "vi",
+				speed: 1,
+			}),
+		"FACT_LOCK_REQUIRED",
+	);
 	const persistedWhileStale = await db
 		.select({ id: voiceConfig.id, revision: voiceConfig.revision })
 		.from(voiceConfig)
@@ -542,6 +553,17 @@ try {
 	assert(
 		reopened?.id === created.id && reopened.revision === revision,
 		"Fact Lock rerun did not reopen the persisted VoiceConfig.",
+	);
+	const reopenedSaved = await saveVoiceConfig(actorA, {
+		projectId: fixtureA.projectId,
+		baseRevision: reopened.revision,
+		voiceId: "ara",
+		language: "vi",
+		speed: 1,
+	});
+	assert(
+		reopenedSaved.revision === reopened.revision + 1,
+		"Fact Lock rerun did not reopen VoiceConfig writes.",
 	);
 
 	console.log(

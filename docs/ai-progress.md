@@ -1,7 +1,29 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-011 Phase 1 Voice Foundation đã hoàn thành và Phase 2/3 chưa bắt đầu.
+- Trạng thái: AFF-US-011 Phase 2 TTS Preview Runtime đã triển khai; Phase 3 chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-19
+
+## 2026-08-19 — AFF-US-011 Phase 2 TTS Preview Runtime
+
+Đã nối `TtsProvider` server-only với registry và adapter `ApiKeyFunTtsProvider`.
+Adapter gửi một request `POST /v1/tts`, dùng TTS credential riêng, timeout bounded,
+không retry, strict `audio/mpeg`, empty/5 MiB size guard và error mapping không
+leak response body. Bổ sung server env contract cho TTS key/base URL/timeout/max
+chars và live smoke flag `AFFICHANNEL_LIVE_TTS_SMOKE=0` mặc định.
+
+Đã thêm `previewVoice()` derive text từ current ScriptVersion, normalize/truncate
+server-side, enforce Fact Lock trước và ngay trước provider, kiểm tra lại
+ScriptVersion/gate/VoiceConfig revision và trả binary protected qua
+`POST /api/projects/:projectId/voice/preview`. Không persist audio, không thêm
+migration, UI, full voiceover, cache, usage/billing hoặc render.
+
+Đã bổ sung unit provider/route/domain tests và deterministic integration proof cho
+5 preset, PASS, stale Script, stale Product Fact, rerun, missing config và
+cross-workspace isolation. Live smoke không chạy vì flag mặc định `0`.
+
+Trạng thái: **AFF-US-011 Phase 2 TTS Preview Runtime is ACCEPTED. Phase 3 chưa bắt đầu.**
+
+Tài liệu chi tiết: `docs/aff-us-011-phase-2-tts-preview-runtime.md`.
 
 ## 2026-08-19 — AFF-US-011 Phase 1 Voice Foundation
 

@@ -229,7 +229,10 @@ catalog runtime nên catalog verified do server sở hữu. Chi tiết contract 
 
 Phase 1 foundation đã lưu current VoiceConfig bằng revision CAS và expose catalog,
 load/save API có Fact Lock/workspace authorization. UI panel, preview audio và
-full voiceover vẫn chưa mở trong phase này.
+full voiceover vẫn chưa mở trong phase này. Phase 2 đã bổ sung server-derived
+preview runtime qua protected binary endpoint; preview chỉ đọc ScriptVersion hiện
+tại sau Fact Lock PASS, không nhận arbitrary client text/config và không persist
+audio. UI Voice Studio và full voiceover vẫn thuộc Phase 3.
 
 ## 9. Các màn hình chính
 

@@ -53,6 +53,21 @@ export const env = createEnv({
 			.max(64_000)
 			.default(8_192),
 		TTS_DEFAULT_PROVIDER: z.string().trim().min(1).default("apikeyfun"),
+		TTS_APIKEY_FUN_API_KEY: z.string().trim().min(1).optional(),
+		TTS_APIKEY_FUN_BASE_URL: z.url().optional(),
+		TTS_PREVIEW_TIMEOUT_MS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(900_000)
+			.default(30_000),
+		TTS_PREVIEW_MAX_CHARS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(2_000)
+			.default(500),
+		AFFICHANNEL_LIVE_TTS_SMOKE: z.enum(["0", "1"]).default("0"),
 		APIKEY_FUN_API_KEY: z.string().trim().min(1).optional(),
 		APIKEY_FUN_BASE_URL: z.url().optional(),
 		APIKEY_FUN_PRICING_VERSION: z.string().trim().min(1).optional(),

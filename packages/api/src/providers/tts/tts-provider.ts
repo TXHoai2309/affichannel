@@ -9,7 +9,7 @@ export type TtsPreviewInput = {
 
 export type TtsPreviewResult = {
 	audio: Uint8Array;
-	mimeType: "audio/mpeg";
+	contentType: "audio/mpeg";
 	providerRequestId: string | null;
 	latencyMs: number | null;
 };

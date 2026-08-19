@@ -100,8 +100,25 @@ export function findVoicePreset(voiceId: string) {
 export function validateVoiceConfigFields(raw: unknown) {
 	const parsed = voiceConfigFieldsSchema.safeParse(raw);
 	if (!parsed.success) {
+		const candidate = raw as Record<string, unknown>;
+		if (
+			typeof candidate === "object" &&
+			candidate !== null &&
+			Object.keys(candidate).every((key) =>
+				["voiceId", "language", "speed"].includes(key),
+			) &&
+			typeof candidate.voiceId === "string" &&
+			typeof candidate.language === "string" &&
+			typeof candidate.speed === "number"
+		) {
+			throw new VoiceConfigError(
+				"TTS_SPEED_OUT_OF_RANGE",
+				"Tốc độ voice nằm ngoài khoảng cho phép.",
+				{ speed: candidate.speed },
+			);
+		}
 		throw new VoiceConfigError(
-			"TTS_SPEED_OUT_OF_RANGE",
+			"VOICE_CONFIG_INPUT_INVALID",
 			"Voice configuration contains invalid fields.",
 		);
 	}

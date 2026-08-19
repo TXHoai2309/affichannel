@@ -317,6 +317,20 @@ trong lúc chờ provider vì chưa có provider call; `ApiKeyFunTtsProvider.pre
 chỉ là boundary deferred cho Phase 2. Chi tiết schema/API/test nằm tại
 `docs/aff-us-011-phase-1-foundation.md`.
 
+### Phase 2 TTS Preview Runtime
+
+Phase 2 nối `voice_config` với server-only `TtsProvider` registry. Adapter
+`ApiKeyFunTtsProvider` dùng TTS credential riêng, một request `POST /v1/tts`,
+không retry, timeout bounded, MIME `audio/mpeg` strict, empty/size guard và
+safe error mapping. Preview service derive text từ current ScriptVersion ở server,
+gọi `FactLockGate.assertPassed()` trước và ngay trước provider, rồi kiểm tra lại
+ScriptVersion/gate/VoiceConfig revision. Không giữ DB transaction khi chờ TTS.
+
+`POST /api/projects/:projectId/voice/preview` là protected binary route, không
+nhận arbitrary text/config và không persist audio. Phase 2 không thêm migration,
+usage/billing schema, cache, UI, full voiceover hoặc render. Chi tiết tại
+`docs/aff-us-011-phase-2-tts-preview-runtime.md`.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

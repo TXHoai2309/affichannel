@@ -18,6 +18,11 @@ sử dụng Semantic Versioning.
   `ara/eve/leo/rex/sal`, protected `voice.listPresets/getConfig/saveConfig`,
   validation, revision CAS, Fact Lock enforcement và workspace isolation. Chưa
   có UI panel, preview binary hoặc paid TTS runtime.
+- AFF-US-011 Phase 2: thêm server-only `TtsProvider` registry và ApiKeyFun TTS
+  adapter, server-derived preview text, Fact Lock/ScriptVersion/VoiceConfig
+  revision safety, protected `audio/mpeg` binary route, timeout/MIME/size/error
+  mapping và deterministic preview integration. Chưa có UI panel, full voiceover,
+  audio persistence hoặc live smoke mặc định.
 - AFF-US-010 Phase 1: thêm Fact Lock run/claim/mapping schema additive, deterministic
   classification validator, exact ScriptVersion/Product Fact snapshot, dependency
   registration, idempotent runtime API `factLock.run/getState` và read model stale.

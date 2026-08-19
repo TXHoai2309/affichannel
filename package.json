@@ -26,6 +26,8 @@
 		"test:integration:script-version": "tsx scripts/test-script-version-foundation.ts",
 		"test:integration:fact-lock": "tsx scripts/test-fact-lock.ts",
 		"test:integration:voice-config": "tsx scripts/test-voice-config.ts",
+		"test:integration:voice-preview": "tsx scripts/test-voice-preview.ts",
+		"test:live:tts": "tsx scripts/test-voice-preview-live.ts",
 		"deploy:setup": "vercel link",
 		"dev:vercel": "vercel dev -L",
 		"env:preview": "tsx scripts/sync-vercel-env.ts preview",

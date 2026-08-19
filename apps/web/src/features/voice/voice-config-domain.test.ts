@@ -60,4 +60,17 @@ describe("AFF-US-011 VoiceConfig domain", () => {
 			expect((error as VoiceConfigError).code).toBe(code);
 		}
 	});
+
+	it("distinguishes malformed configuration input from speed range errors", () => {
+		expect(() =>
+			validateVoiceConfigFields({ voiceId: "ara", language: "vi" }),
+		).toThrowError(VoiceConfigError);
+		try {
+			validateVoiceConfigFields({ voiceId: "ara", language: "vi" });
+		} catch (error) {
+			expect((error as VoiceConfigError).code).toBe(
+				"VOICE_CONFIG_INPUT_INVALID",
+			);
+		}
+	});
 });
