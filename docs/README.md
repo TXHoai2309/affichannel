@@ -19,6 +19,9 @@ với các tài liệu tại đây.
 11. [AFF-US-008 Phase 2B](./aff-us-008-phase-2b.md)
 12. [AFF-US-010 Phase 0 Contract Hardening](./aff-us-010-phase-0-contract-hardening.md)
 13. [AFF-US-010 Phase 1 Foundation & Classification](./aff-us-010-phase-1-foundation.md)
+14. [AFF-US-010 Phase 2 Review & Resolution](./aff-us-010-phase-2-review-resolution.md)
+15. [AFF-US-010 Phase 3 Gate & Runtime](./aff-us-010-phase-3-gate-runtime.md)
+16. [AFF-US-011 Phase 0 Contract & Architecture Freeze](./aff-us-011-phase-0-contract-decisions.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-14
+- Cập nhật lần cuối: 2026-08-19
 
 ## 1. Mục tiêu kiến trúc
 
@@ -278,6 +278,30 @@ Relation lưu trong mapping dùng allow-list `supports | related | contradicts`.
 Fact revision là thuộc tính của từng mapping, không phải thuộc tính top-level của
 claim. Review metadata được lưu tại claim; `MANUAL_APPROVED` cần reviewer và
 `reviewed_at`, còn `AUTO_PASSED`/`UNRESOLVED` không có reviewer metadata.
+
+## 12.1. Kiến trúc TTS của AFF-US-011 Phase 0
+
+Contract AFF-US-011 được khóa tại
+`docs/aff-us-011-phase-0-contract-decisions.md` và DEC-023. Production TTS đi
+qua APIKEY.FUN relay với logical provider `apikeyfun`, credential server-only
+`TTS_APIKEY_FUN_API_KEY`, base URL `TTS_APIKEY_FUN_BASE_URL` và canonical
+`POST /v1/tts`. Text AI key không được dùng cho TTS.
+
+Provider adapter và voice catalog thuộc server/application boundary. Relay không
+expose `/v1/tts/voices`, vì vậy catalog verified được sở hữu ở server và client
+chỉ nhận catalog đã validate. Client không gửi arbitrary provider, voice ID hoặc
+credential.
+
+Voice Studio reuse server-side `FactLockGate.assertPassed(actor, projectId)`.
+Route Voice hiển thị locked state khi Fact Lock chưa PASS; không lưu unlock boolean.
+Preview dùng text do server derive từ current ScriptVersion, gọi provider ngoài
+database transaction và trả audio tạm thời qua protected binary endpoint với
+canonical MIME `audio/mpeg`. Audio preview không lưu DB/object storage.
+
+Timeout dùng `TTS_PREVIEW_TIMEOUT_MS`, provider failure không automatic retry,
+và pricing relay hiện `UNVERIFIED`. Usage metadata chỉ reuse hạ tầng hiện có;
+không tạo accounting subsystem riêng trong US11. Phase 0 không tạo schema,
+migration hoặc runtime implementation.
 
 ## 13. Bất biến bảo mật
 

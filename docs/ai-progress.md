@@ -1,8 +1,28 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-010 Phase 1 đã harden và verify execution ownership, review
-  constraints, canonical Fact relation và per-mapping revision; chưa mở Phase 2.
-- Cập nhật lần cuối: 2026-08-18
+- Trạng thái: AFF-US-011 Phase 0 đã khóa contract/provider capability và chưa bắt đầu
+  Phase 1.
+- Cập nhật lần cuối: 2026-08-19
+
+## 2026-08-19 — AFF-US-011 Phase 0 Contract & Architecture Freeze
+
+Đã ghi nhận capability probe trước đó cho production TTS qua APIKEY.FUN relay:
+`POST /v1/tts` dùng TTS key riêng, voice `eve`, language `vi`, speed `1.0`,
+trả `audio/mpeg` hợp lệ 17.280 bytes trong khoảng 820 ms. Relay không expose
+`/v1/tts/voices` hoặc `/v1/audio/speech`; catalog được khóa là server-owned
+verified catalog theo provider documentation. Pricing APIKEY.FUN TTS vẫn
+`UNVERIFIED`.
+
+Đã khóa VoiceConfig mutable theo workspace/project với revision CAS, language
+canonical `vi`, speed `0.7..1.5`, route locked theo Fact Lock và server
+enforcement bằng `FactLockGate.assertPassed(actor, projectId)`. Preview text sẽ
+do server derive từ current ScriptVersion và audio chỉ trả binary tạm thời,
+không persist.
+
+Phase 0 chỉ cập nhật contract/decision/roadmap/changelog; không tạo schema,
+migration `0015`, provider/API/UI và không gọi thêm paid TTS.
+
+Trạng thái: **AFF-US-011 Phase 0 Contract & Architecture is ACCEPTED. Phase 1 chưa bắt đầu.**
 
 ## 2026-08-18 — AFF-US-010 Phase 1 final hardening
 

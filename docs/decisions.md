@@ -1,10 +1,60 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-14
+- Cập nhật lần cuối: 2026-08-19
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
+
+## DEC-023 — AFF-US-011 TTS provider và Voice Studio Phase 0 contract
+
+- Trạng thái: Đã chấp nhận cho Phase 0
+- Ngày: 2026-08-19
+
+### Bối cảnh
+
+AFF-US-010 đã có server-side Fact Lock gate cho Voice, nhưng TTS provider,
+VoiceConfig, voice catalog, preview text và audio transport chưa được khóa. Capability
+probe xác nhận APIKEY.FUN relay được Grok/xAI TTS qua POST /v1/tts bằng TTS key
+riêng; relay không expose /v1/tts/voices hoặc /v1/audio/speech, còn pricing relay
+chưa được xác minh.
+
+### Quyết định
+
+- AFF-US-011 dùng logical provider apikeyfun, credential
+  TTS_APIKEY_FUN_API_KEY, base URL TTS_APIKEY_FUN_BASE_URL và canonical endpoint
+  POST /v1/tts. Không dùng Text AI key và không triển khai /v1/audio/speech.
+- Voice catalog là server-owned verified catalog với các voice provider-documented
+  ara, eve, leo, rex, sal. Client không gửi arbitrary voice ID hoặc provider để
+  forward thẳng.
+- Language canonical cho tiếng Việt là vi. Speed canonical là 0.7..1.5, default
+  1.0; server validate và UI không được dùng range khác.
+- VoiceConfig là mutable current configuration, duy nhất theo
+  (workspaceId, projectId), không lưu secret/audio/raw provider response. Save dùng
+  baseRevision CAS; mismatch trả VOICE_CONFIG_CONFLICT, không last-write-wins.
+- Voice Studio dùng route hiện tại và locked state của GatedProjectStepPage khi
+  Fact Lock chưa PASS. Interactive config read/save và preview chỉ mở khi PASS;
+  preview bắt buộc gọi FactLockGate.assertPassed(actor, projectId) ở server.
+- Preview text do server lấy từ current ScriptVersion, ưu tiên voiceover segment đầu
+  tiên có nội dung, normalize và giới hạn bởi TTS_PREVIEW_MAX_CHARS; client không
+  được gửi arbitrary text. Script/gate identity phải được kiểm tra lại ngay trước
+  provider call; preview không trở thành artifact nếu revision đổi trong lúc chạy.
+- Provider trả binary audio qua protected authenticated endpoint, canonical v1 là
+  audio/mpeg. Empty body, MIME không hợp lệ, JSON error và HTML challenge bị
+  reject; preview audio không persist.
+- Timeout dùng TTS_PREVIEW_TIMEOUT_MS, không auto-retry billable request; retry chỉ
+  sau thao tác rõ ràng của người dùng. Pricing APIKEY.FUN TTS là UNVERIFIED, cost
+  chỉ nullable và không dùng giá xAI direct.
+- Phase 0 chỉ cập nhật contract/tài liệu. Schema, migration 0015, provider, API,
+  UI và runtime test bắt đầu từ các phase sau.
+
+### Hệ quả
+
+Chi tiết semantic shape, error taxonomy, phase boundary, deterministic provider và
+out-of-scope nằm tại
+docs/aff-us-011-phase-0-contract-decisions.md. Phase 1 phải review migration và
+workspace authorization trước khi tạo voice_config; Phase 2 mới được gọi provider
+live trong runtime. Không renumber các DEC lịch sử.
 
 ## DEC-022 — Fact Lock execution ownership và review evidence
 

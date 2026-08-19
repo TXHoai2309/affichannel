@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-14
+- Cập nhật lần cuối: 2026-08-19
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -213,6 +213,20 @@ Fact Lock run chỉ là `PASSED` khi:
 Semantic matching hoặc LLM có thể đề xuất fact liên quan. Hệ thống không được
 đánh dấu claim là supported nếu thiếu bằng chứng cụ thể.
 
+### AFF-US-011 — Voice Studio Configuration & Preview
+
+Voice Studio chỉ tương tác được khi Fact Lock đạt PASS cho ScriptVersion hiện tại.
+Khi script hoặc Product Fact dependency trở nên stale, route Voice hiển thị locked
+state và preview bị khóa lại. VoiceConfig là cấu hình hiện tại mutable của Project,
+được lưu bằng revision CAS; audio preview là dữ liệu tạm thời, không phải artifact
+và không được persist.
+
+Production TTS của AFF-US-011 dùng APIKEY.FUN relay → Grok/xAI TTS qua
+`POST /v1/tts`, với TTS credential riêng ở server. Tiếng Việt dùng language code
+`vi`; speed có range `0.7..1.5`, mặc định `1.0`. Relay không expose voice
+catalog runtime nên catalog verified do server sở hữu. Chi tiết contract nằm tại
+`docs/aff-us-011-phase-0-contract-decisions.md`.
+
 ## 9. Các màn hình chính
 
 US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,
@@ -290,7 +304,9 @@ không được là lớp kiểm soát duy nhất.
 ## 13. Quyết định còn mở
 
 - File render của MVP 0 lưu local hay upload R2 ngay.
-- TTS provider nào vượt qua kiểm thử phát âm tiếng Việt.
+- TTS provider/APIKEY.FUN relay đã vượt qua capability probe tiếng Việt trong
+  AFF-US-011 Phase 0; pricing qua relay vẫn chưa được xác minh và không được suy
+  ra từ giá xAI direct.
 - Nhóm Product Fact nào cần quy tắc đối chiếu deterministic đầu tiên.
 Các quyết định mở phải được xử lý trong `decisions.md` trước khi việc triển khai
 trở nên khó thay đổi.

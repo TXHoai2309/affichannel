@@ -10,6 +10,10 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- AFF-US-011 Phase 0: khóa contract TTS APIKEY.FUN → Grok/xAI qua `POST /v1/tts`,
+  server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
+  transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có
+  implementation, schema hoặc migration.
 - AFF-US-010 Phase 1: thêm Fact Lock run/claim/mapping schema additive, deterministic
   classification validator, exact ScriptVersion/Product Fact snapshot, dependency
   registration, idempotent runtime API `factLock.run/getState` và read model stale.

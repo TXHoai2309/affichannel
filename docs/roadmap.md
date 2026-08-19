@@ -2,7 +2,7 @@
 
 - Trạng thái: Bản nháp
 - Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-14
+- Cập nhật lần cuối: 2026-08-19
 
 ## 1. Phương pháp triển khai
 
@@ -227,6 +227,25 @@ version hiện tại chưa có run đạt. Chi tiết Phase 3 tại
 ## 11. Slice 8 — Voice và media
 
 Backlog liên quan: `AFF-US-011` đến `AFF-US-014`.
+
+AFF-US-011 Phase 0 — Contract & Architecture Freeze đã được chấp nhận ngày
+2026-08-19. Capability probe xác nhận APIKEY.FUN relay được Grok/xAI TTS qua
+`POST /v1/tts` bằng TTS key riêng; tiếng Việt dùng `vi`, speed dùng range
+`0.7..1.5`, default `1.0`. Relay không expose `/v1/tts/voices`, nên catalog
+voice là server-owned verified catalog. Chi tiết contract tại
+`docs/aff-us-011-phase-0-contract-decisions.md` và DEC-023.
+
+Trạng thái AFF-US-011:
+
+Phase 0 — Contract & Architecture ✅
+Phase 1 — Not started
+Phase 2 — Not started
+Phase 3 — Not started
+
+Phase 0 không tạo schema/migration `0015`, không implement provider/API/UI và
+không gọi thêm paid TTS. Voice Studio vẫn bị khóa bởi Fact Lock cho tới khi run
+hiện tại đạt PASS; preview sau này phải gọi
+`FactLockGate.assertPassed(actor, projectId)` ở server.
 
 - Test TTS tiếng Việt bằng script đại diện.
 - Tạo voice theo segment và cache bằng normalized input hash.

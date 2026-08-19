@@ -120,7 +120,9 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 		const fixture = await seedReviewFixture("passed");
 		try {
 			await signIn(page);
-			await page.goto(`/projects/${fixture.projectId}/voice`);
+			await page.goto(`/projects/${fixture.projectId}/voice`, {
+				waitUntil: "commit",
+			});
 			await expect(
 				page.getByRole("heading", { name: "Giọng đọc" }),
 			).toBeVisible();
@@ -132,21 +134,21 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 					.getByText("Có thể tiếp tục"),
 			).toHaveCount(3);
 
-			await page.goto(`/projects/${fixture.projectId}/video`);
+			await openProjectStep(page, fixture.projectId, "video");
 			await expect(
 				page.getByRole("heading", { name: "Dựng video" }),
 			).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 
-			await page.goto(`/projects/${fixture.projectId}/preview`);
+			await openProjectStep(page, fixture.projectId, "preview");
 			await expect(
 				page.getByRole("heading", { name: "Preview & Render" }),
 			).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
-			await page.reload();
+			await page.reload({ waitUntil: "commit" });
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 
-			await page.goto(`/projects/${fixture.projectId}/content`);
+			await openProjectStep(page, fixture.projectId, "content");
 			await page
 				.getByLabel("Voiceover đoạn 1")
 				.fill("Nội dung đã được chỉnh sửa để kiểm tra re-lock.");
@@ -154,7 +156,9 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 				timeout: 5_000,
 			});
 
-			await page.goto(`/projects/${fixture.projectId}/voice`);
+			await page.goto(`/projects/${fixture.projectId}/voice`, {
+				waitUntil: "commit",
+			});
 			await expect(page.getByText("Fact Lock đã cũ theo script")).toBeVisible();
 			await expect(page.getByText("Đang khóa")).toBeVisible();
 			await expect(
@@ -163,11 +167,11 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 					.getByText("Bị khóa"),
 			).toHaveCount(3);
 
-			await page.goto(`/projects/${fixture.projectId}/fact-lock`);
+			await openFactLockReview(page, fixture.projectId);
 			await rerunDeterministicFactLock(fixture);
-			await page.reload();
+			await page.reload({ waitUntil: "commit" });
 			await expect(page.getByText("Đã chạy Fact Lock")).toHaveCount(0);
-			await page.goto(`/projects/${fixture.projectId}/voice`);
+			await openProjectStep(page, fixture.projectId, "voice");
 			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 			await expect(
@@ -175,11 +179,11 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 					.getByRole("navigation", { name: "Các bước project" })
 					.getByText("Hoàn thành"),
 			).toHaveCount(3);
-			await page.goto(`/projects/${fixture.projectId}/video`);
+			await openProjectStep(page, fixture.projectId, "video");
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
-			await page.goto(`/projects/${fixture.projectId}/preview`);
+			await openProjectStep(page, fixture.projectId, "preview");
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
-			await page.reload();
+			await page.reload({ waitUntil: "commit" });
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 		} finally {
 			await cleanupReviewFixture(fixture);
@@ -208,6 +212,32 @@ async function signIn(page: Page) {
 	await page.getByLabel("Mật khẩu").fill(fixedAccountPassword as string);
 	await page.locator("form").getByRole("button", { name: "Đăng nhập" }).click();
 	await expect(page).toHaveURL(/\/dashboard$/);
+}
+
+type ProjectFlowStep = "content" | "fact-lock" | "preview" | "video" | "voice";
+
+async function openProjectStep(
+	page: Page,
+	projectId: string,
+	stepKey: ProjectFlowStep,
+) {
+	const href = `/projects/${projectId}/${stepKey}`;
+	const stepperLink = page
+		.getByRole("navigation", { name: "Các bước project" })
+		.locator(`a[href="${href}"]`);
+	await Promise.all([
+		page.waitForURL(new RegExp(`${projectId}/${stepKey}$`), {
+			waitUntil: "commit",
+		}),
+		stepperLink.click(),
+	]);
+}
+
+async function openFactLockReview(page: Page, projectId: string) {
+	await openProjectStep(page, projectId, "fact-lock");
+	await expect(
+		page.getByRole("heading", { name: "Fact Lock Review" }),
+	).toBeVisible();
 }
 
 async function seedReviewFixture(
