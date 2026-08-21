@@ -30,14 +30,16 @@ hoặc VoiceConfig cũ làm unlock workflow hiện tại.
   key và idempotency key.
 - Cùng idempotency key + request hash trả cùng attempt; cùng key + khác hash là
   conflict. Failed/indeterminate và explicit regenerate bắt buộc key mới. Pending
-  cùng request hash được coalesce bằng partial unique index để chống duplicate
-  provider call nhưng không chặn historical retry/regenerate.
+  cùng request hash nhưng khác key trả `VOICE_SEGMENT_ALREADY_PENDING` thay vì bind
+  key mới vào artifact cũ; partial unique index vẫn chống duplicate provider call
+  trong race. Completed/failed/indeterminate không chặn key mới tạo attempt lịch sử.
 - Mở rộng `TtsProvider` bằng `generateSegment()` và giữ `preview()` nguyên vẹn.
   Provider trả audio/mpeg và duration nếu có chỉ là advisory; server parse MP3
   bytes và persist duration authoritative.
 - Audio dùng `VoiceAudioStorage` abstraction; dev/test local, production private
   R2. Database chỉ lưu metadata/object key. Protected stream kiểm tra actor,
-  workspace, project, artifact và storage-key ownership; không nhận arbitrary path.
+  workspace, project, artifact và storage-key ownership, đồng thời resolve backend
+  từ persisted `storageProvider`; không nhận arbitrary path.
 - Current/stale, `latestRequest`, `latestUsableArtifact`, effective status và
   total duration đều là server read model. `stale` không phải persisted status.
 - Workflow tiếp tục dùng `project.currentStepKey` và `project_step_status`; không

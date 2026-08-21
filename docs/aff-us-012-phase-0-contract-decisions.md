@@ -237,10 +237,11 @@ explicit regenerate sau artifact completed
   → idempotencyKey mới, artifact mới
 ```
 
-Một request mới có cùng `requestHash` trong lúc đã có pending artifact sẽ được
-coalesce về pending artifact đó, kể cả khi idempotency key khác. Đây là bảo vệ
-side effect/concurrent paid call, không phải cấm historical regenerate. Sau khi
-attempt terminal, idempotency key mới mới tạo được attempt mới.
+Một request mới có cùng `requestHash` trong lúc đã có pending artifact nhưng
+dùng idempotency key khác sẽ nhận `VOICE_SEGMENT_ALREADY_PENDING`, không bind key
+mới vào artifact của key cũ. Đây là bảo vệ side effect/concurrent paid call mà
+vẫn giữ được exact reuse cho từng idempotency key. Sau khi attempt terminal,
+idempotency key mới được phép tạo attempt đầu tiên của key đó.
 
 Database đề xuất partial unique index trên `(workspaceId, projectId, requestHash)`
 cho `status='pending'`. Không tạo unique index trên full fingerprint vì nó sẽ

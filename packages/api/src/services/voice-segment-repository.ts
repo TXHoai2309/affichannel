@@ -105,14 +105,22 @@ function propertyFromError(error: unknown, property: string): unknown {
 	return undefined;
 }
 
-export function isVoiceSegmentArtifactUniqueViolation(error: unknown) {
-	return (
-		propertyFromError(error, "code") === "23505" &&
-		[
-			"voice_segment_artifact_idempotency_unique",
-			"voice_segment_artifact_pending_request_unique",
-		].includes(String(propertyFromError(error, "constraint")))
-	);
+export type VoiceSegmentArtifactUniqueConstraint =
+	| "voice_segment_artifact_idempotency_unique"
+	| "voice_segment_artifact_pending_request_unique";
+
+export function voiceSegmentArtifactUniqueConstraint(
+	error: unknown,
+): VoiceSegmentArtifactUniqueConstraint | undefined {
+	if (propertyFromError(error, "code") !== "23505") return undefined;
+	const constraint = String(propertyFromError(error, "constraint"));
+	if (
+		constraint !== "voice_segment_artifact_idempotency_unique" &&
+		constraint !== "voice_segment_artifact_pending_request_unique"
+	) {
+		return undefined;
+	}
+	return constraint;
 }
 
 export async function findVoiceSegmentArtifactByIdempotencyKey(
@@ -178,29 +186,6 @@ export async function insertPendingVoiceSegmentArtifact(
 		.returning();
 	if (!row) throw new Error("Voice segment artifact insert returned no row.");
 	return toArtifact(row);
-}
-
-export async function findVoiceSegmentArtifactByRequestHash(
-	actor: WorkspaceActor,
-	projectId: string,
-	requestHash: string,
-) {
-	const [row] = await db
-		.select()
-		.from(voiceSegmentArtifact)
-		.where(
-			and(
-				eq(voiceSegmentArtifact.workspaceId, actor.workspaceId),
-				eq(voiceSegmentArtifact.projectId, projectId),
-				eq(voiceSegmentArtifact.requestHash, requestHash),
-			),
-		)
-		.orderBy(
-			desc(voiceSegmentArtifact.createdAt),
-			desc(voiceSegmentArtifact.id),
-		)
-		.limit(1);
-	return row ? toArtifact(row) : undefined;
 }
 
 export async function insertPendingVoiceSegmentArtifactAtomic(input: {

@@ -161,10 +161,6 @@ function harness(
 					row.requestHash === requestHash &&
 					row.status === "pending",
 			),
-		findByRequestHash: async (_actor, projectId, requestHash) =>
-			rows.find(
-				(row) => row.projectId === projectId && row.requestHash === requestHash,
-			),
 		insertPendingAtomic: async ({ insert }) => {
 			const row = pendingArtifact({
 				id: insert.id,
@@ -384,7 +380,7 @@ describe("voice segment runtime", () => {
 		},
 	);
 
-	it("coalesces a pending artifact for a new key without a second provider call", async () => {
+	it("rejects a different key while pending, then allows that key after terminalization", async () => {
 		const h = harness();
 		h.rows.push(
 			pendingArtifact({
@@ -395,7 +391,25 @@ describe("voice segment runtime", () => {
 			}),
 		);
 
-		const result = await generateVoiceSegment(
+		await expect(
+			generateVoiceSegment(
+				actor,
+				{
+					projectId: prepared.projectId,
+					segmentKey: prepared.segmentKey,
+					idempotencyKey: "pending-retry-key-1",
+				},
+				h.dependencies,
+			),
+		).rejects.toMatchObject({ code: "VOICE_SEGMENT_ALREADY_PENDING" });
+		expect(h.generate).not.toHaveBeenCalled();
+		expect(h.rows).toHaveLength(1);
+
+		const original = h.rows[0];
+		expect(original).toBeDefined();
+		if (!original) throw new Error("Pending fixture was not inserted.");
+		original.status = "completed";
+		const retried = await generateVoiceSegment(
 			actor,
 			{
 				projectId: prepared.projectId,
@@ -404,10 +418,21 @@ describe("voice segment runtime", () => {
 			},
 			h.dependencies,
 		);
+		expect(retried.artifact.id).not.toBe("pending-new-key");
+		expect(h.generate).toHaveBeenCalledTimes(1);
+		expect(h.rows).toHaveLength(2);
 
-		expect(result.artifact.id).toBe("pending-new-key");
-		expect(h.generate).not.toHaveBeenCalled();
-		expect(h.rows).toHaveLength(1);
+		const sameOriginalKey = await generateVoiceSegment(
+			actor,
+			{
+				projectId: prepared.projectId,
+				segmentKey: prepared.segmentKey,
+				idempotencyKey: "pending-original-1",
+			},
+			h.dependencies,
+		);
+		expect(sameOriginalKey.artifact.id).toBe("pending-new-key");
+		expect(h.generate).toHaveBeenCalledTimes(1);
 	});
 
 	it("handles the partial unique insert race with one provider call", async () => {
@@ -465,7 +490,16 @@ describe("voice segment runtime", () => {
 		);
 		await bothEntered;
 		release();
-		await Promise.all([first, second]);
+		const raceResults = await Promise.allSettled([first, second]);
+		expect(
+			raceResults.filter((result) => result.status === "fulfilled"),
+		).toHaveLength(1);
+		expect(
+			raceResults.find((result) => result.status === "rejected"),
+		).toMatchObject({
+			status: "rejected",
+			reason: { code: "VOICE_SEGMENT_ALREADY_PENDING" },
+		});
 		expect(h.generate).toHaveBeenCalledTimes(1);
 	});
 
@@ -632,7 +666,7 @@ describe("voice segment runtime", () => {
 			),
 		).rejects.toMatchObject({
 			code: "TTS_PERSISTENCE_FAILED",
-			metadata: { cleanupFailed: true, storageRetained: false },
+			metadata: { cleanupFailed: true, storageRetained: true },
 		});
 		expect(cleanupFailure.remove).toHaveBeenCalledTimes(1);
 		expect(cleanupFailure.generate).toHaveBeenCalledTimes(1);

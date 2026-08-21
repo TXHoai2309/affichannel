@@ -1358,14 +1358,14 @@ Trạng thái: **AFF-US-012 Phase 1 đã triển khai; Phase 2 đang chờ revie
 - Mở rộng `TtsProvider` bằng `generateSegment()` với server-owned input, giữ
   nguyên preview contract và deterministic test seam không chạy production.
 - Triển khai server orchestration: Fact Lock/current ScriptVersion/VoiceConfig,
-  full fingerprint, exact segment text, idempotency, request-hash coalescing và
-  xử lý DB partial-unique race không gọi provider trùng.
+  full fingerprint, exact segment text, exact idempotency reuse/conflict,
+  pending request-hash guard và xử lý DB partial-unique race không gọi provider trùng.
 - Triển khai provider timeout/uncertainty mapping, MP3/MIME/size validation,
   server-authoritative duration, checksum, local/private-R2 registry, pending
   reconciliation, storage failure và persistence cleanup semantics.
 - Thêm protected `voiceSegment.list/getState/generate` và protected immutable
   audio route với workspace/project ownership, DB-owned storage key, ETag/304.
-- Verification: web unit 30 files/223 tests, runtime integration Neon pass,
+- Verification: web unit 30 files/227 tests, runtime integration Neon pass,
   full check-types/build pass, scoped Biome pass; không live APIKEY.FUN/R2,
   không migration `0017`.
 
@@ -1373,9 +1373,11 @@ Trạng thái: **AFF-US-012 Phase 2 đã triển khai, chờ review/acceptance; 
 
 ### 2026-08-21 — AFF-US-012 Phase 2 acceptance hardening
 
-- Sửa terminal idempotency semantics: key mới chỉ coalesce pending cùng request
-  hash; completed/failed/indeterminate vẫn tạo attempt/history mới. Terminal
-  lookup chỉ còn dùng để recover partial-unique race đã xác định.
+- Sửa terminal idempotency semantics: pending khác idempotency key trả
+  `VOICE_SEGMENT_ALREADY_PENDING`, không bind key mới vào artifact cũ; completed/
+  failed/indeterminate vẫn cho key mới tạo attempt/history. Race `23505` winner
+  cùng key thì reuse, winner khác key thì trả `VOICE_SEGMENT_ALREADY_PENDING`,
+  không terminal-bind.
 - Thêm Fact Lock assert lại sau Tx A ngay trước provider. Test mô phỏng Product
   Fact invalidation chuyển pending thành `failed/VOICE_SEGMENT_CONTEXT_STALE`
   và provider call count bằng 0.
@@ -1384,5 +1386,7 @@ Trạng thái: **AFF-US-012 Phase 2 đã triển khai, chờ review/acceptance; 
   cho reconciliation và không retry provider.
 - Chuẩn hóa provider success response sai MIME, empty hoặc oversize thành
   `TTS_INVALID_AUDIO`, không thay đổi preview mapping.
+- Audio route resolve local/R2 bằng persisted `artifact.storageProvider`; cleanup
+  diagnostic phản ánh `storageRetained` đúng khi delete thất bại.
 
 Trạng thái: **AFF-US-012 Phase 2 hardening đã triển khai, chờ review/acceptance; Phase 3 chưa bắt đầu.**

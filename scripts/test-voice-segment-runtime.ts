@@ -243,10 +243,17 @@ try {
 	await providerStarted;
 	await new Promise((resolve) => setTimeout(resolve, 250));
 	releaseProvider();
-	const [first, second] = await Promise.all([firstPromise, secondPromise]);
+	const raceResults = await Promise.allSettled([firstPromise, secondPromise]);
+	const winner = raceResults.find(
+		(result): result is PromiseFulfilledResult<Awaited<typeof firstPromise>> =>
+			result.status === "fulfilled",
+	);
+	const loser = raceResults.find((result) => result.status === "rejected");
+	assert(winner && loser, "DB race did not produce one winner and one loser.");
+	const first = winner.value;
 	assert(
-		first.artifact.id === second.artifact.id,
-		`DB race did not coalesce: ${first.artifact.id} vs ${second.artifact.id}`,
+		loser.reason?.code === "VOICE_SEGMENT_ALREADY_PENDING",
+		`DB race loser returned unexpected error: ${loser.reason?.code ?? "unknown"}`,
 	);
 	assert(
 		providerCallCount === 1,

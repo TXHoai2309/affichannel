@@ -47,6 +47,8 @@ export async function GET(
 			!artifact ||
 			artifact.projectId !== projectId ||
 			artifact.status !== "completed" ||
+			(artifact.storageProvider !== "local" &&
+				artifact.storageProvider !== "r2") ||
 			!artifact.storageKey ||
 			!artifact.checksum ||
 			artifact.mimeType !== "audio/mpeg"
@@ -59,7 +61,7 @@ export async function GET(
 			return new Response(null, { status: 304, headers });
 		}
 
-		const storage = createVoiceAudioStorage();
+		const storage = createVoiceAudioStorage(artifact.storageProvider);
 		const stream = await storage.open(artifact.storageKey);
 		return new Response(stream, {
 			status: 200,

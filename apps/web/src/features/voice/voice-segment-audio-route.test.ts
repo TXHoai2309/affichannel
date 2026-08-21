@@ -33,6 +33,7 @@ const params = Promise.resolve({
 const artifact = {
 	projectId: "project-1",
 	status: "completed",
+	storageProvider: "local" as const,
 	storageKey: "voice/v1/workspace-1/project-1/artifact-1.mp3",
 	checksum: "a".repeat(64),
 	mimeType: "audio/mpeg",
@@ -88,6 +89,7 @@ describe("protected voice segment audio route", () => {
 		expect(response.headers.get("cache-control")).toBe(
 			"private, max-age=31536000, immutable",
 		);
+		expect(mocks.createStorage).toHaveBeenCalledWith("local");
 		expect(Array.from(new Uint8Array(await response.arrayBuffer()))).toEqual([
 			0xff, 0xfb, 0x90,
 		]);
@@ -104,6 +106,29 @@ describe("protected voice segment audio route", () => {
 		expect((await response.arrayBuffer()).byteLength).toBe(0);
 		expect(mocks.createStorage).not.toHaveBeenCalled();
 	});
+
+	it("resolves R2 from the artifact instead of the current default ENV", async () => {
+		mocks.findArtifact.mockResolvedValue({
+			...artifact,
+			storageProvider: "r2",
+		});
+		const response = await GET(new Request("http://localhost"), { params });
+		expect(response.status).toBe(200);
+		expect(mocks.createStorage).toHaveBeenCalledWith("r2");
+	});
+
+	it.each([null, "gcs"] as const)(
+		"fails closed for a missing or invalid persisted storage provider (%s)",
+		async (storageProvider) => {
+			mocks.findArtifact.mockResolvedValue({
+				...artifact,
+				storageProvider,
+			});
+			const response = await GET(new Request("http://localhost"), { params });
+			expect(response.status).toBe(404);
+			expect(mocks.createStorage).not.toHaveBeenCalled();
+		},
+	);
 
 	it("normalizes missing storage into a controlled HTTP error", async () => {
 		mocks.createStorage.mockReturnValue({

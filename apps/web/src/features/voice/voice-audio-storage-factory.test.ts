@@ -22,6 +22,14 @@ describe("voice audio storage factory", () => {
 		);
 	});
 
+	it("uses the explicitly requested provider over the current default", () => {
+		const local = createVoiceAudioStorage("local");
+		expect(local.provider).toBe("local");
+		expect(() => createVoiceAudioStorage("r2")).toThrowError(
+			expect.objectContaining({ code: "TTS_STORAGE_CONFIGURATION_INVALID" }),
+		);
+	});
+
 	it("creates an R2 adapter without making a network call", () => {
 		const storage = createR2VoiceAudioStorage({
 			endpoint: "https://r2.example.test",

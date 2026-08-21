@@ -12,6 +12,7 @@ import {
 	type R2VoiceAudioObjectClient,
 	R2VoiceAudioStorage,
 	type VoiceAudioStorage,
+	type VoiceAudioStorageProvider,
 } from "./voice-audio-storage";
 
 export type R2VoiceAudioStorageConfig = {
@@ -74,9 +75,15 @@ export function createR2VoiceAudioStorage(config: R2VoiceAudioStorageConfig) {
 	return new R2VoiceAudioStorage(objectClient);
 }
 
-export function createVoiceAudioStorage(): VoiceAudioStorage {
-	if (env.VOICE_AUDIO_STORAGE_PROVIDER === "local") {
+export function createVoiceAudioStorage(
+	provider: VoiceAudioStorageProvider = env.VOICE_AUDIO_STORAGE_PROVIDER,
+): VoiceAudioStorage {
+	if (provider === "local") {
 		return new LocalVoiceAudioStorage({ rootDir: env.VOICE_AUDIO_LOCAL_ROOT });
 	}
-	return createR2VoiceAudioStorage(requireR2Config());
+	if (provider === "r2") return createR2VoiceAudioStorage(requireR2Config());
+	throw new VoiceSegmentError(
+		"TTS_STORAGE_CONFIGURATION_INVALID",
+		"Voice audio storage provider không được hỗ trợ.",
+	);
 }

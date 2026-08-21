@@ -36,13 +36,12 @@ import {
 	findPendingVoiceSegmentArtifactByRequestHash,
 	findVoiceSegmentArtifactById,
 	findVoiceSegmentArtifactByIdempotencyKey,
-	findVoiceSegmentArtifactByRequestHash,
 	getVoiceSegmentReadModel,
 	type InsertPendingVoiceSegmentArtifactInput,
 	insertPendingVoiceSegmentArtifactAtomic,
-	isVoiceSegmentArtifactUniqueViolation,
 	listVoiceSegmentArtifacts,
 	reconcileExpiredPendingVoiceSegmentArtifacts,
+	voiceSegmentArtifactUniqueConstraint,
 } from "./voice-segment-repository";
 import type { WorkspaceActor } from "./workspace";
 
@@ -68,7 +67,6 @@ export type VoiceSegmentRepositoryDependencies = {
 	findByIdempotencyKey: typeof findVoiceSegmentArtifactByIdempotencyKey;
 	findById: typeof findVoiceSegmentArtifactById;
 	findPendingByRequestHash: typeof findPendingVoiceSegmentArtifactByRequestHash;
-	findByRequestHash: typeof findVoiceSegmentArtifactByRequestHash;
 	insertPendingAtomic: typeof insertPendingVoiceSegmentArtifactAtomic;
 	complete: typeof completeVoiceSegmentArtifact;
 	fail: typeof failVoiceSegmentArtifact;
@@ -304,7 +302,13 @@ async function coalescedArtifact(
 		prepared.projectId,
 		requestHash,
 	);
-	return pending;
+	if (pending) {
+		throw new VoiceSegmentError(
+			"VOICE_SEGMENT_ALREADY_PENDING",
+			"Voice segment cùng request đang được xử lý; hãy dùng lại idempotency key của attempt đó hoặc chờ hoàn tất.",
+		);
+	}
+	return undefined;
 }
 
 export async function generateVoiceSegment(
@@ -382,7 +386,8 @@ export async function generateVoiceSegment(
 			expected: prepared.fingerprint,
 		});
 	} catch (error) {
-		if (!isVoiceSegmentArtifactUniqueViolation(error)) throw error;
+		const uniqueConstraint = voiceSegmentArtifactUniqueConstraint(error);
+		if (!uniqueConstraint) throw error;
 		const raced = await coalescedArtifact(
 			actor,
 			prepared,
@@ -399,27 +404,16 @@ export async function generateVoiceSegment(
 			);
 			return { artifact: raced, readModel: state.readModel };
 		}
-		// A recognized pending unique race may have completed before the loser
-		// re-reads. Only this race-recovery path may use terminal request-hash lookup;
-		// normal new-key requests must be allowed to regenerate after terminal states.
-		const findByRequestHash =
-			dependencies.repository?.findByRequestHash ??
-			findVoiceSegmentArtifactByRequestHash;
-		const raceWinner = await findByRequestHash(
-			actor,
-			prepared.projectId,
-			requestHash,
-		);
-		if (raceWinner) {
-			const state = await currentState(
-				actor,
-				input.projectId,
-				input.segmentKey,
-				dependencies,
+		if (uniqueConstraint === "voice_segment_artifact_pending_request_unique") {
+			throw new VoiceSegmentError(
+				"VOICE_SEGMENT_ALREADY_PENDING",
+				"Voice segment cùng request vừa được một request khác bắt đầu xử lý.",
 			);
-			return { artifact: raceWinner, readModel: state.readModel };
 		}
-		throw error;
+		throw new VoiceSegmentError(
+			"VOICE_SEGMENT_ALREADY_PENDING",
+			"Idempotency request đang có một ghi nhận cạnh tranh; hãy dùng lại key sau khi đọc state.",
+		);
 	}
 
 	try {
@@ -605,7 +599,7 @@ export async function generateVoiceSegment(
 			{
 				cleanupFailed,
 				storageProvider: storage.provider,
-				storageRetained: false,
+				storageRetained: cleanupFailed,
 				persistenceState: persisted?.status ?? "non_completed",
 			},
 		);

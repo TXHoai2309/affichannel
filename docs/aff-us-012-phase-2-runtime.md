@@ -48,9 +48,11 @@ Fingerprint gồm đầy đủ ScriptVersion/VoiceConfig identity; `textHash` v�
 
 - Cùng idempotency key + cùng hash: trả artifact hiện có, không gọi provider.
 - Cùng key + khác hash: `VOICE_SEGMENT_IDEMPOTENCY_CONFLICT`.
-- Pending cùng request hash: coalesce.
-- Race `23505` của partial unique index được nhận diện theo đúng constraint,
-  re-read theo idempotency/request hash và không trả generic 500.
+- Pending cùng request hash nhưng khác idempotency key: trả
+  `VOICE_SEGMENT_ALREADY_PENDING`; không bind key mới vào artifact khác key.
+- Race `23505` của partial unique index được nhận diện theo đúng constraint:
+  winner cùng key thì reuse, winner khác key thì `VOICE_SEGMENT_ALREADY_PENDING`,
+  không trả generic 500 và không gọi provider từ loser.
 - Unique violation khác không bị swallow.
 
 Tx A khóa/recheck project, current draft và VoiceConfig trước khi tạo pending.
@@ -92,8 +94,9 @@ Không tạo public URL hoặc nhận arbitrary storage key từ client.
 - `storage.put` fail: artifact `failed/TTS_STORAGE_FAILED`, không gọi lại provider.
 - Tx B fail sau provider + storage thành công: best-effort `storage.delete`, trả
   `TTS_PERSISTENCE_FAILED`, không retry provider.
-- Cleanup failure được ghi bằng sanitized diagnostic (`cleanupFailed` và provider),
-  không log secret/raw provider payload.
+- Cleanup failure được ghi bằng sanitized diagnostic (`cleanupFailed` và
+  `storageRetained`; delete fail nghĩa là object vẫn có thể còn), không log secret/
+  raw provider payload.
 - Local `open()` preflight `stat()` để missing/unreadable file trở thành controlled
   `TTS_STORAGE_FAILED`, không tạo unhandled asynchronous stream error.
 
@@ -143,10 +146,10 @@ cũ và không mở khóa workflow. Không cancel, delete hoặc rewrite fingerp
 
 Acceptance hardening bổ sung:
 
-- `findByRequestHash` không còn short-circuit request key mới sau terminal
-  `completed`, `failed` hoặc `indeterminate`; chỉ pending cùng hash được coalesce.
-  Lookup terminal chỉ được dùng trong recovery của một DB partial-unique race đã
-  xác định.
+- `findByRequestHash` không còn được dùng để silently bind request key mới. Exact
+  idempotency key được reuse; pending khác key trả
+  `VOICE_SEGMENT_ALREADY_PENDING`; completed/failed/indeterminate cho key mới tạo
+  attempt mới. Không dùng terminal request-hash lookup trong race recovery.
 - Fact Lock được assert lại sau Tx A và ngay trước provider call. Nếu Product Fact
   invalidation làm gate stale, pending được terminalize thành `failed` với
   `VOICE_SEGMENT_CONTEXT_STALE`, provider không được gọi.
@@ -156,11 +159,13 @@ Acceptance hardening bổ sung:
   trả `TTS_PERSISTENCE_FAILED` và không retry provider.
 - MIME, empty và oversize từ provider map về `TTS_INVALID_AUDIO`; timeout/network
   và 408/5xx vẫn giữ uncertain semantics. Preview contract không đổi.
+- Audio route resolve storage bằng persisted `artifact.storageProvider`, không theo
+  ENV default hiện tại; provider/config thiếu hoặc không hợp lệ fail closed.
 
 ## 10. Tests và verification
 
 Deterministic coverage gồm provider input/MIME/size/timeout/uncertainty, exact
-Unicode/VND/brand text, idempotency conflict/coalesce, DB partial-unique race,
+Unicode/VND/brand text, exact idempotency reuse/conflict/pending guard, DB partial-unique race,
 invalid MP3, storage/finalize/cleanup failure, expired pending, script/config race,
 terminal retry/regenerate, post-Tx-A Fact Lock/Product Fact race,
 ambiguous-finalize recovery, R2 mock/fail-closed factory, protected audio
@@ -168,7 +173,7 @@ headers/ETag/304/cross-project và preview regression.
 
 Đã chạy:
 
-- `pnpm --filter web test`: **30 files / 223 tests passed**;
+- `pnpm --filter web test`: **30 files / 227 tests passed**;
 - `pnpm --filter web test:e2e -- --grep "Voice"`: **1 passed**;
 - `pnpm test:integration:voice-segment-runtime`: passed trên Neon dev;
 - `pnpm test:integration:voice-segment`: passed;
