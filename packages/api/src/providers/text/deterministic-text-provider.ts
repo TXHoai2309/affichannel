@@ -3,7 +3,10 @@ import {
 	ScriptGenerationError,
 } from "@affichannel/core";
 import type { FactLockInputSnapshot } from "@affichannel/core/fact-lock/types";
-import type { ScriptGenerationInputSnapshot } from "@affichannel/core/script-generation/types";
+import type {
+	ClaimOccurrence,
+	ScriptGenerationInputSnapshot,
+} from "@affichannel/core/script-generation/types";
 import {
 	type TextProvider,
 	TextProviderError,
@@ -19,6 +22,103 @@ export type DeterministicTextProviderOptions = {
 	snapshot?: ScriptGenerationInputSnapshot;
 	factLockSnapshot?: FactLockInputSnapshot;
 };
+
+type FactLockOccurrence = {
+	occurrence: ClaimOccurrence;
+	text: string;
+};
+
+const measurableAnchorPattern =
+	/(?<![\p{L}\p{N}])\d+(?:[.,]\d+)?\s*(?:giờ|phút|ngày|tháng|kg|g|ml|lít|mah|w|v|hz|%)(?![\p{L}\p{N}])/giu;
+
+function normalizeText(value: string) {
+	return value
+		.normalize("NFKC")
+		.toLocaleLowerCase("vi-VN")
+		.replace(/\s+/g, " ")
+		.trim();
+}
+
+function escapeRegExp(value: string) {
+	return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function findTextSpan(text: string, candidate: string) {
+	const words = normalizeText(candidate)
+		.split(" ")
+		.filter(Boolean)
+		.map(escapeRegExp);
+	if (words.length === 0) return null;
+	return text.match(new RegExp(words.join("\\s+"), "iu"))?.[0] ?? null;
+}
+
+function findFactualSpan(text: string, factContent: string) {
+	const exact = findTextSpan(text, factContent);
+	if (exact) return exact;
+	for (const anchor of factContent.match(measurableAnchorPattern) ?? []) {
+		const measurable = findTextSpan(text, anchor);
+		if (measurable) return measurable;
+	}
+	return null;
+}
+
+function factLockOccurrences(
+	snapshot: FactLockInputSnapshot,
+): FactLockOccurrence[] {
+	const script = snapshot.scriptVersion.snapshot;
+	const occurrences: FactLockOccurrence[] = [];
+	if (script.selectedHookKey) {
+		const selected = script.hookVariants.find(
+			(item) => item.key === script.selectedHookKey,
+		);
+		if (selected) {
+			occurrences.push({
+				occurrence: { section: "hook", hookKey: selected.key },
+				text: selected.text,
+			});
+		}
+	}
+	for (const segment of script.voiceoverSegments)
+		occurrences.push({
+			occurrence: { section: "voiceover", segmentKey: segment.key },
+			text: segment.text,
+		});
+	for (const scene of script.scenes)
+		if (scene.onScreenText)
+			occurrences.push({
+				occurrence: { section: "scene", sceneOrder: scene.order },
+				text: scene.onScreenText,
+			});
+	occurrences.push({ occurrence: { section: "cta" }, text: script.cta.text });
+	occurrences.push({
+		occurrence: { section: "caption" },
+		text: script.caption,
+	});
+	return occurrences;
+}
+
+function deterministicFactLockClaims(snapshot: FactLockInputSnapshot) {
+	const claims = [] as Array<Record<string, unknown>>;
+	for (const [occurrenceIndex, candidate] of factLockOccurrences(
+		snapshot,
+	).entries()) {
+		for (const fact of snapshot.productFacts) {
+			const claimText = findFactualSpan(candidate.text, fact.content);
+			if (!claimText) continue;
+			claims.push({
+				claimKey: `claim-${occurrenceIndex + 1}-${fact.id}`,
+				claimText,
+				occurrence: candidate.occurrence,
+				classificationStatus: "SUPPORTED",
+				reason: "Claim được đối chiếu với Product Fact trong snapshot.",
+				confidence: 1,
+				suggestionText: null,
+				factMappings: [{ factId: fact.id, relation: "supports" }],
+			});
+		}
+	}
+	return claims;
+}
 
 function createDraft(snapshot: ScriptGenerationInputSnapshot) {
 	const firstFact = snapshot.facts[0]?.content ?? "thông tin đã được xác thực";
@@ -154,45 +254,10 @@ export class DeterministicTextProvider implements TextProvider {
 					"AI_PROVIDER_ERROR",
 					"Fact Lock snapshot is missing.",
 				);
-			const occurrence = snapshot.scriptVersion.snapshot.selectedHookKey
-				? {
-						section: "hook" as const,
-						hookKey: snapshot.scriptVersion.snapshot.selectedHookKey,
-					}
-				: {
-						section: "voiceover" as const,
-						segmentKey:
-							snapshot.scriptVersion.snapshot.voiceoverSegments[0]?.key ?? "",
-					};
-			const occurrenceText =
-				occurrence.section === "hook"
-					? snapshot.scriptVersion.snapshot.hookVariants.find(
-							(item) => item.key === occurrence.hookKey,
-						)?.text
-					: snapshot.scriptVersion.snapshot.voiceoverSegments[0]?.text;
+			const claims = deterministicFactLockClaims(snapshot);
 			const output = {
 				schemaVersion: "fact-lock-output.v1",
-				claims: occurrenceText
-					? [
-							{
-								claimKey: "claim-1",
-								claimText: occurrenceText,
-								occurrence,
-								classificationStatus: "SUPPORTED",
-								reason: "Claim được đối chiếu với Product Fact trong snapshot.",
-								confidence: 1,
-								suggestionText: null,
-								factMappings: snapshot.productFacts[0]
-									? [
-											{
-												factId: snapshot.productFacts[0].id,
-												relation: "supports",
-											},
-										]
-									: [],
-							},
-						]
-					: [],
+				claims,
 			};
 			return {
 				content: output,

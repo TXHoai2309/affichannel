@@ -520,6 +520,31 @@ export type FactLockFinalizeOutcome =
 	| { kind: "success"; result: TextProviderResult }
 	| { kind: "failure"; code: string };
 
+const truncatedFactLockFinishReasons = new Set([
+	"max_tokens",
+	"max_output_tokens",
+	"length",
+]);
+
+export function isTruncatedFactLockFinishReason(
+	finishReason: string | null | undefined,
+) {
+	return Boolean(
+		finishReason &&
+			truncatedFactLockFinishReasons.has(finishReason.trim().toLowerCase()),
+	);
+}
+
+export function persistedFactLockValidationErrorCode(validation: {
+	code: "INVALID_FACT_LOCK_OUTPUT";
+	issueCodes: string[];
+}) {
+	const diagnostic = validation.issueCodes.join(",");
+	return diagnostic
+		? `INVALID_FACT_LOCK_OUTPUT:${diagnostic}`
+		: validation.code;
+}
+
 async function dependenciesAreCurrent(
 	transaction: Parameters<Parameters<typeof db.transaction>[0]>[0],
 	actor: WorkspaceActor,
@@ -731,15 +756,20 @@ export async function finalizeFactLockRun(
 					? "indeterminate"
 					: "failed";
 		} else {
-			const validation = validateFactLockProviderOutput(
-				input.outcome.result.content,
-				run.inputSnapshotJson as FactLockInputSnapshot,
-			);
-			if (!validation.success) errorCode = validation.code;
+			if (isTruncatedFactLockFinishReason(input.outcome.result.finishReason))
+				errorCode = "AI_OUTPUT_TRUNCATED";
 			else {
-				acceptedOutput = true;
-				claims = validation.claims;
-				status = deriveFactLockRunStatus(claims);
+				const validation = validateFactLockProviderOutput(
+					input.outcome.result.content,
+					run.inputSnapshotJson as FactLockInputSnapshot,
+				);
+				if (!validation.success)
+					errorCode = persistedFactLockValidationErrorCode(validation);
+				else {
+					acceptedOutput = true;
+					claims = validation.claims;
+					status = deriveFactLockRunStatus(claims);
+				}
 			}
 			providerRequestId = input.outcome.result.providerRequestId;
 			inputTokens = input.outcome.result.inputTokens;

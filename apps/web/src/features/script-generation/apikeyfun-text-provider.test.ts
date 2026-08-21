@@ -28,24 +28,41 @@ const request: TextProviderRequest = {
 };
 
 function sseResponse(
-	content: string,
-	options?: { id?: string; usage?: boolean; requestIdHeader?: string },
+	content: string | string[],
+	options?: {
+		id?: string;
+		usage?: boolean;
+		requestIdHeader?: string;
+		cacheCreationInputTokens?: number;
+		cacheReadInputTokens?: number;
+		finishReason?: string;
+	},
 ) {
+	const chunks = Array.isArray(content) ? content : [content];
 	const events = [
 		`event: message_start\ndata: ${JSON.stringify({
 			type: "message_start",
 			message: {
 				id: options?.id,
-				usage: options?.usage ? { input_tokens: 12 } : undefined,
+				usage: options?.usage
+					? {
+							input_tokens: 12,
+							cache_creation_input_tokens: options.cacheCreationInputTokens,
+							cache_read_input_tokens: options.cacheReadInputTokens,
+						}
+					: undefined,
 			},
 		})}`,
-		`event: content_block_delta\ndata: ${JSON.stringify({
-			type: "content_block_delta",
-			delta: { type: "text_delta", text: content },
-		})}`,
+		...chunks.map(
+			(chunk) =>
+				`event: content_block_delta\ndata: ${JSON.stringify({
+					type: "content_block_delta",
+					delta: { type: "text_delta", text: chunk },
+				})}`,
+		),
 		`event: message_delta\ndata: ${JSON.stringify({
 			type: "message_delta",
-			delta: { stop_reason: "end_turn" },
+			delta: { stop_reason: options?.finishReason ?? "end_turn" },
 			usage: options?.usage ? { output_tokens: 34 } : undefined,
 		})}`,
 		'event: message_stop\ndata: {"type":"message_stop"}',
@@ -125,6 +142,37 @@ describe("APIKEY.FUN text provider adapter", () => {
 
 		expect(result.content).toBe("not-json");
 		expect(validateScriptDraftOutput(result.content, 30).status).toBe("failed");
+	});
+
+	it("normalizes exactly one fenced JSON object and rejects prose wrapping", async () => {
+		const fencedFetch = vi.fn<typeof fetch>(async () =>
+			sseResponse('```json\n{"draft":"ok"}\n```', { id: "msg_fenced" }),
+		);
+		const fenced = await makeProvider(fencedFetch).generate(request);
+		expect(fenced.content).toEqual({ draft: "ok" });
+
+		const proseFetch = vi.fn<typeof fetch>(async () =>
+			sseResponse('Result: {"draft":"ok"}', { id: "msg_prose" }),
+		);
+		const prose = await makeProvider(proseFetch).generate(request);
+		expect(prose.content).toBe('Result: {"draft":"ok"}');
+		expect(validateScriptDraftOutput(prose.content, 30).status).toBe("failed");
+	});
+
+	it("assembles SSE text deltas once in order and includes cached input usage", async () => {
+		const fetchMock = vi.fn<typeof fetch>(async () =>
+			sseResponse(['{"draft":', '"ok"}'], {
+				id: "msg_chunks",
+				usage: true,
+				cacheCreationInputTokens: 20,
+				cacheReadInputTokens: 600,
+			}),
+		);
+		const result = await makeProvider(fetchMock).generate(request);
+
+		expect(result.content).toEqual({ draft: "ok" });
+		expect(result.inputTokens).toBe(632);
+		expect(result.outputTokens).toBe(34);
 	});
 
 	it("preserves null usage and request ID when the provider omits them", async () => {

@@ -257,6 +257,32 @@ Chi tiết tại `docs/aff-us-011-phase-1-foundation.md` và
 `docs/aff-us-011-phase-2-tts-preview-runtime.md` và
 `docs/aff-us-011-phase-3-voice-studio.md`.
 
+### AFF-US-012 — Segment Voiceover Generation
+
+Phase 0 — Contract & Architecture Lock đã được chấp nhận ngày 2026-08-21.
+Phase 1 — Foundation đã triển khai schema `voice_segment_artifact`, migration
+`0016`, fingerprint/read model, local/R2 storage foundation, checksum và
+server-side MP3 duration. Contract khóa `VoiceSegmentArtifact` theo full
+ScriptVersion/VoiceConfig fingerprint, immutable generation history, idempotency
+và pending concurrency, server-authoritative MP3 duration, local/private-R2
+storage, protected stream, failure taxonomy, race semantics và current/stale
+read model. Workflow tiếp tục dùng `project.currentStepKey` và
+`project_step_status` hiện có; không tạo status source of truth mới.
+
+Phase 1 không gọi paid TTS/R2 thật và chưa tạo provider generation API, UI,
+protected stream hoặc workflow mutation. Chi tiết tại
+`docs/aff-us-012-phase-0-contract-decisions.md`,
+`docs/aff-us-012-phase-1-foundation.md` và DEC-024.
+
+Các phase dự kiến:
+
+```text
+Phase 1 — schema/repository/storage/duration foundation
+Phase 2 — segment generation API/provider/protected stream
+Phase 3 — segment list/player/basic waveform
+Phase 4 — duration/workflow hardening và acceptance E2E
+```
+
 - Test TTS tiếng Việt bằng script đại diện.
 - Tạo voice theo segment và cache bằng normalized input hash.
 - Upload và validate media thật.

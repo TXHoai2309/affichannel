@@ -198,8 +198,11 @@ describe("AFF-US-010 Fact Lock foundation", () => {
 					factMappings: [{ factId: "invented", relation: "supports" }],
 				}),
 				snapshot,
-			).success,
-		).toBe(false);
+			),
+		).toMatchObject({
+			success: false,
+			issueCodes: ["FACT_MAPPING_INVALID"],
+		});
 		expect(
 			validateFactLockProviderOutput(
 				output({ claimText: "Nội dung không có trong script." }),
@@ -215,6 +218,58 @@ describe("AFF-US-010 Fact Lock foundation", () => {
 				snapshot,
 			).success,
 		).toBe(false);
+	});
+
+	it("accepts one fenced JSON object but rejects prose and reports sanitized diagnostics", () => {
+		const fenced = validateFactLockProviderOutput(
+			`\`\`\`json\n${JSON.stringify(output())}\n\`\`\``,
+			snapshot,
+		);
+		expect(fenced.success).toBe(true);
+
+		const prose = validateFactLockProviderOutput(
+			`Kết quả:\n${JSON.stringify(output())}`,
+			snapshot,
+		);
+		expect(prose).toMatchObject({
+			success: false,
+			code: "INVALID_FACT_LOCK_OUTPUT",
+			issueCodes: ["ROOT_NOT_JSON"],
+		});
+
+		const wrongVersion = validateFactLockProviderOutput(
+			{ ...output(), schemaVersion: "fact-lock-output.v0" },
+			snapshot,
+		);
+		expect(wrongVersion).toMatchObject({
+			success: false,
+			issueCodes: ["SCHEMA_VERSION_MISMATCH"],
+		});
+	});
+
+	it("rejects non-selected hook occurrences and inconsistent classifications", () => {
+		const otherHook = validateFactLockProviderOutput(
+			output({
+				claimText: "Một hook khác.",
+				occurrence: { section: "hook", hookKey: "other" },
+				classificationStatus: "NEEDS_REVIEW",
+				factMappings: [],
+			}),
+			snapshot,
+		);
+		expect(otherHook).toMatchObject({
+			success: false,
+			issueCodes: ["CLAIM_OCCURRENCE_INVALID"],
+		});
+
+		const unsupportedWithSupport = validateFactLockProviderOutput(
+			output({ classificationStatus: "UNSUPPORTED" }),
+			snapshot,
+		);
+		expect(unsupportedWithSupport).toMatchObject({
+			success: false,
+			issueCodes: ["CLASSIFICATION_INVALID"],
+		});
 	});
 
 	it("derives stale only for result-bearing runs whose source or dependencies changed", () => {

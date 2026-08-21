@@ -5,6 +5,7 @@ import type {
 } from "@affichannel/api/providers/text/text-provider";
 import { executePreparedGeneration } from "@affichannel/api/routers/script-generation";
 import {
+	evaluateFullScriptGenerationResult,
 	mergeRepairScriptOutput,
 	runPreparedScriptGeneration,
 } from "@affichannel/api/services/script-generation-service";
@@ -193,6 +194,8 @@ describe("AFF-US-008 script-generation foundation", () => {
 		expect(prompt.trustedInstructions).toContain("untrusted input data");
 		expect(prompt.outputSchema).toContain("Return exactly one JSON object.");
 		expect(prompt.outputSchema).toContain("voiceoverSegmentKeys");
+		expect(prompt.outputSchema).toContain("every key references");
+		expect(prompt.outputSchema).toContain("within 15%");
 		expect(prompt.outputSchema).toContain("Do not add selectedHook");
 		expect(prompt.outputSchema).toContain("hookVariants");
 		expect(prompt.outputSchema).toContain("channelSettings.avoidWords");
@@ -244,8 +247,26 @@ describe("AFF-US-008 script-generation foundation", () => {
 			occurrence: { section: "voiceover", segmentKey: "benefit" },
 		});
 		const validation = validateScriptDraftOutput(output, 30, 1);
-		expect(validation.status).toBe("failed");
+		expect(validation.status).toBe("partial");
 		expect(validation.validSections).not.toContain("claims");
+		expect(validation.issueCodes).toContain("CLAIM_LIMIT_EXCEEDED");
+	});
+
+	it("salvages a full-schema draft when only scene duration is invalid", async () => {
+		const output = await buildDeterministicOutput();
+		const invalidDuration = {
+			...output,
+			scenes: output.scenes?.map((scene) => ({
+				...scene,
+				durationSeconds: 1,
+			})),
+		};
+		const validation = validateScriptDraftOutput(invalidDuration, 30);
+
+		expect(validation.status).toBe("partial");
+		expect(validation.validSections).not.toContain("scenes");
+		expect(validation.validSections).toHaveLength(7);
+		expect(validation.issueCodes).toContain("SCENES_DURATION_INVALID");
 	});
 
 	it("classifies missing scenes and claims as a usable partial draft", async () => {
@@ -277,7 +298,9 @@ describe("AFF-US-008 script-generation foundation", () => {
 	});
 
 	it("rejects malformed, unknown-reference and out-of-budget output", () => {
-		expect(validateScriptDraftOutput("not-json", 30).status).toBe("failed");
+		const malformed = validateScriptDraftOutput("not-json", 30);
+		expect(malformed.status).toBe("failed");
+		expect(malformed.issueCodes).toContain("ROOT_NOT_JSON");
 		expect(
 			validateScriptDraftOutput(
 				{
@@ -307,6 +330,92 @@ describe("AFF-US-008 script-generation foundation", () => {
 				30,
 			).status,
 		).toBe("partial");
+	});
+
+	it("accepts raw or singly fenced JSON but rejects prose and malformed JSON", async () => {
+		const output = await buildDeterministicOutput();
+		const json = JSON.stringify(output);
+
+		expect(validateScriptDraftOutput(json, 30).status).toBe("completed");
+		expect(
+			validateScriptDraftOutput(`\`\`\`json\n${json}\n\`\`\``, 30).status,
+		).toBe("completed");
+		for (const invalid of [
+			`Here is the JSON:\n${json}`,
+			`\`\`\`json\n${json}\n\`\`\`\nExplanation`,
+			'{"schemaVersion":',
+		]) {
+			const validation = validateScriptDraftOutput(invalid, 30);
+			expect(validation.status).toBe("failed");
+			expect(validation.issueCodes).toContain("ROOT_NOT_JSON");
+		}
+	});
+
+	it("reports root schema, language, and unknown-key diagnostics without raw content", async () => {
+		const output = await buildDeterministicOutput();
+		const cases = [
+			[
+				{ ...output, schemaVersion: "script-draft.v1" },
+				"SCHEMA_VERSION_MISMATCH",
+			],
+			[{ ...output, language: "en-US" }, "LANGUAGE_MISMATCH"],
+			[{ ...output, extraRootKey: "not persisted" }, "UNKNOWN_ROOT_KEY"],
+		] as const;
+
+		for (const [value, issueCode] of cases) {
+			const validation = validateScriptDraftOutput(value, 30);
+			expect(validation.status).toBe("failed");
+			expect(validation.issueCodes).toEqual([issueCode]);
+		}
+	});
+
+	it("classifies truncated finish reasons before validating provider content", async () => {
+		const output = await buildDeterministicOutput();
+		const result: TextProviderResult = {
+			content: output,
+			providerRequestId: "provider-request-truncated",
+			inputTokens: 100,
+			outputTokens: 200,
+			estimatedCostMicros: BigInt(1),
+			actualCostMicros: null,
+			currency: "CNY",
+			finishReason: "max_tokens",
+		};
+
+		expect(
+			evaluateFullScriptGenerationResult(
+				{ ...result, finishReason: "end_turn" },
+				snapshot as ScriptGenerationInputSnapshot,
+			),
+		).toMatchObject({ status: "completed", errorCode: null });
+		expect(
+			evaluateFullScriptGenerationResult(
+				result,
+				snapshot as ScriptGenerationInputSnapshot,
+			),
+		).toMatchObject({
+			status: "failed",
+			errorCode: "AI_OUTPUT_TRUNCATED",
+			validSections: [],
+		});
+	});
+
+	it("persists only sanitized invalid-output diagnostics", () => {
+		const decision = evaluateFullScriptGenerationResult(
+			{
+				content: "private malformed provider output",
+				providerRequestId: "provider-request-invalid",
+				inputTokens: 1,
+				outputTokens: 1,
+				estimatedCostMicros: BigInt(1),
+				actualCostMicros: null,
+				currency: "CNY",
+			},
+			snapshot as ScriptGenerationInputSnapshot,
+		);
+
+		expect(decision.errorCode).toBe("AI_INVALID_OUTPUT:ROOT_NOT_JSON");
+		expect(decision.errorCode).not.toContain("private malformed");
 	});
 
 	it("models timeout and provider failure without a live SDK", async () => {

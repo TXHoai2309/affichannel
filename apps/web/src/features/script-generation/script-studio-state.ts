@@ -175,16 +175,28 @@ const ERROR_MESSAGES: Record<string, string> = {
 		"Trạng thái yêu cầu chưa xác định. Hệ thống không tự động gửi lại để tránh phát sinh chi phí trùng.",
 	AI_PROVIDER_ERROR: "Nhà cung cấp AI chưa hoàn tất yêu cầu.",
 	AI_INVALID_OUTPUT: "AI trả về nội dung chưa đạt cấu trúc kịch bản.",
+	AI_OUTPUT_TRUNCATED:
+		"AI đã dừng vì chạm giới hạn độ dài trước khi hoàn tất kịch bản.",
 	GENERATION_INDETERMINATE:
 		"Trạng thái yêu cầu chưa xác định. Hệ thống không tự động gửi lại để tránh phát sinh chi phí trùng.",
 };
 
 export function getScriptGenerationErrorMessage(error: unknown) {
 	const code = getErrorCode(error);
+	const baseCode = code?.split(":", 1)[0];
 	return (
-		(code && ERROR_MESSAGES[code]) ??
+		(baseCode && ERROR_MESSAGES[baseCode]) ??
 		"Không thể hoàn tất yêu cầu tạo kịch bản. Hãy kiểm tra cấu hình và thử lại bằng một yêu cầu mới."
 	);
+}
+
+export function getPersistedScriptGenerationErrorMessage(
+	request: ScriptGenerationArtifact | null,
+) {
+	if (request?.status !== "failed" || !request.errorCode) return null;
+	return getScriptGenerationErrorMessage({
+		data: { code: request.errorCode },
+	});
 }
 
 export function createIdempotencyKey(prefix: "generate" | "repair") {

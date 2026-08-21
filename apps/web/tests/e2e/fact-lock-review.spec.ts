@@ -547,7 +547,7 @@ async function seedReviewFixture(
 		promptHash: "f".repeat(64),
 		provider: "deterministic",
 		model: "us010-e2e",
-		promptVersion: "fact-lock-prompt.v1",
+		promptVersion: "fact-lock-prompt.v3",
 		outputSchemaVersion: "fact-lock-output.v1",
 		status: mode,
 		createdByUserId: actor.userId,
@@ -645,7 +645,7 @@ async function rerunDeterministicFactLock(fixture: ReviewFixture) {
 		{
 			provider: "deterministic",
 			model: "us010-e2e",
-			promptVersion: "fact-lock-prompt.v1",
+			promptVersion: "fact-lock-prompt.v3",
 			outputSchemaVersion: "fact-lock-output.v1",
 		},
 	);

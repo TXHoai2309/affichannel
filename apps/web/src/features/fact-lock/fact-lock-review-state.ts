@@ -97,6 +97,10 @@ export function getFactLockErrorCode(error: unknown) {
 }
 
 const FACT_LOCK_ERROR_MESSAGES: Record<string, string> = {
+	INVALID_FACT_LOCK_OUTPUT:
+		"AI trả về kết quả không đúng contract Fact Lock. Hãy chạy đối chiếu lại.",
+	AI_OUTPUT_TRUNCATED:
+		"Kết quả AI bị cắt do giới hạn output. Hãy chạy đối chiếu lại.",
 	FACT_LOCK_NO_USABLE_FACTS:
 		"Chưa có Product Fact đủ điều kiện. Hãy bổ sung hoặc cập nhật Product Facts trước.",
 	FACT_LOCK_STALE:
@@ -125,8 +129,9 @@ const FACT_LOCK_ERROR_MESSAGES: Record<string, string> = {
 
 export function getFactLockErrorMessage(error: unknown) {
 	const code = getFactLockErrorCode(error);
+	const baseCode = code?.split(":", 1)[0];
 	return (
-		(code && FACT_LOCK_ERROR_MESSAGES[code]) ??
+		(baseCode && FACT_LOCK_ERROR_MESSAGES[baseCode]) ??
 		"Không thể hoàn tất thao tác Fact Lock. Hãy tải lại và thử lại."
 	);
 }

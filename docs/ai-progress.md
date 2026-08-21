@@ -1316,3 +1316,39 @@ Verification Phase 3:
 - Không migration; `db:generate`/build/Biome/diff check thực hiện ở final verification.
 
 Trạng thái: **AFF-US-010 Phase 3 Gate & Runtime is ready for final acceptance.**
+
+### 2026-08-21 — AFF-US-012 Phase 0 Contract & Architecture Lock
+
+- Audit ScriptVersion/current draft, FactLockGate, VoiceConfig/Voice Studio/preview,
+  TtsProvider/APIKEY.FUN, persisted project workflow và storage/env hiện tại.
+- Xác nhận workflow source of truth đã tồn tại ở `project.currentStepKey` và
+  `project_step_status`; không tạo status table mới. Xác nhận TtsProvider hiện
+  chỉ có preview, chưa có segment generation/duration parser/audio storage adapter.
+- Khóa tài liệu `VoiceSegmentArtifact` immutable attempt/history, full
+  ScriptVersion/VoiceConfig fingerprint, request hash/idempotency, retry và
+  concurrent pending semantics; stale chỉ là derived read model.
+- Khóa server-authoritative MP3 duration, local/private-R2 storage abstraction,
+  protected stream ownership, failure taxonomy, cleanup/race semantics, current
+  total duration và Voice readiness predicate.
+- Cập nhật DEC-024, architecture, product spec, roadmap, changelog và docs index.
+- Không tạo schema/migration, không đổi runtime/API/UI, không gọi paid TTS.
+
+Trạng thái: **AFF-US-012 Phase 0 đã được chấp nhận; Phase 1 chưa bắt đầu.**
+
+### 2026-08-21 — AFF-US-012 Phase 1 Foundation, Storage & Duration
+
+- Phase 0/DEC-024 được chấp nhận; triển khai `voice_segment_artifact` schema và
+  migration `0016_gifted_microbe.sql`, apply additive thành công vào dev Neon.
+- Thêm core fingerprint/current-stale/latest read model, exact text hashing,
+  SHA-256 request/audio checksum, status/metadata constraints và pending lease.
+- Thêm local atomic storage và R2 adapter foundation qua injected client; key
+  `voice/v1/{workspaceId}/{projectId}/{artifactId}.mp3`, path traversal guard,
+  không public object và không gọi R2 thật.
+- Thêm `music-metadata` server parser, deterministic MP3 fixture, domain errors,
+  repository operations và integration fixture cleanup.
+- Verification: foundation unit 8/8, web test 27 files/199 tests, full
+  `check-types`, build, scoped Biome, `git diff --check`, db generate no-op và
+  integration foundation pass; migration cuối là `0016`, không có `0017`.
+- Không gọi TTS/APIKEY.FUN/R2 thật; chưa làm generation API/UI/workflow.
+
+Trạng thái: **AFF-US-012 Phase 1 đã triển khai, chờ review/acceptance; Phase 2 chưa bắt đầu.**

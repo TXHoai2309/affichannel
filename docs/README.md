@@ -25,6 +25,8 @@ với các tài liệu tại đây.
 17. [AFF-US-011 Phase 1 Voice Foundation](./aff-us-011-phase-1-foundation.md)
 18. [AFF-US-011 Phase 2 TTS Preview Runtime](./aff-us-011-phase-2-tts-preview-runtime.md)
 19. [AFF-US-011 Phase 3 Voice Studio](./aff-us-011-phase-3-voice-studio.md)
+20. [AFF-US-012 Phase 0 Contract & Architecture Lock](./aff-us-012-phase-0-contract-decisions.md)
+21. [AFF-US-012 Phase 1 Foundation](./aff-us-012-phase-1-foundation.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

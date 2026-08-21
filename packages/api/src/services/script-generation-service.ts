@@ -12,6 +12,7 @@ import {
 	SCRIPT_PROMPT_VERSION,
 	SCRIPT_SNAPSHOT_VERSION,
 	ScriptGenerationError,
+	type ScriptOutputValidation,
 	scriptGenerationSections,
 	validateRepairScriptOutput,
 	validateScriptDraftOutput,
@@ -702,6 +703,62 @@ type FinalizeFailure = {
 		| "GENERATION_INDETERMINATE";
 };
 
+const truncatedFinishReasons = new Set([
+	"max_tokens",
+	"max_output_tokens",
+	"length",
+]);
+
+export function isTruncatedTextProviderFinishReason(
+	finishReason: string | null | undefined,
+) {
+	return Boolean(
+		finishReason &&
+			truncatedFinishReasons.has(finishReason.trim().toLowerCase()),
+	);
+}
+
+export function persistedScriptValidationErrorCode(
+	validation: ScriptOutputValidation,
+) {
+	if (validation.errorCode !== "INVALID_GENERATION_OUTPUT")
+		return validation.errorCode;
+	const diagnostic = validation.issueCodes.join(",");
+	return diagnostic ? `AI_INVALID_OUTPUT:${diagnostic}` : "AI_INVALID_OUTPUT";
+}
+
+export function evaluateFullScriptGenerationResult(
+	result: TextProviderResult,
+	snapshot: ScriptGenerationInputSnapshot,
+) {
+	if (isTruncatedTextProviderFinishReason(result.finishReason)) {
+		return {
+			status: "failed" as const,
+			output: null,
+			validSections: [] as ScriptGenerationSection[],
+			invalidSections: [...scriptGenerationSections],
+			errorCode: "AI_OUTPUT_TRUNCATED",
+		};
+	}
+	const validation = validateScriptDraftOutput(
+		result.content,
+		snapshot.contentBrief.durationSeconds,
+		snapshot.outputRules.claimLimit,
+		{
+			expectedLanguage: snapshot.outputRules.language,
+			requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
+			avoidWords: snapshot.channelSettings.avoidWords,
+		},
+	);
+	return {
+		status: validation.status,
+		output: validation.output,
+		validSections: validation.validSections,
+		invalidSections: validation.invalidSections,
+		errorCode: persistedScriptValidationErrorCode(validation),
+	};
+}
+
 function scriptSectionOutputKey(section: ScriptGenerationSection) {
 	return section === "hook"
 		? "hookVariants"
@@ -894,104 +951,128 @@ export async function finalizeScriptGeneration(
 				requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
 				avoidWords: snapshot.channelSettings.avoidWords,
 			};
-			let validation = validateScriptDraftOutput(
-				result.content,
-				snapshot.contentBrief.durationSeconds,
-				snapshot.outputRules.claimLimit,
-				validationOptions,
-			);
-			if (row.mode === "repair" && snapshot.request.repair) {
-				const repairValidation = validateRepairScriptOutput(
+			if (row.mode === "full") {
+				const decision = evaluateFullScriptGenerationResult(result, snapshot);
+				status = decision.status;
+				outputJson = decision.output;
+				validSections = decision.validSections;
+				invalidSections = decision.invalidSections;
+				errorCode = decision.errorCode;
+			} else if (snapshot.request.repair) {
+				let validation = validateScriptDraftOutput(
 					result.content,
-					snapshot.request.repair.sections,
+					snapshot.contentBrief.durationSeconds,
 					snapshot.outputRules.claimLimit,
 					validationOptions,
 				);
-				if (repairValidation.success && repairValidation.output) {
-					const parentValidSections =
-						snapshot.request.repair.baseValidSections ??
-						scriptGenerationSections.filter(
-							(section) =>
-								getScriptSectionValue(
-									snapshot.request.repair?.baseOutput as PartialScriptDraft,
-									section,
-								) !== undefined,
-						);
-					const mergedRepair = mergeRepairScriptOutput(
-						snapshot.request.repair.baseOutput,
-						parentValidSections,
-						snapshot.request.repair.sections,
-						repairValidation.output,
-					);
-					if (!mergedRepair) {
-						validation = {
-							status: "failed",
-							output: null,
-							validSections: [],
-							invalidSections: [...scriptGenerationSections],
-							errorCode: "INVALID_GENERATION_OUTPUT",
-						};
-					} else {
-						const mergedValidation = validateScriptDraftOutput(
-							mergedRepair.output,
-							snapshot.contentBrief.durationSeconds,
-							snapshot.outputRules.claimLimit,
-							validationOptions,
-						);
-						const preservedContent = mergedRepair.preservedSections.every(
-							(section) => {
-								const mergedValue = getScriptSectionValue(
-									mergedRepair.output,
-									section,
-								);
-								const parentValue = getScriptSectionValue(
-									snapshot.request.repair?.baseOutput as PartialScriptDraft,
-									section,
-								);
-								return (
-									mergedValidation.validSections.includes(section) &&
-									mergedValue !== undefined &&
-									parentValue !== undefined &&
-									canonicalizeJson(mergedValue) ===
-										canonicalizeJson(parentValue)
-								);
-							},
-						);
-						const repairedSectionsValid =
-							snapshot.request.repair.sections.every((section) =>
-								mergedValidation.validSections.includes(section),
-							);
-						validation =
-							preservedContent &&
-							repairedSectionsValid &&
-							mergedValidation.status !== "failed"
-								? mergedValidation
-								: {
-										status: "failed",
-										output: null,
-										validSections: [],
-										invalidSections: [...scriptGenerationSections],
-										errorCode: "INVALID_GENERATION_OUTPUT",
-									};
-					}
-				} else {
+				if (isTruncatedTextProviderFinishReason(result.finishReason)) {
 					validation = {
 						status: "failed",
 						output: null,
 						validSections: [],
 						invalidSections: [...scriptGenerationSections],
 						errorCode: "INVALID_GENERATION_OUTPUT",
+						issueCodes: ["REPAIR_OUTPUT_INVALID"],
 					};
+					errorCode = "AI_OUTPUT_TRUNCATED";
+				} else {
+					const repairValidation = validateRepairScriptOutput(
+						result.content,
+						snapshot.request.repair.sections,
+						snapshot.outputRules.claimLimit,
+						validationOptions,
+					);
+					if (repairValidation.success && repairValidation.output) {
+						const parentValidSections =
+							snapshot.request.repair.baseValidSections ??
+							scriptGenerationSections.filter(
+								(section) =>
+									getScriptSectionValue(
+										snapshot.request.repair?.baseOutput as PartialScriptDraft,
+										section,
+									) !== undefined,
+							);
+						const mergedRepair = mergeRepairScriptOutput(
+							snapshot.request.repair.baseOutput,
+							parentValidSections,
+							snapshot.request.repair.sections,
+							repairValidation.output,
+						);
+						if (!mergedRepair) {
+							validation = {
+								status: "failed",
+								output: null,
+								validSections: [],
+								invalidSections: [...scriptGenerationSections],
+								errorCode: "INVALID_GENERATION_OUTPUT",
+								issueCodes: ["REPAIR_MERGE_INVALID"],
+							};
+						} else {
+							const mergedValidation = validateScriptDraftOutput(
+								mergedRepair.output,
+								snapshot.contentBrief.durationSeconds,
+								snapshot.outputRules.claimLimit,
+								validationOptions,
+							);
+							const preservedContent = mergedRepair.preservedSections.every(
+								(section) => {
+									const mergedValue = getScriptSectionValue(
+										mergedRepair.output,
+										section,
+									);
+									const parentValue = getScriptSectionValue(
+										snapshot.request.repair?.baseOutput as PartialScriptDraft,
+										section,
+									);
+									return (
+										mergedValidation.validSections.includes(section) &&
+										mergedValue !== undefined &&
+										parentValue !== undefined &&
+										canonicalizeJson(mergedValue) ===
+											canonicalizeJson(parentValue)
+									);
+								},
+							);
+							const repairedSectionsValid =
+								snapshot.request.repair.sections.every((section) =>
+									mergedValidation.validSections.includes(section),
+								);
+							validation =
+								preservedContent &&
+								repairedSectionsValid &&
+								mergedValidation.status !== "failed"
+									? mergedValidation
+									: {
+											status: "failed",
+											output: null,
+											validSections: [],
+											invalidSections: [...scriptGenerationSections],
+											errorCode: "INVALID_GENERATION_OUTPUT",
+											issueCodes: ["REPAIR_RESULT_INVALID"],
+										};
+						}
+					} else {
+						validation = {
+							status: "failed",
+							output: null,
+							validSections: [],
+							invalidSections: [...scriptGenerationSections],
+							errorCode: "INVALID_GENERATION_OUTPUT",
+							issueCodes: ["REPAIR_OUTPUT_INVALID"],
+						};
+					}
 				}
+				status = validation.status;
+				outputJson = validation.output;
+				validSections = validation.validSections;
+				invalidSections = validation.invalidSections;
+				if (!errorCode)
+					errorCode = persistedScriptValidationErrorCode(validation);
+			} else {
+				status = "failed";
+				invalidSections = [...scriptGenerationSections];
+				errorCode = "AI_INVALID_OUTPUT:REPAIR_OUTPUT_INVALID";
 			}
-			status = validation.status;
-			outputJson = validation.output;
-			validSections = validation.validSections;
-			invalidSections = validation.invalidSections;
-			errorCode =
-				validation.errorCode === "INVALID_GENERATION_OUTPUT"
-					? "AI_INVALID_OUTPUT"
-					: validation.errorCode;
 			providerRequestId = result.providerRequestId;
 			inputTokens = result.inputTokens;
 			outputTokens = result.outputTokens;

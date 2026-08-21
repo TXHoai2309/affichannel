@@ -239,6 +239,32 @@ loading/timeout/provider unavailable. Dirty config không được preview; Blob
 nhưng giữ config đã lưu; rerun PASS mở lại. Full voiceover và audio artifact
 vẫn chưa thuộc phase này.
 
+### AFF-US-012 — Segment Voiceover Generation
+
+AFF-US-012 tạo voiceover riêng cho từng `voiceoverSegment` của current
+ScriptVersion. Người dùng chỉ được generate sau Fact Lock PASS và khi
+VoiceConfig hiện tại đã lưu. Server tự lấy text theo `segmentKey`, pin
+ScriptVersion ID/revision, text hash và VoiceConfig revision; client không được
+gửi text hoặc voice fields làm authoritative input.
+
+Mỗi lần TTS là một audio generation artifact bất biến có thể phát sinh nhiều
+attempt/history. Audio của ScriptVersion hoặc VoiceConfig cũ vẫn được giữ để
+audit nhưng không được chọn làm current, không cộng vào tổng thời lượng và
+không làm Voice step ready. Audio persist qua private storage; database chỉ lưu
+metadata/object key. Server parse audio metadata để xác định duration; browser
+chỉ dùng cho playback.
+
+Voiceover readiness đạt khi Fact Lock PASS, VoiceConfig current tồn tại và mọi
+segment của current ScriptVersion có artifact completed khớp full source/config
+fingerprint. Tổng thời lượng chỉ cộng các artifact current completed. Chi tiết
+contract Phase 0 tại `docs/aff-us-012-phase-0-contract-decisions.md`; Phase 0
+chưa tạo runtime, UI, schema hoặc migration.
+
+AFF-US-012 Phase 1 đã tạo nền tảng artifact `voice_segment_artifact`, checksum,
+server-side MP3 duration và local/private-storage boundary. Phase này chưa tạo
+segment generation API, player/waveform UI, protected audio endpoint hoặc tự
+động hoàn thành workflow.
+
 ## 9. Các màn hình chính
 
 US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,

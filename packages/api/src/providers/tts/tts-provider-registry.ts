@@ -29,6 +29,7 @@ export function resolveTtsProvider(
 ): TtsProvider | undefined {
 	if (providerName !== "apikeyfun") return undefined;
 	if (env.AFFICHANNEL_E2E_TTS_DETERMINISTIC === "1") {
+		if (env.NODE_ENV === "production") return undefined;
 		return new DeterministicTtsProvider();
 	}
 	const providerOptions = resolveApikeyFunOptions(options);

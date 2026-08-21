@@ -10,6 +10,16 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- AFF-US-012 Phase 0: audit và khóa contract cho immutable VoiceSegment artifact,
+  full source/config fingerprint, idempotency/retry/concurrent pending,
+  server-authoritative MP3 duration, local/private-R2 storage, failure/race
+  semantics, current/stale read model và Voice readiness. Chưa tạo schema,
+  migration, runtime, API, UI hoặc gọi paid TTS.
+- AFF-US-012 Phase 1: thêm `voice_segment_artifact` migration `0016`, full
+  fingerprint/read model, workspace idempotency và pending protection, local/R2
+  storage foundation, SHA-256 checksums, server-side MP3 duration và deterministic
+  unit/integration coverage. Chưa có TTS generation API, UI, protected stream
+  hoặc workflow mutation; không gọi paid TTS/R2.
 - AFF-US-011 Phase 0: khóa contract TTS APIKEY.FUN → Grok/xAI qua `POST /v1/tts`,
   server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
   transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có

@@ -1,4 +1,7 @@
-import { ScriptGenerationError } from "@affichannel/core";
+import {
+	parseSingleJsonObject,
+	ScriptGenerationError,
+} from "@affichannel/core";
 
 import {
 	type TextProvider,
@@ -63,6 +66,16 @@ function firstPositiveInteger(...values: unknown[]) {
 	return null;
 }
 
+function summedTokenCount(...values: unknown[]) {
+	const parsed = values.flatMap((value) => {
+		const count = positiveInteger(value);
+		return count === null ? [] : [count];
+	});
+	if (parsed.length === 0) return null;
+	const total = parsed.reduce((sum, value) => sum + value, 0);
+	return Number.isSafeInteger(total) ? total : null;
+}
+
 function normalizeCurrency(value: unknown) {
 	return typeof value === "string" && /^[A-Z]{3}$/.test(value) ? value : null;
 }
@@ -117,12 +130,15 @@ function reportedCost(root: Record<string, unknown>) {
 
 function usageFrom(root: Record<string, unknown>): Usage {
 	const usage = isRecord(root.usage) ? root.usage : {};
+	const anthropicInputTokens = summedTokenCount(
+		usage.input_tokens,
+		usage.cache_creation_input_tokens,
+		usage.cache_read_input_tokens,
+	);
 	return {
-		inputTokens: firstPositiveInteger(
-			usage.input_tokens,
-			usage.inputTokens,
-			usage.prompt_tokens,
-		),
+		inputTokens:
+			anthropicInputTokens ??
+			firstPositiveInteger(usage.inputTokens, usage.prompt_tokens),
 		outputTokens: firstPositiveInteger(
 			usage.output_tokens,
 			usage.outputTokens,
@@ -161,11 +177,8 @@ function contentTextFrom(root: Record<string, unknown>) {
 }
 
 function parseJsonContent(text: string): unknown {
-	try {
-		return JSON.parse(text) as unknown;
-	} catch {
-		return text;
-	}
+	const parsed = parseSingleJsonObject(text);
+	return parsed.success ? parsed.data : text;
 }
 
 function parseSse(raw: string): ParsedProviderResponse | null {

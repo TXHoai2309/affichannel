@@ -46,7 +46,7 @@ export const factLockFactRelations = [
 export type FactLockFactRelation = (typeof factLockFactRelations)[number];
 
 export const FACT_LOCK_SNAPSHOT_VERSION = "fact-lock-input.v1";
-export const FACT_LOCK_PROMPT_VERSION = "fact-lock-prompt.v1";
+export const FACT_LOCK_PROMPT_VERSION = "fact-lock-prompt.v3";
 export const FACT_LOCK_OUTPUT_SCHEMA_VERSION = "fact-lock-output.v1";
 
 export type FactLockProductFactSnapshot = {

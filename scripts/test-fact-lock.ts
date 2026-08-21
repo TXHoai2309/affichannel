@@ -99,7 +99,7 @@ const fixtures = [fixtureA, fixtureB];
 const config = {
 	provider: "deterministic",
 	model: "fact-lock-deterministic-v1",
-	promptVersion: "fact-lock-prompt.v1" as const,
+	promptVersion: "fact-lock-prompt.v3" as const,
 	outputSchemaVersion: "fact-lock-output.v1" as const,
 };
 
@@ -393,13 +393,23 @@ try {
 		{ projectId: fixtureA.projectId, idempotencyKey: `${prefix}_same_key` },
 		config,
 	);
+	assert(
+		first.inputSnapshot.productFacts[0]?.assessment.freshness ===
+			"not_applicable" &&
+			first.inputSnapshot.productFacts[0]?.generationUsability === "allowed",
+		"A not_applicable + allowed Product Fact was excluded from Fact Lock.",
+	);
 	const completed = await executeFactLockRun(
 		actorA,
 		first,
 		new DeterministicTextProvider({ factLockSnapshot: first.inputSnapshot }),
 	);
 	assert(
-		completed.status === "passed" && completed.claims.length === 1,
+		completed.status === "passed" &&
+			completed.claims.length >= 1 &&
+			completed.claims.every(
+				(claim) => claim.classificationStatus === "SUPPORTED",
+			),
 		"Valid deterministic Fact Lock did not pass.",
 	);
 	assert(
@@ -588,8 +598,38 @@ try {
 		new DeterministicTextProvider({ scenario: "malformed" }),
 	);
 	assert(
-		failed.status === "failed",
+		failed.status === "failed" &&
+			failed.errorCode === "INVALID_FACT_LOCK_OUTPUT:ROOT_NOT_JSON",
 		"Malformed provider output did not fail the run.",
+	);
+
+	const truncatedRun = await prepareFactLockRun(
+		actorA,
+		{ projectId: fixtureA.projectId, idempotencyKey: `${prefix}_truncated` },
+		config,
+	);
+	const truncated = await runPreparedFactLock(actorA, truncatedRun, {
+		...fakeProvider(
+			supportedOutput([{ factId: fixtureA.factId, relation: "supports" }]),
+		),
+		generate: async () => ({
+			content: supportedOutput([
+				{ factId: fixtureA.factId, relation: "supports" },
+			]),
+			providerRequestId: "fake-truncated",
+			inputTokens: 10,
+			outputTokens: 20,
+			estimatedCostMicros: BigInt(0),
+			actualCostMicros: BigInt(0),
+			currency: "VND",
+			finishReason: "max_tokens",
+		}),
+	});
+	assert(
+		truncated.status === "failed" &&
+			truncated.errorCode === "AI_OUTPUT_TRUNCATED" &&
+			truncated.claims.length === 0,
+		"Truncated Fact Lock output was accepted or lost its diagnostic.",
 	);
 	const failedDependency = await db
 		.select()
@@ -601,9 +641,9 @@ try {
 	);
 	const afterFailed = await getFactLockState(actorA, fixtureA.projectId);
 	assert(
-		afterFailed.latestRequest?.id === failed.id &&
+		afterFailed.latestRequest?.id === truncated.id &&
 			afterFailed.latestApplicableRun?.id === concurrentRun.id,
-		"Failed request must not replace the latest usable passed run.",
+		"Failed requests must not replace the latest usable passed run.",
 	);
 	const gateAfterFailed = await FactLockGate.evaluate(
 		actorA,
@@ -1304,12 +1344,12 @@ try {
 	await db
 		.update(scriptVersion)
 		.set({
-			revision: 2,
+			revision: 4,
 			editableSnapshotJson: {
 				...draft(),
 				selectedHookKey: "selected",
-				claimsSourceRevision: 2,
-				claimsStatus: "current",
+				claimsSourceRevision: 1,
+				claimsStatus: "stale",
 			},
 			updatedAt: new Date(),
 		})
@@ -1345,12 +1385,98 @@ try {
 	);
 	assert(
 		fixtureBScriptRerunResult.status === "passed" &&
-			fixtureBScriptRerunResult.sourceScriptRevision === 2 &&
+			fixtureBScriptRerunResult.sourceScriptRevision === 4 &&
 			reopenedAfterScriptRerun.allowed &&
 			reopenedAfterScriptRerun.reason === "FACT_LOCK_PASSED" &&
 			reopenedAfterScriptRerun.factLockRunId === fixtureBScriptRerunResult.id &&
-			reopenedAfterScriptRerun.currentScriptRevision === 2,
+			reopenedAfterScriptRerun.currentScriptRevision === 4,
 		"Current PASS did not reopen the gate over the historical PASS.",
+	);
+	const refreshedScript = (
+		await db
+			.select({ editableSnapshotJson: scriptVersion.editableSnapshotJson })
+			.from(scriptVersion)
+			.where(eq(scriptVersion.id, fixtureB.scriptVersionId))
+			.limit(1)
+	)[0]?.editableSnapshotJson as ReturnType<typeof draft> & {
+		claimsSourceRevision: number;
+		claimsStatus: string;
+	};
+	assert(
+		refreshedScript.claimsStatus === "current" &&
+			refreshedScript.claimsSourceRevision === 4 &&
+			refreshedScript.claims.length === fixtureBScriptRerunResult.claims.length,
+		"Stale rev1 claims were not refreshed to current metadata at script rev4.",
+	);
+	const editorialRefreshSnapshot = {
+		...draft(),
+		hookVariants: [
+			{
+				key: "selected",
+				text: "Hôm nay mình review nhanh mẫu chuột không dây này nhé!",
+			},
+			{ key: "benefit", text: "Một lựa chọn cho ngày dài." },
+			{ key: "problem", text: "Đang tìm chuột không dây?" },
+		],
+		selectedHookKey: "selected",
+		caption: "Tai nghe pin 20 giờ.",
+		claimsSourceRevision: 4,
+		claimsStatus: "stale" as const,
+	};
+	await db
+		.update(scriptVersion)
+		.set({
+			revision: 5,
+			editableSnapshotJson: editorialRefreshSnapshot,
+			updatedAt: new Date(),
+		})
+		.where(eq(scriptVersion.id, fixtureB.scriptVersionId));
+	const editorialRefreshRun = await prepareFactLockRun(
+		actorA,
+		{
+			projectId: fixtureB.projectId,
+			idempotencyKey: `${prefix}_editorial_refresh`,
+		},
+		config,
+	);
+	const editorialRefreshResult = await runPreparedFactLock(
+		actorA,
+		editorialRefreshRun,
+		new DeterministicTextProvider({
+			factLockSnapshot: editorialRefreshRun.inputSnapshot,
+		}),
+	);
+	const editorialClaims = await db
+		.select({
+			claimText: factLockClaim.claimText,
+			classificationStatus: factLockClaim.classificationStatus,
+		})
+		.from(factLockClaim)
+		.where(eq(factLockClaim.runId, editorialRefreshRun.id));
+	assert(
+		editorialRefreshResult.status === "passed" &&
+			editorialRefreshResult.sourceScriptRevision === 5 &&
+			editorialClaims.length === 3 &&
+			!editorialClaims.some(
+				(claim) =>
+					claim.claimText ===
+					"Hôm nay mình review nhanh mẫu chuột không dây này nhé!",
+			) &&
+			editorialClaims.every(
+				(claim) => claim.classificationStatus === "SUPPORTED",
+			),
+		"Editorial opener was persisted or factual claims were not refreshed at rev5.",
+	);
+	const editorialRefreshState = await getFactLockState(
+		actorA,
+		fixtureB.projectId,
+	);
+	assert(
+		editorialRefreshState.latestRequest?.effectiveStatus === "passed" &&
+			editorialRefreshState.latestRequest.claims.length === 3 &&
+			editorialRefreshState.currentScriptVersion?.claimsStatus === "current" &&
+			editorialRefreshState.currentScriptVersion.claimsSourceRevision === 5,
+		"Fact Lock gate/count did not reflect the refreshed factual claims only.",
 	);
 	const fixtureBFact = (
 		await db

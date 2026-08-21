@@ -1,3 +1,4 @@
+import { parseSingleJsonObject } from "../script-generation/structured-json";
 import type { ClaimOccurrence } from "../script-generation/types";
 import { scriptVersionEditableSnapshotSchema } from "../script-version/schema";
 import { evaluateFactLockPolicy } from "./policy";
@@ -8,6 +9,24 @@ import type {
 	FactLockProviderClaim,
 	FactLockStoredClaim,
 } from "./types";
+
+export type FactLockOutputIssueCode =
+	| "ROOT_NOT_JSON"
+	| "ROOT_NOT_OBJECT"
+	| "SCHEMA_VERSION_MISMATCH"
+	| "CLAIMS_SCHEMA_INVALID"
+	| "CLAIM_LIMIT_EXCEEDED"
+	| "CLAIM_OCCURRENCE_INVALID"
+	| "FACT_MAPPING_INVALID"
+	| "CLASSIFICATION_INVALID";
+
+function invalidOutput(...issueCodes: FactLockOutputIssueCode[]) {
+	return {
+		success: false as const,
+		code: "INVALID_FACT_LOCK_OUTPUT" as const,
+		issueCodes: [...new Set(issueCodes)],
+	};
+}
 
 function normalize(value: string) {
 	return value
@@ -61,38 +80,26 @@ export function validateFactLockProviderOutput(
 	raw: unknown,
 	snapshot: FactLockInputSnapshot,
 ) {
-	const parsed =
-		typeof raw === "string"
-			? (() => {
-					try {
-						return JSON.parse(raw) as unknown;
-					} catch {
-						return raw;
-					}
-				})()
-			: raw;
-	const result = factLockProviderOutputSchema.safeParse(parsed);
-	if (!result.success)
-		return {
-			success: false as const,
-			code: "INVALID_FACT_LOCK_OUTPUT" as const,
-			issues: result.error.issues,
-		};
+	const parsed = parseSingleJsonObject(raw);
+	if (!parsed.success) return invalidOutput(parsed.issueCode);
+	if (parsed.data.schemaVersion !== "fact-lock-output.v1")
+		return invalidOutput("SCHEMA_VERSION_MISMATCH");
+	const result = factLockProviderOutputSchema.safeParse(parsed.data);
+	if (!result.success) return invalidOutput("CLAIMS_SCHEMA_INVALID");
 	if (
 		snapshot.outputRules.claimLimit !== null &&
 		result.data.claims.length > snapshot.outputRules.claimLimit
-	) {
-		return {
-			success: false as const,
-			code: "INVALID_FACT_LOCK_OUTPUT" as const,
-			issues: [
-				{ message: "Fact Lock output exceeds the configured claim limit." },
-			],
-		};
-	}
+	)
+		return invalidOutput("CLAIM_LIMIT_EXCEEDED");
 	const facts = new Map(snapshot.productFacts.map((fact) => [fact.id, fact]));
 	const claims: FactLockStoredClaim[] = [];
 	for (const claim of result.data.claims) {
+		if (
+			claim.occurrence.section === "hook" &&
+			claim.occurrence.hookKey !==
+				snapshot.scriptVersion.snapshot.selectedHookKey
+		)
+			return invalidOutput("CLAIM_OCCURRENCE_INVALID");
 		const occurrenceText = extractFactLockOccurrenceText(
 			snapshot,
 			claim.occurrence,
@@ -100,17 +107,8 @@ export function validateFactLockProviderOutput(
 		if (
 			!occurrenceText ||
 			!normalize(occurrenceText).includes(normalize(claim.claimText))
-		) {
-			return {
-				success: false as const,
-				code: "INVALID_FACT_LOCK_OUTPUT" as const,
-				issues: [
-					{
-						message: `Claim ${claim.claimKey} is not an exact extraction from its occurrence.`,
-					},
-				],
-			};
-		}
+		)
+			return invalidOutput("CLAIM_OCCURRENCE_INVALID");
 		const mappedFacts = claim.factMappings.map((mapping) => {
 			const fact = facts.get(mapping.factId);
 			return fact
@@ -121,17 +119,8 @@ export function validateFactLockProviderOutput(
 					}
 				: null;
 		});
-		if (mappedFacts.some((mapping) => mapping === null)) {
-			return {
-				success: false as const,
-				code: "INVALID_FACT_LOCK_OUTPUT" as const,
-				issues: [
-					{
-						message: `Claim ${claim.claimKey} references a Fact outside the exact snapshot.`,
-					},
-				],
-			};
-		}
+		if (mappedFacts.some((mapping) => mapping === null))
+			return invalidOutput("FACT_MAPPING_INVALID");
 		const policy = evaluateFactLockPolicy(
 			claim.claimText,
 			occurrenceText,
@@ -141,41 +130,15 @@ export function validateFactLockProviderOutput(
 		if (
 			classificationStatus === "SUPPORTED" &&
 			!mappedFacts.some((mapping) => mapping?.relation === "supports")
-		) {
-			return {
-				success: false as const,
-				code: "INVALID_FACT_LOCK_OUTPUT" as const,
-				issues: [
-					{
-						message: `Supported claim ${claim.claimKey} must map to a supporting Fact.`,
-					},
-				],
-			};
-		}
+		)
+			return invalidOutput("CLASSIFICATION_INVALID");
 		if (
 			classificationStatus === "UNSUPPORTED" &&
 			mappedFacts.some((mapping) => mapping?.relation === "supports")
-		) {
-			return {
-				success: false as const,
-				code: "INVALID_FACT_LOCK_OUTPUT" as const,
-				issues: [
-					{
-						message: `Unsupported claim ${claim.claimKey} cannot map a supporting Fact.`,
-					},
-				],
-			};
-		}
+		)
+			return invalidOutput("CLASSIFICATION_INVALID");
 		if (classificationStatus === "PROHIBITED" && !policy.prohibited) {
-			return {
-				success: false as const,
-				code: "INVALID_FACT_LOCK_OUTPUT" as const,
-				issues: [
-					{
-						message: `Prohibited claim ${claim.claimKey} was not confirmed by the server policy.`,
-					},
-				],
-			};
+			return invalidOutput("CLASSIFICATION_INVALID");
 		}
 		claims.push({
 			...claim,

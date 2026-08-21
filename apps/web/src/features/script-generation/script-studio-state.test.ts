@@ -11,6 +11,7 @@ import {
 	formatEstimatedCost,
 	getEstimateViewState,
 	getLatestUsableArtifact,
+	getPersistedScriptGenerationErrorMessage,
 	getScriptGenerationErrorMessage,
 	getStudioStatus,
 	hasNewerScriptGeneration,
@@ -303,5 +304,42 @@ describe("Script Studio state", () => {
 		expect(
 			getScriptGenerationErrorMessage(new Error("raw provider body")),
 		).not.toContain("raw provider body");
+		expect(
+			getScriptGenerationErrorMessage({
+				data: { code: "AI_INVALID_OUTPUT:ROOT_NOT_JSON" },
+			}),
+		).toBe("AI trả về nội dung chưa đạt cấu trúc kịch bản.");
 	});
+
+	it("surfaces the persisted failed-request error without a mutation exception", () => {
+		const failed = makeArtifact({
+			status: "failed",
+			output: null,
+			errorCode: "AI_INVALID_OUTPUT",
+		});
+
+		expect(getPersistedScriptGenerationErrorMessage(failed)).toBe(
+			"AI trả về nội dung chưa đạt cấu trúc kịch bản.",
+		);
+		expect(
+			getPersistedScriptGenerationErrorMessage(
+				makeArtifact({
+					status: "failed",
+					output: null,
+					errorCode: "AI_OUTPUT_TRUNCATED",
+				}),
+			),
+		).toContain("chạm giới hạn độ dài");
+	});
+
+	it.each(["pending", "indeterminate", "completed", "partial"] as const)(
+		"does not treat %s as a persisted failed-request message",
+		(status) => {
+			expect(
+				getPersistedScriptGenerationErrorMessage(
+					makeArtifact({ status, errorCode: "AI_INVALID_OUTPUT" }),
+				),
+			).toBeNull();
+		},
+	);
 });

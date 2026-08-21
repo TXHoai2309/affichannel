@@ -13,8 +13,8 @@
 		"check-types": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@affichannel/core": "workspace:*",
 		"@affichannel/auth": "workspace:*",
+		"@affichannel/core": "workspace:*",
 		"@affichannel/db": "workspace:*",
 		"@affichannel/env": "workspace:*",
 		"@orpc/client": "catalog:",
@@ -22,6 +22,7 @@
 		"@orpc/server": "catalog:",
 		"@orpc/zod": "catalog:",
 		"dotenv": "catalog:",
+		"music-metadata": "^11.15.0",
 		"next": "catalog:",
 		"zod": "catalog:"
 	},

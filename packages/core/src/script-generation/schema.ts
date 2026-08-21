@@ -6,6 +6,7 @@ import {
 	SCRIPT_GENERATION_LIMITS,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
 } from "./policy";
+import { parseSingleJsonObject } from "./structured-json";
 import {
 	type ClaimOccurrence,
 	type PartialScriptDraft,
@@ -190,15 +191,6 @@ export const scriptSectionSchemas = {
 	claims: z.array(claimSchema).max(SCRIPT_GENERATION_LIMITS.maxClaims),
 } as const;
 
-function parseUnknownOutput(raw: unknown): unknown {
-	if (typeof raw !== "string") return raw;
-	try {
-		return JSON.parse(raw) as unknown;
-	} catch {
-		return undefined;
-	}
-}
-
 function byteLength(value: unknown) {
 	return new TextEncoder().encode(canonicalizeJson(value)).byteLength;
 }
@@ -231,7 +223,71 @@ export type ScriptOutputValidation = {
 	validSections: ScriptGenerationSection[];
 	invalidSections: ScriptGenerationSection[];
 	errorCode: "INVALID_GENERATION_OUTPUT" | null;
+	issueCodes: ScriptOutputValidationIssueCode[];
 };
+
+export const scriptOutputValidationIssueCodes = [
+	"ROOT_NOT_JSON",
+	"ROOT_NOT_OBJECT",
+	"SCHEMA_VERSION_MISMATCH",
+	"LANGUAGE_MISMATCH",
+	"UNKNOWN_ROOT_KEY",
+	"HOOK_SCHEMA_INVALID",
+	"VOICEOVER_SCHEMA_INVALID",
+	"SCENES_SCHEMA_INVALID",
+	"CTA_SCHEMA_INVALID",
+	"CAPTION_SCHEMA_INVALID",
+	"HASHTAGS_SCHEMA_INVALID",
+	"DISCLOSURE_SCHEMA_INVALID",
+	"CLAIMS_SCHEMA_INVALID",
+	"HOOK_KEYS_INVALID",
+	"VOICEOVER_KEYS_INVALID",
+	"SCENES_REFERENCE_INVALID",
+	"SCENES_DURATION_INVALID",
+	"CLAIM_LIMIT_EXCEEDED",
+	"CLAIM_REFERENCE_INVALID",
+	"DISCLOSURE_POLICY_INVALID",
+	"CONTENT_POLICY_INVALID",
+	"OUTPUT_TOO_LARGE",
+	"NO_VALID_SECTIONS",
+	"REPAIR_OUTPUT_INVALID",
+	"REPAIR_MERGE_INVALID",
+	"REPAIR_RESULT_INVALID",
+] as const;
+
+export type ScriptOutputValidationIssueCode =
+	(typeof scriptOutputValidationIssueCodes)[number];
+
+const sectionSchemaIssueCodes: Record<
+	ScriptGenerationSection,
+	ScriptOutputValidationIssueCode
+> = {
+	hook: "HOOK_SCHEMA_INVALID",
+	voiceover: "VOICEOVER_SCHEMA_INVALID",
+	scenes: "SCENES_SCHEMA_INVALID",
+	cta: "CTA_SCHEMA_INVALID",
+	caption: "CAPTION_SCHEMA_INVALID",
+	hashtags: "HASHTAGS_SCHEMA_INVALID",
+	disclosure: "DISCLOSURE_SCHEMA_INVALID",
+	claims: "CLAIMS_SCHEMA_INVALID",
+};
+
+function uniqueIssueCodes(codes: ScriptOutputValidationIssueCode[]) {
+	return [...new Set(codes)];
+}
+
+function failedValidation(
+	issueCodes: ScriptOutputValidationIssueCode[],
+): ScriptOutputValidation {
+	return {
+		status: "failed",
+		output: null,
+		validSections: [],
+		invalidSections: allSections(),
+		errorCode: "INVALID_GENERATION_OUTPUT",
+		issueCodes: uniqueIssueCodes(issueCodes),
+	};
+}
 
 export type ScriptDraftValidationOptions = {
 	expectedLanguage?: string;
@@ -356,17 +412,9 @@ export function validateScriptDraftOutput(
 	options: ScriptDraftValidationOptions = {},
 ): ScriptOutputValidation {
 	const resolvedOptions = resolvedValidationOptions(options);
-	const parsed = parseUnknownOutput(raw);
-	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-		return {
-			status: "failed",
-			output: null,
-			validSections: [],
-			invalidSections: allSections(),
-			errorCode: "INVALID_GENERATION_OUTPUT",
-		};
-	}
-	const root = parsed as Record<string, unknown>;
+	const parsed = parseSingleJsonObject(raw);
+	if (!parsed.success) return failedValidation([parsed.issueCode]);
+	const root = parsed.data;
 	const full = scriptDraftSchema.safeParse(root);
 	if (full.success && full.data.language === resolvedOptions.expectedLanguage) {
 		const totalDuration = full.data.scenes.reduce(
@@ -390,45 +438,30 @@ export function validateScriptDraftOutput(
 					resolvedOptions,
 				),
 		);
-		if (
-			!withinDuration ||
-			!withinClaimLimit ||
-			byteLength(full.data) > SCRIPT_GENERATION_LIMITS.maxOutputBytes
-		) {
-			return {
-				status: "failed",
-				output: null,
-				validSections: [],
-				invalidSections: allSections(),
-				errorCode: "INVALID_GENERATION_OUTPUT",
-			};
+		if (byteLength(full.data) > SCRIPT_GENERATION_LIMITS.maxOutputBytes) {
+			return failedValidation(["OUTPUT_TOO_LARGE"]);
 		}
-		if (policyValid) {
+		if (withinDuration && withinClaimLimit && policyValid) {
 			return {
 				status: "completed",
 				output: full.data,
 				validSections: allSections(),
 				invalidSections: [],
 				errorCode: null,
+				issueCodes: [],
 			};
 		}
 	}
 
 	const schemaVersion = root.schemaVersion;
 	const language = root.language;
+	if (schemaVersion !== SCRIPT_OUTPUT_SCHEMA_VERSION)
+		return failedValidation(["SCHEMA_VERSION_MISMATCH"]);
 	if (
-		schemaVersion !== SCRIPT_OUTPUT_SCHEMA_VERSION ||
 		typeof language !== "string" ||
 		language.trim() !== resolvedOptions.expectedLanguage
-	) {
-		return {
-			status: "failed",
-			output: null,
-			validSections: [],
-			invalidSections: allSections(),
-			errorCode: "INVALID_GENERATION_OUTPUT",
-		};
-	}
+	)
+		return failedValidation(["LANGUAGE_MISMATCH"]);
 
 	const output: PartialScriptDraft = {
 		schemaVersion,
@@ -436,6 +469,7 @@ export function validateScriptDraftOutput(
 	};
 	const validSections: ScriptGenerationSection[] = [];
 	const invalidSections: ScriptGenerationSection[] = [];
+	const issueCodes: ScriptOutputValidationIssueCode[] = [];
 	const allowedKeys = new Set([
 		"schemaVersion",
 		"language",
@@ -447,31 +481,32 @@ export function validateScriptDraftOutput(
 	]);
 	for (const key of Object.keys(root)) {
 		if (!allowedKeys.has(key)) {
-			return {
-				status: "failed",
-				output: null,
-				validSections: [],
-				invalidSections: allSections(),
-				errorCode: "INVALID_GENERATION_OUTPUT",
-			};
+			return failedValidation(["UNKNOWN_ROOT_KEY"]);
 		}
 	}
 	for (const section of scriptGenerationSections) {
 		const key = inputKey(section);
 		if (!(key in root)) {
 			invalidSections.push(section);
+			issueCodes.push(sectionSchemaIssueCodes[section]);
 			continue;
 		}
 		const result = scriptSectionSchemas[section].safeParse(root[key]);
 		if (result.success) {
 			if (sectionViolatesPolicy(section, result.data, resolvedOptions)) {
 				invalidSections.push(section);
+				issueCodes.push(
+					section === "disclosure"
+						? "DISCLOSURE_POLICY_INVALID"
+						: "CONTENT_POLICY_INVALID",
+				);
 				continue;
 			}
 			(output as Record<string, unknown>)[key] = result.data;
 			validSections.push(section);
 		} else {
 			invalidSections.push(section);
+			issueCodes.push(sectionSchemaIssueCodes[section]);
 		}
 	}
 
@@ -480,10 +515,12 @@ export function validateScriptDraftOutput(
 	const scenes = output.scenes;
 	if (hookVariants && !unique(hookVariants.map((variant) => variant.key))) {
 		removeValidSection(validSections, invalidSections, "hook");
+		issueCodes.push("HOOK_KEYS_INVALID");
 		delete output.hookVariants;
 	}
 	if (voiceover && !unique(voiceover.map((segment) => segment.key))) {
 		removeValidSection(validSections, invalidSections, "voiceover");
+		issueCodes.push("VOICEOVER_KEYS_INVALID");
 		delete output.voiceoverSegments;
 	}
 	if (scenes) {
@@ -506,6 +543,7 @@ export function validateScriptDraftOutput(
 				))
 		) {
 			removeValidSection(validSections, invalidSections, "scenes");
+			issueCodes.push("SCENES_REFERENCE_INVALID");
 			delete output.scenes;
 		}
 	}
@@ -515,6 +553,7 @@ export function validateScriptDraftOutput(
 		output.claims.length > claimLimit
 	) {
 		removeValidSection(validSections, invalidSections, "claims");
+		issueCodes.push("CLAIM_LIMIT_EXCEEDED");
 		delete output.claims;
 	}
 	if (output.claims) {
@@ -540,6 +579,7 @@ export function validateScriptDraftOutput(
 		});
 		if (!claimTargetValid) {
 			removeValidSection(validSections, invalidSections, "claims");
+			issueCodes.push("CLAIM_REFERENCE_INVALID");
 			delete output.claims;
 		}
 	}
@@ -553,17 +593,12 @@ export function validateScriptDraftOutput(
 			targetDurationSeconds * SCRIPT_GENERATION_LIMITS.durationToleranceRatio
 		) {
 			removeValidSection(validSections, invalidSections, "scenes");
+			issueCodes.push("SCENES_DURATION_INVALID");
 			delete output.scenes;
 		}
 	}
 	if (byteLength(output) > SCRIPT_GENERATION_LIMITS.maxOutputBytes) {
-		return {
-			status: "failed",
-			output: null,
-			validSections: [],
-			invalidSections: allSections(),
-			errorCode: "INVALID_GENERATION_OUTPUT",
-		};
+		return failedValidation(["OUTPUT_TOO_LARGE"]);
 	}
 	validSections.sort(
 		(a, b) =>
@@ -573,17 +608,21 @@ export function validateScriptDraftOutput(
 		(a, b) =>
 			scriptGenerationSections.indexOf(a) - scriptGenerationSections.indexOf(b),
 	);
+	const status =
+		validSections.length === 0
+			? "failed"
+			: validSections.length === scriptGenerationSections.length
+				? "completed"
+				: "partial";
+	if (status === "failed" && issueCodes.length === 0)
+		issueCodes.push("NO_VALID_SECTIONS");
 	return {
-		status:
-			validSections.length === 0
-				? "failed"
-				: validSections.length === scriptGenerationSections.length
-					? "completed"
-					: "partial",
+		status,
 		output: validSections.length === 0 ? null : output,
 		validSections,
 		invalidSections,
 		errorCode: validSections.length === 0 ? "INVALID_GENERATION_OUTPUT" : null,
+		issueCodes: uniqueIssueCodes(issueCodes),
 	};
 }
 
@@ -599,10 +638,9 @@ export function validateRepairScriptOutput(
 	options: ScriptDraftValidationOptions = {},
 ): RepairOutputValidation {
 	const resolvedOptions = resolvedValidationOptions(options);
-	const parsed = parseUnknownOutput(raw);
-	if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
-		return { success: false, output: null };
-	const root = parsed as Record<string, unknown>;
+	const parsed = parseSingleJsonObject(raw);
+	if (!parsed.success) return { success: false, output: null };
+	const root = parsed.data;
 	if (
 		root.schemaVersion !== SCRIPT_OUTPUT_SCHEMA_VERSION ||
 		typeof root.language !== "string" ||

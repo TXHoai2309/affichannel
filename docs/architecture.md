@@ -350,6 +350,53 @@ flag; flag được giữ lại trước dotenv override trong env loader. Đây
 không phải production fallback, không gọi relay trả phí và không persist audio.
 Chi tiết tại `docs/aff-us-011-phase-3-voice-studio.md`.
 
+### 12.2. Kiến trúc voiceover artifact của AFF-US-012
+
+AFF-US-012 dùng `VoiceSegmentArtifact` cho từng lần generation TTS. Artifact pin
+đúng current ScriptVersion ID/revision, segment key/text hash và VoiceConfig
+revision cùng provider/voice/language/speed. Một logical segment có nhiều attempt
+history; historical artifact không bị mutate thành `stale`. `stale`,
+`latestRequest`, `latestUsableArtifact` và effective status là read model được
+derive bằng cách so full fingerprint với current source/config.
+
+Generation mở rộng `TtsProvider` bằng `generateSegment()` nhưng giữ preview
+contract hiện tại. Client chỉ gửi project, segment key và idempotency key; server
+tự resolve text/config và tạo request hash. Transaction tạo pending và transaction
+finalize tách khỏi provider/storage network call. Timeout, uncertain delivery,
+invalid audio, duration metadata, storage và persistence có error semantics riêng;
+không blind retry request có thể đã tính phí.
+
+Audio segment đi qua `VoiceAudioStorage` với local implementation cho dev/test và
+private R2 cho production. Database chỉ lưu metadata, checksum và server-generated
+storage key. Protected stream phải authorize actor/workspace/project/artifact và
+không mở arbitrary local path hoặc public R2 object. Server parse MP3 bytes để lấy
+`durationMs` authoritative; browser duration chỉ phục vụ playback.
+
+Workflow vẫn dùng `project.currentStepKey` và `project_step_status` hiện có. Voice
+readiness và total duration chỉ tính artifact completed khớp current full
+fingerprint, sau Fact Lock PASS và current VoiceConfig. Chi tiết contract/index/
+retry/race/test tại `docs/aff-us-012-phase-0-contract-decisions.md` và DEC-024.
+Phase 0 chưa tạo schema, migration, storage adapter, runtime provider, API hoặc UI.
+
+### 12.3. AFF-US-012 Phase 1 foundation
+
+Phase 1 đã thêm `voice_segment_artifact` với source/config fingerprint đầy đủ,
+workspace idempotency, partial unique pending protection và completed metadata
+checks. Artifact history không bị mutate thành stale; current/stale/latest read
+model dùng core utility để so fingerprint.
+
+Audio foundation dùng `VoiceAudioStorage`: local filesystem cho dev/test và R2
+adapter qua injected S3-compatible object client. Storage key versioned là
+`voice/v1/{workspaceId}/{projectId}/{artifactId}.mp3`; database chỉ lưu metadata,
+checksum và key. `music-metadata` parse MP3 bytes server-side để tạo duration
+authoritative. Policy env gồm max 4000 code points, 10 MiB, timeout 60 giây và
+pending lease 5 phút.
+
+Migration `0016_gifted_microbe.sql` đã apply theo migration procedure hiện tại.
+Phase 1 chưa implement provider generation, protected stream, API, UI hoặc
+workflow mutation. Chi tiết tại
+`docs/aff-us-012-phase-1-foundation.md`.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

@@ -6,8 +6,16 @@ dotenv.config({
 	path: resolve(__dirname, ".env"),
 });
 
-// Authenticated E2E must never call paid TTS. The server registry sees this
-// explicit test-only flag and returns the deterministic adapter instead.
+if (process.env.E2E_BASE_URL?.trim()) {
+	throw new Error(
+		"E2E_BASE_URL is disabled: authenticated E2E must start its own deterministic server.",
+	);
+}
+
+// Authenticated E2E must never call paid TTS. Playwright owns the server,
+// forces a non-production environment, and passes this explicit test-only flag
+// through the child process environment.
+Object.assign(process.env, { NODE_ENV: "development" });
 process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC = "1";
 
 const e2eEmail = process.env.E2E_AUTH_EMAIL?.trim();
@@ -29,15 +37,13 @@ export default defineConfig({
 	workers: 1,
 	reporter: process.env.CI ? "line" : "list",
 	use: {
-		baseURL: process.env.E2E_BASE_URL ?? "http://localhost:3002",
+		baseURL: "http://localhost:3002",
 		trace: "retain-on-failure",
 	},
-	webServer: process.env.E2E_BASE_URL
-		? undefined
-		: {
-				command: "pnpm dev",
-				url: "http://localhost:3002",
-				reuseExistingServer: !process.env.CI,
-				timeout: 120_000,
-			},
+	webServer: {
+		command: "pnpm dev",
+		url: "http://localhost:3002",
+		reuseExistingServer: false,
+		timeout: 120_000,
+	},
 });

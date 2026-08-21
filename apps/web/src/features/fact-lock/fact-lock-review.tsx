@@ -313,6 +313,7 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 		);
 
 	const latestStatus = model.latestRequest?.effectiveStatus ?? null;
+	const latestErrorCode = model.latestRequest?.errorCode ?? null;
 	const hasNoRun = model.latestRequest === null;
 	const needsFacts =
 		model.latestRequest?.errorCode === "FACT_LOCK_NO_USABLE_FACTS" ||
@@ -409,8 +410,17 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 						<div>
 							<p className="font-medium">{statusMessage}</p>
 							<p className="mt-1 text-sm opacity-80">
-								Bạn có thể giữ màn hình này mở để trạng thái tự cập nhật.
+								{latestStatus === "pending"
+									? "Bạn có thể giữ màn hình này mở để trạng thái tự cập nhật."
+									: getFactLockErrorMessage({
+											message: latestErrorCode ?? "FACT_LOCK_ERROR",
+										})}
 							</p>
+							{latestErrorCode && latestStatus !== "pending" && (
+								<code className="mt-2 block break-all text-xs opacity-70">
+									{latestErrorCode}
+								</code>
+							)}
 						</div>
 					</CardContent>
 				</Card>

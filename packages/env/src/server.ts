@@ -72,6 +72,40 @@ export const env = createEnv({
 			.positive()
 			.max(2_000)
 			.default(500),
+		VOICE_AUDIO_STORAGE_PROVIDER: z.enum(["local", "r2"]).default("local"),
+		VOICE_AUDIO_LOCAL_ROOT: z
+			.string()
+			.trim()
+			.min(1)
+			.default(".data/voice-audio"),
+		VOICE_SEGMENT_MAX_CHARS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(10_000)
+			.default(4_000),
+		VOICE_SEGMENT_MAX_AUDIO_BYTES: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(100 * 1024 * 1024)
+			.default(10 * 1024 * 1024),
+		VOICE_SEGMENT_TIMEOUT_MS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(900_000)
+			.default(60_000),
+		VOICE_SEGMENT_PENDING_LEASE_MS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(86_400_000)
+			.default(5 * 60_000),
+		R2_ENDPOINT: z.url().optional(),
+		R2_BUCKET: z.string().trim().min(1).optional(),
+		R2_ACCESS_KEY_ID: z.string().trim().min(1).optional(),
+		R2_SECRET_ACCESS_KEY: z.string().trim().min(1).optional(),
 		AFFICHANNEL_LIVE_TTS_SMOKE: z.enum(["0", "1"]).default("0"),
 		AFFICHANNEL_E2E_TTS_DETERMINISTIC: z.enum(["0", "1"]).default("0"),
 		APIKEY_FUN_API_KEY: z.string().trim().min(1).optional(),

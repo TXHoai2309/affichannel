@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
 	filterFactLockClaims,
 	getFactLockActionState,
+	getFactLockErrorMessage,
 	getFactLockOccurrenceLabel,
 	getFactLockSummary,
 } from "./fact-lock-review-state";
@@ -67,5 +68,16 @@ describe("Fact Lock Review state", () => {
 		expect(
 			getFactLockOccurrenceLabel({ section: "scene", sceneOrder: 2 }),
 		).toBe("Cảnh · 2");
+	});
+
+	it("maps persisted diagnostic suffixes to a safe user-facing message", () => {
+		expect(
+			getFactLockErrorMessage({
+				message: "INVALID_FACT_LOCK_OUTPUT:CLAIM_OCCURRENCE_INVALID",
+			}),
+		).toContain("không đúng contract Fact Lock");
+		expect(
+			getFactLockErrorMessage({ message: "AI_OUTPUT_TRUNCATED" }),
+		).toContain("bị cắt");
 	});
 });

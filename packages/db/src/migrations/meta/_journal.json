@@ -113,6 +113,13 @@
       "when": 1787116555444,
       "tag": "0015_last_gunslinger",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1787286551711,
+      "tag": "0016_gifted_microbe",
+      "breakpoints": true
     }
   ]
 }

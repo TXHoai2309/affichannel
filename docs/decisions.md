@@ -1,10 +1,59 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-19
+- Cập nhật lần cuối: 2026-08-21
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
+
+## DEC-024 — AFF-US-012 VoiceSegment artifact và generation contract
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-21
+
+### Bối cảnh
+
+AFF-US-011 đã khóa VoiceConfig và preview tạm thời nhưng chưa có audio artifact.
+AFF-US-012 cần tạo TTS theo từng voiceover segment, giữ lịch sử generation,
+không gọi lại một request có thể đã tính phí và không để audio của ScriptVersion
+hoặc VoiceConfig cũ làm unlock workflow hiện tại.
+
+### Quyết định đề xuất
+
+- `VoiceSegmentArtifact` là một immutable generation attempt; một logical segment
+  có nhiều attempt/history. Chỉ lifecycle của pending attempt được chuyển một
+  chiều sang `completed`, `failed` hoặc `indeterminate`; không mutate history để
+  gắn `stale`.
+- Fingerprint server-owned gồm workspace/project, ScriptVersion ID/revision,
+  segment key/text hash, VoiceConfig revision và provider/voice/language/speed.
+  `requestHash` được server tính từ fingerprint; client chỉ gửi project, segment
+  key và idempotency key.
+- Cùng idempotency key + request hash trả cùng attempt; cùng key + khác hash là
+  conflict. Failed/indeterminate và explicit regenerate bắt buộc key mới. Pending
+  cùng request hash được coalesce bằng partial unique index để chống duplicate
+  provider call nhưng không chặn historical retry/regenerate.
+- Mở rộng `TtsProvider` bằng `generateSegment()` và giữ `preview()` nguyên vẹn.
+  Provider trả audio/mpeg và duration nếu có chỉ là advisory; server parse MP3
+  bytes và persist duration authoritative.
+- Audio dùng `VoiceAudioStorage` abstraction; dev/test local, production private
+  R2. Database chỉ lưu metadata/object key. Protected stream kiểm tra actor,
+  workspace, project, artifact và storage-key ownership; không nhận arbitrary path.
+- Current/stale, `latestRequest`, `latestUsableArtifact`, effective status và
+  total duration đều là server read model. `stale` không phải persisted status.
+- Workflow tiếp tục dùng `project.currentStepKey` và `project_step_status`; không
+  tạo status source of truth mới hoặc generic workflow mutation. Voice readiness
+  chỉ đạt khi Fact Lock PASS, config current và mọi segment current có usable
+  artifact khớp đầy đủ fingerprint.
+- Provider/network uncertainty, invalid audio, metadata parse, storage và
+  persistence failure có error taxonomy riêng; không blind retry.
+
+### Hệ quả
+
+Chi tiết audit, schema/index đề xuất, race semantics, storage contract, test plan
+và Phase 1–4 nằm tại
+`docs/aff-us-012-phase-0-contract-decisions.md`. Phase 0 không tạo migration,
+schema, runtime, API, UI hoặc paid TTS. Các giá trị giới hạn segment, duration
+parser, R2 config và reconciliation cần được review trước Phase 1.
 
 ## DEC-023 — AFF-US-011 TTS provider và Voice Studio Phase 0 contract
 

@@ -59,6 +59,7 @@ import {
 	formatOccurrence,
 	getEstimateViewState,
 	getLatestUsableArtifact,
+	getPersistedScriptGenerationErrorMessage,
 	getScriptGenerationErrorMessage,
 	getStudioStatus,
 	hasNewerScriptGeneration,
@@ -577,6 +578,8 @@ function RequestNotice({
 	actionError: string | null;
 }) {
 	const request = model.latestRequest;
+	const persistedErrorMessage =
+		getPersistedScriptGenerationErrorMessage(request);
 	if (actionError) {
 		return (
 			<div
@@ -622,8 +625,8 @@ function RequestNotice({
 		>
 			<p className="font-semibold">Không thể tạo kịch bản.</p>
 			<p className="mt-1">
-				Yêu cầu mới nhất chưa được hoàn tất. Bạn có thể kiểm tra context và tạo
-				một yêu cầu mới.
+				{persistedErrorMessage ??
+					"Yêu cầu mới nhất chưa được hoàn tất. Bạn có thể kiểm tra context và tạo một yêu cầu mới."}
 			</p>
 		</div>
 	);
