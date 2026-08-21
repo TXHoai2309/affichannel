@@ -8,6 +8,7 @@ import {
 } from "@affichannel/api/services/voice-segment-runtime-service";
 import {
 	deriveVoiceSegmentReadModel,
+	FactLockError,
 	type VoiceSegmentArtifact,
 	VoiceSegmentError,
 	type VoiceSegmentFingerprint,
@@ -94,7 +95,10 @@ function harness(
 		providerError?: unknown;
 		storagePutError?: unknown;
 		completeError?: unknown;
+		completeThenThrow?: boolean;
 		deleteError?: unknown;
+		findByIdError?: unknown;
+		assertFactLockPassed?: () => Promise<void>;
 	} = {},
 ) {
 	const rows: VoiceSegmentArtifact[] = [];
@@ -146,6 +150,10 @@ function harness(
 	const repository: VoiceSegmentRepositoryDependencies = {
 		findByIdempotencyKey: async (_actor, idempotencyKey) =>
 			rows.find((row) => row.idempotencyKey === idempotencyKey),
+		findById: async (_actor, artifactId) => {
+			if (options.findByIdError) throw options.findByIdError;
+			return rows.find((row) => row.id === artifactId);
+		},
 		findPendingByRequestHash: async (_actor, projectId, requestHash) =>
 			rows.find(
 				(row) =>
@@ -181,6 +189,7 @@ function harness(
 				durationMs: input.durationMs,
 				finishedAt: new Date(),
 			});
+			if (options.completeThenThrow) throw new Error("commit response lost");
 			return row;
 		},
 		fail: async (input) => {
@@ -231,6 +240,9 @@ function harness(
 			storage,
 			prepare: async () => prepared,
 			readCurrent: async () => prepared,
+			afterPending: async () => undefined,
+			assertFactLockPassed:
+				options.assertFactLockPassed ?? (async () => undefined),
 			repository,
 			now: () => new Date("2026-08-21T00:10:00.000Z"),
 		},
@@ -311,6 +323,93 @@ describe("voice segment runtime", () => {
 		expect(h.generate).toHaveBeenCalledTimes(1);
 	});
 
+	it.each([
+		["completed", {}] as const,
+		[
+			"failed",
+			{
+				providerError: new TtsProviderError(
+					"TTS_PROVIDER_FAILED",
+					"known rejection",
+				),
+			},
+		] as const,
+		[
+			"indeterminate",
+			{
+				providerError: new TtsProviderError(
+					"TTS_TIMEOUT_UNCERTAIN",
+					"uncertain delivery",
+					{ uncertain: true },
+				),
+			},
+		] as const,
+	])(
+		"allows a new key to regenerate after terminal %s",
+		async (_status, options) => {
+			const h = harness(options);
+			const firstKey = `terminal-${_status}-1`;
+			const secondKey = `terminal-${_status}-2`;
+			const firstRequest = generateVoiceSegment(
+				actor,
+				{
+					projectId: prepared.projectId,
+					segmentKey: prepared.segmentKey,
+					idempotencyKey: firstKey,
+				},
+				h.dependencies,
+			);
+			if (_status === "completed") {
+				await expect(firstRequest).resolves.toBeDefined();
+			} else {
+				await expect(firstRequest).rejects.toBeDefined();
+			}
+			const secondRequest = generateVoiceSegment(
+				actor,
+				{
+					projectId: prepared.projectId,
+					segmentKey: prepared.segmentKey,
+					idempotencyKey: secondKey,
+				},
+				h.dependencies,
+			);
+			if (_status === "completed") {
+				await expect(secondRequest).resolves.toBeDefined();
+			} else {
+				await expect(secondRequest).rejects.toBeDefined();
+			}
+
+			expect(h.generate).toHaveBeenCalledTimes(2);
+			expect(h.rows).toHaveLength(2);
+		},
+	);
+
+	it("coalesces a pending artifact for a new key without a second provider call", async () => {
+		const h = harness();
+		h.rows.push(
+			pendingArtifact({
+				id: "pending-new-key",
+				idempotencyKey: "pending-original-1",
+				requestHash: hashVoiceSegmentRequest(prepared.fingerprint),
+				createdAt: new Date("2026-08-21T00:09:30.000Z"),
+			}),
+		);
+
+		const result = await generateVoiceSegment(
+			actor,
+			{
+				projectId: prepared.projectId,
+				segmentKey: prepared.segmentKey,
+				idempotencyKey: "pending-retry-key-1",
+			},
+			h.dependencies,
+		);
+
+		expect(result.artifact.id).toBe("pending-new-key");
+		expect(h.generate).not.toHaveBeenCalled();
+		expect(h.rows).toHaveLength(1);
+	});
+
 	it("handles the partial unique insert race with one provider call", async () => {
 		const h = harness();
 		let insertCalls = 0;
@@ -370,6 +469,41 @@ describe("voice segment runtime", () => {
 		expect(h.generate).toHaveBeenCalledTimes(1);
 	});
 
+	it("rechecks Fact Lock after Tx A when Product Fact becomes stale", async () => {
+		let productFactCurrent = true;
+		const h = harness({
+			assertFactLockPassed: async () => {
+				if (!productFactCurrent) {
+					throw new FactLockError(
+						"FACT_LOCK_REQUIRED",
+						"Fact Lock stale after Product Fact invalidation.",
+						{ reason: "STALE_FACTS" },
+					);
+				}
+			},
+		});
+		h.dependencies.afterPending = async () => {
+			productFactCurrent = false;
+		};
+
+		await expect(
+			generateVoiceSegment(
+				actor,
+				{
+					projectId: prepared.projectId,
+					segmentKey: prepared.segmentKey,
+					idempotencyKey: "fact-stale-boundary-1",
+				},
+				h.dependencies,
+			),
+		).rejects.toMatchObject({ code: "FACT_LOCK_REQUIRED" });
+		expect(h.generate).not.toHaveBeenCalled();
+		expect(h.rows[0]).toMatchObject({
+			status: "failed",
+			errorCode: "VOICE_SEGMENT_CONTEXT_STALE",
+		});
+	});
+
 	it("marks timeout uncertainty and invalid MP3 as non-retryable artifact states", async () => {
 		const timeout = harness({
 			providerError: new TtsProviderError("TTS_TIMEOUT_UNCERTAIN", "timeout", {
@@ -412,7 +546,7 @@ describe("voice segment runtime", () => {
 		expect(invalid.put).not.toHaveBeenCalled();
 	});
 
-	it("does not retry provider after storage or finalize failure and cleans up finalized orphan", async () => {
+	it("recovers ambiguous finalize and cleans only known non-completed artifacts", async () => {
 		const storageFailure = harness({
 			storagePutError: new VoiceSegmentError("TTS_STORAGE_FAILED"),
 		});
@@ -446,6 +580,62 @@ describe("voice segment runtime", () => {
 		).rejects.toMatchObject({ code: "TTS_PERSISTENCE_FAILED" });
 		expect(finalizeFailure.generate).toHaveBeenCalledTimes(1);
 		expect(finalizeFailure.remove).toHaveBeenCalledTimes(1);
+
+		const committedThenLost = harness({ completeThenThrow: true });
+		const recovered = await generateVoiceSegment(
+			actor,
+			{
+				projectId: "project-1",
+				segmentKey: "intro",
+				idempotencyKey: "idem-finalize-recovered-1",
+			},
+			committedThenLost.dependencies,
+		);
+		expect(recovered.artifact.status).toBe("completed");
+		expect(committedThenLost.remove).not.toHaveBeenCalled();
+		expect(committedThenLost.generate).toHaveBeenCalledTimes(1);
+
+		const unknownState = harness({
+			completeError: new Error("db response unavailable"),
+			findByIdError: new Error("database unreachable"),
+		});
+		await expect(
+			generateVoiceSegment(
+				actor,
+				{
+					projectId: "project-1",
+					segmentKey: "intro",
+					idempotencyKey: "idem-finalize-unknown-1",
+				},
+				unknownState.dependencies,
+			),
+		).rejects.toMatchObject({
+			code: "TTS_PERSISTENCE_FAILED",
+			metadata: { storageRetained: true, persistenceState: "unknown" },
+		});
+		expect(unknownState.remove).not.toHaveBeenCalled();
+		expect(unknownState.generate).toHaveBeenCalledTimes(1);
+
+		const cleanupFailure = harness({
+			completeError: new Error("db unavailable"),
+			deleteError: new Error("storage unavailable"),
+		});
+		await expect(
+			generateVoiceSegment(
+				actor,
+				{
+					projectId: "project-1",
+					segmentKey: "intro",
+					idempotencyKey: "idem-finalize-cleanup-1",
+				},
+				cleanupFailure.dependencies,
+			),
+		).rejects.toMatchObject({
+			code: "TTS_PERSISTENCE_FAILED",
+			metadata: { cleanupFailed: true, storageRetained: false },
+		});
+		expect(cleanupFailure.remove).toHaveBeenCalledTimes(1);
+		expect(cleanupFailure.generate).toHaveBeenCalledTimes(1);
 	});
 
 	it("reconciles expired pending without automatic provider retry", async () => {

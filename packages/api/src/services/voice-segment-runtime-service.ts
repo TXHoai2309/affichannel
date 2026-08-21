@@ -34,6 +34,7 @@ import {
 	completeVoiceSegmentArtifact,
 	failVoiceSegmentArtifact,
 	findPendingVoiceSegmentArtifactByRequestHash,
+	findVoiceSegmentArtifactById,
 	findVoiceSegmentArtifactByIdempotencyKey,
 	findVoiceSegmentArtifactByRequestHash,
 	getVoiceSegmentReadModel,
@@ -65,6 +66,7 @@ export type VoiceSegmentGenerateResult = {
 
 export type VoiceSegmentRepositoryDependencies = {
 	findByIdempotencyKey: typeof findVoiceSegmentArtifactByIdempotencyKey;
+	findById: typeof findVoiceSegmentArtifactById;
 	findPendingByRequestHash: typeof findPendingVoiceSegmentArtifactByRequestHash;
 	findByRequestHash: typeof findVoiceSegmentArtifactByRequestHash;
 	insertPendingAtomic: typeof insertPendingVoiceSegmentArtifactAtomic;
@@ -89,6 +91,11 @@ export type VoiceSegmentRuntimeDependencies = {
 		segmentKey: string,
 	) => Promise<PreparedVoiceSegmentRequest>;
 	beforeInsert?: () => Promise<void>;
+	afterPending?: (artifact: VoiceSegmentArtifact) => Promise<void>;
+	assertFactLockPassed?: (
+		actor: WorkspaceActor,
+		projectId: string,
+	) => Promise<unknown>;
 	now?: () => Date;
 	repository?: Partial<VoiceSegmentRepositoryDependencies>;
 };
@@ -282,9 +289,6 @@ async function coalescedArtifact(
 	const findPendingByRequestHash =
 		dependencies.repository?.findPendingByRequestHash ??
 		findPendingVoiceSegmentArtifactByRequestHash;
-	const findByRequestHash =
-		dependencies.repository?.findByRequestHash ??
-		findVoiceSegmentArtifactByRequestHash;
 	const existing = await findByIdempotencyKey(actor, idempotencyKey);
 	if (existing) {
 		if (existing.requestHash !== requestHash) {
@@ -300,7 +304,7 @@ async function coalescedArtifact(
 		prepared.projectId,
 		requestHash,
 	);
-	return pending ?? findByRequestHash(actor, prepared.projectId, requestHash);
+	return pending;
 }
 
 export async function generateVoiceSegment(
@@ -395,6 +399,45 @@ export async function generateVoiceSegment(
 			);
 			return { artifact: raced, readModel: state.readModel };
 		}
+		// A recognized pending unique race may have completed before the loser
+		// re-reads. Only this race-recovery path may use terminal request-hash lookup;
+		// normal new-key requests must be allowed to regenerate after terminal states.
+		const findByRequestHash =
+			dependencies.repository?.findByRequestHash ??
+			findVoiceSegmentArtifactByRequestHash;
+		const raceWinner = await findByRequestHash(
+			actor,
+			prepared.projectId,
+			requestHash,
+		);
+		if (raceWinner) {
+			const state = await currentState(
+				actor,
+				input.projectId,
+				input.segmentKey,
+				dependencies,
+			);
+			return { artifact: raceWinner, readModel: state.readModel };
+		}
+		throw error;
+	}
+
+	try {
+		await dependencies.afterPending?.(pending);
+		const assertFactLockPassed =
+			dependencies.assertFactLockPassed ??
+			((gateActor: WorkspaceActor, gateProjectId: string) =>
+				FactLockGate.assertPassed(gateActor, gateProjectId));
+		await assertFactLockPassed(actor, input.projectId);
+	} catch (error) {
+		await markArtifactFailure(
+			actor,
+			pending.id,
+			"failed",
+			"VOICE_SEGMENT_CONTEXT_STALE",
+			null,
+			dependencies.repository,
+		);
 		throw error;
 	}
 
@@ -470,23 +513,81 @@ export async function generateVoiceSegment(
 	}
 
 	let finalized: VoiceSegmentArtifact | undefined;
+	const finalizeInput = {
+		actor,
+		artifactId: pending.id,
+		providerRequestId: providerResult.providerRequestId,
+		storageProvider: storage.provider,
+		storageKey,
+		mimeType: "audio/mpeg" as const,
+		byteSize: providerResult.audio.byteLength,
+		checksum,
+		durationMs,
+	};
 	try {
 		const complete =
 			dependencies.repository?.complete ?? completeVoiceSegmentArtifact;
-		finalized = await complete({
-			actor,
-			artifactId: pending.id,
-			providerRequestId: providerResult.providerRequestId,
-			storageProvider: storage.provider,
-			storageKey,
-			mimeType: "audio/mpeg",
-			byteSize: providerResult.audio.byteLength,
-			checksum,
-			durationMs,
-		});
+		finalized = await complete(finalizeInput);
 		if (!finalized)
 			throw new Error("Voice segment artifact finalize returned no row.");
 	} catch {
+		const findById =
+			dependencies.repository?.findById ?? findVoiceSegmentArtifactById;
+		let persisted: VoiceSegmentArtifact | undefined;
+		let persistenceStateKnown = false;
+		try {
+			persisted = await findById(actor, pending.id);
+			persistenceStateKnown = true;
+		} catch {
+			persistenceStateKnown = false;
+		}
+
+		if (persisted?.status === "completed") {
+			const matchesFinalize =
+				persisted.providerRequestId === finalizeInput.providerRequestId &&
+				persisted.storageProvider === finalizeInput.storageProvider &&
+				persisted.storageKey === finalizeInput.storageKey &&
+				persisted.mimeType === finalizeInput.mimeType &&
+				persisted.byteSize === finalizeInput.byteSize &&
+				persisted.checksum === finalizeInput.checksum &&
+				persisted.durationMs === finalizeInput.durationMs;
+			if (matchesFinalize) {
+				finalized = persisted;
+			} else {
+				console.warn("voice_segment_finalize_state_mismatch", {
+					artifactId: pending.id,
+					storageProvider: storage.provider,
+					storageRetained: true,
+				});
+				throw new VoiceSegmentError(
+					"TTS_PERSISTENCE_FAILED",
+					"Metadata voice segment đã hoàn tất nhưng không khớp audio hiện tại.",
+					{ storageRetained: true, persistenceState: "completed_mismatch" },
+				);
+			}
+		} else if (!persistenceStateKnown || !persisted) {
+			console.warn("voice_segment_finalize_state_unknown", {
+				artifactId: pending.id,
+				storageProvider: storage.provider,
+				storageRetained: true,
+			});
+			throw new VoiceSegmentError(
+				"TTS_PERSISTENCE_FAILED",
+				"Không xác định được trạng thái lưu metadata voice segment; audio được giữ lại để reconciliation.",
+				{ storageRetained: true, persistenceState: "unknown" },
+			);
+		}
+
+		if (finalized) {
+			const state = await currentState(
+				actor,
+				input.projectId,
+				input.segmentKey,
+				dependencies,
+			);
+			return { artifact: finalized, readModel: state.readModel };
+		}
+
 		let cleanupFailed = false;
 		try {
 			await storage.delete(storageKey);
@@ -501,7 +602,12 @@ export async function generateVoiceSegment(
 		throw new VoiceSegmentError(
 			"TTS_PERSISTENCE_FAILED",
 			"Không thể hoàn tất lưu metadata voice segment; provider không được gọi lại.",
-			{ cleanupFailed, storageProvider: storage.provider },
+			{
+				cleanupFailed,
+				storageProvider: storage.provider,
+				storageRetained: false,
+				persistenceState: persisted?.status ?? "non_completed",
+			},
 		);
 	}
 

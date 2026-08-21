@@ -137,6 +137,7 @@ const dependencies = {
 	storage,
 	prepare: async () => prepared,
 	readCurrent: async () => prepared,
+	assertFactLockPassed: async () => undefined,
 	beforeInsert: async () => {
 		beforeInsertCalls += 1;
 		if (beforeInsertCalls === 2) resolveBothBeforeInsert();
@@ -256,7 +257,7 @@ try {
 		`Server MP3 duration was not authoritative: ${first.artifact.durationMs}.`,
 	);
 
-	const reused = await request("runtime-race-a-1");
+	const reused = await request(first.artifact.idempotencyKey);
 	assert(reused.artifact.id === first.artifact.id, "Idempotency reuse failed.");
 	assert(
 		providerCallCount === 1,

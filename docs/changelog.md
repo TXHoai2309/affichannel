@@ -25,6 +25,10 @@ sử dụng Semantic Versioning.
   validation/duration, local/private-R2 storage registry, protected state/audio
   APIs, ETag/304 và persistence cleanup. Chưa có UI/player/waveform/workflow
   mutation; không gọi live APIKEY.FUN/R2 và không tạo migration `0017`.
+- AFF-US-012 Phase 2 hardening: terminal artifact không còn chặn retry bằng key mới,
+  thêm Fact Lock recheck sát paid-call boundary, recovery khi finalize response
+  ambiguous và giữ object khi DB outcome không xác định; invalid MIME/empty/oversize
+  map về `TTS_INVALID_AUDIO`.
 - AFF-US-011 Phase 0: khóa contract TTS APIKEY.FUN → Grok/xAI qua `POST /v1/tts`,
   server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
   transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có

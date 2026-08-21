@@ -4,6 +4,7 @@ import {
 	listVoicePresets,
 	TTS_PROVIDER,
 	VoiceConfigError,
+	VoiceSegmentError,
 	validateVoiceConfigFields,
 } from "@affichannel/core";
 
@@ -96,6 +97,10 @@ function providerSegmentFailure(
 	return new TtsProviderError("TTS_PROVIDER_FAILED", message, {
 		providerRequestId,
 	});
+}
+
+function invalidSegmentAudio(message: string) {
+	return new VoiceSegmentError("TTS_INVALID_AUDIO", message);
 }
 
 /** Thin server-only adapter. It performs one request and never retries. */
@@ -217,9 +222,8 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 					}
 					throw previewFailed("TTS provider trả về MIME type không hợp lệ.");
 				}
-				throw providerSegmentFailure(
+				throw invalidSegmentAudio(
 					"TTS provider trả về MIME type không hợp lệ.",
-					providerRequestId,
 				);
 			}
 
@@ -228,9 +232,8 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 				if (mode === "preview") {
 					throw previewFailed("Audio preview vượt quá kích thước cho phép.");
 				}
-				throw providerSegmentFailure(
+				throw invalidSegmentAudio(
 					"Audio segment vượt quá kích thước cho phép.",
-					providerRequestId,
 				);
 			}
 
@@ -264,9 +267,8 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 						"TTS provider trả về audio preview không hợp lệ.",
 					);
 				}
-				throw providerSegmentFailure(
+				throw invalidSegmentAudio(
 					"TTS provider trả về audio segment không hợp lệ.",
-					providerRequestId,
 				);
 			}
 
@@ -279,6 +281,7 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 		} catch (error) {
 			if (
 				error instanceof VoiceConfigError ||
+				error instanceof VoiceSegmentError ||
 				error instanceof TtsProviderError
 			) {
 				throw error;

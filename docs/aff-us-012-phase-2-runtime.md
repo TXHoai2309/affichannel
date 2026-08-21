@@ -141,17 +141,35 @@ Artifact cũ vẫn giữ trong history khi ScriptVersion revision hoặc VoiceCo
 revision đổi trong lúc provider chạy. Read model current mới không chọn artifact
 cũ và không mở khóa workflow. Không cancel, delete hoặc rewrite fingerprint.
 
+Acceptance hardening bổ sung:
+
+- `findByRequestHash` không còn short-circuit request key mới sau terminal
+  `completed`, `failed` hoặc `indeterminate`; chỉ pending cùng hash được coalesce.
+  Lookup terminal chỉ được dùng trong recovery của một DB partial-unique race đã
+  xác định.
+- Fact Lock được assert lại sau Tx A và ngay trước provider call. Nếu Product Fact
+  invalidation làm gate stale, pending được terminalize thành `failed` với
+  `VOICE_SEGMENT_CONTEXT_STALE`, provider không được gọi.
+- Khi Tx B ném lỗi, runtime re-read artifact. Completed khớp metadata thì recover
+  thành công và giữ object; state pending/non-completed mới cleanup. Nếu DB outcome
+  không xác định hoặc completed metadata mismatch, giữ object cho reconciliation,
+  trả `TTS_PERSISTENCE_FAILED` và không retry provider.
+- MIME, empty và oversize từ provider map về `TTS_INVALID_AUDIO`; timeout/network
+  và 408/5xx vẫn giữ uncertain semantics. Preview contract không đổi.
+
 ## 10. Tests và verification
 
 Deterministic coverage gồm provider input/MIME/size/timeout/uncertainty, exact
 Unicode/VND/brand text, idempotency conflict/coalesce, DB partial-unique race,
 invalid MP3, storage/finalize/cleanup failure, expired pending, script/config race,
-R2 mock/fail-closed factory, protected audio headers/ETag/304/cross-project và
-preview regression.
+terminal retry/regenerate, post-Tx-A Fact Lock/Product Fact race,
+ambiguous-finalize recovery, R2 mock/fail-closed factory, protected audio
+headers/ETag/304/cross-project và preview regression.
 
 Đã chạy:
 
-- `pnpm --filter web test`: **30 files / 218 tests passed**;
+- `pnpm --filter web test`: **30 files / 223 tests passed**;
+- `pnpm --filter web test:e2e -- --grep "Voice"`: **1 passed**;
 - `pnpm test:integration:voice-segment-runtime`: passed trên Neon dev;
 - `pnpm test:integration:voice-segment`: passed;
 - `pnpm check-types`: passed, 5/5 type-check tasks;

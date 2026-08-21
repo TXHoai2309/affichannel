@@ -211,15 +211,31 @@ describe("ApiKeyFun TTS preview adapter", () => {
 		},
 	);
 
-	it("classifies malformed successful segment responses as known provider failure", async () => {
+	it("classifies malformed successful segment responses as invalid audio", async () => {
 		const fetchMock = vi.fn<typeof fetch>(async () =>
 			audioResponse(new Uint8Array([1]), "application/json"),
 		);
 		await expect(
 			makeProvider(fetchMock).generateSegment(previewInput),
 		).rejects.toMatchObject({
-			code: "TTS_PROVIDER_FAILED",
+			code: "TTS_INVALID_AUDIO",
 		});
+
+		const emptyFetch = vi.fn<typeof fetch>(async () =>
+			audioResponse(new Uint8Array(), "audio/mpeg"),
+		);
+		await expect(
+			makeProvider(emptyFetch).generateSegment(previewInput),
+		).rejects.toMatchObject({ code: "TTS_INVALID_AUDIO" });
+
+		const oversizedFetch = vi.fn<typeof fetch>(async () =>
+			audioResponse(new Uint8Array([1, 2]), "audio/mpeg"),
+		);
+		await expect(
+			makeProvider(oversizedFetch, { segmentMaxBytes: 1 }).generateSegment(
+				previewInput,
+			),
+		).rejects.toMatchObject({ code: "TTS_INVALID_AUDIO" });
 
 		const timeoutFetch = vi.fn<typeof fetch>(
 			(_input, init) =>

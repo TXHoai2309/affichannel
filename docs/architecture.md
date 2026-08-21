@@ -420,6 +420,14 @@ project, artifact ownership, status và DB-owned storage key; endpoint hỗ tr�
 304 và private immutable cache. Phase 2 không tạo migration, workflow mutation,
 UI hoặc waveform. Chi tiết tại `docs/aff-us-012-phase-2-runtime.md`.
 
+Acceptance hardening giữ terminal artifact trong history nhưng chỉ coalesce pending
+cùng request hash; request key mới sau completed/failed/indeterminate luôn tạo
+attempt mới. Sau Tx A, Fact Lock được assert lại ngay trước provider để chặn Product
+Fact invalidation race. Finalize failure phải re-read artifact trước cleanup: completed
+khớp metadata được recover và giữ object; DB outcome không chắc chắn thì giữ object
+cho reconciliation thay vì blind-delete. Provider success response sai MIME, rỗng
+hoặc oversize là `TTS_INVALID_AUDIO`; preview behavior không đổi.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

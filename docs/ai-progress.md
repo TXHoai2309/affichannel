@@ -1365,8 +1365,24 @@ Trạng thái: **AFF-US-012 Phase 1 đã triển khai; Phase 2 đang chờ revie
   reconciliation, storage failure và persistence cleanup semantics.
 - Thêm protected `voiceSegment.list/getState/generate` và protected immutable
   audio route với workspace/project ownership, DB-owned storage key, ETag/304.
-- Verification: web unit 30 files/218 tests, runtime integration Neon pass,
+- Verification: web unit 30 files/223 tests, runtime integration Neon pass,
   full check-types/build pass, scoped Biome pass; không live APIKEY.FUN/R2,
   không migration `0017`.
 
 Trạng thái: **AFF-US-012 Phase 2 đã triển khai, chờ review/acceptance; Phase 3 chưa bắt đầu.**
+
+### 2026-08-21 — AFF-US-012 Phase 2 acceptance hardening
+
+- Sửa terminal idempotency semantics: key mới chỉ coalesce pending cùng request
+  hash; completed/failed/indeterminate vẫn tạo attempt/history mới. Terminal
+  lookup chỉ còn dùng để recover partial-unique race đã xác định.
+- Thêm Fact Lock assert lại sau Tx A ngay trước provider. Test mô phỏng Product
+  Fact invalidation chuyển pending thành `failed/VOICE_SEGMENT_CONTEXT_STALE`
+  và provider call count bằng 0.
+- Finalize failure re-read artifact trước cleanup: committed completed được recover
+  không xóa object; pending/non-completed mới cleanup; DB outcome unknown giữ object
+  cho reconciliation và không retry provider.
+- Chuẩn hóa provider success response sai MIME, empty hoặc oversize thành
+  `TTS_INVALID_AUDIO`, không thay đổi preview mapping.
+
+Trạng thái: **AFF-US-012 Phase 2 hardening đã triển khai, chờ review/acceptance; Phase 3 chưa bắt đầu.**
