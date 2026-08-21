@@ -28,6 +28,7 @@
 		"test:integration:voice-config": "tsx scripts/test-voice-config.ts",
 		"test:integration:voice-preview": "tsx scripts/test-voice-preview.ts",
 		"test:integration:voice-segment": "tsx scripts/test-voice-segment-foundation.ts",
+		"test:integration:voice-segment-runtime": "tsx scripts/test-voice-segment-runtime.ts",
 		"test:live:tts": "tsx scripts/test-voice-preview-live.ts",
 		"deploy:setup": "vercel link",
 		"dev:vercel": "vercel dev -L",

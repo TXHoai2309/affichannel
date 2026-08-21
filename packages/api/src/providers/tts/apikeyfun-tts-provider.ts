@@ -1,14 +1,18 @@
 import {
+	DEFAULT_VOICE_SEGMENT_MAX_AUDIO_BYTES,
+	DEFAULT_VOICE_SEGMENT_TIMEOUT_MS,
 	listVoicePresets,
 	TTS_PROVIDER,
 	VoiceConfigError,
 	validateVoiceConfigFields,
 } from "@affichannel/core";
 
-import type {
-	TtsPreviewInput,
-	TtsPreviewResult,
-	TtsProvider,
+import {
+	type TtsGenerateSegmentResult,
+	type TtsPreviewInput,
+	type TtsPreviewResult,
+	type TtsProvider,
+	TtsProviderError,
 } from "./tts-provider";
 
 export const DEFAULT_APIKEY_FUN_TTS_BASE_URL = "https://api.apikey.fun";
@@ -20,8 +24,12 @@ export type ApiKeyFunTtsProviderOptions = {
 	baseUrl?: string;
 	timeoutMs?: number;
 	maxBytes?: number;
+	segmentTimeoutMs?: number;
+	segmentMaxBytes?: number;
 	fetchImplementation?: typeof fetch;
 };
+
+type RequestMode = "preview" | "segment";
 
 function normalizeEndpoint(baseUrl: string) {
 	const normalized = baseUrl.replace(/\/+$/, "");
@@ -65,13 +73,43 @@ function isTimeoutError(error: unknown, timedOut: boolean) {
 	);
 }
 
-/** Thin server-only adapter. It performs one request and never retries or persists audio. */
+function validateSynthesisInput(input: TtsPreviewInput) {
+	if (
+		!isRecord(input) ||
+		typeof input.text !== "string" ||
+		input.text.trim().length === 0
+	) {
+		throw invalidInput("TTS text không được để trống.");
+	}
+
+	return validateVoiceConfigFields({
+		voiceId: input.voiceId,
+		language: input.language,
+		speed: input.speed,
+	});
+}
+
+function providerSegmentFailure(
+	message: string,
+	providerRequestId: string | null,
+) {
+	return new TtsProviderError("TTS_PROVIDER_FAILED", message, {
+		providerRequestId,
+	});
+}
+
+/** Thin server-only adapter. It performs one request and never retries. */
 export class ApiKeyFunTtsProvider implements TtsProvider {
 	readonly providerId = TTS_PROVIDER;
-	private readonly options: Required<
-		Pick<ApiKeyFunTtsProviderOptions, "timeoutMs" | "maxBytes">
-	> &
-		Omit<ApiKeyFunTtsProviderOptions, "timeoutMs" | "maxBytes">;
+	private readonly options: {
+		apiKey?: string;
+		baseUrl?: string;
+		timeoutMs: number;
+		maxBytes: number;
+		segmentTimeoutMs: number;
+		segmentMaxBytes: number;
+		fetchImplementation?: typeof fetch;
+	};
 	private readonly fetchImplementation: typeof fetch;
 
 	constructor(options: ApiKeyFunTtsProviderOptions = {}) {
@@ -79,6 +117,10 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 			...options,
 			timeoutMs: options.timeoutMs ?? DEFAULT_TTS_PREVIEW_TIMEOUT_MS,
 			maxBytes: options.maxBytes ?? TTS_PREVIEW_MAX_BYTES,
+			segmentTimeoutMs:
+				options.segmentTimeoutMs ?? DEFAULT_VOICE_SEGMENT_TIMEOUT_MS,
+			segmentMaxBytes:
+				options.segmentMaxBytes ?? DEFAULT_VOICE_SEGMENT_MAX_AUDIO_BYTES,
 		};
 		this.fetchImplementation = options.fetchImplementation ?? fetch;
 	}
@@ -87,32 +129,34 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 		return listVoicePresets();
 	}
 
-	async preview(input: TtsPreviewInput): Promise<TtsPreviewResult> {
-		if (
-			!isRecord(input) ||
-			typeof input.text !== "string" ||
-			input.text.trim().length === 0
-		) {
-			throw invalidInput("Preview text không được để trống.");
-		}
-
-		const fields = validateVoiceConfigFields({
-			voiceId: input.voiceId,
-			language: input.language,
-			speed: input.speed,
-		});
+	private async requestAudio(input: TtsPreviewInput, mode: RequestMode) {
+		const fields = validateSynthesisInput(input);
 		const apiKey = this.options.apiKey?.trim();
 		if (!apiKey) {
-			throw providerUnavailable("TTS provider chưa được cấu hình trên server.");
+			if (mode === "preview") {
+				throw providerUnavailable(
+					"TTS provider chưa được cấu hình trên server.",
+				);
+			}
+			throw new TtsProviderError(
+				"TTS_PROVIDER_UNAVAILABLE",
+				"TTS provider chưa được cấu hình trên server.",
+			);
 		}
 
+		const timeoutMs =
+			mode === "preview"
+				? this.options.timeoutMs
+				: this.options.segmentTimeoutMs;
+		const maxBytes =
+			mode === "preview" ? this.options.maxBytes : this.options.segmentMaxBytes;
 		const startedAt = Date.now();
 		const controller = new AbortController();
 		let timedOut = false;
 		const timeout = setTimeout(() => {
 			timedOut = true;
 			controller.abort();
-		}, this.options.timeoutMs);
+		}, timeoutMs);
 
 		try {
 			const response = await this.fetchImplementation(
@@ -135,73 +179,157 @@ export class ApiKeyFunTtsProvider implements TtsProvider {
 					signal: controller.signal,
 				},
 			);
-
+			const providerRequestId = requestId(response);
 			const contentType = normalizeContentType(
 				response.headers.get("content-type"),
 			);
+
 			if (!response.ok) {
-				if (
-					response.status === 429 ||
-					(response.status >= 500 && response.status <= 599) ||
-					(response.status === 403 && contentType === "text/html")
-				) {
-					throw providerUnavailable("TTS provider hiện không khả dụng.");
+				if (mode === "preview") {
+					if (
+						response.status === 429 ||
+						(response.status >= 500 && response.status <= 599) ||
+						(response.status === 403 && contentType === "text/html")
+					) {
+						throw providerUnavailable("TTS provider hiện không khả dụng.");
+					}
+					throw previewFailed("TTS provider từ chối yêu cầu preview.");
 				}
-				throw previewFailed("TTS provider từ chối yêu cầu preview.");
+				if (response.status === 408 || response.status >= 500) {
+					throw new TtsProviderError(
+						"TTS_REQUEST_STATE_UNCERTAIN",
+						"TTS provider trả về trạng thái không xác định; không tự động thử lại.",
+						{ uncertain: true, providerRequestId },
+					);
+				}
+				throw providerSegmentFailure(
+					"TTS provider từ chối yêu cầu tạo segment.",
+					providerRequestId,
+				);
 			}
 
-			if (contentType === "text/html") {
-				throw providerUnavailable("TTS provider trả về trang không khả dụng.");
-			}
 			if (contentType !== "audio/mpeg") {
-				throw previewFailed("TTS provider trả về MIME type không hợp lệ.");
+				if (mode === "preview") {
+					if (contentType === "text/html") {
+						throw providerUnavailable(
+							"TTS provider trả về trang không khả dụng.",
+						);
+					}
+					throw previewFailed("TTS provider trả về MIME type không hợp lệ.");
+				}
+				throw providerSegmentFailure(
+					"TTS provider trả về MIME type không hợp lệ.",
+					providerRequestId,
+				);
 			}
 
 			const contentLength = response.headers.get("content-length");
-			if (contentLength && Number(contentLength) > this.options.maxBytes) {
-				throw previewFailed("Audio preview vượt quá kích thước cho phép.");
+			if (contentLength && Number(contentLength) > maxBytes) {
+				if (mode === "preview") {
+					throw previewFailed("Audio preview vượt quá kích thước cho phép.");
+				}
+				throw providerSegmentFailure(
+					"Audio segment vượt quá kích thước cho phép.",
+					providerRequestId,
+				);
 			}
 
 			let audio: Uint8Array;
 			try {
 				audio = new Uint8Array(await response.arrayBuffer());
 			} catch {
-				if (timedOut) {
+				if (mode === "preview") {
+					if (timedOut) {
+						throw new VoiceConfigError(
+							"TTS_PREVIEW_TIMEOUT",
+							"TTS preview vượt quá thời gian chờ.",
+						);
+					}
+					throw providerUnavailable(
+						"Không thể đọc audio preview từ TTS provider.",
+					);
+				}
+				throw new TtsProviderError(
+					timedOut ? "TTS_TIMEOUT_UNCERTAIN" : "TTS_REQUEST_STATE_UNCERTAIN",
+					timedOut
+						? "TTS provider timeout sau khi yêu cầu đã được gửi."
+						: "Không thể đọc audio từ TTS provider; trạng thái yêu cầu không xác định.",
+					{ uncertain: true, providerRequestId },
+				);
+			}
+
+			if (audio.byteLength === 0 || audio.byteLength > maxBytes) {
+				if (mode === "preview") {
+					throw previewFailed(
+						"TTS provider trả về audio preview không hợp lệ.",
+					);
+				}
+				throw providerSegmentFailure(
+					"TTS provider trả về audio segment không hợp lệ.",
+					providerRequestId,
+				);
+			}
+
+			return {
+				audio,
+				contentType: "audio/mpeg" as const,
+				providerRequestId,
+				latencyMs: Date.now() - startedAt,
+			};
+		} catch (error) {
+			if (
+				error instanceof VoiceConfigError ||
+				error instanceof TtsProviderError
+			) {
+				throw error;
+			}
+			if (isTimeoutError(error, timedOut)) {
+				if (mode === "preview") {
 					throw new VoiceConfigError(
 						"TTS_PREVIEW_TIMEOUT",
 						"TTS preview vượt quá thời gian chờ.",
 					);
 				}
+				throw new TtsProviderError(
+					"TTS_TIMEOUT_UNCERTAIN",
+					"TTS provider timeout sau khi yêu cầu đã được gửi.",
+					{ uncertain: true },
+				);
+			}
+			if (mode === "preview") {
 				throw providerUnavailable(
-					"Không thể đọc audio preview từ TTS provider.",
+					"Không thể kết nối tới TTS provider; không tự động thử lại.",
 				);
 			}
-			if (audio.byteLength === 0) {
-				throw previewFailed("TTS provider trả về audio rỗng.");
-			}
-			if (audio.byteLength > this.options.maxBytes) {
-				throw previewFailed("Audio preview vượt quá kích thước cho phép.");
-			}
-
-			return {
-				audio,
-				contentType: "audio/mpeg",
-				providerRequestId: requestId(response),
-				latencyMs: Date.now() - startedAt,
-			};
-		} catch (error) {
-			if (error instanceof VoiceConfigError) throw error;
-			if (isTimeoutError(error, timedOut)) {
-				throw new VoiceConfigError(
-					"TTS_PREVIEW_TIMEOUT",
-					"TTS preview vượt quá thời gian chờ.",
-				);
-			}
-			throw providerUnavailable(
-				"Không thể kết nối tới TTS provider; không tự động thử lại.",
+			throw new TtsProviderError(
+				"TTS_REQUEST_STATE_UNCERTAIN",
+				"Không thể kết nối tới TTS provider; trạng thái yêu cầu không xác định.",
+				{ uncertain: true },
 			);
 		} finally {
 			clearTimeout(timeout);
 		}
+	}
+
+	async preview(input: TtsPreviewInput): Promise<TtsPreviewResult> {
+		const result = await this.requestAudio(input, "preview");
+		return {
+			audio: result.audio,
+			contentType: result.contentType,
+			providerRequestId: result.providerRequestId,
+			latencyMs: result.latencyMs,
+		};
+	}
+
+	async generateSegment(
+		input: TtsPreviewInput,
+	): Promise<TtsGenerateSegmentResult> {
+		const result = await this.requestAudio(input, "segment");
+		return {
+			audio: result.audio,
+			contentType: result.contentType,
+			providerRequestId: result.providerRequestId,
+			providerDurationMs: null,
+		};
 	}
 }

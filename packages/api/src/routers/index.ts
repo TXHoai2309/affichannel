@@ -10,6 +10,7 @@ import { scriptGenerationRouter } from "./script-generation";
 import { scriptVersionRouter } from "./script-version";
 import { settingsRouter } from "./settings";
 import { voiceRouter } from "./voice";
+import { voiceSegmentRouter } from "./voice-segment";
 
 export const appRouter = {
 	healthCheck: publicProcedure.handler(() => {
@@ -30,6 +31,7 @@ export const appRouter = {
 	scriptVersion: scriptVersionRouter,
 	settings: settingsRouter,
 	voice: voiceRouter,
+	voiceSegment: voiceSegmentRouter,
 };
 export type AppRouter = typeof appRouter;
 export type AppRouterClient = RouterClient<typeof appRouter>;

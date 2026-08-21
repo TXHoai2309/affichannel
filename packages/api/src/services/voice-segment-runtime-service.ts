@@ -1,0 +1,552 @@
+import { randomUUID } from "node:crypto";
+import {
+	deriveVoiceSegmentReadModel,
+	TTS_PROVIDER,
+	VoiceConfigError,
+	type VoiceSegmentArtifact,
+	type VoiceSegmentArtifactReadModel,
+	VoiceSegmentError,
+	type VoiceSegmentFingerprint,
+	validateVoiceConfigFields,
+	validateVoiceSegmentText,
+} from "@affichannel/core";
+import { env } from "@affichannel/env/server";
+
+import { parseMp3DurationMs } from "../audio/mp3-duration";
+import type {
+	TtsGenerateSegmentResult,
+	TtsProvider,
+	TtsProviderError,
+} from "../providers/tts/tts-provider";
+import { resolveTtsProvider } from "../providers/tts/tts-provider-registry";
+import type { VoiceAudioStorage } from "../storage/voice-audio-storage";
+import { createDefaultVoiceAudioStorageKey } from "../storage/voice-audio-storage";
+import { createVoiceAudioStorage } from "../storage/voice-audio-storage-factory";
+import { FactLockGate } from "./fact-lock-gate-service";
+import { findCurrentScriptVersion } from "./script-version-repository";
+import { findVoiceConfig } from "./voice-config-service";
+import {
+	hashVoiceSegmentRequest,
+	hashVoiceSegmentText,
+	sha256Bytes,
+} from "./voice-segment-hashing";
+import {
+	completeVoiceSegmentArtifact,
+	failVoiceSegmentArtifact,
+	findPendingVoiceSegmentArtifactByRequestHash,
+	findVoiceSegmentArtifactByIdempotencyKey,
+	findVoiceSegmentArtifactByRequestHash,
+	getVoiceSegmentReadModel,
+	type InsertPendingVoiceSegmentArtifactInput,
+	insertPendingVoiceSegmentArtifactAtomic,
+	isVoiceSegmentArtifactUniqueViolation,
+	listVoiceSegmentArtifacts,
+	reconcileExpiredPendingVoiceSegmentArtifacts,
+} from "./voice-segment-repository";
+import type { WorkspaceActor } from "./workspace";
+
+export type PreparedVoiceSegmentRequest = {
+	projectId: string;
+	segmentKey: string;
+	text: string;
+	fingerprint: VoiceSegmentFingerprint;
+};
+
+export type VoiceSegmentState = {
+	segmentKey: string;
+	text: string;
+	readModel: VoiceSegmentArtifactReadModel;
+};
+
+export type VoiceSegmentGenerateResult = {
+	artifact: VoiceSegmentArtifact;
+	readModel: VoiceSegmentArtifactReadModel;
+};
+
+export type VoiceSegmentRepositoryDependencies = {
+	findByIdempotencyKey: typeof findVoiceSegmentArtifactByIdempotencyKey;
+	findPendingByRequestHash: typeof findPendingVoiceSegmentArtifactByRequestHash;
+	findByRequestHash: typeof findVoiceSegmentArtifactByRequestHash;
+	insertPendingAtomic: typeof insertPendingVoiceSegmentArtifactAtomic;
+	complete: typeof completeVoiceSegmentArtifact;
+	fail: typeof failVoiceSegmentArtifact;
+	getReadModel: typeof getVoiceSegmentReadModel;
+	list: typeof listVoiceSegmentArtifacts;
+	reconcileExpired: typeof reconcileExpiredPendingVoiceSegmentArtifacts;
+};
+
+export type VoiceSegmentRuntimeDependencies = {
+	provider?: TtsProvider;
+	storage?: VoiceAudioStorage;
+	prepare?: (
+		actor: WorkspaceActor,
+		projectId: string,
+		segmentKey: string,
+	) => Promise<PreparedVoiceSegmentRequest>;
+	readCurrent?: (
+		actor: WorkspaceActor,
+		projectId: string,
+		segmentKey: string,
+	) => Promise<PreparedVoiceSegmentRequest>;
+	beforeInsert?: () => Promise<void>;
+	now?: () => Date;
+	repository?: Partial<VoiceSegmentRepositoryDependencies>;
+};
+
+function segmentNotFound(
+	message = "Voice segment không tồn tại trong ScriptVersion hiện tại.",
+) {
+	return new VoiceSegmentError("VOICE_SEGMENT_NOT_FOUND", message);
+}
+
+function validateIdempotencyKey(idempotencyKey: string) {
+	const value = idempotencyKey.trim();
+	if (value.length < 8 || value.length > 200) {
+		throw new VoiceSegmentError(
+			"VOICE_SEGMENT_INPUT_INVALID",
+			"Idempotency key phải dài từ 8 đến 200 ký tự.",
+		);
+	}
+	return value;
+}
+
+async function readCurrentVoiceSegmentContext(
+	actor: WorkspaceActor,
+	projectId: string,
+	segmentKey: string,
+): Promise<PreparedVoiceSegmentRequest> {
+	const script = await findCurrentScriptVersion(actor, projectId);
+	if (!script) throw segmentNotFound("Project chưa có ScriptVersion hiện tại.");
+	const config = await findVoiceConfig(actor, projectId);
+	if (!config) throw new VoiceConfigError("VOICE_CONFIG_NOT_FOUND");
+
+	const fields = validateVoiceConfigFields({
+		voiceId: config.voiceId,
+		language: config.language,
+		speed: config.speed,
+	});
+	if (config.provider !== TTS_PROVIDER) {
+		throw new VoiceSegmentError(
+			"TTS_PROVIDER_UNAVAILABLE",
+			"VoiceConfig sử dụng provider không được hỗ trợ.",
+		);
+	}
+
+	const segment = script.editableSnapshot.voiceoverSegments.find(
+		(candidate) => candidate.key === segmentKey,
+	);
+	if (!segment) throw segmentNotFound();
+	const text = validateVoiceSegmentText(
+		segment.text,
+		env.VOICE_SEGMENT_MAX_CHARS,
+	);
+	const fingerprint: VoiceSegmentFingerprint = {
+		workspaceId: actor.workspaceId,
+		projectId,
+		sourceScriptVersionId: script.id,
+		sourceScriptRevision: script.revision,
+		segmentKey,
+		textHash: hashVoiceSegmentText(text),
+		voiceConfigRevision: config.revision,
+		provider: config.provider,
+		voiceId: fields.voiceId,
+		language: fields.language,
+		speed: fields.speed,
+	};
+	return { projectId, segmentKey, text, fingerprint };
+}
+
+export async function prepareVoiceSegmentRequest(
+	actor: WorkspaceActor,
+	projectId: string,
+	segmentKey: string,
+) {
+	await FactLockGate.assertPassed(actor, projectId);
+	return readCurrentVoiceSegmentContext(actor, projectId, segmentKey);
+}
+
+async function markArtifactFailure(
+	actor: WorkspaceActor,
+	artifactId: string,
+	status: "failed" | "indeterminate",
+	errorCode: string,
+	providerRequestId: string | null,
+	repository?: Partial<VoiceSegmentRepositoryDependencies>,
+) {
+	try {
+		const fail = repository?.fail ?? failVoiceSegmentArtifact;
+		const failed = await fail({
+			actor,
+			artifactId,
+			status,
+			errorCode,
+			providerRequestId,
+		});
+		if (!failed) {
+			throw new Error("Voice segment artifact was no longer pending.");
+		}
+		return failed;
+	} catch {
+		throw new VoiceSegmentError(
+			"TTS_PERSISTENCE_FAILED",
+			"Không thể ghi trạng thái thất bại của voice segment.",
+			{ originalErrorCode: errorCode },
+		);
+	}
+}
+
+async function readState(
+	actor: WorkspaceActor,
+	prepared: PreparedVoiceSegmentRequest,
+	dependencies: VoiceSegmentRuntimeDependencies,
+) {
+	const getReadModel =
+		dependencies.repository?.getReadModel ?? getVoiceSegmentReadModel;
+	return getReadModel(
+		actor,
+		prepared.projectId,
+		prepared.segmentKey,
+		prepared.fingerprint,
+	);
+}
+
+async function currentState(
+	actor: WorkspaceActor,
+	projectId: string,
+	segmentKey: string,
+	dependencies: VoiceSegmentRuntimeDependencies,
+) {
+	const current = dependencies.readCurrent
+		? await dependencies.readCurrent(actor, projectId, segmentKey)
+		: await readCurrentVoiceSegmentContext(actor, projectId, segmentKey);
+	return { current, readModel: await readState(actor, current, dependencies) };
+}
+
+function validateGeneratedAudio(result: TtsGenerateSegmentResult) {
+	if (
+		result.contentType !== "audio/mpeg" ||
+		result.audio.byteLength === 0 ||
+		result.audio.byteLength > env.VOICE_SEGMENT_MAX_AUDIO_BYTES
+	) {
+		throw new VoiceSegmentError(
+			"TTS_INVALID_AUDIO",
+			"TTS provider trả về audio segment không hợp lệ.",
+		);
+	}
+}
+
+function asProviderError(error: unknown): {
+	status: "failed" | "indeterminate";
+	code: string;
+	providerRequestId: string | null;
+	error: unknown;
+} {
+	if (error && typeof error === "object" && "uncertain" in error) {
+		const providerError = error as TtsProviderError;
+		return {
+			status: providerError.uncertain ? "indeterminate" : "failed",
+			code: providerError.code,
+			providerRequestId: providerError.providerRequestId,
+			error,
+		};
+	}
+	if (error instanceof VoiceSegmentError) {
+		return {
+			status: "failed",
+			code: error.code,
+			providerRequestId: null,
+			error,
+		};
+	}
+	return {
+		status: "indeterminate",
+		code: "TTS_REQUEST_STATE_UNCERTAIN",
+		providerRequestId: null,
+		error: new VoiceSegmentError(
+			"TTS_REQUEST_STATE_UNCERTAIN",
+			"TTS provider request có trạng thái không xác định.",
+		),
+	};
+}
+
+async function coalescedArtifact(
+	actor: WorkspaceActor,
+	prepared: PreparedVoiceSegmentRequest,
+	idempotencyKey: string,
+	requestHash: string,
+	dependencies: VoiceSegmentRuntimeDependencies,
+) {
+	const findByIdempotencyKey =
+		dependencies.repository?.findByIdempotencyKey ??
+		findVoiceSegmentArtifactByIdempotencyKey;
+	const findPendingByRequestHash =
+		dependencies.repository?.findPendingByRequestHash ??
+		findPendingVoiceSegmentArtifactByRequestHash;
+	const findByRequestHash =
+		dependencies.repository?.findByRequestHash ??
+		findVoiceSegmentArtifactByRequestHash;
+	const existing = await findByIdempotencyKey(actor, idempotencyKey);
+	if (existing) {
+		if (existing.requestHash !== requestHash) {
+			throw new VoiceSegmentError(
+				"VOICE_SEGMENT_IDEMPOTENCY_CONFLICT",
+				"Idempotency key đã được dùng cho request khác.",
+			);
+		}
+		return existing;
+	}
+	const pending = await findPendingByRequestHash(
+		actor,
+		prepared.projectId,
+		requestHash,
+	);
+	return pending ?? findByRequestHash(actor, prepared.projectId, requestHash);
+}
+
+export async function generateVoiceSegment(
+	actor: WorkspaceActor,
+	input: { projectId: string; segmentKey: string; idempotencyKey: string },
+	dependencies: VoiceSegmentRuntimeDependencies = {},
+): Promise<VoiceSegmentGenerateResult> {
+	const idempotencyKey = validateIdempotencyKey(input.idempotencyKey);
+	const prepared = dependencies.prepare
+		? await dependencies.prepare(actor, input.projectId, input.segmentKey)
+		: await prepareVoiceSegmentRequest(
+				actor,
+				input.projectId,
+				input.segmentKey,
+			);
+	const requestHash = hashVoiceSegmentRequest(prepared.fingerprint);
+	const now = dependencies.now?.() ?? new Date();
+	const reconcileExpired =
+		dependencies.repository?.reconcileExpired ??
+		reconcileExpiredPendingVoiceSegmentArtifacts;
+	await reconcileExpired(actor, now);
+
+	const reusable = await coalescedArtifact(
+		actor,
+		prepared,
+		idempotencyKey,
+		requestHash,
+		dependencies,
+	);
+	if (reusable) {
+		const state = await currentState(
+			actor,
+			input.projectId,
+			input.segmentKey,
+			dependencies,
+		);
+		return { artifact: reusable, readModel: state.readModel };
+	}
+
+	const provider =
+		dependencies.provider ?? resolveTtsProvider(prepared.fingerprint.provider);
+	if (!provider) {
+		throw new VoiceSegmentError(
+			"TTS_PROVIDER_UNAVAILABLE",
+			"TTS provider không khả dụng trên server.",
+		);
+	}
+	const storage = dependencies.storage ?? createVoiceAudioStorage();
+	const insertInput: InsertPendingVoiceSegmentArtifactInput = {
+		id: randomUUID(),
+		actor,
+		projectId: prepared.projectId,
+		sourceScriptVersionId: prepared.fingerprint.sourceScriptVersionId,
+		sourceScriptRevision: prepared.fingerprint.sourceScriptRevision,
+		segmentKey: prepared.segmentKey,
+		segmentTextSnapshot: prepared.text,
+		textHash: prepared.fingerprint.textHash,
+		voiceConfigRevision: prepared.fingerprint.voiceConfigRevision,
+		provider: prepared.fingerprint.provider,
+		voiceId: prepared.fingerprint.voiceId,
+		language: prepared.fingerprint.language,
+		speed: prepared.fingerprint.speed,
+		idempotencyKey,
+		requestHash,
+	};
+	await dependencies.beforeInsert?.();
+
+	let pending: VoiceSegmentArtifact;
+	try {
+		const insertPendingAtomic =
+			dependencies.repository?.insertPendingAtomic ??
+			insertPendingVoiceSegmentArtifactAtomic;
+		pending = await insertPendingAtomic({
+			insert: insertInput,
+			expected: prepared.fingerprint,
+		});
+	} catch (error) {
+		if (!isVoiceSegmentArtifactUniqueViolation(error)) throw error;
+		const raced = await coalescedArtifact(
+			actor,
+			prepared,
+			idempotencyKey,
+			requestHash,
+			dependencies,
+		);
+		if (raced) {
+			const state = await currentState(
+				actor,
+				input.projectId,
+				input.segmentKey,
+				dependencies,
+			);
+			return { artifact: raced, readModel: state.readModel };
+		}
+		throw error;
+	}
+
+	let providerResult: TtsGenerateSegmentResult;
+	try {
+		providerResult = await provider.generateSegment({
+			text: prepared.text,
+			voiceId: prepared.fingerprint.voiceId,
+			language: prepared.fingerprint.language,
+			speed: prepared.fingerprint.speed,
+		});
+	} catch (error) {
+		const classified = asProviderError(error);
+		await markArtifactFailure(
+			actor,
+			pending.id,
+			classified.status,
+			classified.code,
+			classified.providerRequestId,
+			dependencies.repository,
+		);
+		throw classified.error;
+	}
+
+	let durationMs: number;
+	let checksum: string;
+	try {
+		validateGeneratedAudio(providerResult);
+		durationMs = await parseMp3DurationMs(providerResult.audio);
+		checksum = sha256Bytes(providerResult.audio);
+	} catch (error) {
+		const classified = asProviderError(error);
+		await markArtifactFailure(
+			actor,
+			pending.id,
+			"failed",
+			classified.code,
+			providerResult.providerRequestId,
+			dependencies.repository,
+		);
+		throw classified.error;
+	}
+
+	const storageKey = createDefaultVoiceAudioStorageKey({
+		workspaceId: actor.workspaceId,
+		projectId: input.projectId,
+		artifactId: pending.id,
+	});
+	try {
+		await storage.put({
+			storageKey,
+			body: providerResult.audio,
+			contentType: "audio/mpeg",
+			checksum,
+		});
+	} catch (error) {
+		const storageError =
+			error instanceof VoiceSegmentError
+				? error
+				: new VoiceSegmentError(
+						"TTS_STORAGE_FAILED",
+						"Không thể lưu audio voice segment.",
+					);
+		await markArtifactFailure(
+			actor,
+			pending.id,
+			"failed",
+			storageError.code,
+			providerResult.providerRequestId,
+			dependencies.repository,
+		);
+		throw storageError;
+	}
+
+	let finalized: VoiceSegmentArtifact | undefined;
+	try {
+		const complete =
+			dependencies.repository?.complete ?? completeVoiceSegmentArtifact;
+		finalized = await complete({
+			actor,
+			artifactId: pending.id,
+			providerRequestId: providerResult.providerRequestId,
+			storageProvider: storage.provider,
+			storageKey,
+			mimeType: "audio/mpeg",
+			byteSize: providerResult.audio.byteLength,
+			checksum,
+			durationMs,
+		});
+		if (!finalized)
+			throw new Error("Voice segment artifact finalize returned no row.");
+	} catch {
+		let cleanupFailed = false;
+		try {
+			await storage.delete(storageKey);
+		} catch {
+			cleanupFailed = true;
+		}
+		console.warn("voice_segment_finalize_cleanup", {
+			artifactId: pending.id,
+			storageProvider: storage.provider,
+			cleanupFailed,
+		});
+		throw new VoiceSegmentError(
+			"TTS_PERSISTENCE_FAILED",
+			"Không thể hoàn tất lưu metadata voice segment; provider không được gọi lại.",
+			{ cleanupFailed, storageProvider: storage.provider },
+		);
+	}
+
+	const state = await currentState(
+		actor,
+		input.projectId,
+		input.segmentKey,
+		dependencies,
+	);
+	return { artifact: finalized, readModel: state.readModel };
+}
+
+export async function getVoiceSegmentState(
+	actor: WorkspaceActor,
+	projectId: string,
+	segmentKey: string,
+	dependencies: VoiceSegmentRuntimeDependencies = {},
+) {
+	return currentState(actor, projectId, segmentKey, dependencies);
+}
+
+export async function listVoiceSegmentStates(
+	actor: WorkspaceActor,
+	projectId: string,
+	dependencies: VoiceSegmentRuntimeDependencies = {},
+): Promise<VoiceSegmentState[]> {
+	const script = await findCurrentScriptVersion(actor, projectId);
+	if (!script) throw segmentNotFound("Project chưa có ScriptVersion hiện tại.");
+	const config = await findVoiceConfig(actor, projectId);
+	if (!config) throw new VoiceConfigError("VOICE_CONFIG_NOT_FOUND");
+	const list = dependencies.repository?.list ?? listVoiceSegmentArtifacts;
+	const artifacts = await list(actor, projectId);
+	return Promise.all(
+		script.editableSnapshot.voiceoverSegments.map(async (segment) => {
+			const current = await (dependencies.readCurrent
+				? dependencies.readCurrent(actor, projectId, segment.key)
+				: readCurrentVoiceSegmentContext(actor, projectId, segment.key));
+			return {
+				segmentKey: segment.key,
+				text: segment.text,
+				readModel: deriveVoiceSegmentReadModel(
+					artifacts.filter((artifact) => artifact.segmentKey === segment.key),
+					current.fingerprint,
+				),
+			};
+		}),
+	);
+}

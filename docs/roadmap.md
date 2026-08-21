@@ -274,11 +274,17 @@ protected stream hoặc workflow mutation. Chi tiết tại
 `docs/aff-us-012-phase-0-contract-decisions.md`,
 `docs/aff-us-012-phase-1-foundation.md` và DEC-024.
 
+Phase 2 đã triển khai segment generation runtime/API/provider, server-authoritative
+input và MP3 duration, idempotency/coalescing với DB race handling, local/private-R2
+storage registry, protected state/audio endpoints và failure/cleanup semantics.
+Không tạo migration `0017`, không gọi live APIKEY.FUN hoặc R2 trong test. Phase 2
+đã triển khai và chờ review/acceptance; Phase 3 chưa bắt đầu.
+
 Các phase dự kiến:
 
 ```text
 Phase 1 — schema/repository/storage/duration foundation
-Phase 2 — segment generation API/provider/protected stream
+Phase 2 — segment generation API/provider/protected stream ✅
 Phase 3 — segment list/player/basic waveform
 Phase 4 — duration/workflow hardening và acceptance E2E
 ```

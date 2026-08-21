@@ -116,6 +116,14 @@ export function listServerVoicePresets() {
 
 export async function getVoiceConfig(actor: WorkspaceActor, projectId: string) {
 	await FactLockGate.assertPassed(actor, projectId);
+	return findVoiceConfig(actor, projectId);
+}
+
+/** Read-only snapshot for artifact current/stale derivation after a provider call. */
+export async function findVoiceConfig(
+	actor: WorkspaceActor,
+	projectId: string,
+) {
 	const accessibleProject = await findAccessibleProject(actor, projectId);
 	if (!accessibleProject) {
 		throw new VoiceConfigError("VOICE_CONFIG_NOT_FOUND");

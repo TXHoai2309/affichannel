@@ -17,6 +17,7 @@
 		"@affichannel/core": "workspace:*",
 		"@affichannel/db": "workspace:*",
 		"@affichannel/env": "workspace:*",
+		"@aws-sdk/client-s3": "^3.1114.0",
 		"@orpc/client": "catalog:",
 		"@orpc/openapi": "catalog:",
 		"@orpc/server": "catalog:",

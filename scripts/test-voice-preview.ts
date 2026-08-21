@@ -363,6 +363,16 @@ class DeterministicPreviewProvider implements TtsProvider {
 			latencyMs: 1,
 		};
 	}
+
+	async generateSegment(input: TtsPreviewInput) {
+		this.lastInput = input;
+		return {
+			audio: new Uint8Array([0xff, 0xfb, 0x90]),
+			contentType: "audio/mpeg" as const,
+			providerRequestId: null,
+			providerDurationMs: null,
+		};
+	}
 }
 
 await db.insert(workspace).values([

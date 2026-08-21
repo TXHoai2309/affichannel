@@ -1,6 +1,7 @@
 import { listVoicePresets, TTS_PROVIDER } from "@affichannel/core";
 
 import type {
+	TtsGenerateSegmentResult,
 	TtsPreviewInput,
 	TtsPreviewResult,
 	TtsProvider,
@@ -19,6 +20,17 @@ const DETERMINISTIC_MPEG_FRAME = Uint8Array.from({ length: 417 }, (_, index) =>
 					: 0,
 );
 
+function deterministicSegmentAudio() {
+	const audio = new Uint8Array(DETERMINISTIC_MPEG_FRAME.byteLength * 40);
+	for (let index = 0; index < 40; index += 1) {
+		audio.set(
+			DETERMINISTIC_MPEG_FRAME,
+			index * DETERMINISTIC_MPEG_FRAME.byteLength,
+		);
+	}
+	return audio;
+}
+
 export class DeterministicTtsProvider implements TtsProvider {
 	readonly providerId = TTS_PROVIDER;
 
@@ -32,6 +44,17 @@ export class DeterministicTtsProvider implements TtsProvider {
 			contentType: "audio/mpeg",
 			providerRequestId: "deterministic-tts-preview",
 			latencyMs: 1,
+		};
+	}
+
+	async generateSegment(
+		_input: TtsPreviewInput,
+	): Promise<TtsGenerateSegmentResult> {
+		return {
+			audio: deterministicSegmentAudio(),
+			contentType: "audio/mpeg",
+			providerRequestId: "deterministic-tts-segment",
+			providerDurationMs: null,
 		};
 	}
 }

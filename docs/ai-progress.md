@@ -1351,4 +1351,22 @@ Trạng thái: **AFF-US-012 Phase 0 đã được chấp nhận; Phase 1 chưa b
   integration foundation pass; migration cuối là `0016`, không có `0017`.
 - Không gọi TTS/APIKEY.FUN/R2 thật; chưa làm generation API/UI/workflow.
 
-Trạng thái: **AFF-US-012 Phase 1 đã triển khai, chờ review/acceptance; Phase 2 chưa bắt đầu.**
+Trạng thái: **AFF-US-012 Phase 1 đã triển khai; Phase 2 đang chờ review/acceptance.**
+
+### 2026-08-21 — AFF-US-012 Phase 2 Segment TTS Runtime, API & Protected Audio
+
+- Mở rộng `TtsProvider` bằng `generateSegment()` với server-owned input, giữ
+  nguyên preview contract và deterministic test seam không chạy production.
+- Triển khai server orchestration: Fact Lock/current ScriptVersion/VoiceConfig,
+  full fingerprint, exact segment text, idempotency, request-hash coalescing và
+  xử lý DB partial-unique race không gọi provider trùng.
+- Triển khai provider timeout/uncertainty mapping, MP3/MIME/size validation,
+  server-authoritative duration, checksum, local/private-R2 registry, pending
+  reconciliation, storage failure và persistence cleanup semantics.
+- Thêm protected `voiceSegment.list/getState/generate` và protected immutable
+  audio route với workspace/project ownership, DB-owned storage key, ETag/304.
+- Verification: web unit 30 files/218 tests, runtime integration Neon pass,
+  full check-types/build pass, scoped Biome pass; không live APIKEY.FUN/R2,
+  không migration `0017`.
+
+Trạng thái: **AFF-US-012 Phase 2 đã triển khai, chờ review/acceptance; Phase 3 chưa bắt đầu.**

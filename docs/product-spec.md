@@ -265,6 +265,16 @@ server-side MP3 duration và local/private-storage boundary. Phase này chưa t�
 segment generation API, player/waveform UI, protected audio endpoint hoặc tự
 động hoàn thành workflow.
 
+AFF-US-012 Phase 2 đã mở rộng TTS provider bằng segment generation và application
+service server-authoritative: request chỉ nhận project, segment key và idempotency
+key; text, ScriptVersion, VoiceConfig, fingerprint, provider input và storage key
+đều được resolve ở server. Runtime tách Tx A pending/provider-storage/Tx B finalize,
+xử lý idempotency, partial-unique race, timeout uncertainty, invalid MP3, checksum,
+duration authority và cleanup khi persistence lỗi. Protected oRPC list/getState/
+generate và binary audio route kiểm tra workspace/project/artifact ownership,
+ETag/304 và private cache. Phase này chưa có segment list/player/waveform UI hoặc
+workflow completion; chưa gọi paid TTS/R2 thật trong test.
+
 ## 9. Các màn hình chính
 
 US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,

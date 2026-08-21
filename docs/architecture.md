@@ -397,6 +397,29 @@ Phase 1 chưa implement provider generation, protected stream, API, UI hoặc
 workflow mutation. Chi tiết tại
 `docs/aff-us-012-phase-1-foundation.md`.
 
+### 12.4. AFF-US-012 Phase 2 runtime, API và protected audio
+
+Phase 2 mở rộng `TtsProvider` bằng `generateSegment()` nhưng giữ nguyên
+`preview()`. Generate chỉ nhận `projectId`, `segmentKey` và idempotency key từ
+client; application service tự resolve current ScriptVersion, exact segment text,
+VoiceConfig và Fact Lock. Tx A tạo pending, provider/storage chạy ngoài transaction,
+rồi Tx B finalize artifact completed. Request hash và partial unique index xử lý
+replay/coalescing/race; unique violation ngoài các constraint đã biết không bị
+swallow.
+
+Provider response phải là MP3 hợp lệ, không rỗng và không vượt giới hạn. Server
+parse duration từ bytes làm authority, còn provider duration chỉ advisory. Timeout,
+network, 408/5xx hoặc stream uncertainty là `indeterminate`; known rejection,
+invalid audio và storage failure là lỗi có mã riêng, không blind retry. Pending hết
+lease chuyển `indeterminate`; retry dùng idempotency key mới.
+
+Storage registry chọn local cho dev/test hoặc private R2 cho production; thiếu R2
+config thì fail closed. DB chỉ lưu metadata, checksum và object key. Protected
+oRPC `voiceSegment.list/getState/generate` và binary audio route kiểm tra workspace,
+project, artifact ownership, status và DB-owned storage key; endpoint hỗ trợ ETag,
+304 và private immutable cache. Phase 2 không tạo migration, workflow mutation,
+UI hoặc waveform. Chi tiết tại `docs/aff-us-012-phase-2-runtime.md`.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

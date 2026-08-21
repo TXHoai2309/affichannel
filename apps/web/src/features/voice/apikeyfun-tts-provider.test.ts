@@ -1,4 +1,5 @@
 import { ApiKeyFunTtsProvider } from "@affichannel/api/providers/tts/apikeyfun-tts-provider";
+import { TtsProviderError } from "@affichannel/api/providers/tts/tts-provider";
 import { VoiceConfigError } from "@affichannel/core";
 import { describe, expect, it, vi } from "vitest";
 
@@ -157,6 +158,92 @@ describe("ApiKeyFun TTS preview adapter", () => {
 			"rex",
 			"sal",
 		]);
+	});
+
+	it("supports segment generation with the same canonical request and a 60s-class policy", async () => {
+		const fetchMock = vi.fn<typeof fetch>(async (_input, init) => {
+			expect(init?.signal).toBeDefined();
+			return audioResponse(new Uint8Array([0xff, 0xfb, 0x90]));
+		});
+		const provider = makeProvider(fetchMock, {
+			segmentTimeoutMs: 60_000,
+			segmentMaxBytes: 10 * 1024 * 1024,
+		});
+		const result = await provider.generateSegment({
+			text: "Giá 150.000 ₫ — AffiChannel 🎙️",
+			voiceId: "eve",
+			language: "vi",
+			speed: 1,
+		});
+		const [, init] = fetchMock.mock.calls[0] ?? [];
+
+		expect(JSON.parse(String(init?.body))).toEqual({
+			text: "Giá 150.000 ₫ — AffiChannel 🎙️",
+			voice_id: "eve",
+			language: "vi",
+			speed: 1,
+		});
+		expect(result.providerDurationMs).toBeNull();
+		expect(result.providerRequestId).toBe("tts-request-1");
+	});
+
+	it.each([
+		[408, "TTS_REQUEST_STATE_UNCERTAIN"],
+		[500, "TTS_REQUEST_STATE_UNCERTAIN"],
+	] as const)(
+		"classifies HTTP %s generation as uncertain without retry",
+		async (status, code) => {
+			const fetchMock = vi.fn<typeof fetch>(
+				async () =>
+					new Response("upstream detail", {
+						status,
+						headers: { "x-request-id": "uncertain-1" },
+					}),
+			);
+			await expect(
+				makeProvider(fetchMock).generateSegment(previewInput),
+			).rejects.toMatchObject({
+				code,
+				providerRequestId: "uncertain-1",
+				uncertain: true,
+			});
+			expect(fetchMock).toHaveBeenCalledTimes(1);
+		},
+	);
+
+	it("classifies malformed successful segment responses as known provider failure", async () => {
+		const fetchMock = vi.fn<typeof fetch>(async () =>
+			audioResponse(new Uint8Array([1]), "application/json"),
+		);
+		await expect(
+			makeProvider(fetchMock).generateSegment(previewInput),
+		).rejects.toMatchObject({
+			code: "TTS_PROVIDER_FAILED",
+		});
+
+		const timeoutFetch = vi.fn<typeof fetch>(
+			(_input, init) =>
+				new Promise<Response>((_resolve, reject) => {
+					init?.signal?.addEventListener("abort", () => {
+						const error = new Error("timeout");
+						error.name = "AbortError";
+						reject(error);
+					});
+				}),
+		);
+		await expect(
+			makeProvider(timeoutFetch, { segmentTimeoutMs: 10 }).generateSegment(
+				previewInput,
+			),
+		).rejects.toBeInstanceOf(TtsProviderError);
+		await expect(
+			makeProvider(timeoutFetch, { segmentTimeoutMs: 10 }).generateSegment(
+				previewInput,
+			),
+		).rejects.toMatchObject({
+			code: "TTS_TIMEOUT_UNCERTAIN",
+			uncertain: true,
+		});
 	});
 
 	it("keeps adapter errors typed without retaining provider response text", async () => {

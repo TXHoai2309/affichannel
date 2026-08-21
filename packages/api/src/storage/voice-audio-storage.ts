@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { resolve, sep } from "node:path";
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { dirname, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import {
 	assertSafeVoiceAudioStorageKey,
@@ -99,7 +99,7 @@ export class LocalVoiceAudioStorage implements VoiceAudioStorage {
 		const targetPath = this.pathFor(input.storageKey);
 		const tempPath = `${targetPath}.${randomUUID()}.tmp`;
 		try {
-			await mkdir(resolve(targetPath, ".."), { recursive: true });
+			await mkdir(dirname(targetPath), { recursive: true });
 			await writeFile(tempPath, input.body, { flag: "wx" });
 			await rename(tempPath, targetPath);
 			return { byteSize: input.body.byteLength, checksum };
@@ -120,8 +120,10 @@ export class LocalVoiceAudioStorage implements VoiceAudioStorage {
 
 	async open(storageKey: string) {
 		try {
+			const path = this.pathFor(storageKey);
+			await stat(path);
 			return Readable.toWeb(
-				createReadStream(this.pathFor(storageKey)),
+				createReadStream(path),
 			) as unknown as ReadableStream<Uint8Array>;
 		} catch (error) {
 			throw storageFailure("Could not open local voice audio.", error);

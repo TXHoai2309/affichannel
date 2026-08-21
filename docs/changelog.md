@@ -20,6 +20,11 @@ sử dụng Semantic Versioning.
   storage foundation, SHA-256 checksums, server-side MP3 duration và deterministic
   unit/integration coverage. Chưa có TTS generation API, UI, protected stream
   hoặc workflow mutation; không gọi paid TTS/R2.
+- AFF-US-012 Phase 2: mở rộng `TtsProvider.generateSegment`, server-authoritative
+  segment runtime, idempotency/DB race coalescing, timeout uncertainty, MP3
+  validation/duration, local/private-R2 storage registry, protected state/audio
+  APIs, ETag/304 và persistence cleanup. Chưa có UI/player/waveform/workflow
+  mutation; không gọi live APIKEY.FUN/R2 và không tạo migration `0017`.
 - AFF-US-011 Phase 0: khóa contract TTS APIKEY.FUN → Grok/xAI qua `POST /v1/tts`,
   server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
   transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có

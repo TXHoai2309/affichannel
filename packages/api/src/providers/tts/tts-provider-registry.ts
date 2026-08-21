@@ -20,6 +20,8 @@ function resolveApikeyFunOptions(
 		apiKey: env.TTS_APIKEY_FUN_API_KEY,
 		baseUrl: env.TTS_APIKEY_FUN_BASE_URL,
 		timeoutMs: env.TTS_PREVIEW_TIMEOUT_MS,
+		segmentTimeoutMs: env.VOICE_SEGMENT_TIMEOUT_MS,
+		segmentMaxBytes: env.VOICE_SEGMENT_MAX_AUDIO_BYTES,
 	};
 }
 

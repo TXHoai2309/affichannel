@@ -18,7 +18,7 @@ AFF-US-012 cần tạo TTS theo từng voiceover segment, giữ lịch sử gene
 không gọi lại một request có thể đã tính phí và không để audio của ScriptVersion
 hoặc VoiceConfig cũ làm unlock workflow hiện tại.
 
-### Quyết định đề xuất
+### Quyết định
 
 - `VoiceSegmentArtifact` là một immutable generation attempt; một logical segment
   có nhiều attempt/history. Chỉ lifecycle của pending attempt được chuyển một
@@ -52,8 +52,11 @@ hoặc VoiceConfig cũ làm unlock workflow hiện tại.
 Chi tiết audit, schema/index đề xuất, race semantics, storage contract, test plan
 và Phase 1–4 nằm tại
 `docs/aff-us-012-phase-0-contract-decisions.md`. Phase 0 không tạo migration,
-schema, runtime, API, UI hoặc paid TTS. Các giá trị giới hạn segment, duration
-parser, R2 config và reconciliation cần được review trước Phase 1.
+schema, runtime, API, UI hoặc paid TTS. Phase 1 đã đưa schema/storage/duration
+foundation vào migration `0016`; Phase 2 triển khai provider generation,
+runtime/API, protected audio, R2 fail-closed và reconciliation semantics mà
+không tạo migration `0017`. Các phase sau vẫn phải review UI, workflow và
+acceptance E2E trước khi mở rộng phạm vi.
 
 ## DEC-023 — AFF-US-011 TTS provider và Voice Studio Phase 0 contract
 
