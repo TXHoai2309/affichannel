@@ -275,6 +275,14 @@ generate và binary audio route kiểm tra workspace/project/artifact ownership,
 ETag/304 và private cache. Phase này chưa có segment list/player/waveform UI hoặc
 workflow completion; chưa gọi paid TTS/R2 thật trong test.
 
+AFF-US-012 Phase 3 đã thêm Voice Segment Studio UI bên dưới VoiceConfig: danh sách
+segment theo current ScriptVersion, trạng thái read model, generate/regenerate từng
+đoạn, protected native player, server duration và waveform derived có cache memory.
+UI giữ usable audio cũ khi regenerate, khóa khi VoiceConfig dirty hoặc Fact Lock
+stale, map lỗi sanitized và không mutate workflow completion/total duration.
+Waveform decode failure chỉ fallback player-only. E2E dùng deterministic TTS, không
+gọi live APIKEY.FUN/R2; Phase 4 vẫn phụ trách workflow completion và acceptance E2E.
+
 ## 9. Các màn hình chính
 
 US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,

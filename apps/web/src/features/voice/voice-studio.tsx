@@ -27,6 +27,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
 import { requestVoicePreview } from "./voice-preview-client";
+import VoiceSegmentStudio from "./voice-segment-studio";
 import {
 	createVoiceStudioDraft,
 	getVoiceStudioErrorMessage,
@@ -138,6 +139,9 @@ export default function VoiceStudio({ projectId }: { projectId: string }) {
 	const mountedRef = useRef(true);
 	const objectUrlRef = useRef<string | null>(null);
 	const previewAbortRef = useRef<AbortController | null>(null);
+	const handleSegmentFactLockStale = useCallback(() => {
+		setStale(true);
+	}, []);
 
 	const presets = presetsQuery.data ?? [];
 	const selectedPreset = presets.find((preset) => preset.id === draft?.voiceId);
@@ -531,6 +535,14 @@ export default function VoiceStudio({ projectId }: { projectId: string }) {
 					</CardContent>
 				</Card>
 			</div>
+
+			<VoiceSegmentStudio
+				configDirty={dirty}
+				configReady={Boolean(savedConfig)}
+				configRevision={savedConfig?.revision ?? null}
+				onFactLockStale={handleSegmentFactLockStale}
+				projectId={projectId}
+			/>
 		</section>
 	);
 }

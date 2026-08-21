@@ -1390,3 +1390,20 @@ Trạng thái: **AFF-US-012 Phase 2 đã triển khai, chờ review/acceptance; 
   diagnostic phản ánh `storageRetained` đúng khi delete thất bại.
 
 Trạng thái: **AFF-US-012 Phase 2 hardening đã triển khai, chờ review/acceptance; Phase 3 chưa bắt đầu.**
+
+### 2026-08-21 — AFF-US-012 Phase 3 Voice Segment Studio UI
+
+- Mở rộng `/projects/{projectId}/voice` với `VoiceSegmentStudio` bên dưới
+  VoiceConfig, dùng `voiceSegment.list/getState/generate`; text lấy exact từ
+  current ScriptVersion và không gửi text/voice/speed/storage key từ browser.
+- Hiển thị `not_generated/pending/completed/failed/indeterminate/stale`, giữ
+  `latestUsableArtifact` khi regenerate pending/failed, khóa generate khi
+  VoiceConfig dirty/chưa lưu và relock khi Fact Lock stale.
+- Thêm protected native player theo artifact ID, server `durationMs`, waveform
+  48 bar derived từ AudioContext, memory cache theo artifact/checksum và
+  player-only fallback khi decode thất bại. Poll list mỗi 2 giây khi pending.
+- Thêm unit state/waveform tests và deterministic E2E save → generate → player /
+  waveform-or-fallback → refresh → regenerate với key mới. Không workflow mutation,
+  không migration mới, không live APIKEY.FUN/R2.
+
+Trạng thái: **AFF-US-012 Phase 3 đã triển khai, chờ review/acceptance; Phase 4 chưa bắt đầu.**

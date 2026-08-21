@@ -28,6 +28,7 @@ với các tài liệu tại đây.
 20. [AFF-US-012 Phase 0 Contract & Architecture Lock](./aff-us-012-phase-0-contract-decisions.md)
 21. [AFF-US-012 Phase 1 Foundation](./aff-us-012-phase-1-foundation.md)
 22. [AFF-US-012 Phase 2 Runtime, API & Protected Audio](./aff-us-012-phase-2-runtime.md)
+23. [AFF-US-012 Phase 3 Voice Segment Studio UI](./aff-us-012-phase-3-ui.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 

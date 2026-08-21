@@ -17,6 +17,7 @@ import {
 	scriptVersion,
 	user,
 	voiceConfig,
+	voiceSegmentArtifact,
 } from "@affichannel/db";
 import { expect, type Page, test } from "@playwright/test";
 import { eq, inArray } from "drizzle-orm";
@@ -29,6 +30,7 @@ import { createProductFact } from "../../../../packages/api/src/services/product
 import { createProduct } from "../../../../packages/api/src/services/product-service";
 import { createProjectRepository } from "../../../../packages/api/src/services/project-repository";
 import { getWorkspaceActor } from "../../../../packages/api/src/services/workspace";
+import { createVoiceAudioStorage } from "../../../../packages/api/src/storage/voice-audio-storage-factory";
 
 const fixedAccountEmail = process.env.E2E_AUTH_EMAIL;
 const fixedAccountPassword = process.env.E2E_AUTH_PASSWORD;
@@ -276,6 +278,120 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 			await page.reload({ waitUntil: "commit" });
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+		} finally {
+			await cleanupReviewFixture(fixture);
+		}
+	});
+
+	test("creates, plays, refreshes and regenerates a Voice Segment deterministically", async ({
+		page,
+	}) => {
+		test.setTimeout(120_000);
+		const fixture = await seedReviewFixture("passed");
+		try {
+			await signIn(page);
+			await page.goto(`/projects/${fixture.projectId}/voice`, {
+				waitUntil: "commit",
+			});
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
+			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
+
+			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
+			const segmentCard = page.getByTestId("voice-segment-intro");
+			await expect(segmentCard).toBeVisible();
+			await expect(segmentCard).toContainText(
+				"Pin dùng 20 giờ trong một lần sạc.",
+			);
+			await expect(
+				segmentCard.getByRole("button", { name: "Tạo giọng đọc" }),
+			).toBeVisible();
+
+			const firstGenerateResponse = page.waitForResponse((response) =>
+				response.url().includes("/api/rpc/voiceSegment/generate"),
+			);
+			await segmentCard.getByRole("button", { name: "Tạo giọng đọc" }).click();
+			await expect(
+				segmentCard.getByRole("button", { name: "Đang tạo..." }),
+			).toBeVisible();
+			expect((await firstGenerateResponse).status()).toBe(200);
+			await expect(segmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(
+				segmentCard.locator('audio[aria-label="Audio đoạn 1"]'),
+			).toBeVisible();
+			await expect(
+				segmentCard.locator(
+					'[data-testid="voice-segment-waveform"], [data-testid="waveform-fallback"]',
+				),
+			).toBeVisible({ timeout: 15_000 });
+
+			const firstArtifacts = await db
+				.select({
+					id: voiceSegmentArtifact.id,
+					idempotencyKey: voiceSegmentArtifact.idempotencyKey,
+				})
+				.from(voiceSegmentArtifact)
+				.where(eq(voiceSegmentArtifact.projectId, fixture.projectId));
+			expect(firstArtifacts).toHaveLength(1);
+
+			await page.reload({ waitUntil: "commit" });
+			const refreshedCard = page.getByTestId("voice-segment-intro");
+			await expect(refreshedCard.getByText(/Đã tạo ·/)).toBeVisible();
+			await expect(
+				refreshedCard.locator('audio[aria-label="Audio đoạn 1"]'),
+			).toBeVisible();
+
+			const secondGenerateResponse = page.waitForResponse((response) =>
+				response.url().includes("/api/rpc/voiceSegment/generate"),
+			);
+			await refreshedCard.getByRole("button", { name: "Tạo lại" }).click();
+			await expect(
+				refreshedCard.getByRole("button", { name: "Đang tạo..." }),
+			).toBeVisible();
+			expect((await secondGenerateResponse).status()).toBe(200);
+			await expect(refreshedCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(
+				refreshedCard.locator('audio[aria-label="Audio đoạn 1"]'),
+			).toBeVisible();
+			await expect(
+				refreshedCard.getByRole("button", { name: "Tạo lại" }),
+			).toBeVisible();
+			await expect(
+				refreshedCard.locator(
+					'[data-testid="voice-segment-waveform"], [data-testid="waveform-fallback"]',
+				),
+			).toBeVisible({ timeout: 15_000 });
+			await expect
+				.poll(
+					async () =>
+						(
+							await db
+								.select({
+									id: voiceSegmentArtifact.id,
+									idempotencyKey: voiceSegmentArtifact.idempotencyKey,
+								})
+								.from(voiceSegmentArtifact)
+								.where(eq(voiceSegmentArtifact.projectId, fixture.projectId))
+						).length,
+					{ timeout: 15_000 },
+				)
+				.toBe(2);
+			const regeneratedArtifacts = await db
+				.select({
+					id: voiceSegmentArtifact.id,
+					idempotencyKey: voiceSegmentArtifact.idempotencyKey,
+				})
+				.from(voiceSegmentArtifact)
+				.where(eq(voiceSegmentArtifact.projectId, fixture.projectId));
+			expect(regeneratedArtifacts).toHaveLength(2);
+			expect(regeneratedArtifacts[0]?.idempotencyKey).not.toBe(
+				regeneratedArtifacts[1]?.idempotencyKey,
+			);
 		} finally {
 			await cleanupReviewFixture(fixture);
 		}
@@ -598,6 +714,25 @@ async function seedReviewFixture(
 }
 
 async function cleanupReviewFixture(fixture: ReviewFixture) {
+	const audioArtifacts = await db
+		.select({ storageKey: voiceSegmentArtifact.storageKey })
+		.from(voiceSegmentArtifact)
+		.where(eq(voiceSegmentArtifact.projectId, fixture.projectId));
+	const localStorage = createVoiceAudioStorage("local");
+	await Promise.all(
+		audioArtifacts
+			.filter((artifact) => artifact.storageKey)
+			.map(async (artifact) => {
+				try {
+					await localStorage.delete(artifact.storageKey as string);
+				} catch {
+					// Cleanup must not hide the fixture teardown or test result.
+				}
+			}),
+	);
+	await db
+		.delete(voiceSegmentArtifact)
+		.where(eq(voiceSegmentArtifact.projectId, fixture.projectId));
 	const runIds = (
 		await db
 			.select({ id: factLockRun.id })

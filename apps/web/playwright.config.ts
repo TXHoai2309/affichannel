@@ -15,7 +15,11 @@ if (process.env.E2E_BASE_URL?.trim()) {
 // Authenticated E2E must never call paid TTS. Playwright owns the server,
 // forces a non-production environment, and passes this explicit test-only flag
 // through the child process environment.
-Object.assign(process.env, { NODE_ENV: "development" });
+Object.assign(process.env, {
+	NODE_ENV: "development",
+	VOICE_AUDIO_STORAGE_PROVIDER: "local",
+	VOICE_AUDIO_LOCAL_ROOT: ".data/voice-audio-e2e",
+});
 process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC = "1";
 
 const e2eEmail = process.env.E2E_AUTH_EMAIL?.trim();

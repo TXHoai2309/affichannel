@@ -278,16 +278,22 @@ Phase 2 đã triển khai segment generation runtime/API/provider, server-author
 input và MP3 duration, idempotency/coalescing với DB race handling, local/private-R2
 storage registry, protected state/audio endpoints và failure/cleanup semantics.
 Không tạo migration `0017`, không gọi live APIKEY.FUN hoặc R2 trong test. Phase 2
-đã triển khai và chờ review/acceptance; Phase 3 chưa bắt đầu.
+đã được chấp nhận; Phase 3 đã triển khai UI và đang chờ review/acceptance.
 
 Các phase dự kiến:
 
 ```text
 Phase 1 — schema/repository/storage/duration foundation
 Phase 2 — segment generation API/provider/protected stream ✅
-Phase 3 — segment list/player/basic waveform
+Phase 3 — segment list/player/basic waveform ✅
 Phase 4 — duration/workflow hardening và acceptance E2E
 ```
+
+Phase 3 giữ nguyên VoiceConfig/gate của US11, dùng server read model cho từng
+segment, generate/regenerate với idempotency key mới, protected audio endpoint,
+server duration và waveform derived cache memory. Không mutate workflow completion,
+không tạo migration mới và không gọi paid TTS/R2 trong test. Chi tiết tại
+`docs/aff-us-012-phase-3-ui.md`.
 
 - Test TTS tiếng Việt bằng script đại diện.
 - Tạo voice theo segment và cache bằng normalized input hash.

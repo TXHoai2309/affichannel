@@ -430,6 +430,22 @@ thay vì blind-delete. Audio route resolve local/R2 từ persisted
 `artifact.storageProvider`, không theo ENV default hiện tại. Provider success response
 sai MIME, rỗng hoặc oversize là `TTS_INVALID_AUDIO`; preview behavior không đổi.
 
+### 12.5. AFF-US-012 Phase 3 Voice Segment Studio UI
+
+Route `/projects/{projectId}/voice` giữ nguyên VoiceConfig của US11 và render
+`VoiceSegmentStudio` bên dưới. UI dùng `voiceSegment.list` làm read model theo
+thứ tự current ScriptVersion, `getState` để refresh segment sau mutation và
+`generate` chỉ với project/segment/idempotency key. `latestRequest`,
+`latestUsableArtifact` và `effectiveStatus` được hiển thị riêng; stale không
+được coi là failed/current completed.
+
+Generate bị khóa khi VoiceConfig dirty/chưa lưu hoặc request logical đang pending.
+Regenerate dùng key mới nhưng giữ player của usable artifact cũ. Native player
+đọc protected audio route theo artifact ID; storage provider/key không đi qua
+browser. Waveform decode bytes bằng `AudioContext`, cache memory theo
+artifact/checksum và fallback player-only khi decode thất bại. Phase 3 không
+mutate workflow completion, total duration hoặc `project.currentStepKey`.
+
 ## 13. Bất biến bảo mật
 
 - Secret được validate ở server và không xuất qua `NEXT_PUBLIC_*`.

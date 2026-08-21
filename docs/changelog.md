@@ -29,6 +29,11 @@ sử dụng Semantic Versioning.
   thêm Fact Lock recheck sát paid-call boundary, recovery khi finalize response
   ambiguous và giữ object khi DB outcome không xác định; invalid MIME/empty/oversize
   map về `TTS_INVALID_AUDIO`.
+- AFF-US-012 Phase 3: thêm Voice Segment Studio UI theo current ScriptVersion,
+  server read-model status, generate/regenerate từng đoạn với idempotency key mới,
+  protected native player, server duration, waveform derived cache memory và
+  fallback player-only. Không mutate workflow completion, không tạo migration mới
+  và không gọi live APIKEY.FUN/R2 trong E2E.
 - AFF-US-011 Phase 0: khóa contract TTS APIKEY.FUN → Grok/xAI qua `POST /v1/tts`,
   server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
   transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có
