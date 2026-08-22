@@ -1,6 +1,6 @@
 # Kế hoạch Domain Evolution v0.8
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; chưa thực thi migration
+- Trạng thái: Canonical plan; Phase 0 preparation được phép, migration M1 còn bị chặn bởi quyết định ContentFormat
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-22
 - Quyết định liên quan: DEC-025
@@ -46,7 +46,10 @@ Output ScriptDraft, versioning, repair, idempotency và audit hiện hữu đư�
 2. Chạy golden affiliate regression theo
    `docs/aff-us-012-phase-4-final-acceptance.md`.
 3. Chụp số lượng Project theo Product linkage, current step và artifact state.
-4. Không bắt đầu schema change nếu baseline không xanh.
+4. Khóa `ContentFormat` representation/ownership/versioning và backfill/default
+   rule bằng ADR/contract; không tự quyết trong migration PR.
+5. Không bắt đầu schema change nếu baseline không xanh hoặc ContentFormat blocker
+   chưa đóng.
 
 ### M1 — Expand schema
 

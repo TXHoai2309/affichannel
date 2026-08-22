@@ -4,39 +4,47 @@ Thư mục này là nguồn tài liệu chuẩn về sản phẩm và kỹ thu�
 Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao diện phải nhất quán
 với các tài liệu tại đây.
 
-Product/UI Specification v0.8 đã được chấp nhận ở cấp tài liệu qua DEC-025. Repo
+Product/UI Specification v0.8 là **canonical product specification** và đã được
+chấp nhận ở cấp tài liệu qua DEC-025. Repo
 chỉ được coi là canonical-activated sau migration review và regression gates trong
 `domain-evolution-acceptance.md`; trạng thái hiện tại chưa ngụ ý đã đổi schema/code.
 
 ## Thứ tự đọc
 
-1. [Đặc tả sản phẩm](./product-spec.md)
-2. [Kiến trúc hệ thống](./architecture.md)
-3. [Hệ thống thiết kế](./design-system.md)
+1. [Các quyết định kiến trúc](./decisions.md)
+2. [Đặc tả sản phẩm v0.8](./product-spec.md)
+3. [Kiến trúc hệ thống](./architecture.md)
 4. [Lộ trình triển khai](./roadmap.md)
-5. [Các quyết định kiến trúc](./decisions.md)
-6. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
-7. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
-8. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
+5. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
+6. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
+7. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
+8. [Hệ thống thiết kế](./design-system.md)
 9. [Tiến trình AI agent](./ai-progress.md)
 10. [Nhật ký thay đổi](./changelog.md)
-11. [Bàn giao AFF-US-004](./aff-us-004.md)
-12. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
-13. [AFF-US-008 Phase 2A](./aff-us-008-phase-2a.md)
-14. [AFF-US-008 Phase 2B](./aff-us-008-phase-2b.md)
-15. [AFF-US-010 Phase 0 Contract Hardening](./aff-us-010-phase-0-contract-hardening.md)
-16. [AFF-US-010 Phase 1 Foundation & Classification](./aff-us-010-phase-1-foundation.md)
-17. [AFF-US-010 Phase 2 Review & Resolution](./aff-us-010-phase-2-review-resolution.md)
-18. [AFF-US-010 Phase 3 Gate & Runtime](./aff-us-010-phase-3-gate-runtime.md)
-19. [AFF-US-011 Phase 0 Contract & Architecture Freeze](./aff-us-011-phase-0-contract-decisions.md)
-20. [AFF-US-011 Phase 1 Voice Foundation](./aff-us-011-phase-1-foundation.md)
-21. [AFF-US-011 Phase 2 TTS Preview Runtime](./aff-us-011-phase-2-tts-preview-runtime.md)
-22. [AFF-US-011 Phase 3 Voice Studio](./aff-us-011-phase-3-voice-studio.md)
-23. [AFF-US-012 Phase 0 Contract & Architecture Lock](./aff-us-012-phase-0-contract-decisions.md)
-24. [AFF-US-012 Phase 1 Foundation](./aff-us-012-phase-1-foundation.md)
-25. [AFF-US-012 Phase 2 Runtime, API & Protected Audio](./aff-us-012-phase-2-runtime.md)
-26. [AFF-US-012 Phase 3 Voice Segment Studio UI](./aff-us-012-phase-3-ui.md)
-27. [AFF-US-012 Phase 4 Final Acceptance](./aff-us-012-phase-4-final-acceptance.md)
+
+## Historical baseline trước Domain Evolution v0.8
+
+Các tài liệu dưới đây là bằng chứng của golden affiliate flow tại thời điểm từng
+story hoàn thành. Chúng phục vụ regression/audit và **không override DEC-025,
+Product Specification v0.8 hoặc current execution order trong roadmap**.
+
+1. [Bàn giao AFF-US-004](./aff-us-004.md)
+2. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
+3. [AFF-US-008 Phase 2A](./aff-us-008-phase-2a.md)
+4. [AFF-US-008 Phase 2B](./aff-us-008-phase-2b.md)
+5. [AFF-US-010 Phase 0 Contract Hardening](./aff-us-010-phase-0-contract-hardening.md)
+6. [AFF-US-010 Phase 1 Foundation & Classification](./aff-us-010-phase-1-foundation.md)
+7. [AFF-US-010 Phase 2 Review & Resolution](./aff-us-010-phase-2-review-resolution.md)
+8. [AFF-US-010 Phase 3 Gate & Runtime](./aff-us-010-phase-3-gate-runtime.md)
+9. [AFF-US-011 Phase 0 Contract & Architecture Freeze](./aff-us-011-phase-0-contract-decisions.md)
+10. [AFF-US-011 Phase 1 Voice Foundation](./aff-us-011-phase-1-foundation.md)
+11. [AFF-US-011 Phase 2 TTS Preview Runtime](./aff-us-011-phase-2-tts-preview-runtime.md)
+12. [AFF-US-011 Phase 3 Voice Studio](./aff-us-011-phase-3-voice-studio.md)
+13. [AFF-US-012 Phase 0 Contract & Architecture Lock](./aff-us-012-phase-0-contract-decisions.md)
+14. [AFF-US-012 Phase 1 Foundation](./aff-us-012-phase-1-foundation.md)
+15. [AFF-US-012 Phase 2 Runtime, API & Protected Audio](./aff-us-012-phase-2-runtime.md)
+16. [AFF-US-012 Phase 3 Voice Segment Studio UI](./aff-us-012-phase-3-ui.md)
+17. [AFF-US-012 Phase 4 Final Acceptance](./aff-us-012-phase-4-final-acceptance.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 
@@ -82,3 +90,7 @@ Product/UI Specification v0.8 Word là đầu vào canonical đã được DEC-0
 các tài liệu Markdown trong thư mục này là contract trực tiếp để triển khai repo.
 Các file Word/spreadsheet cũ hơn vẫn là nguồn tham khảo lịch sử. Nếu tài liệu cũ
 mâu thuẫn với thư mục này, hãy áp dụng thứ tự nguồn sự thật nêu trên.
+
+Sprint Plan v1.0 đã bị roadmap canonical v0.8 thay thế. Sprint Plan v2.0 là
+external project artifact tại `D:\Affichanels\tài liệu`; không tạo relative link
+vì file không nằm trong repo.

@@ -1,7 +1,29 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-012 hoàn tất; Product/UI v0.8 đã canonical ở cấp tài liệu, implementation/migration chưa bắt đầu.
+- Trạng thái: US12 baseline frozen/completed; v0.8 documentation canonicalized; Domain Evolution/ClaimManifest/Quick Image implementation chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-22
+
+## 2026-08-22 — Finalize bộ tài liệu canonical v0.8
+
+Đã đưa `CURRENT EXECUTION ORDER — CANONICAL v0.8` lên đầu roadmap và đánh dấu
+toàn bộ slice affiliate-first cũ là historical/golden baseline. Thứ tự công việc
+mới là Freeze US12 → Domain Evolution → ClaimManifest/Fact Lock → Quick Image →
+Channel-first UI → Library/Calendar → Analytics → AI Visual.
+
+Architecture đã phản ánh `packages/core` đang được sử dụng và VoiceSegment đã có
+`VoiceAudioStorage`: local cho dev/test, private R2 cho production, database chỉ
+lưu storage key/metadata. Media Library và render asset storage vẫn là target,
+không được ghi nhận là đã hoàn thành.
+
+Open-decision audit xác định ContentFormat representation/ownership/versioning là
+blocker trước migration M1. Applicability provenance, Organic factual evidence,
+render/provider và analytics được phân loại non-blocker/deferred với gate rõ ràng.
+Có thể bắt đầu **Domain Evolution preparation / Phase 0**, chưa được bắt đầu
+migration cho đến khi ContentFormat blocker đóng.
+
+Không sửa code/schema/test, không tạo/apply migration, không gọi paid provider và
+không commit/push/merge/deploy. Migration head vẫn
+`0016_gifted_microbe.sql`; ClaimManifest và Quick Image implementation chưa bắt đầu.
 
 ## 2026-08-22 — Đồng bộ canonical Product/UI Specification v0.8
 

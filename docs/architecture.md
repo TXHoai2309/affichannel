@@ -29,13 +29,13 @@
 | Repository | pnpm workspace và Turborepo |
 | Chất lượng | TypeScript và Biome |
 | Deploy web | Vercel |
-| Object storage | Cloudflare R2, thêm khi bắt đầu upload media |
+| Object storage | `VoiceAudioStorage` hiện hỗ trợ local dev/test và private Cloudflare R2 production; media/render storage còn mở rộng theo slice |
 | Render | Remotion và FFmpeg trong worker riêng |
 
 `runtime: none` trong metadata scaffold nghĩa là không sinh backend runtime riêng.
 Ứng dụng full-stack Next.js vẫn chạy code server trên Node.js runtime.
 
-## 3. Cấu trúc repository mục tiêu
+## 3. Cấu trúc repository hiện tại và mục tiêu
 
 ```text
 affichannel/
@@ -45,10 +45,10 @@ affichannel/
 ├─ packages/
 │  ├─ api/                  oRPC procedure và request context
 │  ├─ auth/                 Cấu hình Better Auth
-│  ├─ core/                 Domain rule và application service (sẽ thêm)
+│  ├─ core/                 Shared domain policies, validators, errors và logic dùng chung hiện hữu
 │  ├─ db/                   Drizzle schema, migration và repository
 │  ├─ env/                  Biến môi trường đã validate
-│  ├─ storage/              Adapter R2/local (sẽ thêm)
+│  ├─ storage/              Package media/render storage mục tiêu; VoiceAudioStorage hiện ở packages/api/src/storage
 │  ├─ ui/                   Shared UI primitive và token
 │  └─ video/                Remotion composition và render contract (sẽ thêm)
 ├─ docs/                    Tài liệu sản phẩm và kỹ thuật chuẩn
@@ -198,7 +198,21 @@ atomicity bằng nhiều request độc lập từ client.
 
 ## 9. Media và storage
 
-Database chỉ lưu metadata và object key, không lưu binary media.
+### Đã triển khai hiện tại
+
+AFF-US-012 đã có `VoiceAudioStorage` abstraction trong
+`packages/api/src/storage`: development/test dùng local filesystem, production
+dùng private Cloudflare R2 qua server-owned configuration. VoiceSegment database
+chỉ lưu `storageProvider`, `storageKey`, MIME, kích thước, checksum, duration và
+metadata; không lưu binary audio. Protected audio route resolve adapter từ
+`storageProvider` đã persist và kiểm tra workspace ownership.
+
+Implementation này chỉ hoàn thành storage cho VoiceSegment. Nó không đồng nghĩa
+Media Library, render asset hoặc output-video storage đã hoàn thành.
+
+### Kiến trúc đích cho media và render
+
+Database chỉ lưu metadata và object key, không lưu binary media/video.
 
 Storage adapter phải hỗ trợ:
 
@@ -537,7 +551,11 @@ Biến bắt buộc hiện tại:
 - `BETTER_AUTH_URL`;
 - `CORS_ORIGIN`.
 
-Chỉ thêm biến R2, AI, TTS và worker khi bắt đầu vertical slice tương ứng.
+TTS và VoiceAudioStorage variables hiện đã được validate, gồm provider local/R2,
+local root, TTS endpoint/key/timeout và R2 credentials tùy chọn. Chỉ thêm biến cho
+Media Library, render worker, AI Visual hoặc provider mới khi vertical slice tương
+ứng bắt đầu; không dùng biến VoiceAudioStorage để ngụ ý các storage domain khác đã
+hoàn thành.
 
 ## 15. Cổng chất lượng
 
@@ -558,7 +576,8 @@ Trước khi hoàn thành một slice:
 
 - Next.js tại port 3002.
 - Neon development database.
-- Có thể dùng local filesystem adapter cho thử nghiệm media ban đầu.
+- VoiceSegment dùng local filesystem adapter trong dev/test; media/render local
+  adapter tiếp tục được thêm theo vertical slice tương ứng.
 - Local render worker khi bắt đầu render.
 
 Runtime query dùng `DATABASE_URL` pooled; Drizzle schema tooling dùng
@@ -572,7 +591,10 @@ Runtime query dùng `DATABASE_URL` pooled; Drizzle schema tooling dùng
 - Worker deploy riêng hoặc local worker được vận hành rõ ràng.
 
 Agent không tự deploy production nếu chủ dự án chưa cho phép rõ ràng.
-## AFF-US-007 — Transaction boundary và read model freshness
+## Historical implementation notes — AFF-US-007 transaction/read model
+
+> Historical baseline before v0.8 Domain Evolution; giữ nguyên contract tại thời
+> điểm story hoàn thành và không dùng làm current target architecture.
 
 AFF-US-007 bổ sung `revision` cho `product_fact` và `product_fact_history`, cùng
 `fact_dependency` và `fact_invalidation_event`. `fact_dependency.productFactId` cố ý không
@@ -588,7 +610,7 @@ Freshness được tính ở core từ date-only và business timezone, sau đó
 list và Dashboard aggregate. Không tạo scheduler, warning table hoặc invalidation job riêng cho
 clock freshness.
 
-## AFF-US-008 — ScriptGeneration foundation
+## Historical implementation notes — AFF-US-008 ScriptGeneration foundation
 
 US8 lưu `script_generation` như generated artifact read-only, có full/partial output và reload
 được. Artifact này không phải `script_version`; repair tạo child artifact mới. Input snapshot

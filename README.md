@@ -6,6 +6,13 @@ policy yêu cầu; Product claim vẫn phải truy vết qua Product Facts và F
 Project được khởi tạo bằng Better T Stack với Next.js, oRPC, Better Auth, Drizzle
 và Neon PostgreSQL.
 
+Canonical product scope hỗ trợ Organic channel content, Affiliate content,
+Scripted creation, Quick Image creation và Voice/Video pipeline theo content
+requirements. Product Facts và Fact Lock chỉ bắt buộc khi applicability policy
+yêu cầu. Đây là scope đích v0.8; implementation hiện tại mới hoàn tất golden
+affiliate flow đến AFF-US-012, còn Domain Evolution, ClaimManifest v0.8 và Quick
+Image chưa bắt đầu.
+
 ## Tài liệu project
 
 Đọc [docs/README.md](./docs/README.md) trước khi triển khai feature. Phạm vi sản
@@ -90,6 +97,7 @@ affichannel/
 │  ├─ api/          oRPC procedures và context
 │  ├─ auth/         Cấu hình Better Auth
 │  ├─ config/       Cấu hình TypeScript dùng chung
+│  ├─ core/         Shared domain policies, validators và logic dùng chung
 │  ├─ db/           Drizzle schema và database access
 │  ├─ env/          Validation biến môi trường
 │  └─ ui/           Shared UI components và styles

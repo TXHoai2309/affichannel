@@ -4,6 +4,29 @@
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-22
 
+## CURRENT EXECUTION ORDER — CANONICAL v0.8
+
+Đây là thứ tự duy nhất dùng để chọn công việc mới. Các Slice/AFF-US
+affiliate-first bên dưới được giữ nguyên làm historical/golden baseline; **không
+tiếp tục triển khai backlog mới theo thứ tự các slice lịch sử đó**.
+
+1. Freeze US12 baseline.
+2. Domain Evolution.
+3. ClaimManifest / Fact Lock evolution.
+4. Quick Image.
+5. Channel-first UI.
+6. Library / Calendar.
+7. Analytics.
+8. AI Visual.
+
+Current pointer: US12 baseline đã frozen/completed. Bước tiếp theo là Domain
+Evolution preparation / Phase 0; migration M1 chưa được phép bắt đầu khi
+`ContentFormat` representation/ownership/versioning còn mở.
+
+Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
+canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
+`docs/domain-evolution-acceptance.md`.
+
 ## 1. Phương pháp triển khai
 
 Làm theo vertical slice. Mỗi slice gồm database, domain logic, API, UI, các trạng
@@ -30,7 +53,10 @@ Slice chỉ bắt đầu khi có:
 - cách kiểm thử;
 - không còn quyết định chưa xử lý có thể làm thay đổi lớn implementation.
 
-## 3. Giai đoạn 0 — Tài liệu và baseline
+## Historical Affiliate Baseline — Giai đoạn 0
+
+> Historical — do not use as current execution order. Nội dung từ đây đến hết
+> Slice 9 phản ánh trình tự xây golden affiliate flow và được giữ để regression.
 
 Kết quả: có cơ sở triển khai được thống nhất trước feature code.
 
@@ -48,7 +74,7 @@ Kết quả: có cơ sở triển khai được thống nhất trước feature 
 - `pnpm run check-types` đạt.
 - Chủ dự án duyệt hoặc sửa phạm vi MVP 0.
 
-## 4. Slice 1 — Authentication
+## Historical — Slice 1: Authentication
 
 Backlog liên quan: `AFF-US-001`.
 
@@ -67,7 +93,7 @@ Acceptance Criteria:
 
 Không bao gồm social login, organization/role và account administration UI.
 
-## 5. Slice 2 — App Shell và Navigation
+## Historical — Slice 2: App Shell và Navigation
 
 Backlog liên quan: `AFF-US-002`.
 
@@ -92,7 +118,7 @@ này chỉ định nghĩa `ProjectStepKey`, `ProjectStepStatus` và persistence 
 lưu tại `Project.currentStepKey`; URL chỉ xác định bước đang được xem, còn
 `Project/ContentBrief/StepStatus` là persistence domain thực.
 
-## 6. Slice 3 — Product
+## Historical — Slice 3: Product
 
 Backlog liên quan: `AFF-US-005`.
 
@@ -114,7 +140,7 @@ Cập nhật hoàn thiện (2026-08-12): Product Library dùng cursor pagination
 Product Detail không hiển thị copy implementation, và URL validation dùng parser cùng allow-list
 protocol. Story đã đủ điều kiện chuyển sang AFF-US-006 Product Facts.
 
-## 7. Slice 4 — Product Facts
+## Historical — Slice 4: Product Facts
 
 Backlog liên quan: `AFF-US-006`.
 
@@ -131,7 +157,7 @@ Không thuộc slice này: freshness automation, stale/expired status, scheduler
 scraping/fetching, provider AI, Fact Lock và restore/diff UI. Các phần này chỉ bắt đầu khi
 story tương ứng có contract riêng.
 
-## 8. Slice 5 — Project và Content Brief
+## Historical — Slice 5: Project và Content Brief
 
 Backlog liên quan: `AFF-US-004`.
 
@@ -156,7 +182,7 @@ recent projects giới hạn 5, activity derive từ created/updated timestamps,
 placeholder trung thực và mở project theo current step. Authenticated E2E đã đạt 8/8, gồm
 flow tạo project → Dashboard → mở Recent Project → current step → ProjectStepper.
 
-## 9. Slice 6 — Structured Script
+## Historical — Slice 6: Structured Script
 
 Backlog liên quan: `AFF-US-008` và `AFF-US-009`.
 
@@ -183,7 +209,7 @@ ScriptVersion, Fact Lock, TTS, video và authenticated/live acceptance vẫn là
 phần sau phase này; video default được giữ ở APIKEY.FUN + Grok 720p theo adapter,
 không triển khai trong Phase 2B.
 
-## 10. Slice 7 — Fact Lock
+## Historical — Slice 7: Fact Lock
 
 Backlog dự kiến: `AFF-US-010`; phải sửa khoảng trống ID hiện có trước triển khai.
 
@@ -224,7 +250,7 @@ Acceptance Criteria tuân theo `product-spec.md`. TTS và Render bị khóa nế
 version hiện tại chưa có run đạt. Chi tiết Phase 3 tại
 `docs/aff-us-010-phase-3-gate-runtime.md`.
 
-## 11. Slice 8 — Voice và media
+## Historical — Slice 8: Voice và media
 
 Backlog liên quan: `AFF-US-011` đến `AFF-US-014`.
 
@@ -309,7 +335,7 @@ nhưng làm gate và persisted status phản ánh trạng thái cần xem lại.
 - Upload và validate media thật.
 - Gắn media và voice vào scene có thứ tự.
 
-## 12. Slice 9 — Preview và render
+## Historical — Slice 9: Preview và render
 
 Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
 
@@ -321,17 +347,18 @@ Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
 
 MVP 0 hoàn thành khi slice này đạt end-to-end.
 
-## 13. Chuỗi kích hoạt canonical v0.8
+## Chuỗi kích hoạt canonical v0.8 — chi tiết
 
 Các slice 1–9 ở trên là lịch sử và golden affiliate baseline. Không đánh lại số
 story hoặc bulk rewrite implementation cũ. Công việc mới đi theo thứ tự phụ thuộc:
 
-### 13.1. Freeze baseline AFF-US-012
+### 1. Freeze baseline AFF-US-012
 
+- Trạng thái: hoàn tất/frozen tại migration `0016_gifted_microbe.sql`.
 - Giữ acceptance evidence Phase 4 và regression golden affiliate flow.
 - Không thay đổi schema/contract khi baseline chưa xanh.
 
-### 13.2. Domain Evolution
+### 2. Domain Evolution
 
 - Additive migration cho `contentType`, `creationPath`, `contentFormat`; backfill
   project cũ thành `AFFILIATE + SCRIPTED`.
@@ -340,7 +367,7 @@ story hoặc bulk rewrite implementation cũ. Công việc mới đi theo thứ 
   `nextApplicableStep`; không sửa enum persisted step status.
 - Thêm ScriptGeneration mode `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`.
 
-### 13.3. ClaimManifest và Fact Lock Manifest-first
+### 3. ClaimManifest và Fact Lock Manifest-first
 
 - Tạo immutable server-built ClaimManifest từ mọi output-bearing source.
 - Mở rộng FactLockRun new writes bằng Manifest ID/fingerprint; giữ read adapter cho
@@ -348,26 +375,29 @@ story hoặc bulk rewrite implementation cũ. Công việc mới đi theo thứ 
 - Áp dụng conditional gate: Affiliate và Organic Product claim cần Fact Lock;
   Organic claimless là `NOT_REQUIRED`, kể cả khi opt-in Voice.
 
-### 13.4. Quick Image vertical slice
+### 4. Quick Image vertical slice
 
 - Hoàn thiện `ORGANIC + QUICK_IMAGE` không Product/Script/Fact Lock.
 - Một ảnh 9:16, motion local deterministic, text/music/voice tùy chọn.
 - Shared composition/preview/render, immutable variation và retry không overwrite.
 
-### 13.5. Channel-first UI
+### 5. Channel-first UI
 
 - Một Channel Strategy/workspace và defaults tái sử dụng.
 - Video Studio có bốn tab Content → Resources → Compose → Export; bảy persisted
   project steps vẫn là workflow storage.
 - UI hiển thị rõ `NOT_REQUIRED`, `OPTIONAL`, `BLOCKED`, `STALE` và lý do.
 
-### 13.6. Library, Calendar và Analytics
+### 6. Library và Calendar
 
 - Content Library theo lifecycle tách biệt khỏi production readiness.
 - Calendar/lịch bảy ngày và publication record.
+
+### 7. Analytics
+
 - Import metrics CSV/XLSX, analytics mô tả và hiệu quả chi phí.
 
-### 13.7. Post-MVP AI Visual
+### 8. Post-MVP AI Visual
 
 - Bật một Video AI provider qua adapter/feature flag sau khi Quick Image ổn định.
 - Giữ cost confirmation, retry hữu hạn, immutable outputs và manual publishing.
@@ -395,7 +425,7 @@ golden affiliate flow trước khi bắt đầu phase kế tiếp.
 - Migration được tạo và review khi phù hợp.
 - Changelog và AI progress được cập nhật.
 - Slice sau không phụ thuộc hành vi chưa được tài liệu hóa.
-## AFF-US-007 — Fact Freshness và Dependency Invalidation
+## Historical — AFF-US-007: Fact Freshness và Dependency Invalidation
 
 Trạng thái (2026-08-12): đã triển khai vertical slice domain/API/UI/test. Đã có policy freshness
 tập trung cho price/promotion, assessment và generation usability, Product Fact revision với

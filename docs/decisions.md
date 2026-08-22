@@ -6,6 +6,11 @@
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
 
+DEC-025 là canonical direction hiện tại cho Channel-first v0.8. Các ADR cũ mô tả
+Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ làm lịch sử;
+chúng không override conditional applicability và Manifest-first contract của
+DEC-025 cho công việc mới.
+
 ## DEC-025 — Kích hoạt contract channel-first của Product Specification v0.8
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation đi qua migration và regression gate

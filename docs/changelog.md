@@ -8,6 +8,20 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Canonical v0.8 documentation finalization
+
+- Làm rõ current execution roadmap theo thứ tự Freeze US12 → Domain Evolution →
+  ClaimManifest/Fact Lock → Quick Image → Channel-first UI → Library/Calendar →
+  Analytics → AI Visual.
+- Đánh dấu các slice affiliate-first cũ là historical/golden baseline, không phải
+  current execution order; không sửa acceptance history AFF-US-008–012.
+- Đồng bộ Architecture với `packages/core` và `VoiceAudioStorage` local/private-R2
+  đã tồn tại, đồng thời giữ Media Library/render storage là target theo slice sau.
+- Phân loại open decisions: ContentFormat là blocker trước migration M1; các mục
+  provenance/evidence/provider/render/analytics có gate hoặc phase riêng.
+- Không thay đổi runtime, schema hoặc migration; migration head vẫn
+  `0016_gifted_microbe.sql`.
+
 ### Đã thêm
 
 - Product/UI Specification v0.8 được tiếp nhận qua DEC-025 cùng ba contract triển

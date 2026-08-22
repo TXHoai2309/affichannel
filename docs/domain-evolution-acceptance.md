@@ -13,6 +13,8 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ## 2. Gate A — Migration và compatibility
 
+- [ ] ADR/contract khóa ContentFormat representation, registry ownership,
+  versioning và backfill/default rule trước migration M1.
 - [ ] Additive migration apply thành công trên snapshot giống production.
 - [ ] Project cũ backfill đúng `AFFILIATE + SCRIPTED`, giữ Product/current step/artifact.
 - [ ] Backfill chạy lại không đổi kết quả và có exception report.

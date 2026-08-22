@@ -462,18 +462,19 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 
 ## 13. Quyết định còn mở
 
-- Tên enum/database cụ thể và ownership của ContentFormat registry.
-- Schema chi tiết của applicability provenance snapshot trên artifact.
-- Render worker local engine và composition schema chi tiết của phase render.
-- MVP cho manual evidence review của Organic factual knowledge.
-- Analytics dedupe key khi bắt đầu Analytics phase.
-- File render của MVP 0 lưu local hay upload R2 ngay.
-- TTS provider/APIKEY.FUN relay đã vượt qua capability probe tiếng Việt trong
-  AFF-US-011 Phase 0; pricing qua relay vẫn chưa được xác minh và không được suy
-  ra từ giá xAI direct.
-- Nhóm Product Fact nào cần quy tắc đối chiếu deterministic đầu tiên.
-Các quyết định mở phải được xử lý trong `decisions.md` trước khi việc triển khai
-trở nên khó thay đổi.
+| Phân loại | Quyết định mở | Gate phải đóng |
+|---|---|---|
+| **BLOCKER before Domain Evolution migration** | Representation/database naming, ownership, versioning và initial registry/backfill rule của `ContentFormat`. | Trước migration M1 thêm Project fields; Phase 0 preparation vẫn được phép bắt đầu. |
+| **NON-BLOCKER for Domain Evolution** | Schema chi tiết của applicability provenance snapshot trên artifact. | Trước khi ClaimManifest/Quick Image ghi artifact mới; resolver runtime và Project backfill không phải chờ. |
+| **NON-BLOCKER for Domain Evolution** | MVP manual evidence review cho Organic factual knowledge không dựa trên Product Facts. | Trước khi bật factual Organic path tương ứng; Organic claimless/no-product vẫn được triển khai. |
+| **NON-BLOCKER — contract đã khóa** | Conditional workflow resolver persistence. | DEC-025 đã khóa: applicability là runtime DTO, không mở rộng enum step status; chỉ `currentStepKey` transition bằng business action transactional. Chỉ còn implementation detail/audit shape. |
+| **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
+| **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
+| **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
+
+Kết luận go/no-go: có thể bắt đầu **Domain Evolution preparation / Phase 0**,
+nhưng chưa được bắt đầu migration M1 cho đến khi `ContentFormat` được khóa bằng
+ADR/contract. Không tự chọn schema trong implementation PR để né blocker này.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.
@@ -481,7 +482,11 @@ Ownership của MVP 0 đã chốt: một internal workspace dùng chung, members
 Contract migration, Fact Lock và acceptance tương ứng nằm tại
 `docs/domain-evolution-plan.md`, `docs/claim-manifest-fact-lock-contract.md` và
 `docs/domain-evolution-acceptance.md`.
-## AFF-US-007 — Fact Freshness và Dependency Invalidation
+
+## Historical implementation notes — AFF-US-007 Fact Freshness
+
+> Historical baseline before v0.8 Domain Evolution; giữ nguyên contract tại thời
+> điểm story hoàn thành và không dùng làm current execution order.
 
 AFF-US-007 mở rộng Product Facts bằng assessment freshness, không thay đổi các status
 `draft | verified | inactive` của bản ghi Fact. `price` dùng tuổi tối đa 7 ngày và
@@ -504,7 +509,7 @@ server-side và tạo child bất biến; `requestHash` chỉ nhận client inte
 provider config. Generated output là untrusted, phải strict-validate cross-reference/hashtag và
 state shape; live provider/API/UI vẫn chưa thuộc slice này.
 
-## AFF-US-008 Phase 2A — AI input và cost visibility
+## Historical implementation notes — AFF-US-008 AI input và cost visibility
 
 Script generation chỉ được thực hiện khi workspace có Channel Settings đầy đủ và server đã resolve
 provider/model. Input snapshot phải ghi lại Product Facts usable cùng revision/freshness, Content
