@@ -21,4 +21,5 @@ export * from "./script-generation/types";
 export * from "./script-version";
 export * from "./voice";
 export * from "./voice-segment";
+export * from "./voice-step/readiness";
 export * from "./workspace";

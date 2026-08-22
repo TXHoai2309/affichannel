@@ -43,6 +43,7 @@ import {
 	reconcileExpiredPendingVoiceSegmentArtifacts,
 	voiceSegmentArtifactUniqueConstraint,
 } from "./voice-segment-repository";
+import { reconcileVoiceStepBestEffort } from "./voice-step-workflow-service";
 import type { WorkspaceActor } from "./workspace";
 
 export type PreparedVoiceSegmentRequest = {
@@ -95,8 +96,25 @@ export type VoiceSegmentRuntimeDependencies = {
 		projectId: string,
 	) => Promise<unknown>;
 	now?: () => Date;
+	reconcileWorkflow?: (
+		actor: WorkspaceActor,
+		projectId: string,
+	) => Promise<unknown>;
 	repository?: Partial<VoiceSegmentRepositoryDependencies>;
 };
+
+async function reconcileWorkflowAfterMutation(
+	actor: WorkspaceActor,
+	projectId: string,
+	dependencies: VoiceSegmentRuntimeDependencies,
+) {
+	if (dependencies.reconcileWorkflow) {
+		await dependencies.reconcileWorkflow(actor, projectId);
+		return;
+	}
+	if (!dependencies.repository)
+		await reconcileVoiceStepBestEffort(actor, projectId);
+}
 
 function segmentNotFound(
 	message = "Voice segment không tồn tại trong ScriptVersion hiện tại.",
@@ -339,6 +357,7 @@ export async function generateVoiceSegment(
 		dependencies,
 	);
 	if (reusable) {
+		await reconcileWorkflowAfterMutation(actor, input.projectId, dependencies);
 		const state = await currentState(
 			actor,
 			input.projectId,
@@ -432,6 +451,7 @@ export async function generateVoiceSegment(
 			null,
 			dependencies.repository,
 		);
+		await reconcileWorkflowAfterMutation(actor, input.projectId, dependencies);
 		throw error;
 	}
 
@@ -453,6 +473,7 @@ export async function generateVoiceSegment(
 			classified.providerRequestId,
 			dependencies.repository,
 		);
+		await reconcileWorkflowAfterMutation(actor, input.projectId, dependencies);
 		throw classified.error;
 	}
 
@@ -472,6 +493,7 @@ export async function generateVoiceSegment(
 			providerResult.providerRequestId,
 			dependencies.repository,
 		);
+		await reconcileWorkflowAfterMutation(actor, input.projectId, dependencies);
 		throw classified.error;
 	}
 
@@ -503,6 +525,7 @@ export async function generateVoiceSegment(
 			providerResult.providerRequestId,
 			dependencies.repository,
 		);
+		await reconcileWorkflowAfterMutation(actor, input.projectId, dependencies);
 		throw storageError;
 	}
 
@@ -573,6 +596,11 @@ export async function generateVoiceSegment(
 		}
 
 		if (finalized) {
+			await reconcileWorkflowAfterMutation(
+				actor,
+				input.projectId,
+				dependencies,
+			);
 			const state = await currentState(
 				actor,
 				input.projectId,
@@ -605,6 +633,7 @@ export async function generateVoiceSegment(
 		);
 	}
 
+	await reconcileWorkflowAfterMutation(actor, input.projectId, dependencies);
 	const state = await currentState(
 		actor,
 		input.projectId,
@@ -620,6 +649,11 @@ export async function getVoiceSegmentState(
 	segmentKey: string,
 	dependencies: VoiceSegmentRuntimeDependencies = {},
 ) {
+	const reconcileExpired =
+		dependencies.repository?.reconcileExpired ??
+		reconcileExpiredPendingVoiceSegmentArtifacts;
+	await reconcileExpired(actor);
+	await reconcileWorkflowAfterMutation(actor, projectId, dependencies);
 	return currentState(actor, projectId, segmentKey, dependencies);
 }
 
@@ -628,6 +662,11 @@ export async function listVoiceSegmentStates(
 	projectId: string,
 	dependencies: VoiceSegmentRuntimeDependencies = {},
 ): Promise<VoiceSegmentState[]> {
+	const reconcileExpired =
+		dependencies.repository?.reconcileExpired ??
+		reconcileExpiredPendingVoiceSegmentArtifacts;
+	await reconcileExpired(actor);
+	await reconcileWorkflowAfterMutation(actor, projectId, dependencies);
 	const script = await findCurrentScriptVersion(actor, projectId);
 	if (!script) throw segmentNotFound("Project chưa có ScriptVersion hiện tại.");
 	const config = await findVoiceConfig(actor, projectId);

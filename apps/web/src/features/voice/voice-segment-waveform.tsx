@@ -11,7 +11,8 @@ import {
 	waveformCacheKey,
 } from "./voice-segment-studio-state";
 
-const waveformPeaksCache = new Map<string, Promise<number[]>>();
+const waveformPeaksCache = new Map<string, number[]>();
+const waveformLoads = new Map<string, Promise<number[]>>();
 
 type BrowserAudioContextConstructor = new () => AudioContext;
 type BrowserWindow = Window & {
@@ -29,20 +30,12 @@ function getAudioContextConstructor(): BrowserAudioContextConstructor {
 	return AudioContextConstructor;
 }
 
-async function decodeWaveform(
-	url: string,
-	signal: AbortSignal,
-): Promise<number[]> {
-	const response = await fetch(url, {
-		credentials: "include",
-		signal,
-	});
+async function decodeWaveform(url: string): Promise<number[]> {
+	const response = await fetch(url, { credentials: "include" });
 	if (!response.ok) {
 		throw new Error(`Audio request failed with status ${response.status}.`);
 	}
 	const bytes = await response.arrayBuffer();
-	if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-
 	const AudioContextConstructor = getAudioContextConstructor();
 	const context = new AudioContextConstructor();
 	try {
@@ -60,21 +53,34 @@ async function decodeWaveform(
 	}
 }
 
-function getOrCreateWaveformPromise(
+export function loadWaveformPeaks(
 	cacheKey: string,
 	url: string,
-	signal: AbortSignal,
-) {
+): Promise<number[]> {
 	const cached = waveformPeaksCache.get(cacheKey);
-	if (cached) return cached;
-	const promise = decodeWaveform(url, signal);
-	waveformPeaksCache.set(cacheKey, promise);
+	if (cached) return Promise.resolve(cached);
+	const inFlight = waveformLoads.get(cacheKey);
+	if (inFlight) return inFlight;
+	const promise = decodeWaveform(url);
+	waveformLoads.set(cacheKey, promise);
+	promise.then(
+		(peaks) => {
+			waveformLoads.delete(cacheKey);
+			waveformPeaksCache.set(cacheKey, peaks);
+		},
+		() => {
+			waveformLoads.delete(cacheKey);
+		},
+	);
 	void promise.catch(() => {
-		if (waveformPeaksCache.get(cacheKey) === promise) {
-			waveformPeaksCache.delete(cacheKey);
-		}
+		// A failed decode is retryable and is deliberately not cached.
 	});
 	return promise;
+}
+
+export function clearWaveformPeaksCache() {
+	waveformPeaksCache.clear();
+	waveformLoads.clear();
 }
 
 export function VoiceSegmentWaveform({
@@ -91,20 +97,19 @@ export function VoiceSegmentWaveform({
 	const [failed, setFailed] = useState(false);
 
 	useEffect(() => {
-		const controller = new AbortController();
 		let active = true;
 		setPeaks(null);
 		setLoading(true);
 		setFailed(false);
 
-		getOrCreateWaveformPromise(cacheKey, audioUrl, controller.signal)
+		loadWaveformPeaks(cacheKey, audioUrl)
 			.then((nextPeaks) => {
 				if (!active) return;
 				setPeaks(nextPeaks);
 				setLoading(false);
 			})
 			.catch((error: unknown) => {
-				if (!active || controller.signal.aborted) return;
+				if (!active) return;
 				setFailed(true);
 				setLoading(false);
 				void error;
@@ -112,7 +117,6 @@ export function VoiceSegmentWaveform({
 
 		return () => {
 			active = false;
-			controller.abort();
 		};
 	}, [audioUrl, cacheKey]);
 

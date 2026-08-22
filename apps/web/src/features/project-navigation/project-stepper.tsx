@@ -40,11 +40,13 @@ export default function ProjectStepper({
 	currentStepKey = "fact-lock",
 	persistedStatuses = DEMO_PROJECT_STEP_STATUSES,
 	factLockGate = null,
+	voiceReady,
 }: {
 	projectId: string;
 	currentStepKey?: ProjectStepKey;
 	persistedStatuses?: Record<ProjectStepKey, PersistedProjectStepStatus>;
 	factLockGate?: FactLockGateResult | null;
+	voiceReady?: boolean;
 }) {
 	const pathname = usePathname();
 	const activeStepKey = getActiveProjectStepKey(pathname, projectId);
@@ -97,10 +99,12 @@ export default function ProjectStepper({
 						step.key,
 						workflowStatus,
 						factLockGate,
+						voiceReady,
 					);
 					const readinessLabel = getProjectStepReadinessLabel(
 						step.key,
 						factLockGate,
+						voiceReady,
 					);
 					const Icon = STATUS_ICONS[status];
 					const active = step.key === activeStepKey;

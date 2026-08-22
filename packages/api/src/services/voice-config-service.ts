@@ -12,6 +12,7 @@ import { env } from "@affichannel/env/server";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { FactLockGate } from "./fact-lock-gate-service";
+import { reconcileVoiceStepBestEffort } from "./voice-step-workflow-service";
 import type { WorkspaceActor } from "./workspace";
 
 type VoiceConfigRow = typeof voiceConfig.$inferSelect;
@@ -156,7 +157,7 @@ export async function saveVoiceConfig(
 	}
 
 	try {
-		return await db.transaction(async (transaction) => {
+		const saved = await db.transaction(async (transaction) => {
 			const accessibleProject = await lockAccessibleProject(
 				transaction,
 				actor,
@@ -237,6 +238,8 @@ export async function saveVoiceConfig(
 			}
 			return mapVoiceConfig(updated);
 		});
+		await reconcileVoiceStepBestEffort(actor, input.projectId);
+		return saved;
 	} catch (error) {
 		if (isUniqueViolation(error)) {
 			throw new VoiceConfigError("VOICE_CONFIG_CONFLICT");

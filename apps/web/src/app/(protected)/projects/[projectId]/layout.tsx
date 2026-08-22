@@ -9,9 +9,10 @@ import type { ReactNode } from "react";
 import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
 import ProjectStepper from "@/features/project-navigation/project-stepper";
 import {
-	getFactLockGateForCurrentUser,
 	getCurrentWorkspaceActor,
+	getFactLockGateForCurrentUser,
 	getProjectForCurrentUser,
+	getVoiceStepSummaryForCurrentUser,
 } from "@/lib/project-loader";
 
 export default async function ProjectLayout({
@@ -53,6 +54,7 @@ export default async function ProjectLayout({
 	}
 
 	const factLockGate = await getFactLockGateForCurrentUser(project.id);
+	const voiceSummary = await getVoiceStepSummaryForCurrentUser(project.id);
 
 	const persistedStatuses = Object.fromEntries(
 		project.stepStatuses.map((step) => [step.stepKey, step.status]),
@@ -65,6 +67,7 @@ export default async function ProjectLayout({
 				factLockGate={factLockGate ?? null}
 				persistedStatuses={persistedStatuses}
 				projectId={project.id}
+				voiceReady={voiceSummary?.ready ?? false}
 			/>
 			{children}
 		</div>

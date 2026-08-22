@@ -1,14 +1,16 @@
 # Kiến trúc AffiChannel
 
-- Trạng thái: Bản nháp
-- Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-19
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; triển khai qua migration và regression gate
+- Phiên bản: 0.8.0
+- Cập nhật lần cuối: 2026-08-22
 
 ## 1. Mục tiêu kiến trúc
 
 - Giữ luồng end-to-end đầu tiên đủ đơn giản cho một lập trình viên.
 - Cho phép thay thế provider, storage và cách render.
 - Thực thi authorization và các quy tắc workflow ở server.
+- Cho phép Organic/Affiliate và nhiều creation path dùng chung một workflow
+  adaptive mà không làm mất golden affiliate flow.
 - Lưu trạng thái job dài hạn bên ngoài vòng đời một web request.
 - Cho phép truy vết fact, chi phí, asset AI và metrics.
 - Không gắn business logic chặt vào Next.js route handler hoặc UI component.
@@ -118,10 +120,13 @@ Triển khai module theo thứ tự phụ thuộc:
 
 ```text
 identity
+→ channel-settings
 → products
 → product-facts
 → projects
+→ applicability
 → scripts
+→ claim-manifest
 → fact-lock
 → media
 → voice
@@ -145,6 +150,8 @@ Schema đầu tiên chỉ thêm những gì vertical slice hiện tại cần:
 - `project`.
 - `script_generation` khi bắt đầu AFF-US-008; `script_version` chỉ thêm ở AFF-US-009.
 - `fact_lock_run`, `fact_lock_claim` và `fact_lock_claim_fact` khi bắt đầu AFF-US-010.
+- Domain Evolution thêm additive fields vào `project`, tạo immutable
+  `claim_manifest` và mở rộng `fact_lock_run` theo Manifest-first contract.
 
 Quy tắc chung:
 
@@ -158,6 +165,27 @@ Quy tắc chung:
 
 Không tạo tất cả bảng tương lai trong migration đầu tiên. Thêm schema cùng
 vertical slice thực sự sử dụng nó.
+
+### 7.1. Contract Domain Evolution v0.8
+
+`Project` tiếp tục là content production unit và đóng vai trò Content Item trong
+MVP. Migration thêm `contentType`, `creationPath`, `contentFormat`; backfill toàn
+bộ project lịch sử thành `AFFILIATE + SCRIPTED` trước khi đặt default/not-null phù
+hợp. `productId` được phép nullable ở database, nhưng application service phải
+enforce Product cho Affiliate và mọi Organic content có Product claim. Read path
+phải chịu được cả dữ liệu trước và sau migration trong cửa sổ rollout.
+
+Applicability Resolver là pure domain policy dùng chung cho UI, API readiness và
+worker preflight. Resolver trả runtime DTO `NOT_REQUIRED | OPTIONAL | REQUIRED |
+READY | BLOCKED | STALE`; không ghi các giá trị này vào
+`project_step_status.status`. Khi current persisted step là `NOT_REQUIRED`,
+server tính `nextApplicableStep` theo thứ tự bảy step, khóa project và cập nhật
+`currentStepKey` trong transaction. Step bị bỏ qua không được giả là `completed`.
+
+Script generation nhận discriminated input mode do server chọn:
+`PRODUCT_BACKED` hoặc `ORGANIC_NO_PRODUCT`. Mode thứ hai không lookup Product/Facts
+và prompt/output validation không được tự sinh Product claim. Output
+ScriptDraft/versioning hiện hữu không đổi.
 
 ## 8. Transaction và Neon
 
@@ -249,23 +277,39 @@ Chi tiết được khóa bởi DEC-015 và `docs/aff-us-008-foundation.md`.
 
 ## 12. Kiến trúc Fact Lock
 
-Contract hardening của AFF-US-010 được khóa tại
-`docs/aff-us-010-phase-0-contract-hardening.md`. Fact Lock run lưu persisted
-status (`pending`, `review_required`, `passed`, `failed`, `indeterminate`); `stale`
-là effective read-model state khi `ScriptVersion.revision` hoặc Product Fact
-dependency không còn khớp, không phải một trạng thái mutate lịch sử. Claims
-classification (`SUPPORTED`, `NEEDS_REVIEW`, `UNSUPPORTED`, `PROHIBITED`) tách khỏi
-review status và AI không phải authority duy nhất cho `PROHIBITED`.
+Contract lịch sử của AFF-US-010 được khóa tại
+`docs/aff-us-010-phase-0-contract-hardening.md`; contract mở rộng v0.8 nằm tại
+`docs/claim-manifest-fact-lock-contract.md`. New Fact Lock run đánh giá một
+server-built immutable ClaimManifest và lưu Manifest ID/fingerprint. ScriptVersion
+chỉ là source adapter/provenance nullable. Run lịch sử gắn Script tiếp tục đọc
+được, không bulk rewrite; pending/idempotency của new writes dựa trên Manifest
+fingerprint.
+
+Fact Lock run lưu persisted status (`pending`, `review_required`, `passed`,
+`failed`, `indeterminate`); `stale` là effective read-model state khi Manifest
+fingerprint hoặc Product Fact dependency không còn khớp, không phải trạng thái
+mutate lịch sử. Claim classification (`SUPPORTED`, `NEEDS_REVIEW`, `UNSUPPORTED`,
+`PROHIBITED`) tách khỏi review status và AI không phải authority duy nhất cho
+`PROHIBITED`.
 
 Fact Lock gồm các giai đoạn riêng:
 
-1. tách candidate claim từ script version bất biến;
-2. chuẩn hóa tên, giá trị, đơn vị, ngày và điều kiện khuyến mại;
-3. đề xuất Product Facts có khả năng hỗ trợ;
-4. áp dụng deterministic rule nếu có;
-5. yêu cầu con người xử lý điểm mơ hồ;
-6. lưu evidence link và lý do;
-7. tính trạng thái tổng của run.
+1. build ClaimManifest phía server từ ScriptVersion, overlay, caption, CTA, voice
+   text, declared claim và composition version;
+2. tách candidate claim từ mọi output-bearing source;
+3. chuẩn hóa tên, giá trị, đơn vị, ngày và điều kiện khuyến mại;
+4. đề xuất Product Facts có khả năng hỗ trợ;
+5. áp dụng deterministic rule nếu có;
+6. yêu cầu con người xử lý điểm mơ hồ;
+7. lưu evidence link và lý do;
+8. tính trạng thái tổng của run.
+
+Client không được đặt `isEmpty` hoặc fingerprint. Empty manifest chỉ hợp lệ sau
+normalization thành công và inventory thực sự rỗng; lỗi hoặc uncertainty phải fail
+closed thành `indeterminate`/`blocked`. Affiliate luôn cần policy check trước
+TTS/render. Organic không Product claim trả `NOT_REQUIRED`; nếu người dùng opt-in
+Voice thì TTS được phép chạy mà không đòi Fact Lock PASS. Organic có Product claim
+phải có accessible Product, Product Facts evidence và Fact Lock PASS.
 
 LLM output là structured input không đáng tin cậy và phải qua schema validation.
 Model không được tự ghi trạng thái approved cuối cùng nếu thiếu server-side rule
@@ -292,8 +336,10 @@ expose `/v1/tts/voices`, vì vậy catalog verified được sở hữu ở serv
 chỉ nhận catalog đã validate. Client không gửi arbitrary provider, voice ID hoặc
 credential.
 
-Voice Studio reuse server-side `FactLockGate.assertPassed(actor, projectId)`.
-Route Voice hiển thị locked state khi Fact Lock chưa PASS; không lưu unlock boolean.
+Voice Studio hiện hữu reuse server-side `FactLockGate.assertPassed(actor,
+projectId)` cho golden affiliate flow. Sau Domain Evolution, route và mutation phải
+gọi Applicability Resolver: chỉ assert Fact Lock khi gate `REQUIRED`; Organic
+claimless có thể dùng Voice khi gate `NOT_REQUIRED`. Không lưu unlock boolean.
 Preview dùng text do server derive từ current ScriptVersion, gọi provider ngoài
 database transaction và trả audio tạm thời qua protected binary endpoint với
 canonical MIME `audio/mpeg`. Audio preview không lưu DB/object storage.
@@ -445,6 +491,27 @@ Regenerate dùng key mới nhưng giữ player của usable artifact cũ. Native
 browser. Waveform decode bytes bằng `AudioContext`, cache memory theo
 artifact/checksum và fallback player-only khi decode thất bại. Phase 3 không
 mutate workflow completion, total duration hoặc `project.currentStepKey`.
+
+### 12.6. AFF-US-012 Phase 4 workflow completion
+
+Phase 4 không tạo workflow table hoặc readiness boolean. Canonical evaluator đọc
+Fact Lock, current ScriptVersion, current VoiceConfig và full artifact fingerprint;
+chỉ current completed usable artifact mới được tính completed hoặc cộng duration.
+Application services gọi reconcile sau mutation; reconcile khóa project row, đọc
+lại snapshot server và upsert các dòng `voice`/`video` trong `project_step_status`.
+`currentStepKey` chỉ tiến `voice → video` khi Voice ready và không tự rollback khi
+input trở nên stale. Direct Video route vẫn fail closed qua server gate.
+
+Pending artifact quá lease được đổi sang `indeterminate` với uncertainty code,
+không tự retry provider. Protected audio resolve storage adapter từ
+`artifact.storageProvider` đã lưu, độc lập với default ENV hiện tại. Waveform
+loader cache dùng shared in-flight promise, chỉ cache success và cho phép retry
+sau decode failure. Phase 4 dùng deterministic TTS/local storage trong test và
+không tạo migration mới.
+
+Các mục 12.1–12.6 là bằng chứng triển khai golden affiliate flow. Domain Evolution
+không sửa lịch sử đó; resolver và Manifest-first gate bao quanh flow để giữ hành vi
+cũ cho `AFFILIATE + SCRIPTED`, đồng thời mở đường Organic/Quick Image.
 
 ## 13. Bất biến bảo mật
 

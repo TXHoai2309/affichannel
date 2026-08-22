@@ -56,6 +56,7 @@ import {
 import { renderFactLockPrompt } from "./fact-lock-prompt";
 import { sha256Hex } from "./script-generation-hashing";
 import { resolveServerGenerationConfig } from "./script-generation-service";
+import { reconcileVoiceStepBestEffort } from "./voice-step-workflow-service";
 import type { WorkspaceActor } from "./workspace";
 
 export type FactLockProviderConfig = {
@@ -716,7 +717,7 @@ export async function finalizeFactLockRun(
 	actor: WorkspaceActor,
 	input: { runId: string; outcome: FactLockFinalizeOutcome },
 ) {
-	return db.transaction(async (transaction) => {
+	const result = await db.transaction(async (transaction) => {
 		const [run] = await transaction
 			.select()
 			.from(factLockRun)
@@ -903,6 +904,8 @@ export async function finalizeFactLockRun(
 			claims: await loadClaims(transaction, actor, final.id),
 		};
 	});
+	await reconcileVoiceStepBestEffort(actor, result.projectId);
+	return result;
 }
 
 async function runClaimedFactLock(
@@ -1261,6 +1264,7 @@ export async function manualApproveFactLockClaim(
 					),
 				);
 	});
+	await reconcileVoiceStepBestEffort(actor, input.projectId);
 	return getFactLockState(actor, input.projectId);
 }
 
@@ -1318,6 +1322,7 @@ export async function mutateFactLockClaimSourceAndRefresh(
 				"Script đã thay đổi. Hãy tải lại trước khi xử lý claim.",
 			);
 	});
+	await reconcileVoiceStepBestEffort(actor, input.projectId);
 	return getFactLockState(actor, input.projectId);
 }
 

@@ -10,6 +10,11 @@ sử dụng Semantic Versioning.
 
 ### Đã thêm
 
+- Product/UI Specification v0.8 được tiếp nhận qua DEC-025 cùng ba contract triển
+  khai: Domain Evolution migration plan, ClaimManifest/Fact Lock Manifest-first
+  và acceptance matrix. Đây là cập nhật tài liệu; chưa apply migration hoặc đổi code.
+- Roadmap channel-first bổ sung Organic/Affiliate, Quick Image, Applicability
+  Resolver, Channel Strategy, Library/Calendar/Analytics và Post-MVP AI Visual.
 - AFF-US-012 Phase 0: audit và khóa contract cho immutable VoiceSegment artifact,
   full source/config fingerprint, idempotency/retry/concurrent pending,
   server-authoritative MP3 duration, local/private-R2 storage, failure/race
@@ -34,6 +39,11 @@ sử dụng Semantic Versioning.
   protected native player, server duration, waveform derived cache memory và
   fallback player-only. Không mutate workflow completion, không tạo migration mới
   và không gọi live APIKEY.FUN/R2 trong E2E.
+- AFF-US-012 Phase 4: hoàn tất canonical Voice readiness, tổng duration từ current
+  usable artifacts, reconcile `project_step_status`/`currentStepKey`, Video gate,
+  pending lease uncertainty, artifact storage-provider routing và waveform cache
+  hardening. Deterministic E2E xác minh reload, stale script/config, regeneration,
+  persistence và isolation; không tạo migration mới, không gọi paid APIKEY.FUN/R2.
 - AFF-US-011 Phase 0: khóa contract TTS APIKEY.FUN → Grok/xAI qua `POST /v1/tts`,
   server-owned voice catalog, VoiceConfig CAS, Fact Lock gate, preview binary
   transport, timeout/error/retry semantics và pricing `UNVERIFIED`. Chưa có
@@ -91,6 +101,9 @@ sử dụng Semantic Versioning.
 
 ### Đã thay đổi
 
+- Product Spec, Architecture, Design System, Roadmap, docs index, README và quy
+  tắc agent được đồng bộ theo v0.8. Golden affiliate flow AFF-US-001–012 và lịch
+  sử FactLockRun được giữ làm regression baseline.
 - AFF-US-010 Phase 0: khóa contract Fact Lock, tách pre-run/strict ScriptVersion
   validator, phân biệt persisted/effective stale, và chốt classification, idempotency,
   dependency, CAS resolution cùng server-side gate reason codes; chưa tạo schema/migration,

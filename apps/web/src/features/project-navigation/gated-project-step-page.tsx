@@ -1,7 +1,10 @@
 import { evaluateFactLockGate } from "@affichannel/core";
 import type { ReactNode } from "react";
 
-import { getFactLockGateForCurrentUser } from "@/lib/project-loader";
+import {
+	getFactLockGateForCurrentUser,
+	getVoiceStepSummaryForCurrentUser,
+} from "@/lib/project-loader";
 import { getProjectFixture } from "./project-fixtures";
 import ProjectStepPage from "./project-step-page";
 import type { ProjectStepKey } from "./project-steps";
@@ -18,6 +21,10 @@ export default async function GatedProjectStepPage({
 	const gate = getProjectFixture(projectId)
 		? evaluateFactLockGate({ currentScriptVersion: null, runs: [] })
 		: await getFactLockGateForCurrentUser(projectId);
+	const voiceSummary =
+		stepKey === "video" && !getProjectFixture(projectId)
+			? await getVoiceStepSummaryForCurrentUser(projectId)
+			: undefined;
 
 	return (
 		<ProjectStepPage
@@ -25,6 +32,10 @@ export default async function GatedProjectStepPage({
 			gate={gate}
 			projectId={projectId}
 			stepKey={stepKey}
+			voiceReady={
+				stepKey === "video" ? (voiceSummary?.ready ?? false) : undefined
+			}
+			voiceSummary={voiceSummary}
 		/>
 	);
 }

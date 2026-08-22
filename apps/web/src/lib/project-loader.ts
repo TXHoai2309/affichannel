@@ -1,5 +1,6 @@
 import { FactLockGate } from "@affichannel/api/services/fact-lock-gate-service";
 import { getProjectDetails } from "@affichannel/api/services/project-repository";
+import { reconcileVoiceStep } from "@affichannel/api/services/voice-step-workflow-service";
 import { getWorkspaceActor } from "@affichannel/api/services/workspace";
 import { auth } from "@affichannel/auth";
 import { headers } from "next/headers";
@@ -23,5 +24,13 @@ export const getFactLockGateForCurrentUser = cache(
 	async (projectId: string) => {
 		const actor = await getCurrentWorkspaceActor();
 		return actor ? FactLockGate.evaluate(actor, projectId) : undefined;
+	},
+);
+
+export const getVoiceStepSummaryForCurrentUser = cache(
+	async (projectId: string) => {
+		const actor = await getCurrentWorkspaceActor();
+		if (!actor) return undefined;
+		return (await reconcileVoiceStep(actor, projectId))?.summary;
 	},
 );

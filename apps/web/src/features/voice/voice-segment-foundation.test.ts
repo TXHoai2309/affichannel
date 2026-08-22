@@ -122,6 +122,29 @@ describe("AFF-US-012 VoiceSegment foundation", () => {
 		);
 	});
 
+	it("preserves long, symbolic, currency and brand text exactly", () => {
+		const samples = [
+			"Thời lượng pin lên đến 20 giờ.",
+			"150.000 ₫ · 1.299.000đ · $29.99",
+			"50% USB-C 2.4 GHz A/B + & / -",
+			"Logitech MX Master 3S · Apple · Sony WH-1000XM5",
+			"😀 🎙️ — exact casing and punctuation",
+		];
+		for (const text of samples) {
+			expect(validateVoiceSegmentText(text)).toBe(text);
+			expect(hashVoiceSegmentText(text)).toBe(hashVoiceSegmentText(text));
+		}
+
+		const exactMax = "x".repeat(4_000);
+		expect(validateVoiceSegmentText(exactMax, 4_000)).toBe(exactMax);
+		expect(() => validateVoiceSegmentText(`${exactMax}x`, 4_000)).toThrowError(
+			expect.objectContaining({
+				code: "VOICE_SEGMENT_INPUT_TOO_LONG",
+				metadata: { maxChars: 4_000, codePointLength: 4_001 },
+			}),
+		);
+	});
+
 	it("derives latest request, usable artifact and stale/current status", () => {
 		const historical = artifact({ id: "historical", sourceScriptRevision: 1 });
 		const current = artifact({

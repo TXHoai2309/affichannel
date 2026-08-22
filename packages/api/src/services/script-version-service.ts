@@ -12,13 +12,13 @@ import {
 	findScriptVersion,
 	hasAccessibleProject,
 	hasInvalidatedSourceDependency,
-	insertScriptVersionDraft,
-	isUniqueViolation,
+	initializeScriptVersionDraftAtomic,
 	listScriptVersionHistory,
 	restoreScriptVersionRecord,
 	saveScriptVersionRecord,
 	updateDraftScriptVersion,
 } from "./script-version-repository";
+import { reconcileVoiceStepBestEffort } from "./voice-step-workflow-service";
 import type { WorkspaceActor } from "./workspace";
 
 function createInitialSnapshot(
@@ -66,27 +66,17 @@ export async function initializeScriptVersion(
 	}
 
 	const editableSnapshot = createInitialSnapshot(source.outputJson);
-	try {
-		return await insertScriptVersionDraft({
-			actor,
-			projectId: input.projectId,
-			sourceGenerationId: input.sourceGenerationId,
-			editableSnapshot,
-		});
-	} catch (error) {
-		if (!isUniqueViolation(error)) throw error;
-		const concurrentDraft = await findCurrentScriptVersion(
-			actor,
-			input.projectId,
-		);
-		if (
-			concurrentDraft &&
-			concurrentDraft.sourceGenerationId === input.sourceGenerationId
-		) {
-			return concurrentDraft;
-		}
+	const draft = await initializeScriptVersionDraftAtomic({
+		actor,
+		projectId: input.projectId,
+		sourceGenerationId: input.sourceGenerationId,
+		editableSnapshot,
+	});
+	if (!draft) throw new ScriptVersionError("SCRIPT_VERSION_NOT_FOUND");
+	if (draft.sourceGenerationId !== input.sourceGenerationId) {
 		throw new ScriptVersionError("SCRIPT_VERSION_DRAFT_ALREADY_EXISTS");
 	}
+	return draft;
 }
 
 export async function getCurrentScriptVersion(
@@ -140,7 +130,10 @@ export async function autosaveScriptVersion(
 		baseRevision: input.baseRevision,
 		editableSnapshot: nextSnapshot,
 	});
-	if (updated) return updated;
+	if (updated) {
+		await reconcileVoiceStepBestEffort(actor, current.projectId);
+		return updated;
+	}
 
 	const latest = await findScriptVersion(actor, input.scriptVersionId);
 	if (!latest) throw new ScriptVersionError("SCRIPT_VERSION_NOT_FOUND");
@@ -222,5 +215,6 @@ export async function restoreScriptVersion(
 		baseRevision: input.baseRevision,
 	});
 	if (result.kind !== "success") throwScriptVersionMutationError(result);
+	await reconcileVoiceStepBestEffort(actor, result.record.projectId);
 	return result.record;
 }

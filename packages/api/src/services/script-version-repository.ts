@@ -256,6 +256,53 @@ export async function insertScriptVersionDraft(input: {
 	return mapScriptVersionRecord(record);
 }
 
+export async function initializeScriptVersionDraftAtomic(input: {
+	actor: WorkspaceActor;
+	projectId: string;
+	sourceGenerationId: string;
+	editableSnapshot: ScriptVersionEditableSnapshot;
+}) {
+	return db.transaction(async (transaction) => {
+		const projectRecord = await lockProjectForMutation(
+			transaction,
+			input.actor,
+			input.projectId,
+		);
+		if (!projectRecord) return undefined;
+
+		const [existing] = await transaction
+			.select()
+			.from(scriptVersion)
+			.where(
+				and(
+					eq(scriptVersion.workspaceId, input.actor.workspaceId),
+					eq(scriptVersion.projectId, input.projectId),
+					eq(scriptVersion.status, "draft"),
+				),
+			)
+			.limit(1)
+			.for("update", { of: scriptVersion });
+		if (existing) return mapScriptVersionRecord(existing);
+
+		const [record] = await transaction
+			.insert(scriptVersion)
+			.values({
+				id: randomUUID(),
+				workspaceId: input.actor.workspaceId,
+				projectId: input.projectId,
+				sourceGenerationId: input.sourceGenerationId,
+				status: "draft",
+				versionNumber: null,
+				editableSnapshotJson: input.editableSnapshot,
+				revision: 1,
+				createdByUserId: input.actor.userId,
+			})
+			.returning();
+		if (!record) throw new Error("ScriptVersion insert returned no row.");
+		return mapScriptVersionRecord(record);
+	});
+}
+
 export async function updateDraftScriptVersion(input: {
 	actor: WorkspaceActor;
 	scriptVersionId: string;

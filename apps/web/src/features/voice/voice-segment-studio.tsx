@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
 import {
@@ -47,6 +47,50 @@ type VoiceSegmentListItem = {
 	text: string;
 	readModel: VoiceSegmentArtifactReadModel;
 };
+
+type VoiceStepSummary = {
+	totalSegments: number;
+	completedSegments: number;
+	pendingSegments: number;
+	staleSegments: number;
+	totalVoiceoverDurationMs: number;
+	ready: boolean;
+};
+
+function VoiceoverSummary({
+	summary,
+}: {
+	summary: VoiceStepSummary | null | undefined;
+}) {
+	if (!summary) {
+		return <Skeleton className="h-24 rounded-2xl" />;
+	}
+	return (
+		<Card className="rounded-2xl border-primary/20 bg-primary/[0.03]">
+			<CardContent className="flex flex-wrap items-center justify-between gap-4 p-5">
+				<div>
+					<p className="font-medium">Voiceover</p>
+					<p className="mt-1 text-muted-foreground text-sm">
+						{summary.completedSegments} / {summary.totalSegments} đoạn đã tạo
+					</p>
+				</div>
+				<div className="text-left sm:text-right">
+					<p className="text-muted-foreground text-xs">
+						Tổng thời lượng hiện tại
+					</p>
+					<p className="font-semibold text-primary text-sm">
+						{(summary.totalVoiceoverDurationMs / 1_000).toFixed(1)} giây
+					</p>
+				</div>
+				{summary.ready ? (
+					<Badge className="ml-auto" variant="success">
+						Voiceover đã sẵn sàng
+					</Badge>
+				) : null}
+			</CardContent>
+		</Card>
+	);
+}
 
 function SegmentStudioSkeleton() {
 	return (
@@ -278,6 +322,14 @@ export default function VoiceSegmentStudio({
 			enabled: configReady,
 		}),
 	);
+	const summaryQuery = useQuery(
+		orpc.voiceSegment.getSummary.queryOptions({
+			input: { projectId },
+			meta: { suppressGlobalErrorToast: true },
+			retry: false,
+			enabled: configReady,
+		}),
+	);
 	const generateMutation = useMutation(
 		orpc.voiceSegment.generate.mutationOptions({ retry: false }),
 	);
@@ -286,6 +338,7 @@ export default function VoiceSegmentStudio({
 		segmentKey: string;
 		message: string;
 	} | null>(null);
+	const lastConfigRevisionRef = useRef<number | null>(null);
 
 	const segments = (listQuery.data ?? []) as VoiceSegmentListItem[];
 	const hasPending = segments.some(
@@ -301,16 +354,30 @@ export default function VoiceSegmentStudio({
 
 	useEffect(() => {
 		if (configRevision === null || !configReady) return;
+		if (lastConfigRevisionRef.current === null) {
+			lastConfigRevisionRef.current = configRevision;
+			return;
+		}
+		if (lastConfigRevisionRef.current === configRevision) return;
+		lastConfigRevisionRef.current = configRevision;
 		void listQuery.refetch();
-	}, [configReady, configRevision, listQuery.refetch]);
+		void summaryQuery.refetch();
+	}, [configReady, configRevision, listQuery.refetch, summaryQuery.refetch]);
 
 	useEffect(() => {
 		if (!configReady || (!hasPending && !generateMutation.isPending)) return;
 		const intervalId = window.setInterval(() => {
 			void listQuery.refetch();
+			void summaryQuery.refetch();
 		}, 2_000);
 		return () => window.clearInterval(intervalId);
-	}, [configReady, generateMutation.isPending, hasPending, listQuery.refetch]);
+	}, [
+		configReady,
+		generateMutation.isPending,
+		hasPending,
+		listQuery.refetch,
+		summaryQuery.refetch,
+	]);
 
 	const refreshSegmentState = async (segmentKey: string) => {
 		return queryClient.fetchQuery(
@@ -347,6 +414,7 @@ export default function VoiceSegmentStudio({
 		} finally {
 			await Promise.allSettled([
 				listQuery.refetch(),
+				summaryQuery.refetch(),
 				refreshSegmentState(segmentKey),
 			]);
 			setActiveSegmentKey(null);
@@ -386,6 +454,8 @@ export default function VoiceSegmentStudio({
 					Sửa trong Nội dung
 				</Link>
 			</div>
+
+			{configReady ? <VoiceoverSummary summary={summaryQuery.data} /> : null}
 
 			{configDirty ? (
 				<div

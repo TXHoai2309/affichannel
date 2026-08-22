@@ -1,8 +1,8 @@
 # Hệ thống thiết kế AffiChannel
 
-- Trạng thái: Bản nháp
-- Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-10
+- Trạng thái: Đã chấp nhận ở cấp tài liệu
+- Phiên bản: 0.8.0
+- Cập nhật lần cuối: 2026-08-22
 
 ## 1. Định hướng thiết kế
 
@@ -13,10 +13,11 @@ glow, gradient hoặc metric chỉ mang tính trang trí.
 Thứ tự ưu tiên:
 
 1. Làm rõ hành động tiếp theo.
-2. Đặt bằng chứng và trạng thái gần nội dung chứa claim.
-3. Minh bạch hành động tốn phí hoặc khó hoàn tác.
-4. Giữ output 9:16 trong tầm nhìn khi dựng video.
-5. Ưu tiên hierarchy và khoảng trắng hơn hiệu ứng.
+2. Cho người dùng chọn Content Type/Creation Path mà không ép Product vào Organic.
+3. Đặt bằng chứng và trạng thái gần nội dung chứa claim.
+4. Minh bạch hành động tốn phí hoặc khó hoàn tác.
+5. Giữ output 9:16 trong tầm nhìn khi dựng video.
+6. Ưu tiên hierarchy và khoảng trắng hơn hiệu ứng.
 
 ## 2. Visual tokens
 
@@ -113,6 +114,10 @@ Chữ tiếng Việt, tên sản phẩm dài, giá, đơn vị và URL phải lu
 
 ### Creative mode
 
+Video Studio có bốn tab presentation-level: `Content → Resources → Compose →
+Export`. Tab không thay thế hoặc đổi tên bảy persisted project step keys; deep
+link, back/forward và server workflow vẫn dựa trên các route/step hiện hữu.
+
 Video workspace dùng bố cục tập trung:
 
 ```text
@@ -127,12 +132,17 @@ Video workspace dùng bố cục tập trung:
 Preview là trung tâm thị giác. Side panel có thể thu gọn ở màn hình hẹp. MVP
 authoring ưu tiên desktop; mobile cần đọc được nhưng chưa cần editor hoàn chỉnh.
 
+Quick Image hiển thị ảnh 9:16, duration 5/10/15 giây và motion preset rõ ràng.
+Product, Script, Fact Lock và Voice chỉ xuất hiện như dependency khi resolver cho
+biết `OPTIONAL`, `REQUIRED`, `BLOCKED` hoặc `STALE`; mục `NOT_REQUIRED` có thể được
+thu gọn nhưng phải giải thích được vì sao bị bỏ qua.
+
 ## 6. Điều hướng
 
 App Shell của US002 có các entry point ổn định:
 
 - Dashboard
-- Dự án
+- Nội dung / Dự án
 - Sản phẩm
 - Media Library
 - Analytics
@@ -141,6 +151,9 @@ App Shell của US002 có các entry point ổn định:
 
 Các module chưa có business logic hiển thị skeleton/placeholder rõ ràng. Script,
 Fact Lock, Voice, Video, Preview và Completed được mở trong project stepper.
+
+Channel Strategy là entry point cấu hình một channel/workspace. Product Library là
+resource dùng khi policy yêu cầu, không phải điểm bắt đầu bắt buộc của mọi content.
 
 ## 7. Quy ước component
 
@@ -170,6 +183,21 @@ Fact Lock, Voice, Video, Preview và Completed được mở trong project stepp
 
 Dùng thuật ngữ domain nhất quán. Ví dụ dùng `SUPPORTED`, không trộn `Valid`,
 `Approved` và `OK`.
+
+Applicability dùng đúng label `Không cần`, `Tùy chọn`, `Bắt buộc`, `Sẵn sàng`,
+`Đang bị chặn`, `Đã lỗi thời` tương ứng với runtime state. Không hiển thị
+`NOT_REQUIRED` như completed. Blocked/stale luôn có reason và hành động tiếp theo.
+
+### Product và Product claim
+
+- Product picker chỉ có dấu bắt buộc khi resolver yêu cầu.
+- Organic claimless phải cho phép tiếp tục với `productId=null`.
+- Khi người dùng thêm Product claim, UI phải yêu cầu Product/evidence và cho biết
+  Fact Lock sẽ trở thành bắt buộc.
+- Fact Lock review dùng source locator của ClaimManifest để mở đúng Script field,
+  overlay, caption, CTA, voice text hoặc composition element.
+- Empty Manifest hợp lệ hiển thị “Không phát hiện Product claim” và provenance;
+  uncertainty hiển thị blocked/indeterminate, không dùng empty state thành công.
 
 ### Dialog, drawer và route
 
@@ -254,3 +282,7 @@ hoặc cancel.
 - Đã thử chữ tiếng Việt và label dài.
 - Hành động tốn phí/phá hủy có xác nhận.
 - Thuật ngữ UI khớp đặc tả sản phẩm.
+- Content Type và Creation Path được trình bày như hai quyết định độc lập.
+- Step `NOT_REQUIRED` không bị hiển thị thành completed.
+- Product/Fact Lock chỉ chặn khi resolver trả `REQUIRED`.
+- Bốn tab Studio và bảy persisted step routes giữ navigation nhất quán.

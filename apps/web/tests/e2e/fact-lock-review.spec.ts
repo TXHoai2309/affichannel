@@ -13,6 +13,7 @@ import {
 	productFact,
 	productFactHistory,
 	project,
+	projectStepStatus,
 	scriptGeneration,
 	scriptVersion,
 	user,
@@ -120,7 +121,7 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 	test("opens Voice/Video/Preview only for a passed gate and relocks after script edit", async ({
 		page,
 	}) => {
-		test.setTimeout(90_000);
+		test.setTimeout(180_000);
 		const fixture = await seedReviewFixture("passed");
 		try {
 			await signIn(page);
@@ -203,13 +204,15 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 				page
 					.getByRole("navigation", { name: "Các bước project" })
 					.getByText("Có thể tiếp tục"),
-			).toHaveCount(3);
+			).toHaveCount(2);
 
 			await openProjectStep(page, fixture.projectId, "video");
 			await expect(
 				page.getByRole("heading", { name: "Dựng video" }),
 			).toBeVisible();
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toBeVisible();
+			await expect(page.getByText("Đang khóa")).toBeVisible();
 
 			await openProjectStep(page, fixture.projectId, "preview");
 			await expect(
@@ -239,7 +242,7 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 				page
 					.getByRole("navigation", { name: "Các bước project" })
 					.getByText("Bị khóa"),
-			).toHaveCount(3);
+			).toHaveCount(2);
 
 			await openFactLockReview(page, fixture.projectId);
 			await rerunDeterministicFactLock(fixture);
@@ -274,6 +277,7 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			).toHaveCount(3);
 			await openProjectStep(page, fixture.projectId, "video");
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toBeVisible();
 			await openProjectStep(page, fixture.projectId, "preview");
 			await expect(page.getByText("Đã mở khóa")).toBeVisible();
 			await page.reload({ waitUntil: "commit" });
@@ -396,6 +400,156 @@ test.describe("AFF-US-010 Fact Lock Review", () => {
 			await cleanupReviewFixture(fixture);
 		}
 	});
+
+	test("persists Voice readiness, relocks on script/config changes, and gates Video", async ({
+		page,
+	}) => {
+		test.setTimeout(180_000);
+		const fixture = await seedReviewFixture("passed", "voice", 2);
+		try {
+			await signIn(page);
+			await page.goto(`/projects/${fixture.projectId}/voice`, {
+				waitUntil: "commit",
+			});
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
+			await expect(page.getByText("Fact Lock đã đạt")).toBeVisible();
+
+			await openProjectStep(page, fixture.projectId, "video");
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toBeVisible();
+			await expect(page.getByText("Đang khóa")).toBeVisible();
+			await openProjectStep(page, fixture.projectId, "voice");
+
+			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
+			const segmentCard = page.getByTestId("voice-segment-intro");
+			const secondSegmentCard = page.getByTestId("voice-segment-benefits");
+			await expect(segmentCard).toBeVisible();
+			await expect(secondSegmentCard).toBeVisible();
+			await segmentCard.getByRole("button", { name: "Tạo giọng đọc" }).click();
+			await expect(page.getByText("1 / 2 đoạn đã tạo")).toBeVisible();
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toHaveCount(0);
+			await page.reload({ waitUntil: "commit" });
+			await expect(segmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await secondSegmentCard
+				.getByRole("button", { name: "Tạo giọng đọc" })
+				.click();
+			await expect(secondSegmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(page.getByText("2 / 2 đoạn đã tạo")).toBeVisible();
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toBeVisible();
+			await expect(page.getByText("2.1 giây", { exact: true })).toBeVisible();
+
+			await expect
+				.poll(async () => {
+					const [record] = await db
+						.select({ currentStepKey: project.currentStepKey })
+						.from(project)
+						.where(eq(project.id, fixture.projectId));
+					return record?.currentStepKey;
+				})
+				.toBe("video");
+			const statuses = await db
+				.select({
+					stepKey: projectStepStatus.stepKey,
+					status: projectStepStatus.status,
+				})
+				.from(projectStepStatus)
+				.where(eq(projectStepStatus.projectId, fixture.projectId));
+			expect(statuses).toEqual(
+				expect.arrayContaining([
+					{ stepKey: "voice", status: "completed" },
+					{ stepKey: "video", status: "not_started" },
+				]),
+			);
+
+			await openProjectStep(page, fixture.projectId, "video");
+			await expect(
+				page.getByRole("heading", { name: "Dựng video" }),
+			).toBeVisible();
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toHaveCount(0);
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+			await openProjectStep(page, fixture.projectId, "voice");
+			await page.reload({ waitUntil: "commit" });
+			await expect(page.getByText("2 / 2 đoạn đã tạo")).toBeVisible();
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toBeVisible();
+
+			await openProjectStep(page, fixture.projectId, "content");
+			await page
+				.getByLabel("Voiceover đoạn 1")
+				.fill("Nội dung mới để kiểm tra stale rồi tạo lại audio.");
+			await expect(page.getByText("Đã lưu").first()).toBeVisible({
+				timeout: 5_000,
+			});
+			await page.goto(`/projects/${fixture.projectId}/voice`, {
+				waitUntil: "commit",
+			});
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toHaveCount(0);
+			await expect(page.getByText("Fact Lock đã cũ theo script")).toBeVisible();
+			await expect(page.getByText("Đang khóa")).toBeVisible();
+
+			await openFactLockReview(page, fixture.projectId);
+			await rerunDeterministicFactLock(fixture);
+			await page.goto(`/projects/${fixture.projectId}/voice`, {
+				waitUntil: "commit",
+			});
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
+			await expect(segmentCard.getByText("Audio đã cũ")).toBeVisible();
+			await expect(secondSegmentCard.getByText("Audio đã cũ")).toBeVisible();
+			await expect(page.getByText("0 / 2 đoạn đã tạo")).toBeVisible();
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toHaveCount(0);
+			await openProjectStep(page, fixture.projectId, "video");
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toBeVisible();
+			await openProjectStep(page, fixture.projectId, "voice");
+
+			await segmentCard.getByRole("button", { name: "Tạo giọng đọc" }).click();
+			await expect(segmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(page.getByText("1 / 2 đoạn đã tạo")).toBeVisible();
+			await secondSegmentCard
+				.getByRole("button", { name: "Tạo giọng đọc" })
+				.click();
+			await expect(secondSegmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(page.getByText("2 / 2 đoạn đã tạo")).toBeVisible();
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toBeVisible();
+
+			await page.getByText("Eve", { exact: true }).click();
+			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
+			await expect(segmentCard.getByText("Audio đã cũ")).toBeVisible();
+			await expect(secondSegmentCard.getByText("Audio đã cũ")).toBeVisible();
+			await expect(page.getByText("0 / 2 đoạn đã tạo")).toBeVisible();
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toHaveCount(0);
+			await openProjectStep(page, fixture.projectId, "video");
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toBeVisible();
+			await openProjectStep(page, fixture.projectId, "voice");
+			await segmentCard.getByRole("button", { name: "Tạo giọng đọc" }).click();
+			await expect(segmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await secondSegmentCard
+				.getByRole("button", { name: "Tạo giọng đọc" })
+				.click();
+			await expect(secondSegmentCard.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 15_000,
+			});
+			await expect(page.getByText("Voiceover đã sẵn sàng")).toBeVisible();
+			await openProjectStep(page, fixture.projectId, "video");
+			await expect(page.getByText("Cần hoàn tất Voiceover")).toHaveCount(0);
+			await expect(page.getByText("Đã mở khóa")).toBeVisible();
+		} finally {
+			await cleanupReviewFixture(fixture);
+		}
+	});
 });
 
 type ReviewFixture = {
@@ -417,7 +571,15 @@ async function signIn(page: Page) {
 	await page.goto("/login");
 	await page.getByLabel("Email").fill(fixedAccountEmail as string);
 	await page.getByLabel("Mật khẩu").fill(fixedAccountPassword as string);
+	const signInResponse = page.waitForResponse(
+		(response) =>
+			response.url().includes("/api/auth/sign-in/email") &&
+			response.request().method() === "POST",
+	);
 	await page.locator("form").getByRole("button", { name: "Đăng nhập" }).click();
+	const response = await signInResponse;
+	expect(response.ok()).toBeTruthy();
+	await page.goto("/dashboard", { waitUntil: "commit" });
 	await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -449,6 +611,8 @@ async function openFactLockReview(page: Page, projectId: string) {
 
 async function seedReviewFixture(
 	mode: "review_required" | "passed" = "review_required",
+	currentStepKey: "product" | "voice" = "product",
+	segmentCount: 1 | 2 = 1,
 ): Promise<ReviewFixture> {
 	if (!fixedAccountEmail) throw new Error("E2E_AUTH_EMAIL is required.");
 	const [fixedUser] = await db
@@ -522,6 +686,12 @@ async function seedReviewFixture(
 		angle: "Đối chiếu Product Facts",
 		description: "Fixture Fact Lock Review.",
 	});
+	if (currentStepKey !== "product") {
+		await db
+			.update(project)
+			.set({ currentStepKey })
+			.where(eq(project.id, projectRecord.id));
+	}
 	const fact = await createProductFact(actor, {
 		productId: productRecord.id,
 		data: {
@@ -551,6 +721,14 @@ async function seedReviewFixture(
 		selectedHookKey: "selected",
 		voiceoverSegments: [
 			{ key: "intro", text: "Pin dùng 20 giờ trong một lần sạc." },
+			...(segmentCount === 2
+				? [
+						{
+							key: "benefits",
+							text: "Kết nối USB-C nhanh, dùng ổn định cả ngày.",
+						},
+					]
+				: []),
 		],
 		scenes: [
 			{
@@ -558,7 +736,8 @@ async function seedReviewFixture(
 				durationSeconds: 30,
 				visualDirection: "Cận cảnh sản phẩm",
 				onScreenText: "Pin 20 giờ",
-				voiceoverSegmentKeys: ["intro"],
+				voiceoverSegmentKeys:
+					segmentCount === 2 ? ["intro", "benefits"] : ["intro"],
 			},
 		],
 		cta: { text: "Xem thêm thông tin" },

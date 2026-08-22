@@ -82,5 +82,14 @@ describe("project step contract", () => {
 			"blocked",
 		);
 		expect(getProjectStepReadinessLabel("voice", blocked)).toBe("Bị khóa");
+		expect(
+			getProjectStepDisplayStatus("video", "not_started", passed, false),
+		).toBe("blocked");
+		expect(getProjectStepReadinessLabel("video", passed, false)).toBe(
+			"Hoàn tất Voice trước",
+		);
+		expect(
+			getProjectStepDisplayStatus("video", "not_started", passed, true),
+		).toBe("not_started");
 	});
 });

@@ -1,7 +1,44 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-011 Phase 3 Voice Studio đã triển khai; AFF-US-011 hoàn tất trong phạm vi preview, full voiceover chưa làm.
-- Cập nhật lần cuối: 2026-08-19
+- Trạng thái: AFF-US-012 hoàn tất; Product/UI v0.8 đã canonical ở cấp tài liệu, implementation/migration chưa bắt đầu.
+- Cập nhật lần cuối: 2026-08-22
+
+## 2026-08-22 — Đồng bộ canonical Product/UI Specification v0.8
+
+Đã tiếp nhận v0.8 qua DEC-025 mà không đánh lại ADR cũ; đồng bộ Product Spec,
+Architecture, Design System, Roadmap, docs index, README và AGENTS. Project tiếp
+tục là Content Item trong MVP; contract mới tách Content Type khỏi Creation Path,
+giữ bảy persisted steps và dùng runtime Applicability Resolver.
+
+Đã thêm `domain-evolution-plan.md`, `claim-manifest-fact-lock-contract.md` và
+`domain-evolution-acceptance.md`. Các tài liệu khóa additive migration/backfill,
+server-built immutable ClaimManifest, Manifest-first FactLockRun, conditional
+Fact Lock, transactional `nextApplicableStep` và regression golden affiliate flow.
+
+Không sửa schema/code, không apply migration, không gọi provider, không commit,
+push hoặc deploy trong lần đồng bộ tài liệu này. Trạng thái repo vẫn là
+**canonical ở cấp tài liệu**; chỉ đổi thành canonical-activated sau khi migration
+review và toàn bộ acceptance gates đạt.
+
+## 2026-08-21 — AFF-US-012 Phase 4 Final Acceptance
+
+Đã hoàn tất workflow sau Phase 0–3: canonical server evaluator yêu cầu Fact Lock
+PASS, VoiceConfig/current ScriptVersion và current completed artifact cho mọi
+segment; tổng duration chỉ cộng artifact usable hiện tại. Reconcile khóa project
+row trước khi upsert `project_step_status`, chỉ tiến `currentStepKey` từ `voice`
+sang `video`, không rollback khi script/config stale; Video direct route dùng cùng
+readiness gate. Pending quá 5 phút thành indeterminate không retry provider.
+
+Đã harden protected audio theo persisted `storageProvider`, waveform shared-loader
+cache và retry decode failure. Added unit/core, waveform, project-gate và
+authenticated deterministic E2E cho reload, script/config stale cycle, failed
+regenerate, duration, workflow persistence, Video access và workspace isolation.
+Playwright server luôn dùng deterministic TTS/local storage; không gọi paid
+APIKEY.FUN/R2. Migration cuối vẫn `0016_gifted_microbe.sql`; không commit/push/deploy.
+
+Trạng thái: **AFF-US-012 Phase 4 ACCEPTED. AFF-US-012 DONE.**
+
+Tài liệu chi tiết: `docs/aff-us-012-phase-4-final-acceptance.md`.
 
 ## 2026-08-19 — AFF-US-011 Phase 3 Voice Studio
 

@@ -1,10 +1,70 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-21
+- Cập nhật lần cuối: 2026-08-22
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
+
+## DEC-025 — Kích hoạt contract channel-first của Product Specification v0.8
+
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation đi qua migration và regression gate
+- Ngày: 2026-08-22
+- Mở rộng: DEC-005, DEC-006, DEC-009, DEC-015, DEC-016, DEC-020, DEC-021, DEC-023, DEC-024
+
+### Bối cảnh
+
+Baseline hiện tại được xây theo golden affiliate flow, trong đó Project luôn có
+Product, ScriptVersion là nguồn claim duy nhất và Fact Lock/Voice là các bước cố
+định. Product Specification v0.8 chuyển AffiChannel Personal sang channel-first,
+cho phép Organic content và nhiều creation path nhưng phải giữ nguyên tính an toàn,
+khả năng truy vết và dữ liệu lịch sử của flow affiliate đã hoàn thành.
+
+Các mã `V08-DEC-*` dưới đây là mã cục bộ của Product Specification v0.8. Chúng
+không thay thế hoặc đánh lại số ADR hiện hữu trong file này.
+
+### Quyết định
+
+| Contract v0.8 | Quyết định được áp dụng trong repo |
+|---|---|
+| `V08-DEC-001` | `Project` tiếp tục là content production unit và đóng vai trò Content Item trong MVP; chưa tạo bảng ContentItem riêng. |
+| `V08-DEC-002` | `contentType` chỉ gồm `ORGANIC | AFFILIATE`; chưa có `HYBRID`. |
+| `V08-DEC-003` | `creationPath` gồm `QUICK_IMAGE | SCRIPTED | MEDIA_FIRST`; `AI_VISUAL` là Post-MVP. |
+| `V08-DEC-004` | Bốn tab Video Studio là presentation layer; không thay thẳng bảy persisted project step keys. |
+| `V08-DEC-005` | Một channel trên mỗi workspace trong MVP. |
+| `V08-DEC-006` | Affiliate luôn cần Product và Fact Lock trước TTS/render. Organic chỉ được `productId=null` khi không có Product claim; mọi Product claim đều cần accessible Product, Product Facts evidence và Fact Lock. |
+| `V08-DEC-007` | Content lifecycle tách khỏi production readiness, artifact status, publication status và analytics import status. |
+| `V08-DEC-008` | Giữ fixed internal accounts và public signup disabled. |
+| `V08-DEC-009` | Project lịch sử được backfill thành `AFFILIATE + SCRIPTED`, giữ nguyên Product và artifacts. |
+| `V08-DEC-010` | Applicability/readiness states là runtime-derived DTO; không thêm `NOT_REQUIRED`, `OPTIONAL`, `REQUIRED`, `READY`, `STALE` vào `project_step_status.status`. |
+| `V08-DEC-011` | Server-built immutable ClaimManifest là nguồn claim canonical cho Fact Lock; ScriptVersion chỉ là một source adapter. |
+| `V08-DEC-012` | Script generation hỗ trợ server-selected `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; output ScriptDraft/versioning hiện tại giữ nguyên. |
+| `V08-DEC-013` | FactLockRun new writes lưu ClaimManifest ID/fingerprint; Script fields là optional provenance. Legacy Script-linked rows tiếp tục đọc được; pending/idempotency của new writes dựa trên Manifest fingerprint. |
+
+Resolver là authority dùng chung cho UI, API readiness và worker preflight. Khi
+persisted step hiện tại là `NOT_REQUIRED`, server tính `nextApplicableStep` theo
+thứ tự bảy step và cập nhật `currentStepKey` bằng business action có transaction;
+không đánh dấu step bị bỏ qua là `completed`. Golden affiliate flow không đổi vì
+các step cũ vẫn applicable.
+
+ClaimManifest phải được build phía server từ mọi output-bearing source, gồm
+ScriptVersion, overlay, caption, CTA, voice text, declared claim và composition
+version. Client không cung cấp `isEmpty` hoặc fingerprint làm source of truth.
+Extraction/normalization lỗi hoặc không chắc chắn phải fail closed thành
+`indeterminate`/`blocked`; không được biến thành empty manifest để PASS.
+
+### Hệ quả
+
+- Tài liệu triển khai chi tiết nằm tại `docs/domain-evolution-plan.md`,
+  `docs/claim-manifest-fact-lock-contract.md` và
+  `docs/domain-evolution-acceptance.md`.
+- Migration phải additive và được review; không bulk rewrite US1–US12 hoặc dữ
+  liệu FactLockRun lịch sử.
+- Chỉ coi repo đã canonical-activated sau khi product spec, architecture,
+  design system và roadmap đồng bộ, migration plan được duyệt và regression
+  baseline trong acceptance document đạt.
+- Các tài liệu phase AFF-US-008 đến AFF-US-012 tiếp tục là bằng chứng lịch sử
+  của golden affiliate flow; DEC-025 mở rộng chúng thay vì sửa lại lịch sử.
 
 ## DEC-024 — AFF-US-012 VoiceSegment artifact và generation contract
 

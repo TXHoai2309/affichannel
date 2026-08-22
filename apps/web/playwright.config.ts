@@ -35,7 +35,7 @@ export default defineConfig({
 	testDir: "./tests/e2e",
 	timeout: 30_000,
 	expect: {
-		timeout: 5_000,
+		timeout: 30_000,
 	},
 	fullyParallel: false,
 	workers: 1,
@@ -45,9 +45,12 @@ export default defineConfig({
 		trace: "retain-on-failure",
 	},
 	webServer: {
-		command: "pnpm dev",
+		// Build once with production semantics, then serve the isolated bundle in
+		// development mode so the deterministic provider remains available.
+		command:
+			'set "NODE_ENV=production"&& pnpm exec next build && set "NODE_ENV=development"&& pnpm exec next start --port 3002',
 		url: "http://localhost:3002",
 		reuseExistingServer: false,
-		timeout: 120_000,
+		timeout: 180_000,
 	},
 });

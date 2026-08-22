@@ -1,8 +1,10 @@
 # AffiChannel
 
-AffiChannel là công cụ nội bộ hỗ trợ xây dựng và vận hành quy trình sản xuất
-video affiliate dạng ngắn. Project được khởi tạo bằng Better T Stack với Next.js,
-oRPC, Better Auth, Drizzle và Neon PostgreSQL.
+AffiChannel Personal là workspace nội bộ channel-first để lập kế hoạch, sản xuất,
+render và đánh giá video ngắn Organic/Affiliate. Product chỉ là dependency khi
+policy yêu cầu; Product claim vẫn phải truy vết qua Product Facts và Fact Lock.
+Project được khởi tạo bằng Better T Stack với Next.js, oRPC, Better Auth, Drizzle
+và Neon PostgreSQL.
 
 ## Tài liệu project
 
@@ -95,8 +97,8 @@ affichannel/
 └─ AGENTS.md        Quy tắc AI agent
 ```
 
-`apps/worker`, `packages/core`, `packages/storage` và `packages/video` sẽ chỉ
-được thêm khi vertical slice tương ứng bắt đầu.
+`apps/worker`, `packages/storage` và `packages/video` sẽ chỉ được thêm khi vertical
+slice tương ứng bắt đầu. `packages/core` đã là nơi giữ domain policy dùng chung.
 
 ## Các lệnh có sẵn
 

@@ -4,6 +4,10 @@ Thư mục này là nguồn tài liệu chuẩn về sản phẩm và kỹ thu�
 Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao diện phải nhất quán
 với các tài liệu tại đây.
 
+Product/UI Specification v0.8 đã được chấp nhận ở cấp tài liệu qua DEC-025. Repo
+chỉ được coi là canonical-activated sau migration review và regression gates trong
+`domain-evolution-acceptance.md`; trạng thái hiện tại chưa ngụ ý đã đổi schema/code.
+
 ## Thứ tự đọc
 
 1. [Đặc tả sản phẩm](./product-spec.md)
@@ -11,24 +15,28 @@ với các tài liệu tại đây.
 3. [Hệ thống thiết kế](./design-system.md)
 4. [Lộ trình triển khai](./roadmap.md)
 5. [Các quyết định kiến trúc](./decisions.md)
-6. [Tiến trình AI agent](./ai-progress.md)
-7. [Nhật ký thay đổi](./changelog.md)
-8. [Bàn giao AFF-US-004](./aff-us-004.md)
-9. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
-10. [AFF-US-008 Phase 2A](./aff-us-008-phase-2a.md)
-11. [AFF-US-008 Phase 2B](./aff-us-008-phase-2b.md)
-12. [AFF-US-010 Phase 0 Contract Hardening](./aff-us-010-phase-0-contract-hardening.md)
-13. [AFF-US-010 Phase 1 Foundation & Classification](./aff-us-010-phase-1-foundation.md)
-14. [AFF-US-010 Phase 2 Review & Resolution](./aff-us-010-phase-2-review-resolution.md)
-15. [AFF-US-010 Phase 3 Gate & Runtime](./aff-us-010-phase-3-gate-runtime.md)
-16. [AFF-US-011 Phase 0 Contract & Architecture Freeze](./aff-us-011-phase-0-contract-decisions.md)
-17. [AFF-US-011 Phase 1 Voice Foundation](./aff-us-011-phase-1-foundation.md)
-18. [AFF-US-011 Phase 2 TTS Preview Runtime](./aff-us-011-phase-2-tts-preview-runtime.md)
-19. [AFF-US-011 Phase 3 Voice Studio](./aff-us-011-phase-3-voice-studio.md)
-20. [AFF-US-012 Phase 0 Contract & Architecture Lock](./aff-us-012-phase-0-contract-decisions.md)
-21. [AFF-US-012 Phase 1 Foundation](./aff-us-012-phase-1-foundation.md)
-22. [AFF-US-012 Phase 2 Runtime, API & Protected Audio](./aff-us-012-phase-2-runtime.md)
-23. [AFF-US-012 Phase 3 Voice Segment Studio UI](./aff-us-012-phase-3-ui.md)
+6. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
+7. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
+8. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
+9. [Tiến trình AI agent](./ai-progress.md)
+10. [Nhật ký thay đổi](./changelog.md)
+11. [Bàn giao AFF-US-004](./aff-us-004.md)
+12. [Nền kiến trúc AFF-US-008](./aff-us-008-foundation.md)
+13. [AFF-US-008 Phase 2A](./aff-us-008-phase-2a.md)
+14. [AFF-US-008 Phase 2B](./aff-us-008-phase-2b.md)
+15. [AFF-US-010 Phase 0 Contract Hardening](./aff-us-010-phase-0-contract-hardening.md)
+16. [AFF-US-010 Phase 1 Foundation & Classification](./aff-us-010-phase-1-foundation.md)
+17. [AFF-US-010 Phase 2 Review & Resolution](./aff-us-010-phase-2-review-resolution.md)
+18. [AFF-US-010 Phase 3 Gate & Runtime](./aff-us-010-phase-3-gate-runtime.md)
+19. [AFF-US-011 Phase 0 Contract & Architecture Freeze](./aff-us-011-phase-0-contract-decisions.md)
+20. [AFF-US-011 Phase 1 Voice Foundation](./aff-us-011-phase-1-foundation.md)
+21. [AFF-US-011 Phase 2 TTS Preview Runtime](./aff-us-011-phase-2-tts-preview-runtime.md)
+22. [AFF-US-011 Phase 3 Voice Studio](./aff-us-011-phase-3-voice-studio.md)
+23. [AFF-US-012 Phase 0 Contract & Architecture Lock](./aff-us-012-phase-0-contract-decisions.md)
+24. [AFF-US-012 Phase 1 Foundation](./aff-us-012-phase-1-foundation.md)
+25. [AFF-US-012 Phase 2 Runtime, API & Protected Audio](./aff-us-012-phase-2-runtime.md)
+26. [AFF-US-012 Phase 3 Voice Segment Studio UI](./aff-us-012-phase-3-ui.md)
+27. [AFF-US-012 Phase 4 Final Acceptance](./aff-us-012-phase-4-final-acceptance.md)
 
 ## Thứ tự ưu tiên khi xác định nguồn sự thật
 
@@ -50,6 +58,8 @@ Không được tự âm thầm xử lý một mâu thuẫn quan trọng. Hãy g
 
 - `Bản nháp`: đang được xác định; không được tự giả định hành vi chưa mô tả.
 - `Đã chấp nhận`: được duyệt làm cơ sở triển khai.
+- `Canonical ở cấp tài liệu`: contract đã chốt nhưng code/schema còn phải qua
+  migration và regression gate.
 - `Đã thay thế`: được giữ lại để tra cứu lịch sử nhưng không còn hiệu lực.
 
 Mỗi tài liệu phải có trạng thái và ngày cập nhật gần tiêu đề. Ngày tháng dùng
@@ -68,6 +78,7 @@ Mỗi tài liệu phải có trạng thái và ngày cập nhật gần tiêu đ
 
 ## Tài liệu kế hoạch trước đây
 
-Các file Word và spreadsheet ban đầu vẫn là nguồn tham khảo lịch sử hữu ích.
-Các tài liệu Markdown trong thư mục này là cơ sở trực tiếp để triển khai. Nếu
-tài liệu cũ mâu thuẫn với thư mục này, hãy áp dụng thứ tự nguồn sự thật nêu trên.
+Product/UI Specification v0.8 Word là đầu vào canonical đã được DEC-025 tiếp nhận;
+các tài liệu Markdown trong thư mục này là contract trực tiếp để triển khai repo.
+Các file Word/spreadsheet cũ hơn vẫn là nguồn tham khảo lịch sử. Nếu tài liệu cũ
+mâu thuẫn với thư mục này, hãy áp dụng thứ tự nguồn sự thật nêu trên.

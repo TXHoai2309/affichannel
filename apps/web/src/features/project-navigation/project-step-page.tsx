@@ -6,19 +6,29 @@ import type { ReactNode } from "react";
 
 import FactLockGatePanel from "@/features/fact-lock/fact-lock-gate-panel";
 import { getProjectStep, type ProjectStepKey } from "./project-steps";
+import VoiceStepGatePanel from "./voice-step-gate-panel";
 
 export default function ProjectStepPage({
 	projectId,
 	stepKey,
 	gate = null,
 	content,
+	voiceReady,
+	voiceSummary,
 }: {
 	projectId: string;
 	stepKey: ProjectStepKey;
 	gate?: FactLockGateResult | null;
 	content?: ReactNode;
+	voiceReady?: boolean;
+	voiceSummary?: {
+		completedSegments: number;
+		totalSegments: number;
+	};
 }) {
 	const step = getProjectStep(stepKey);
+	const voiceGateBlocked =
+		stepKey === "video" && gate?.allowed === true && voiceReady === false;
 
 	if (!step) {
 		return null;
@@ -53,7 +63,15 @@ export default function ProjectStepPage({
 				/>
 			)}
 
-			{gate && !gate.allowed
+			{voiceGateBlocked ? (
+				<VoiceStepGatePanel
+					completedSegments={voiceSummary?.completedSegments ?? 0}
+					projectId={projectId}
+					totalSegments={voiceSummary?.totalSegments ?? 0}
+				/>
+			) : null}
+
+			{(gate && !gate.allowed) || voiceGateBlocked
 				? null
 				: (content ?? (
 						<div className="rounded-xl border border-dashed bg-card p-8">

@@ -1,36 +1,44 @@
-# Đặc tả sản phẩm AffiChannel
+# Đặc tả sản phẩm AffiChannel Personal
 
-- Trạng thái: Bản nháp
-- Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-19
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; repo activation qua migration và regression gate
+- Phiên bản: 0.8.0
+- Cập nhật lần cuối: 2026-08-22
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
 
-AffiChannel là ứng dụng web riêng dành cho nhóm cố định từ hai đến ba người để
-lập kế hoạch, tạo, render và đánh giá video affiliate dạng ngắn. Đây là công cụ
-năng suất nội bộ, không phải sản phẩm SaaS thương mại.
+AffiChannel Personal là workspace channel-first dành cho nhóm cố định từ hai đến
+ba người để lập kế hoạch, tạo, render và đánh giá video dạng ngắn. Người dùng có
+thể xây kênh bằng Organic content trước và bật monetization qua Affiliate khi phù
+hợp. Đây là công cụ năng suất nội bộ, không phải sản phẩm SaaS thương mại.
 
 Giá trị cốt lõi là một quy trình có kiểm soát, giúp giảm thao tác lặp lại nhưng
-vẫn truy vết được claim sản phẩm và giữ quyết định đăng bài cuối cùng ở con người.
+không ép mọi video đi qua Product, Script, Fact Lock và Voice. Khi output có
+Product claim, hệ thống vẫn phải truy vết được claim tới Product Facts và giữ
+quyết định đăng bài cuối cùng ở con người.
 
 ## 2. Nguyên tắc sản phẩm
 
-1. Product Facts là nguồn sự thật cho các claim về sản phẩm.
-2. AI tạo bản nháp và đề xuất; AI không tự phê duyệt fact.
-3. Fact Lock phải đạt cho đúng phiên bản script hiện tại trước TTS hoặc render.
-4. Việc đăng bài vẫn được thực hiện thủ công trong MVP.
-5. Media thật của sản phẩm là mặc định; video sinh bởi AI chỉ là thành phần tùy
-   chọn.
-6. Chi phí, số lần thử lại, nguồn dữ liệu và trạng thái job phải minh bạch.
-7. Một luồng end-to-end nhỏ có giá trị hơn nhiều màn hình chưa kết nối.
+1. Channel Strategy định hướng content; Product chỉ là dependency khi policy yêu cầu.
+2. `ORGANIC` và `AFFILIATE` là Content Type; Content Type độc lập với Creation Path.
+3. Product Facts là nguồn sự thật cho mọi Product claim, kể cả khi Content Type vẫn là Organic.
+4. AI tạo bản nháp và đề xuất; AI không tự phê duyệt fact.
+5. Fact Lock đọc server-built ClaimManifest. Affiliate luôn cần policy check trước
+   TTS/render; Organic chỉ cần khi có Product claim.
+6. Product, Script và Voice không bắt buộc cho mọi content; UI phải phân biệt
+   `NOT_REQUIRED` với `BLOCKED`.
+7. Quick Image dùng local deterministic motion trong MVP; AI animation là Post-MVP.
+8. Việc đăng bài vẫn được thực hiện thủ công trong MVP.
+9. Artifact và render variation là bất biến; output mới không overwrite lịch sử.
+10. Chi phí, số lần thử lại, nguồn dữ liệu và trạng thái job phải minh bạch.
 
 ## 3. Người dùng
 
 ### Người dùng chính
 
-Người vận hành kênh chọn sản phẩm, tạo nội dung, duyệt claim, ghép media, xuất
-video, đăng thủ công và ghi nhận hiệu suất.
+Người vận hành xác định chiến lược kênh, tạo Organic hoặc Affiliate content bằng
+creation path phù hợp, xử lý policy gate khi áp dụng, ghép media, xuất video,
+đăng thủ công và ghi nhận hiệu suất.
 
 ### Mô hình người dùng
 
@@ -43,9 +51,12 @@ video, đăng thủ công và ghi nhận hiệu suất.
 
 ## 4. Mục tiêu
 
-- Lưu thông tin sản phẩm và bằng chứng hỗ trợ để tái sử dụng.
-- Chuyển Content Brief thành script có cấu trúc.
-- Phát hiện claim không được hỗ trợ, hết hạn hoặc bị cấm trước khi sản xuất.
+- Xây dựng kênh bằng content mix, pillar, series và format có thể tái sử dụng.
+- Tạo Organic content không cần Product và Affiliate content có Product evidence.
+- Hỗ trợ Quick Image, Scripted và Media First trên một render pipeline dùng chung.
+- Lưu thông tin sản phẩm và bằng chứng hỗ trợ để tái sử dụng khi có Product claim.
+- Chuyển Content Brief thành script có cấu trúc khi path yêu cầu.
+- Phát hiện Product claim không được hỗ trợ, hết hạn hoặc bị cấm trước khi TTS/render.
 - Tạo hoặc gắn voiceover và media theo từng scene.
 - Preview và render MP4 dọc.
 - Lưu version và trạng thái job có thể tiếp tục.
@@ -65,9 +76,9 @@ video, đăng thủ công và ghi nhận hiệu suất.
 
 ## 6. Phạm vi triển khai
 
-### MVP 0: video đầu tiên sử dụng được
+### Foundation hiện tại: golden affiliate flow
 
-MVP 0 phải hỗ trợ một luồng hoàn chỉnh:
+Golden flow đã được triển khai và phải tiếp tục regression-test trong mọi migration:
 
 ```text
 Đăng nhập
@@ -83,17 +94,35 @@ MVP 0 phải hỗ trợ một luồng hoàn chỉnh:
 → xuất caption và affiliate disclosure
 ```
 
-MVP 0 không bao gồm Video AI, tạo lịch nội dung, analytics nâng cao và auto-post.
+Foundation không bao gồm Video AI, tạo lịch nội dung, analytics nâng cao và auto-post.
 
-### MVP 1: quy trình vận hành
+### Phase A: Domain Evolution
 
-- Channel Settings và các thiết lập nội dung tái sử dụng.
-- Content Library và trạng thái vòng đời.
-- Kế hoạch bảy ngày.
-- Import metrics CSV/XLSX và analytics mô tả.
-- Báo cáo chi phí theo request, project và video đã đăng.
+- Thêm `contentType`, `creationPath`, `contentFormat` cho Project và backfill
+  project cũ thành `AFFILIATE + SCRIPTED`.
+- Cho `productId` nullable ở database nhưng enforce Product cho Affiliate và mọi
+  Organic Product claim.
+- Thêm runtime Applicability Resolver và server transition `nextApplicableStep`;
+  giữ nguyên enum của `project_step_status`.
+- Hỗ trợ ScriptGeneration `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`.
+- Thêm server-built ClaimManifest và FactLockRun Manifest-first, tương thích run cũ.
 
-### MVP 2: media sinh bởi AI có kiểm soát
+### Phase B: Quick Image
+
+- `ORGANIC + QUICK_IMAGE` không cần Product, Script hoặc Fact Lock khi không có Product claim.
+- Một ảnh 9:16, duration 5/10/15 giây, zoom/pan/Ken Burns, text/music/voice tùy chọn.
+- Shared composition/render tạo immutable MP4 variation và không overwrite output cũ.
+
+### Phase C: Channel-first UI và vận hành
+
+- Một Channel Strategy trên mỗi workspace: niche, audience, pillars, series,
+  format defaults, content mix, visual style, voice preset, CTA và disclosure.
+- Video Studio trình bày theo bốn tab Content → Resources → Compose → Export,
+  nhưng không thay thế bảy persisted project step keys.
+- Content Library và Calendar chỉ bắt đầu sau Domain Evolution + Quick Image.
+- Manual metrics import và analytics mô tả bắt đầu sau Library/Calendar.
+
+### Post-MVP: media sinh bởi AI có kiểm soát
 
 - Một Video AI provider qua adapter và feature flag.
 - Job bất đồng bộ, idempotency, giới hạn retry và xác nhận chi phí.
@@ -150,16 +179,32 @@ stale detection, scheduler, scraping/fetching và Fact Lock nằm ngoài AFF-US-
 
 ### Project
 
-Đơn vị sản xuất nội dung, liên kết sản phẩm, nền tảng, mục tiêu, thời lượng, góc
-tiếp cận, các version script, scene, asset, render và dữ liệu đăng bài.
+Project là content production unit và đóng vai trò Content Item trong MVP. Project
+có `contentType`, `creationPath`, `contentFormat`, lifecycle riêng và các version
+script, scene, asset, render, publication, analytics liên quan. `productId` nullable
+chỉ với Organic không có Product claim; Affiliate và mọi Organic Product claim
+đều cần accessible Product.
+
+Content Type canonical: `ORGANIC | AFFILIATE`. Creation Path MVP:
+`QUICK_IMAGE | SCRIPTED | MEDIA_FIRST`; `AI_VISUAL` bị disable đến Post-MVP.
+Content Format là preset cấu trúc/UI hint, không phải workflow state và không tự
+hard-code dependency ngoài Applicability Resolver.
+
+Applicability Resolver tính runtime state cho Product, Script, Fact Lock, Voice và
+Render: `NOT_REQUIRED | OPTIONAL | REQUIRED | READY | BLOCKED | STALE`. Các state
+này không được ghi trực tiếp vào enum persisted `project_step_status.status`.
+Khi current step không áp dụng, server dùng business action có transaction để
+chuyển `currentStepKey` tới persisted step tiếp theo thực sự áp dụng.
 
 ### Script generation
 
-AFF-US-008 tạo generated artifact read-only từ Project, Content Brief, Product và Product Facts
-đủ điều kiện. Artifact được lưu bền vững, có thể `completed` hoặc `partial`, reload sau refresh và
-repair bằng một child artifact mới. Nó giữ input snapshot, Fact revision/dependency, prompt/output
-schema version và request/provider metadata an toàn. Provider output vẫn là dữ liệu không đáng tin
-cậy và candidate claim chưa qua Fact Lock.
+AFF-US-008 tạo generated artifact read-only theo input mode do server resolver
+chọn. `PRODUCT_BACKED` đọc Project, Brief, Channel Settings, Product, Product Facts,
+Media Metadata và Output Rules. `ORGANIC_NO_PRODUCT` không lookup Product/Facts và
+prompt phải cấm invent Product claim. Cả hai mode giữ output ScriptDraft,
+versioning, repair, idempotency, snapshot/hash và provider metadata hiện tại.
+Provider output vẫn là dữ liệu không đáng tin cậy và candidate claim chưa qua
+policy gate khi gate áp dụng.
 
 Script generation không phải nội dung đã được người dùng chọn/chỉnh và không tự hoàn tất workflow.
 `pending`, `failed` hoặc `indeterminate` không được làm mất artifact completed/partial trước đó.
@@ -169,10 +214,22 @@ Script generation không phải nội dung đã được người dùng chọn/c
 Phiên bản bất biến đã lưu của hook, voiceover segment, chỉ dẫn scene, on-screen
 text, CTA, caption, hashtag, disclosure và các claim đã tách.
 
-### Fact-check run
+### Claim Manifest
 
-Kết quả kiểm tra cho đúng một script version. Khi sửa nội dung chứa claim, kết
-quả cũ bị vô hiệu và chuyển sang stale.
+Immutable claim inventory do server build từ mọi output-bearing source:
+ScriptVersion, overlay, caption, CTA, voice text, declared claim và composition
+version. ClaimManifest có source type/version, normalized claims, `isEmpty`,
+fingerprint và audit timestamp. Client không được cung cấp `isEmpty` hoặc
+fingerprint làm source of truth. Lỗi extraction/normalization phải fail closed;
+không được biến thành empty manifest.
+
+### Fact Lock run
+
+Run mới đánh giá đúng một ClaimManifest và lưu Manifest ID/fingerprint bất biến.
+ScriptVersion chỉ là provenance/source adapter khi có. Run lịch sử gắn Script vẫn
+đọc được mà không cần rewrite. Khi output-bearing source hoặc Product Fact
+dependency thay đổi, kết quả cũ có effective state `STALE` và downstream bị khóa
+theo policy.
 
 ### Scene
 
@@ -191,6 +248,10 @@ tăng giữa các snapshot và không cộng trực tiếp nhiều snapshot tíc
 
 ## 8. Hành vi Fact Lock
 
+Fact Lock chỉ áp dụng khi resolver trả `REQUIRED`: mọi Affiliate trước TTS/render
+và mọi Organic có Product claim. Organic không Product claim trả `NOT_REQUIRED`;
+factual knowledge không dựa trên Product Facts thuộc manual evidence flow riêng.
+
 Classification của claim trong một Fact Lock run:
 
 - `SUPPORTED`: có bằng chứng đủ và còn hiệu lực.
@@ -204,11 +265,15 @@ Classification của claim trong một Fact Lock run:
 
 Fact Lock run chỉ là `PASSED` khi:
 
-- áp dụng cho đúng script version hiện tại;
+- áp dụng cho đúng server-built ClaimManifest fingerprint hiện tại;
 - không có claim `UNSUPPORTED` hoặc `PROHIBITED`;
 - run không có effective status `STALE`;
 - mọi claim `NEEDS_REVIEW` đã có hành động xử lý được ghi lại;
 - mọi claim được hỗ trợ vẫn còn liên kết đến bằng chứng.
+
+Affiliate claimless vẫn tạo empty ClaimManifest phía server và policy check có
+thể PASS với zero claim results. Empty chỉ hợp lệ sau normalization thành công;
+provider/extraction uncertainty phải trả `indeterminate` hoặc `blocked`.
 
 Semantic matching hoặc LLM có thể đề xuất fact liên quan. Hệ thống không được
 đánh dấu claim là supported nếu thiếu bằng chứng cụ thể.
@@ -281,18 +346,43 @@ segment theo current ScriptVersion, trạng thái read model, generate/regenerat
 UI giữ usable audio cũ khi regenerate, khóa khi VoiceConfig dirty hoặc Fact Lock
 stale, map lỗi sanitized và không mutate workflow completion/total duration.
 Waveform decode failure chỉ fallback player-only. E2E dùng deterministic TTS, không
-gọi live APIKEY.FUN/R2; Phase 4 vẫn phụ trách workflow completion và acceptance E2E.
+gọi live APIKEY.FUN/R2.
+
+AFF-US-012 Phase 4 đã hoàn tất workflow completion và final acceptance cho golden
+affiliate flow. Readiness của flow này yêu cầu Fact Lock PASS,
+VoiceConfig/current ScriptVersion và artifact completed usable khớp full
+fingerprint cho mọi segment hiện tại. Tổng duration chỉ cộng `durationMs` của các
+artifact đó. Server reconcile
+`project_step_status` sau mutation và chỉ tiến `project.currentStepKey` từ `voice`
+sang `video` khi ready; thay đổi script/config làm Video bị gate lại mà không tự
+rollback current step. Pending quá lease thành indeterminate không retry provider.
+Video của flow này yêu cầu đồng thời Fact Lock PASS và Voice ready. E2E dùng
+deterministic TTS, không gọi live APIKEY.FUN/R2; không tạo migration mới.
+AFF-US-012 đã DONE. Với path mới v0.8, resolver thay điều kiện Fact Lock PASS bằng
+`Fact Lock PASS khi REQUIRED`; Organic claimless vẫn có thể opt-in Voice/TTS.
 
 ## 9. Các màn hình chính
 
-US002 chuẩn hóa protected App Shell dùng chung cho các màn hình MVP: Dashboard,
-Dự án, Sản phẩm, Media Library, Analytics, Chi phí & Usage và Cài đặt. Các entry
-point chưa có business logic vẫn phải có route, breadcrumb, loading/skeleton và
-trạng thái placeholder rõ ràng; App Shell không được được xem là Product CRUD.
-Project dùng stepper 7 bước: Sản phẩm, Nội dung, Fact Lock, Giọng đọc, Dựng video,
-Preview & Render và Hoàn thành.
+US002 chuẩn hóa protected App Shell hiện tại: Dashboard, Dự án, Sản phẩm, Media
+Library, Analytics, Chi phí & Usage và Cài đặt. Channel-first UI tiến hóa dần sang
+Dashboard, Channel, Content/Projects, Products, Video Studio, Content Library,
+Calendar, Analytics và Settings; route chưa có business logic phải dùng placeholder
+trung thực.
 
-### Màn hình MVP 0
+Project tiếp tục persist bảy step keys: Sản phẩm, Nội dung, Fact Lock, Giọng đọc,
+Dựng video, Preview & Render và Hoàn thành. Applicability Resolver quyết định step
+nào được hiển thị, thu gọn hoặc bỏ qua. `NOT_REQUIRED` không được hiển thị như lỗi
+hoặc `BLOCKED`.
+
+Video Studio target dùng bốn tab trình bày:
+
+```text
+Content → Resources → Compose → Export
+```
+
+Bốn tab không phải state machine mới và không thay thẳng persisted step keys.
+
+### Màn hình foundation hiện tại
 
 1. Đăng nhập bằng tài khoản thành viên cố định được bootstrap ngoài luồng public.
 2. Dashboard tối thiểu với trạng thái thiết lập và project gần đây.
@@ -303,31 +393,32 @@ Preview & Render và Hoàn thành.
 7. Video workspace gồm media, TTS, preview và trạng thái render.
 8. Kết quả render và gói export.
 
-### Màn hình giai đoạn sau
+### Màn hình channel-first theo phase
 
-- Channel Settings.
-- Content Calendar.
-- Content Library.
-- Analytics.
+- Domain Evolution: adaptive Project create/read, resolver state và gated routes.
+- Quick Image: upload một ảnh, local motion, optional text/music/voice, preview/render.
+- Channel Strategy và Content navigation.
+- Content Library và Content Calendar.
+- Analytics import/mô tả.
 - Cài đặt provider, storage, voice và render.
 
 ## 10. Vòng đời nội dung
 
 ```text
 IDEA
-→ WRITING
-→ FACT_REVIEW
+→ PREPARING
 → READY
 → IN_VIDEO
-→ RENDERING
 → RENDERED
 → POSTED
 → ANALYZED
 → ARCHIVED
 ```
 
-Chuyển trạng thái phải được kiểm tra ở server. Giao diện có thể hướng dẫn nhưng
-không được là lớp kiểm soát duy nhất.
+Content lifecycle tách khỏi production readiness, artifact status, publication
+status và analytics import status. Fact Lock, Voice hoặc Render có thể
+`NOT_REQUIRED`, `READY`, `BLOCKED` hoặc `STALE` mà không tự đổi lifecycle. Chuyển
+trạng thái phải được kiểm tra ở server; UI không phải lớp kiểm soát duy nhất.
 
 ## 11. Yêu cầu UX toàn cục
 
@@ -342,23 +433,40 @@ không được là lớp kiểm soát duy nhất.
 - Ngày giờ, múi giờ, tiền tệ, sample size và nguồn dữ liệu phải hiển thị khi ảnh
   hưởng đến cách hiểu.
 
-## 12. Acceptance Criteria của MVP 0
+## 12. Acceptance Criteria của canonical v0.8
 
 - Thành viên cố định đăng nhập, đăng xuất và giữ session hợp lệ khi refresh.
 - Người không có quyền không thể đọc hoặc sửa bản ghi được bảo vệ.
-- Sản phẩm và fact được lưu ở Neon và mở lại được.
-- Project tham chiếu được sản phẩm và lưu Content Brief.
-- Script có cấu trúc chỉnh sửa và version hóa được.
-- Fact Lock chặn sản xuất khi claim của version hiện tại không hợp lệ.
-- Media thật và TTS được gắn theo scene.
-- Preview 9:16 dùng dữ liệu project đã lưu.
-- Render lỗi có thể retry và không làm mất project.
-- Render thành công tạo metadata MP4 và gói caption có thể export.
+- Project cũ tiếp tục chạy như `AFFILIATE + SCRIPTED` và không mất Product,
+  Script, Fact Lock hoặc Voice artifacts.
+- Tạo được `ORGANIC + QUICK_IMAGE` không Product, Script hoặc Fact Lock khi không
+  có Product claim; tạo `AFFILIATE + QUICK_IMAGE` vẫn bắt buộc Product.
+- Organic có Product claim nhưng `productId=null` bị reject; link Product hợp lệ
+  không làm Content Type tự chuyển thành Affiliate.
+- Organic Scripted AI dùng `ORGANIC_NO_PRODUCT` mà không lookup Product Facts.
+- UI phân biệt `NOT_REQUIRED` và `BLOCKED`; server bỏ qua step không áp dụng bằng
+  `nextApplicableStep` mà không ghi enum mới vào `project_step_status`.
+- Affiliate luôn có server-built ClaimManifest và Fact Lock policy check trước
+  TTS/render; Organic no-claim không bị Fact Lock chặn.
+- ClaimManifest empty chỉ PASS sau server normalization thành công; client không
+  thể ép `isEmpty` hoặc fingerprint và uncertainty phải fail closed.
+- FactLockRun new write persist Manifest ID/fingerprint; no-script run không cần
+  ScriptVersion và legacy Script-linked rows vẫn đọc được.
+- Organic no-claim có thể opt-in Voice/TTS khi Fact Lock là `NOT_REQUIRED`; khi
+  Fact Lock `REQUIRED`, Voice/TTS vẫn fail closed đến khi PASS.
+- Quick Image render tạo immutable MP4 variation; retry idempotent không làm mất
+  Project hoặc tạo duplicate charge/output ngoài contract.
+- Golden affiliate scripted regression tiếp tục đạt sau migration.
 - Secret không xuất hiện trong source, client bundle, log, database hoặc file
   export.
 
 ## 13. Quyết định còn mở
 
+- Tên enum/database cụ thể và ownership của ContentFormat registry.
+- Schema chi tiết của applicability provenance snapshot trên artifact.
+- Render worker local engine và composition schema chi tiết của phase render.
+- MVP cho manual evidence review của Organic factual knowledge.
+- Analytics dedupe key khi bắt đầu Analytics phase.
 - File render của MVP 0 lưu local hay upload R2 ngay.
 - TTS provider/APIKEY.FUN relay đã vượt qua capability probe tiếng Việt trong
   AFF-US-011 Phase 0; pricing qua relay vẫn chưa được xác minh và không được suy
@@ -369,6 +477,10 @@ trở nên khó thay đổi.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.
+
+Contract migration, Fact Lock và acceptance tương ứng nằm tại
+`docs/domain-evolution-plan.md`, `docs/claim-manifest-fact-lock-contract.md` và
+`docs/domain-evolution-acceptance.md`.
 ## AFF-US-007 — Fact Freshness và Dependency Invalidation
 
 AFF-US-007 mở rộng Product Facts bằng assessment freshness, không thay đổi các status

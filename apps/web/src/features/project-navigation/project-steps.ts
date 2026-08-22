@@ -124,6 +124,7 @@ export function getProjectStepDisplayStatus(
 	stepKey: ProjectStepKey,
 	workflowStatus: ProjectStepStatus,
 	factLockGate: FactLockGateResult | null | undefined,
+	voiceReady?: boolean,
 ): ProjectStepStatus {
 	if (!factLockGate) return workflowStatus;
 	if (stepKey === "fact-lock")
@@ -133,12 +134,14 @@ export function getProjectStepDisplayStatus(
 		!factLockGate.allowed
 	)
 		return "blocked";
+	if (stepKey === "video" && voiceReady === false) return "blocked";
 	return workflowStatus;
 }
 
 export function getProjectStepReadinessLabel(
 	stepKey: ProjectStepKey,
 	factLockGate: FactLockGateResult | null | undefined,
+	voiceReady?: boolean,
 ) {
 	if (!factLockGate) return null;
 	if (stepKey === "fact-lock") {
@@ -155,6 +158,9 @@ export function getProjectStepReadinessLabel(
 			return "Cần xem lại";
 		return "Chưa hoàn tất";
 	}
+	if (stepKey === "voice" || stepKey === "video" || stepKey === "preview")
+		if (stepKey === "video" && voiceReady === false)
+			return "Hoàn tất Voice trước";
 	if (stepKey === "voice" || stepKey === "video" || stepKey === "preview")
 		return factLockGate.allowed ? "Có thể tiếp tục" : "Bị khóa";
 	return null;

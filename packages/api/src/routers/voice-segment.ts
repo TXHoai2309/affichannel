@@ -12,6 +12,7 @@ import {
 	getVoiceSegmentState,
 	listVoiceSegmentStates,
 } from "../services/voice-segment-runtime-service";
+import { getVoiceStepWorkflowEvaluation } from "../services/voice-step-workflow-service";
 import { requireWorkspaceActor } from "../services/workspace";
 
 const idSchema = z.string().trim().min(1).max(120);
@@ -74,6 +75,20 @@ export const voiceSegmentRouter = {
 					input.projectId,
 					input.segmentKey,
 				);
+			} catch (error) {
+				return toVoiceSegmentOrpcError(error);
+			}
+		}),
+	getSummary: protectedProcedure
+		.input(projectSchema)
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			try {
+				const evaluation = await getVoiceStepWorkflowEvaluation(
+					actor,
+					input.projectId,
+				);
+				return evaluation?.summary ?? null;
 			} catch (error) {
 				return toVoiceSegmentOrpcError(error);
 			}

@@ -184,11 +184,23 @@ Không được:
 
 ## 11. Quy tắc Fact Lock và AI
 
-- Product Facts là nguồn sự thật.
+- Product Facts là nguồn sự thật cho mọi Product claim, kể cả Organic content.
 - AI có thể tạo draft và đề xuất evidence; AI không tự phê duyệt claim.
-- Fact Lock áp dụng cho một script version bất biến.
-- Thay đổi nội dung chứa claim hoặc fact hỗ trợ làm kết quả cũ mất hiệu lực.
-- TTS và Render bị chặn nếu run hiện tại chưa đạt quy tắc đã tài liệu hóa.
+- Applicability Resolver server-side là authority cho Product, Script, Fact Lock,
+  Voice và Render; không persist runtime state như `NOT_REQUIRED` vào
+  `project_step_status.status`.
+- Fact Lock new writes áp dụng cho server-built immutable ClaimManifest; ScriptVersion
+  chỉ là một source adapter/provenance. Client không đặt `isEmpty` hoặc fingerprint.
+- Thay đổi Script, overlay, caption, CTA, voice text, declared claim, composition
+  hoặc fact hỗ trợ làm kết quả cũ mất hiệu lực theo Manifest/dependency contract.
+- Affiliate luôn cần Fact Lock trước TTS/Render. Organic chỉ cần khi có Product
+  claim; Organic claimless có thể opt-in Voice/TTS khi Fact Lock `NOT_REQUIRED`.
+- Extraction/normalization lỗi hoặc không chắc chắn phải fail closed; không được
+  biến thành empty Manifest để PASS.
+- TTS và Render chỉ bị chặn bởi Fact Lock khi resolver trả `REQUIRED`; mọi mutation
+  tốn phí và worker preflight phải kiểm tra lại current applicability/gate ở server.
+- Khi step hiện tại `NOT_REQUIRED`, server transition tới `nextApplicableStep`
+  trong transaction và không đánh dấu step bị bỏ qua là `completed`.
 - Khi module được thêm, request tốn phí phải ghi provider/model, request ID,
   input version, cost và failure reason an toàn.
 - Retry phải hữu hạn và idempotent.

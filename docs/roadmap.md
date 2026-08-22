@@ -1,8 +1,8 @@
 # Lộ trình triển khai AffiChannel
 
-- Trạng thái: Bản nháp
-- Phiên bản: 0.1.0
-- Cập nhật lần cuối: 2026-08-19
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
+- Phiên bản: 0.8.0
+- Cập nhật lần cuối: 2026-08-22
 
 ## 1. Phương pháp triển khai
 
@@ -278,7 +278,9 @@ Phase 2 đã triển khai segment generation runtime/API/provider, server-author
 input và MP3 duration, idempotency/coalescing với DB race handling, local/private-R2
 storage registry, protected state/audio endpoints và failure/cleanup semantics.
 Không tạo migration `0017`, không gọi live APIKEY.FUN hoặc R2 trong test. Phase 2
-đã được chấp nhận; Phase 3 đã triển khai UI và đang chờ review/acceptance.
+đã được chấp nhận. Phase 3 đã triển khai UI/player/waveform và Phase 4 đã hoàn tất
+workflow readiness, tổng duration, Video gate, storage-provider read resolution,
+waveform cache hardening và acceptance E2E. AFF-US-012 đã hoàn thành.
 
 Các phase dự kiến:
 
@@ -286,7 +288,7 @@ Các phase dự kiến:
 Phase 1 — schema/repository/storage/duration foundation
 Phase 2 — segment generation API/provider/protected stream ✅
 Phase 3 — segment list/player/basic waveform ✅
-Phase 4 — duration/workflow hardening và acceptance E2E
+Phase 4 — duration/workflow hardening và acceptance E2E ✅
 ```
 
 Phase 3 giữ nguyên VoiceConfig/gate của US11, dùng server read model cho từng
@@ -294,6 +296,13 @@ segment, generate/regenerate với idempotency key mới, protected audio endpoi
 server duration và waveform derived cache memory. Không mutate workflow completion,
 không tạo migration mới và không gọi paid TTS/R2 trong test. Chi tiết tại
 `docs/aff-us-012-phase-3-ui.md`.
+
+Phase 4 dùng evaluator server-side làm nguồn readiness duy nhất, cộng duration
+chỉ từ current usable artifact, reconcile `project_step_status` sau mutation và
+chuyển `currentStepKey` từ Voice sang Video khi đủ điều kiện. Video bị khóa nếu
+Fact Lock hoặc Voice chưa đạt; thay đổi script/config không rollback current step
+nhưng làm gate và persisted status phản ánh trạng thái cần xem lại. Chi tiết tại
+`docs/aff-us-012-phase-4-final-acceptance.md`.
 
 - Test TTS tiếng Việt bằng script đại diện.
 - Tạo voice theo segment và cache bằng normalized input hash.
@@ -312,16 +321,59 @@ Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
 
 MVP 0 hoàn thành khi slice này đạt end-to-end.
 
-## 13. Slice sau MVP
+## 13. Chuỗi kích hoạt canonical v0.8
 
-Sau khi có dữ liệu sử dụng thực tế:
+Các slice 1–9 ở trên là lịch sử và golden affiliate baseline. Không đánh lại số
+story hoặc bulk rewrite implementation cũ. Công việc mới đi theo thứ tự phụ thuộc:
 
-1. Channel Settings và mặc định tái sử dụng (contract/persistence đã được kéo sớm vào AFF-US-008
-   Phase 2A; UI quản lý vẫn để slice sau).
-2. Content lifecycle và lịch bảy ngày.
-3. Publication record và metric snapshot.
-4. Analytics mô tả và hiệu quả chi phí.
-5. Một Video AI provider có kiểm soát.
+### 13.1. Freeze baseline AFF-US-012
+
+- Giữ acceptance evidence Phase 4 và regression golden affiliate flow.
+- Không thay đổi schema/contract khi baseline chưa xanh.
+
+### 13.2. Domain Evolution
+
+- Additive migration cho `contentType`, `creationPath`, `contentFormat`; backfill
+  project cũ thành `AFFILIATE + SCRIPTED`.
+- Cho `productId` nullable ở DB, giữ service invariants cho Affiliate/Product claim.
+- Thêm Applicability Resolver dùng chung cho UI/API/worker và transactional
+  `nextApplicableStep`; không sửa enum persisted step status.
+- Thêm ScriptGeneration mode `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`.
+
+### 13.3. ClaimManifest và Fact Lock Manifest-first
+
+- Tạo immutable server-built ClaimManifest từ mọi output-bearing source.
+- Mở rộng FactLockRun new writes bằng Manifest ID/fingerprint; giữ read adapter cho
+  Script-linked legacy rows.
+- Áp dụng conditional gate: Affiliate và Organic Product claim cần Fact Lock;
+  Organic claimless là `NOT_REQUIRED`, kể cả khi opt-in Voice.
+
+### 13.4. Quick Image vertical slice
+
+- Hoàn thiện `ORGANIC + QUICK_IMAGE` không Product/Script/Fact Lock.
+- Một ảnh 9:16, motion local deterministic, text/music/voice tùy chọn.
+- Shared composition/preview/render, immutable variation và retry không overwrite.
+
+### 13.5. Channel-first UI
+
+- Một Channel Strategy/workspace và defaults tái sử dụng.
+- Video Studio có bốn tab Content → Resources → Compose → Export; bảy persisted
+  project steps vẫn là workflow storage.
+- UI hiển thị rõ `NOT_REQUIRED`, `OPTIONAL`, `BLOCKED`, `STALE` và lý do.
+
+### 13.6. Library, Calendar và Analytics
+
+- Content Library theo lifecycle tách biệt khỏi production readiness.
+- Calendar/lịch bảy ngày và publication record.
+- Import metrics CSV/XLSX, analytics mô tả và hiệu quả chi phí.
+
+### 13.7. Post-MVP AI Visual
+
+- Bật một Video AI provider qua adapter/feature flag sau khi Quick Image ổn định.
+- Giữ cost confirmation, retry hữu hạn, immutable outputs và manual publishing.
+
+Mỗi phase phải đạt `docs/domain-evolution-acceptance.md` và giữ regression của
+golden affiliate flow trước khi bắt đầu phase kế tiếp.
 
 ## 14. Backlog trì hoãn
 
@@ -331,6 +383,7 @@ Sau khi có dữ liệu sử dụng thực tế:
 - Recommendation engine.
 - Mobile editing nâng cao.
 - Quản trị team/workspace.
+- `HYBRID` Content Type và nhiều channel/workspace.
 
 ## 15. Definition of Done của một slice
 
