@@ -5,8 +5,9 @@ Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao di
 với các tài liệu tại đây.
 
 Product/UI Specification v0.8 là **canonical product specification** và đã được
-chấp nhận ở cấp tài liệu qua DEC-025. Repo
-chỉ được coi là canonical-activated sau migration review và regression gates trong
+chấp nhận ở cấp tài liệu qua DEC-025. DEC-026 đã khóa ContentFormat và đóng Phase 0;
+M1 hiện **READY for review** nhưng chưa được tạo hoặc apply. Repo chỉ được coi là
+canonical-activated sau migration review và regression gates trong
 `domain-evolution-acceptance.md`; trạng thái hiện tại chưa ngụ ý đã đổi schema/code.
 
 ## Thứ tự đọc

@@ -1,7 +1,41 @@
 # Tiến trình AI agent
 
-- Trạng thái: US12 baseline frozen/completed; v0.8 documentation canonicalized; Domain Evolution/ClaimManifest/Quick Image implementation chưa bắt đầu.
+- Trạng thái: US12 baseline frozen/completed; Domain Evolution Phase 0 hoàn tất;
+  M1 READY for review nhưng implementation/ClaimManifest/Quick Image chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-22
+
+## 2026-08-22 — Domain Evolution Preparation / Phase 0
+
+Đã audit canonical docs và source hiện tại cho Project schema/repository/service,
+ContentBrief, protected create/update API, persisted workflow, packages/core,
+ScriptGeneration, FactLock và Voice. Migration head vẫn
+`0016_gifted_microbe.sql`; không có `0017`.
+
+DEC-026 đã được accepted để khóa ContentFormat là immutable versioned
+server-owned preset. Identity là `(key, version)`, M1 persistence dùng
+`content_format_key TEXT` + `content_format_version INTEGER`, registry readonly
+đặt trong `packages/core`, không có DB registry table/enum/admin builder. Registry
+MVP gồm một default cho mỗi CreationPath: `SCRIPTED_STANDARD v1`,
+`QUICK_IMAGE_STANDARD v1`, `MEDIA_FIRST_STANDARD v1`.
+
+Legacy Project backfill deterministic thành
+`AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`. Create thiếu format dùng server
+default theo CreationPath; supplied ref phải tồn tại, active và compatible. Đổi
+ContentType không rewrite format còn compatible; đổi CreationPath incompatible
+phải gửi replacement rõ ràng. Unknown ref được đọc raw ở trạng thái unsupported,
+không crash/fallback; action cần definition bị block.
+
+Source audit xác nhận `project.product_id` hiện NOT NULL, Project create/UI/core
+validation bắt buộc Product, list/detail/Dashboard và ScriptGeneration dùng inner
+join Product, FactLock/Voice paths còn giả định Product/Fact Lock bắt buộc.
+`ScriptGeneration.mode` hiện là `full | repair`, nên
+`PRODUCT_BACKED | ORGANIC_NO_PRODUCT` được khóa là input source mode riêng.
+Những điểm này là Phase 1 touchpoint inventory, chưa được sửa trong task này.
+
+Baseline regression prerequisites và ContentFormat acceptance tests đã được ghi
+trong Domain Evolution plan/acceptance. Kết luận: **M1 READY for review**, chưa
+authorize tạo/apply migration. Không sửa runtime/schema/API/UI/test, không gọi
+paid provider và không commit/push/merge/deploy.
 
 ## 2026-08-22 — Finalize bộ tài liệu canonical v0.8
 
@@ -15,11 +49,11 @@ Architecture đã phản ánh `packages/core` đang được sử dụng và Voi
 lưu storage key/metadata. Media Library và render asset storage vẫn là target,
 không được ghi nhận là đã hoàn thành.
 
-Open-decision audit xác định ContentFormat representation/ownership/versioning là
-blocker trước migration M1. Applicability provenance, Organic factual evidence,
-render/provider và analytics được phân loại non-blocker/deferred với gate rõ ràng.
-Có thể bắt đầu **Domain Evolution preparation / Phase 0**, chưa được bắt đầu
-migration cho đến khi ContentFormat blocker đóng.
+Tại thời điểm finalization, open-decision audit xác định ContentFormat
+representation/ownership/versioning là blocker trước migration M1. Blocker này
+sau đó đã được đóng bởi DEC-026 trong Domain Evolution Phase 0. Applicability
+provenance, Organic factual evidence, render/provider và analytics vẫn là
+non-blocker/deferred với gate rõ ràng.
 
 Không sửa code/schema/test, không tạo/apply migration, không gọi paid provider và
 không commit/push/merge/deploy. Migration head vẫn

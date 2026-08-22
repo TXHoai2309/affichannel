@@ -3,7 +3,7 @@
 - Trạng thái: Canonical test contract; chưa chạy
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-22
-- Quyết định liên quan: DEC-025
+- Quyết định liên quan: DEC-025, DEC-026
 
 ## 1. Nguyên tắc đạt
 
@@ -13,14 +13,32 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ## 2. Gate A — Migration và compatibility
 
-- [ ] ADR/contract khóa ContentFormat representation, registry ownership,
-  versioning và backfill/default rule trước migration M1.
+- [x] DEC-026 khóa ContentFormat representation, registry ownership, versioning
+  và backfill/default rule trước migration M1.
 - [ ] Additive migration apply thành công trên snapshot giống production.
-- [ ] Project cũ backfill đúng `AFFILIATE + SCRIPTED`, giữ Product/current step/artifact.
+- [ ] Project cũ backfill đúng
+  `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`, giữ Product/current step/artifact.
 - [ ] Backfill chạy lại không đổi kết quả và có exception report.
 - [ ] Mixed old/new rows đọc được trong deployment window.
 - [ ] Legacy Script-linked FactLockRun vẫn xem được và có effective state đúng.
 - [ ] Rollback feature flag không làm mất Organic/Manifest data đã ghi.
+
+### ContentFormat registry contract
+
+- [ ] Mọi key và cặp `(key, version)` là duy nhất; version là số nguyên dương.
+- [ ] Mỗi MVP CreationPath có đúng một active default và default đó support path.
+- [ ] `SCRIPTED_STANDARD v1` tồn tại làm legacy backfill target; version cũ hoặc
+  deprecated còn được resolve để đọc Project đã pin.
+- [ ] Invalid key/version và format/path mismatch bị server từ chối.
+- [ ] Create không gửi format dùng server default; client không phải authority.
+- [ ] Đổi ContentType không rewrite format còn compatible.
+- [ ] Đổi CreationPath sang path incompatible phải gửi replacement format rõ ràng;
+  server không silently rewrite.
+- [ ] Unknown reference vẫn trả raw `(key, version)`, Project page không crash,
+  không fallback latest và action cần definition bị block có kiểm soát.
+- [ ] Registry không chứa Product/Script/Fact Lock/Voice/Render applicability rule.
+- [ ] Expand M1 dùng nullable pair có whole-pair integrity, không DB default và
+  không index format riêng.
 
 ## 3. Gate B — Applicability Resolver
 
@@ -41,10 +59,12 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 - [ ] Back/forward/refresh hiển thị đúng viewed step và current workflow state.
 - [ ] Resolver change làm downstream gate lại nhưng không tự rollback current step.
 
-## 5. Gate D — Script generation modes
+## 5. Gate D — Script generation input source modes
 
 - [ ] Server chọn `PRODUCT_BACKED` cho path/policy cần Product.
 - [ ] `ORGANIC_NO_PRODUCT` không lookup Product/Facts và không lỗi vì `productId=null`.
+- [ ] Persisted operation mode `full | repair` hiện hữu không bị đổi nghĩa hoặc
+  thay bằng input source mode.
 - [ ] Prompt/output validator chặn Product claim bị invent trong claimless mode.
 - [ ] Snapshot/hash/idempotency khác nhau giữa hai mode khi input semantics khác.
 - [ ] ScriptDraft/version history và golden generation regression vẫn xanh.

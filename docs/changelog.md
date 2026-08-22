@@ -8,6 +8,23 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Domain Evolution Preparation / Phase 0
+
+- Thêm DEC-026, khóa ContentFormat là versioned server-owned preset với identity
+  `(key, version)`, persistence pair `content_format_key` /
+  `content_format_version` và registry readonly trong `packages/core`.
+- Khóa registry MVP gồm `SCRIPTED_STANDARD v1`, `QUICK_IMAGE_STANDARD v1` và
+  `MEDIA_FIRST_STANDARD v1`; format orthogonal với Organic/Affiliate và không là
+  authority của Product/Script/Fact Lock/Voice/Render applicability.
+- Khóa immutable versioning, deprecated/unknown read behavior, deterministic
+  legacy backfill và server default/CreationPath compatibility cho Project mới.
+- Audit source xác nhận `project.product_id` và nhiều create/read/gate path vẫn
+  giả định Product non-null; đây là touchpoint cho implementation sau, không phải
+  thay đổi runtime trong Phase 0.
+- ContentFormat blocker đã đóng; M1 READY for review. Không sửa code/schema/test,
+  không tạo/apply migration `0017`, không gọi paid provider; migration head vẫn
+  `0016_gifted_microbe.sql`.
+
 ### Canonical v0.8 documentation finalization
 
 - Làm rõ current execution roadmap theo thứ tự Freeze US12 → Domain Evolution →
@@ -17,7 +34,8 @@ sử dụng Semantic Versioning.
   current execution order; không sửa acceptance history AFF-US-008–012.
 - Đồng bộ Architecture với `packages/core` và `VoiceAudioStorage` local/private-R2
   đã tồn tại, đồng thời giữ Media Library/render storage là target theo slice sau.
-- Phân loại open decisions: ContentFormat là blocker trước migration M1; các mục
+- Tại thời điểm finalization, ContentFormat được ghi nhận là blocker trước M1;
+  blocker này sau đó đã được đóng bởi DEC-026 trong Phase 0. Các mục
   provenance/evidence/provider/render/analytics có gate hoặc phase riêng.
 - Không thay đổi runtime, schema hoặc migration; migration head vẫn
   `0016_gifted_microbe.sql`.

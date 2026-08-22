@@ -124,6 +124,7 @@ identity
 → products
 → product-facts
 → projects
+→ content-format
 → applicability
 → scripts
 → claim-manifest
@@ -169,11 +170,25 @@ vertical slice thực sự sử dụng nó.
 ### 7.1. Contract Domain Evolution v0.8
 
 `Project` tiếp tục là content production unit và đóng vai trò Content Item trong
-MVP. Migration thêm `contentType`, `creationPath`, `contentFormat`; backfill toàn
-bộ project lịch sử thành `AFFILIATE + SCRIPTED` trước khi đặt default/not-null phù
-hợp. `productId` được phép nullable ở database, nhưng application service phải
-enforce Product cho Affiliate và mọi Organic content có Product claim. Read path
-phải chịu được cả dữ liệu trước và sau migration trong cửa sổ rollout.
+MVP. Migration thêm `content_type`, `creation_path`, `content_format_key` và
+`content_format_version`; backfill toàn bộ project lịch sử thành
+`AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` trước khi đặt not-null. Không dùng
+DB default để che row chưa backfill. `productId` được phép nullable ở database,
+nhưng application service phải enforce Product cho Affiliate và mọi Organic
+content có Product claim. Read path phải chịu được cả dữ liệu trước và sau
+migration trong cửa sổ rollout.
+
+ContentFormat registry là readonly server-owned contract trong `packages/core`.
+Identity là immutable `(key, version)`; registry MVP chỉ có
+`SCRIPTED_STANDARD v1`, `QUICK_IMAGE_STANDARD v1` và
+`MEDIA_FIRST_STANDARD v1`. Database dùng TEXT + positive INTEGER, không dùng enum,
+không tạo registry table và chưa cần index riêng ở M1. Registry chỉ xác nhận
+identity/default/CreationPath compatibility; không chứa applicability rules.
+
+Project read DTO trả nested ContentFormat reference cùng resolution state và
+definition nullable. Unknown ref vẫn đọc raw, trả `unsupported`, không crash hoặc
+fallback sang latest; action cần definition phải fail closed. Deprecated version
+vẫn resolve cho historical Project nhưng không được gán mới. Chi tiết tại DEC-026.
 
 Applicability Resolver là pure domain policy dùng chung cho UI, API readiness và
 worker preflight. Resolver trả runtime DTO `NOT_REQUIRED | OPTIONAL | REQUIRED |
@@ -182,9 +197,10 @@ READY | BLOCKED | STALE`; không ghi các giá trị này vào
 server tính `nextApplicableStep` theo thứ tự bảy step, khóa project và cập nhật
 `currentStepKey` trong transaction. Step bị bỏ qua không được giả là `completed`.
 
-Script generation nhận discriminated input mode do server chọn:
-`PRODUCT_BACKED` hoặc `ORGANIC_NO_PRODUCT`. Mode thứ hai không lookup Product/Facts
-và prompt/output validation không được tự sinh Product claim. Output
+Script generation nhận discriminated input source mode do server chọn:
+`PRODUCT_BACKED` hoặc `ORGANIC_NO_PRODUCT`. Đây là dimension riêng, không thay cột
+operation mode `full | repair` hiện hữu. Input source mode thứ hai không lookup
+Product/Facts và prompt/output validation không được tự sinh Product claim. Output
 ScriptDraft/versioning hiện hữu không đổi.
 
 ## 8. Transaction và Neon

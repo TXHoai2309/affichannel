@@ -98,13 +98,15 @@ Foundation không bao gồm Video AI, tạo lịch nội dung, analytics nâng c
 
 ### Phase A: Domain Evolution
 
-- Thêm `contentType`, `creationPath`, `contentFormat` cho Project và backfill
-  project cũ thành `AFFILIATE + SCRIPTED`.
+- Thêm `contentType`, `creationPath` và ContentFormat ref persist bằng
+  `content_format_key` + `content_format_version`; backfill project cũ thành
+  `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`.
 - Cho `productId` nullable ở database nhưng enforce Product cho Affiliate và mọi
   Organic Product claim.
 - Thêm runtime Applicability Resolver và server transition `nextApplicableStep`;
   giữ nguyên enum của `project_step_status`.
-- Hỗ trợ ScriptGeneration `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`.
+- Hỗ trợ ScriptGeneration input source mode
+  `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`, tách khỏi operation mode `full | repair`.
 - Thêm server-built ClaimManifest và FactLockRun Manifest-first, tương thích run cũ.
 
 ### Phase B: Quick Image
@@ -187,8 +189,13 @@ chỉ với Organic không có Product claim; Affiliate và mọi Organic Produc
 
 Content Type canonical: `ORGANIC | AFFILIATE`. Creation Path MVP:
 `QUICK_IMAGE | SCRIPTED | MEDIA_FIRST`; `AI_VISUAL` bị disable đến Post-MVP.
-Content Format là preset cấu trúc/UI hint, không phải workflow state và không tự
-hard-code dependency ngoài Applicability Resolver.
+ContentFormat là server-owned versioned semantic content/presentation preset được
+pin trên Project bằng `(key, version)`. Initial registry gồm
+`SCRIPTED_STANDARD v1`, `QUICK_IMAGE_STANDARD v1` và `MEDIA_FIRST_STANDARD v1`,
+mỗi format là default của CreationPath tương ứng và dùng được cho cả Organic lẫn
+Affiliate. ContentFormat không phải ContentType, CreationPath, Pillar, Series,
+user template, CompositionTemplate/render ID hoặc workflow state; nó không tự
+quyết Product, Script, Fact Lock, Voice hay Render. DEC-026 là contract chi tiết.
 
 Applicability Resolver tính runtime state cho Product, Script, Fact Lock, Voice và
 Render: `NOT_REQUIRED | OPTIONAL | REQUIRED | READY | BLOCKED | STALE`. Các state
@@ -198,11 +205,13 @@ chuyển `currentStepKey` tới persisted step tiếp theo thực sự áp dụn
 
 ### Script generation
 
-AFF-US-008 tạo generated artifact read-only theo input mode do server resolver
-chọn. `PRODUCT_BACKED` đọc Project, Brief, Channel Settings, Product, Product Facts,
-Media Metadata và Output Rules. `ORGANIC_NO_PRODUCT` không lookup Product/Facts và
-prompt phải cấm invent Product claim. Cả hai mode giữ output ScriptDraft,
-versioning, repair, idempotency, snapshot/hash và provider metadata hiện tại.
+AFF-US-008 tạo generated artifact read-only theo input source mode do server
+resolver chọn. `PRODUCT_BACKED` đọc Project, Brief, Channel Settings, Product,
+Product Facts, Media Metadata và Output Rules. `ORGANIC_NO_PRODUCT` không lookup
+Product/Facts và prompt phải cấm invent Product claim. Input source mode này là
+dimension mới, không thay persisted generation operation mode `full | repair`.
+Cả hai input source mode giữ output ScriptDraft, versioning, repair, idempotency,
+snapshot/hash và provider metadata hiện tại.
 Provider output vẫn là dữ liệu không đáng tin cậy và candidate claim chưa qua
 policy gate khi gate áp dụng.
 
@@ -437,8 +446,9 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 
 - Thành viên cố định đăng nhập, đăng xuất và giữ session hợp lệ khi refresh.
 - Người không có quyền không thể đọc hoặc sửa bản ghi được bảo vệ.
-- Project cũ tiếp tục chạy như `AFFILIATE + SCRIPTED` và không mất Product,
-  Script, Fact Lock hoặc Voice artifacts.
+- Project cũ tiếp tục chạy như
+  `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` và không mất Product, Script,
+  Fact Lock hoặc Voice artifacts.
 - Tạo được `ORGANIC + QUICK_IMAGE` không Product, Script hoặc Fact Lock khi không
   có Product claim; tạo `AFFILIATE + QUICK_IMAGE` vẫn bắt buộc Product.
 - Organic có Product claim nhưng `productId=null` bị reject; link Product hợp lệ
@@ -460,21 +470,22 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 - Secret không xuất hiện trong source, client bundle, log, database hoặc file
   export.
 
-## 13. Quyết định còn mở
+## 13. Quyết định còn mở và migration readiness
 
-| Phân loại | Quyết định mở | Gate phải đóng |
+| Phân loại | Quyết định | Gate |
 |---|---|---|
-| **BLOCKER before Domain Evolution migration** | Representation/database naming, ownership, versioning và initial registry/backfill rule của `ContentFormat`. | Trước migration M1 thêm Project fields; Phase 0 preparation vẫn được phép bắt đầu. |
+| **CLOSED FOR M1 — DEC-026** | ContentFormat là server-owned versioned registry, persist bằng `content_format_key` + `content_format_version`; initial defaults và legacy backfill đã khóa. | M1 đủ điều kiện review; chưa tạo/apply migration trong Phase 0. |
 | **NON-BLOCKER for Domain Evolution** | Schema chi tiết của applicability provenance snapshot trên artifact. | Trước khi ClaimManifest/Quick Image ghi artifact mới; resolver runtime và Project backfill không phải chờ. |
 | **NON-BLOCKER for Domain Evolution** | MVP manual evidence review cho Organic factual knowledge không dựa trên Product Facts. | Trước khi bật factual Organic path tương ứng; Organic claimless/no-product vẫn được triển khai. |
 | **NON-BLOCKER — contract đã khóa** | Conditional workflow resolver persistence. | DEC-025 đã khóa: applicability là runtime DTO, không mở rộng enum step status; chỉ `currentStepKey` transition bằng business action transactional. Chỉ còn implementation detail/audit shape. |
+| **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
-Kết luận go/no-go: có thể bắt đầu **Domain Evolution preparation / Phase 0**,
-nhưng chưa được bắt đầu migration M1 cho đến khi `ContentFormat` được khóa bằng
-ADR/contract. Không tự chọn schema trong implementation PR để né blocker này.
+Kết luận go/no-go: DEC-026 đã đóng blocker ContentFormat. **M1 READY for review**;
+việc tạo/apply migration vẫn phải là task implementation riêng với preflight,
+generated diff review và regression evidence.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

@@ -11,6 +11,169 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-026 — ContentFormat registry, identity và migration contract
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-22
+- Mở rộng: DEC-025 (`V08-DEC-003`, `V08-DEC-004`, `V08-DEC-009`, `V08-DEC-010`)
+
+### Bối cảnh
+
+Domain Evolution M1 cần persist ContentFormat nhưng canonical v0.8 mới chỉ khóa
+khái niệm “preset cấu trúc/UI hint có version”. Source hiện tại chưa có
+ContentFormat: `project.product_id` còn `NOT NULL`, Project create/update luôn yêu
+cầu Product, read models dùng inner join Product và workflow luôn khởi tạo tại
+step `product`. Migration head là `0016_gifted_microbe.sql`.
+
+MVP là internal tool cho hai đến ba người; format là product-owned preset cần
+deterministic versioning, không phải dữ liệu SaaS do người dùng cấu hình. Vì vậy
+database registry/runtime editor không đem lại giá trị tương xứng ở M1.
+
+### Định nghĩa và ranh giới
+
+`ContentFormat` là semantic content/presentation preset được pin trên Project. Nó
+mô tả cách một content item được tổ chức và gợi ý UI phù hợp với một hoặc nhiều
+CreationPath.
+
+`ContentFormat` không phải:
+
+- `ContentType`: Organic/Affiliate và policy/monetization intent;
+- `CreationPath`: cách content/asset được sản xuất;
+- `Content Pillar`: chủ đề chiến lược của channel;
+- `Series`: nhóm content lặp lại theo concept;
+- user-editable `Template` hoặc admin format builder;
+- `CompositionTemplate`: implementation/render template hoặc Remotion ID;
+- workflow state hay authority quyết Product, Script, Fact Lock, Voice hoặc Render.
+
+Một ContentFormat có thể map tới nhiều CompositionTemplate implementation version
+trong tương lai. M1 chỉ ghi conceptual boundary, không tạo schema cho
+CompositionTemplate.
+
+### Representation và ownership
+
+Identity canonical là cặp bất biến:
+
+```ts
+type ContentFormatRef = {
+  key: string;
+  version: number;
+};
+
+type ContentFormatDefinition = {
+  ref: ContentFormatRef;
+  label: string;
+  description?: string;
+  supportedCreationPaths: readonly CreationPath[];
+  availability: "active" | "deprecated";
+};
+```
+
+Registry là readonly, server-owned và đặt trong `packages/core` để giữ pure
+lookup/validation/default policy dùng chung. API/server là authority; frontend có
+thể nhận definition để hiển thị nhưng không tự xác nhận compatibility. MVP không
+có registry table, user-created format, runtime editing hoặc admin builder.
+
+Không encode `SCRIPTED_STANDARD@1` trong một cột. M1 dùng:
+
+```text
+project.content_format_key      TEXT
+project.content_format_version  INTEGER
+```
+
+TEXT được chọn thay database enum để thêm key/version additive mà không cần
+migration cho mỗi preset. Version phải là integer dương. Hai cột cùng null hoặc
+cùng có giá trị; partial pair là invalid. M1 chưa cần index riêng cho ContentFormat
+vì Library/filter chưa nằm trong slice và dataset MVP nhỏ; thêm index theo query
+evidence ở Library phase.
+
+### Initial registry và defaults
+
+| CreationPath | Default ContentFormat | ContentType support |
+|---|---|---|
+| `SCRIPTED` | `SCRIPTED_STANDARD v1` | Organic và Affiliate |
+| `QUICK_IMAGE` | `QUICK_IMAGE_STANDARD v1` | Organic và Affiliate |
+| `MEDIA_FIRST` | `MEDIA_FIRST_STANDARD v1` | Organic và Affiliate |
+
+Ba definition ban đầu đều `active`; mỗi CreationPath có đúng một default. Initial
+registry chỉ có ba definition trên. Format chuyên biệt như review,
+unboxing, tips, quote hoặc storytelling được thêm additive khi có user outcome
+thực tế. Key không encode ContentType; applicability xử lý khác biệt Organic và
+Affiliate.
+
+### Version semantics
+
+- `(key, version)` là immutable identity; version là integer bắt đầu từ 1.
+- Thay đổi cấu trúc, semantic preset, validation hoặc default ảnh hưởng generated/
+  rendered output phải tạo version mới; không mutate version cũ.
+- Sửa label, description, icon hoặc copy cosmetic không làm thay semantic output
+  thì không cần bump version.
+- Registry phải giữ reader cho mọi version còn được Project tham chiếu.
+- `deprecated` vẫn resolve/read được nhưng không được chọn cho Project mới.
+- Không tự upgrade Project lịch sử và không fallback sang latest version.
+
+### Legacy backfill và rollout
+
+- M1 expand: thêm `content_format_key` và `content_format_version` nullable, không
+  đặt database default.
+- M2 backfill idempotent/deterministic mọi Project lịch sử thành
+  `SCRIPTED_STANDARD v1`, cùng `AFFILIATE + SCRIPTED`; không đọc Script để đoán.
+- Backfill không thay Product, Script, FactLockRun, Voice artifact,
+  `project_step_status` hoặc `currentStepKey`.
+- M3 dual read/write: all-null legacy row được compatibility adapter project thành
+  default legacy triple; partial/invalid pair là unresolved và fail closed.
+- M5 enforce, sau M4 resolver shadow: khi zero legacy-null/invalid row được chứng
+  minh, đặt hai cột
+  `NOT NULL` nhưng vẫn không đặt database default; server default là authority.
+
+### New Project và update behavior
+
+- Create không gửi ContentFormat: server chọn default theo CreationPath.
+- Create/update gửi ref: server yêu cầu registry entry/version tồn tại, active khi
+  gán mới và support CreationPath.
+- Đổi ContentType: không đổi ContentFormat nếu CreationPath không đổi và ref vẫn
+  compatible; format orthogonal với Organic/Affiliate.
+- Đổi CreationPath: giữ format nếu compatible. Nếu không compatible, mutation phải
+  gửi replacement ref hợp lệ; server không silently rewrite sang default.
+
+Write DTO dùng optional `contentFormat?: ContentFormatRef` khi create. Read DTO
+dùng nested value `contentFormat: { key, version, resolution, definition }`, phù
+hợp Project DTO hiện có; `resolution` là `resolved | deprecated | unsupported` và
+`definition` nullable. Frontend không lookup registry làm authority duy nhất.
+
+### Unknown/deprecated fail-safe
+
+Unknown `(key, version)` vẫn được đọc raw và Project page không crash. Read model
+trả `unsupported`, không tự fallback/upgrade. Các mutation hoặc render action cần
+format definition bị block bằng typed reason; safe read/archive và metadata action
+không phụ thuộc definition vẫn có thể tiếp tục. Deprecated version trả
+`deprecated`, vẫn đọc/render theo definition cũ nếu downstream contract hỗ trợ,
+nhưng không được gán mới.
+
+### Applicability separation
+
+Registry chỉ xác nhận identity và CreationPath compatibility. Nó không chứa rule
+`productRequired`, `scriptRequired`, `factLockRequired`, `voiceRequired` hoặc
+render gate. Applicability Resolver vẫn là authority và có thể đọc format như một
+input có kiểu khi policy được canonical hóa rõ; format không trở thành hidden
+workflow state.
+
+### Acceptance cho implementation sau
+
+- key và `(key, version)` unique; version dương;
+- mỗi MVP CreationPath có đúng một default active và default support path đó;
+- legacy backfill target tồn tại và old versions còn resolve được;
+- invalid key/version và format/path mismatch bị từ chối;
+- unknown/deprecated behavior fail-safe đúng contract;
+- registry không chứa applicability rule.
+
+### Hệ quả
+
+- ContentFormat blocker trước M1 đã đóng ở cấp ADR; M1 đủ điều kiện review nhưng
+  task này không tạo/apply migration.
+- Không thêm flexibility architecture ngoài nhu cầu MVP.
+- Quick Image Phase 0 chỉ dùng `QUICK_IMAGE_STANDARD v1` như preset/config hint;
+  motion/timeline/composition/storage/AI image-to-video vẫn thuộc slice sau.
+
 ## DEC-025 — Kích hoạt contract channel-first của Product Specification v0.8
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation đi qua migration và regression gate
@@ -43,7 +206,7 @@ không thay thế hoặc đánh lại số ADR hiện hữu trong file này.
 | `V08-DEC-009` | Project lịch sử được backfill thành `AFFILIATE + SCRIPTED`, giữ nguyên Product và artifacts. |
 | `V08-DEC-010` | Applicability/readiness states là runtime-derived DTO; không thêm `NOT_REQUIRED`, `OPTIONAL`, `REQUIRED`, `READY`, `STALE` vào `project_step_status.status`. |
 | `V08-DEC-011` | Server-built immutable ClaimManifest là nguồn claim canonical cho Fact Lock; ScriptVersion chỉ là một source adapter. |
-| `V08-DEC-012` | Script generation hỗ trợ server-selected `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; output ScriptDraft/versioning hiện tại giữ nguyên. |
+| `V08-DEC-012` | Script generation hỗ trợ server-selected input source mode `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; đây không thay persisted operation mode `full | repair`. Output ScriptDraft/versioning hiện tại giữ nguyên. |
 | `V08-DEC-013` | FactLockRun new writes lưu ClaimManifest ID/fingerprint; Script fields là optional provenance. Legacy Script-linked rows tiếp tục đọc được; pending/idempotency của new writes dựa trên Manifest fingerprint. |
 
 Resolver là authority dùng chung cho UI, API readiness và worker preflight. Khi

@@ -199,6 +199,20 @@ Applicability dùng đúng label `Không cần`, `Tùy chọn`, `Bắt buộc`, 
 - Empty Manifest hợp lệ hiển thị “Không phát hiện Product claim” và provenance;
   uncertainty hiển thị blocked/indeterminate, không dùng empty state thành công.
 
+### ContentFormat
+
+- UI hiển thị label/description thân thiện nhưng giữ identity bất biến
+  `(key, version)` do server trả về; không dùng label làm khóa.
+- Format selector chỉ hiển thị registry entry active hỗ trợ CreationPath hiện tại.
+  Server vẫn là authority cho default và validation.
+- Đổi ContentType không tự đổi format còn compatible. Khi đổi CreationPath làm
+  format incompatible, form phải yêu cầu chọn replacement rõ ràng trước submit.
+- Deprecated format đã pin được hiển thị có cảnh báo nhưng vẫn đọc được. Unknown
+  format hiển thị trạng thái “Định dạng không được hỗ trợ”, không làm crash trang,
+  không tự fallback và giải thích action nào đang bị chặn.
+- ContentFormat là preset tổ chức/presentation, không dùng badge hoặc selector của
+  nó để suy ra Product, Script, Fact Lock, Voice hay Render applicability.
+
 ### Dialog, drawer và route
 
 - Dialog: xác nhận hoặc quyết định tập trung.

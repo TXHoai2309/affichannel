@@ -19,9 +19,10 @@ tiếp tục triển khai backlog mới theo thứ tự các slice lịch sử �
 7. Analytics.
 8. AI Visual.
 
-Current pointer: US12 baseline đã frozen/completed. Bước tiếp theo là Domain
-Evolution preparation / Phase 0; migration M1 chưa được phép bắt đầu khi
-`ContentFormat` representation/ownership/versioning còn mở.
+Current pointer: US12 baseline đã frozen/completed. Domain Evolution preparation /
+Phase 0 đã hoàn tất qua DEC-026; **M1 READY for review**, nhưng migration chưa được
+tạo hoặc apply. Bước tiếp theo là review migration plan và baseline preflight
+trước khi có authorization triển khai M1.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
@@ -360,12 +361,15 @@ story hoặc bulk rewrite implementation cũ. Công việc mới đi theo thứ 
 
 ### 2. Domain Evolution
 
-- Additive migration cho `contentType`, `creationPath`, `contentFormat`; backfill
-  project cũ thành `AFFILIATE + SCRIPTED`.
+- Additive migration cho `content_type`, `creation_path`,
+  `content_format_key`, `content_format_version`; backfill project cũ thành
+  `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` theo DEC-026.
 - Cho `productId` nullable ở DB, giữ service invariants cho Affiliate/Product claim.
 - Thêm Applicability Resolver dùng chung cho UI/API/worker và transactional
   `nextApplicableStep`; không sửa enum persisted step status.
-- Thêm ScriptGeneration mode `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`.
+- Thêm ScriptGeneration input source mode
+  `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`; không thay persisted operation mode
+  `full | repair` hiện hữu.
 
 ### 3. ClaimManifest và Fact Lock Manifest-first
 
