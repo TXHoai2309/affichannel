@@ -1,0 +1,347 @@
+import { mutateFactLockClaimSource } from "@affichannel/core/fact-lock/resolution";
+import type { FactLockInputSnapshot } from "@affichannel/core/fact-lock/types";
+import {
+	deriveFactLockEffectiveStatus,
+	deriveFactLockRunStatus,
+	validateFactLockProviderOutput,
+} from "@affichannel/core/fact-lock/validation";
+import { describe, expect, it } from "vitest";
+
+const snapshot: FactLockInputSnapshot = {
+	snapshotVersion: "fact-lock-input.v1",
+	scriptVersion: {
+		id: "script-1",
+		revision: 4,
+		snapshot: {
+			schemaVersion: "script-draft.v2",
+			language: "vi-VN",
+			hookVariants: [
+				{ key: "selected", text: "Bạn có biết tai nghe này có pin 20 giờ?" },
+				{ key: "other", text: "Một hook khác." },
+				{ key: "third", text: "Hook thứ ba." },
+			],
+			selectedHookKey: "selected",
+			voiceoverSegments: [
+				{ key: "intro", text: "Pin dùng 20 giờ trong một lần sạc." },
+			],
+			scenes: [
+				{
+					order: 1,
+					durationSeconds: 10,
+					visualDirection: "Cận cảnh",
+					onScreenText: "Pin 20 giờ",
+					voiceoverSegmentKeys: ["intro"],
+				},
+			],
+			cta: { text: "Xem thêm thông tin" },
+			caption: "Tai nghe cho ngày dài.",
+			hashtags: ["#review"],
+			disclosure: "Nội dung có liên kết affiliate.",
+			claims: [],
+			claimsSourceRevision: 3,
+			claimsStatus: "stale",
+		},
+	},
+	productFacts: [
+		{
+			id: "fact-1",
+			revision: 2,
+			content: "Pin dùng 20 giờ trong một lần sạc.",
+			type: "specification",
+			status: "verified",
+			assessment: {
+				verification: "verified",
+				evidence: "complete",
+				freshness: "not_applicable",
+				freshnessReason: "not_applicable",
+			},
+			generationUsability: "allowed",
+			source: {
+				type: "official",
+				label: "Website hãng",
+				url: "https://example.com",
+				confirmedAt: "2026-08-15",
+				expiresAt: null,
+			},
+		},
+	],
+	policy: {
+		avoidWords: ["cam kết tuyệt đối"],
+		affiliateDisclosure: "Nội dung có liên kết affiliate.",
+		language: "vi-VN",
+	},
+	outputRules: {
+		language: "vi-VN",
+		aspectRatio: "9:16",
+		subtitleSafeArea: "standard",
+		claimLimit: null,
+		requireFinalCta: true,
+	},
+};
+
+function output(overrides: Record<string, unknown> = {}) {
+	return {
+		schemaVersion: "fact-lock-output.v1",
+		claims: [
+			{
+				claimKey: "claim-1",
+				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+				classificationStatus: "SUPPORTED",
+				reason: "Khớp Product Fact.",
+				confidence: 0.98,
+				suggestionText: null,
+				factMappings: [{ factId: "fact-1", relation: "supports" }],
+				...overrides,
+			},
+		],
+	};
+}
+
+describe("AFF-US-010 Fact Lock foundation", () => {
+	it("derives AUTO_PASSED for a supported claim and pins the fact revision", () => {
+		const result = validateFactLockProviderOutput(output(), snapshot);
+		expect(result.success).toBe(true);
+		if (result.success) {
+			expect(result.claims[0]).toMatchObject({
+				classificationStatus: "SUPPORTED",
+				reviewStatus: "AUTO_PASSED",
+				reviewedByUserId: null,
+				reviewedAt: null,
+				reviewNote: null,
+			});
+			expect(result.claims[0].factMappings[0]).toMatchObject({
+				factId: "fact-1",
+				factRevision: 2,
+			});
+		}
+	});
+
+	it("keeps NEEDS_REVIEW, UNSUPPORTED and confirmed PROHIBITED unresolved", () => {
+		for (const classificationStatus of [
+			"NEEDS_REVIEW",
+			"UNSUPPORTED",
+		] as const) {
+			const result = validateFactLockProviderOutput(
+				output({ classificationStatus, factMappings: [] }),
+				snapshot,
+			);
+			expect(result.success).toBe(true);
+			if (result.success)
+				expect(result.claims[0].reviewStatus).toBe("UNRESOLVED");
+		}
+		const prohibited = validateFactLockProviderOutput(
+			output({
+				claimText: "Cam kết tuyệt đối cho mọi người.",
+				classificationStatus: "PROHIBITED",
+				factMappings: [],
+			}),
+			{
+				...snapshot,
+				scriptVersion: {
+					...snapshot.scriptVersion,
+					snapshot: {
+						...snapshot.scriptVersion.snapshot,
+						voiceoverSegments: [
+							{ key: "intro", text: "Cam kết tuyệt đối cho mọi người." },
+						],
+					},
+				},
+			},
+		);
+		expect(prohibited.success).toBe(true);
+		if (prohibited.success)
+			expect(prohibited.claims[0].classificationStatus).toBe("PROHIBITED");
+	});
+
+	it("downgrades an AI-only prohibited classification when server policy does not confirm it", () => {
+		const result = validateFactLockProviderOutput(
+			output({ classificationStatus: "PROHIBITED", factMappings: [] }),
+			snapshot,
+		);
+		expect(result.success).toBe(true);
+		if (result.success)
+			expect(result.claims[0].classificationStatus).toBe("NEEDS_REVIEW");
+	});
+
+	it("treats a manually approved review claim as resolved", () => {
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "SUPPORTED", reviewStatus: "AUTO_PASSED" },
+				{
+					classificationStatus: "NEEDS_REVIEW",
+					reviewStatus: "MANUAL_APPROVED",
+				},
+			]),
+		).toBe("passed");
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "NEEDS_REVIEW", reviewStatus: "UNRESOLVED" },
+			]),
+		).toBe("review_required");
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "UNSUPPORTED", reviewStatus: "UNRESOLVED" },
+			]),
+		).toBe("review_required");
+		expect(
+			deriveFactLockRunStatus([
+				{ classificationStatus: "PROHIBITED", reviewStatus: "UNRESOLVED" },
+			]),
+		).toBe("review_required");
+	});
+
+	it("rejects invented Facts and claims that are not exact occurrence text", () => {
+		expect(
+			validateFactLockProviderOutput(
+				output({
+					factMappings: [{ factId: "invented", relation: "supports" }],
+				}),
+				snapshot,
+			),
+		).toMatchObject({
+			success: false,
+			issueCodes: ["FACT_MAPPING_INVALID"],
+		});
+		expect(
+			validateFactLockProviderOutput(
+				output({ claimText: "Nội dung không có trong script." }),
+				snapshot,
+			).success,
+		).toBe(false);
+		expect(
+			validateFactLockProviderOutput(
+				output({
+					classificationStatus: "NEEDS_REVIEW",
+					factMappings: [{ factId: "fact-1", relation: "context" }],
+				}),
+				snapshot,
+			).success,
+		).toBe(false);
+	});
+
+	it("accepts one fenced JSON object but rejects prose and reports sanitized diagnostics", () => {
+		const fenced = validateFactLockProviderOutput(
+			`\`\`\`json\n${JSON.stringify(output())}\n\`\`\``,
+			snapshot,
+		);
+		expect(fenced.success).toBe(true);
+
+		const prose = validateFactLockProviderOutput(
+			`Kết quả:\n${JSON.stringify(output())}`,
+			snapshot,
+		);
+		expect(prose).toMatchObject({
+			success: false,
+			code: "INVALID_FACT_LOCK_OUTPUT",
+			issueCodes: ["ROOT_NOT_JSON"],
+		});
+
+		const wrongVersion = validateFactLockProviderOutput(
+			{ ...output(), schemaVersion: "fact-lock-output.v0" },
+			snapshot,
+		);
+		expect(wrongVersion).toMatchObject({
+			success: false,
+			issueCodes: ["SCHEMA_VERSION_MISMATCH"],
+		});
+	});
+
+	it("rejects non-selected hook occurrences and inconsistent classifications", () => {
+		const otherHook = validateFactLockProviderOutput(
+			output({
+				claimText: "Một hook khác.",
+				occurrence: { section: "hook", hookKey: "other" },
+				classificationStatus: "NEEDS_REVIEW",
+				factMappings: [],
+			}),
+			snapshot,
+		);
+		expect(otherHook).toMatchObject({
+			success: false,
+			issueCodes: ["CLAIM_OCCURRENCE_INVALID"],
+		});
+
+		const unsupportedWithSupport = validateFactLockProviderOutput(
+			output({ classificationStatus: "UNSUPPORTED" }),
+			snapshot,
+		);
+		expect(unsupportedWithSupport).toMatchObject({
+			success: false,
+			issueCodes: ["CLASSIFICATION_INVALID"],
+		});
+	});
+
+	it("derives stale only for result-bearing runs whose source or dependencies changed", () => {
+		expect(deriveFactLockEffectiveStatus("passed", 4, 4, true)).toBe("passed");
+		expect(deriveFactLockEffectiveStatus("review_required", 4, 5, true)).toBe(
+			"stale",
+		);
+		expect(deriveFactLockEffectiveStatus("passed", 4, 4, false)).toBe("stale");
+		expect(deriveFactLockEffectiveStatus("failed", 4, 5, false)).toBe("failed");
+		expect(deriveFactLockEffectiveStatus("indeterminate", 4, 5, false)).toBe(
+			"indeterminate",
+		);
+	});
+
+	it("rejects whole required-field deletes but allows optional scene text removal", () => {
+		const editableSnapshot = snapshot.scriptVersion.snapshot;
+		const wholeVoiceover = mutateFactLockClaimSource(
+			editableSnapshot,
+			{
+				claimText: "Pin dùng 20 giờ trong một lần sạc.",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+			},
+			{ action: "delete" },
+		);
+		const wholeHook = mutateFactLockClaimSource(
+			editableSnapshot,
+			{
+				claimText: "Bạn có biết tai nghe này có pin 20 giờ?",
+				occurrence: { section: "hook", hookKey: "selected" },
+			},
+			{ action: "delete" },
+		);
+		const optionalScene = mutateFactLockClaimSource(
+			editableSnapshot,
+			{
+				claimText: "Pin 20 giờ",
+				occurrence: { section: "scene", sceneOrder: 1 },
+			},
+			{ action: "delete" },
+		);
+		const partialDelete = mutateFactLockClaimSource(
+			{
+				...editableSnapshot,
+				voiceoverSegments: [
+					{
+						key: "intro",
+						text: "Pin dùng 20 giờ, phù hợp sử dụng cả ngày.",
+					},
+				],
+			},
+			{
+				claimText: "Pin dùng 20 giờ",
+				occurrence: { section: "voiceover", segmentKey: "intro" },
+			},
+			{ action: "delete" },
+		);
+
+		expect(wholeVoiceover).toMatchObject({
+			success: false,
+			code: "FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+		});
+		expect(wholeHook).toMatchObject({
+			success: false,
+			code: "FACT_LOCK_CLAIM_DELETE_REQUIRES_EDIT",
+		});
+		expect(optionalScene.success).toBe(true);
+		if (optionalScene.success)
+			expect(optionalScene.snapshot.scenes[0]?.onScreenText).toBeNull();
+		expect(partialDelete.success).toBe(true);
+		if (partialDelete.success)
+			expect(partialDelete.snapshot.voiceoverSegments[0]?.text).toBe(
+				", phù hợp sử dụng cả ngày.",
+			);
+	});
+});

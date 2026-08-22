@@ -1,0 +1,24 @@
+{
+  "name": "@affichannel/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@affichannel/db": "workspace:*",
+    "@affichannel/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@affichannel/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

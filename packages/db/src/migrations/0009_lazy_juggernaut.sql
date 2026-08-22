@@ -1,0 +1,7 @@
+ALTER TABLE "script_generation" DROP CONSTRAINT "script_generation_state_shape_check";--> statement-breakpoint
+ALTER TABLE "script_generation" ADD CONSTRAINT "script_generation_state_shape_check" CHECK ((
+			("script_generation"."status" = 'completed' and "script_generation"."output_json" is not null and cardinality("script_generation"."valid_sections") = 8 and cardinality("script_generation"."invalid_sections") = 0 and ("script_generation"."valid_sections" || "script_generation"."invalid_sections") @> ARRAY['hook','voiceover','scenes','cta','caption','hashtags','disclosure','claims']::text[])
+			or ("script_generation"."status" = 'partial' and "script_generation"."output_json" is not null and cardinality("script_generation"."valid_sections") > 0 and cardinality("script_generation"."invalid_sections") > 0 and cardinality("script_generation"."valid_sections" || "script_generation"."invalid_sections") = 8 and ("script_generation"."valid_sections" || "script_generation"."invalid_sections") @> ARRAY['hook','voiceover','scenes','cta','caption','hashtags','disclosure','claims']::text[])
+			or ("script_generation"."status" = 'failed' and "script_generation"."output_json" is null and cardinality("script_generation"."valid_sections") = 0)
+			or "script_generation"."status" in ('pending', 'indeterminate')
+		));

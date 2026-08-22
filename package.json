@@ -1,27 +1,61 @@
 {
-  "name": "affichannel",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "next": "16.3.0",
-    "react": "19.2.8",
-    "react-dom": "19.2.8"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.0",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  },
-  "packageManager": "pnpm@11.17.0"
+	"name": "affichannel",
+	"private": true,
+	"workspaces": [
+		"apps/*",
+		"packages/*"
+	],
+	"type": "module",
+	"scripts": {
+		"dev": "turbo run dev",
+		"build": "turbo run build",
+		"check-types": "turbo run check-types",
+		"dev:web": "turbo run dev -F web",
+		"db:push": "turbo run db:push -F @affichannel/db",
+		"db:studio": "turbo run db:studio -F @affichannel/db",
+		"db:generate": "turbo run db:generate -F @affichannel/db",
+		"db:migrate": "turbo run db:migrate -F @affichannel/db",
+		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
+		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
+		"test:integration:product": "tsx scripts/test-product-management.ts",
+		"test:integration:product-facts": "tsx scripts/test-product-facts.ts",
+		"test:integration:product-fact-freshness": "tsx scripts/test-product-fact-freshness.ts",
+		"test:integration:dashboard": "tsx scripts/test-dashboard-overview.ts",
+		"test:integration:script-generation": "tsx scripts/test-script-generation-foundation.ts",
+		"test:integration:script-generation-live": "tsx scripts/test-script-generation-live.ts",
+		"test:integration:script-version": "tsx scripts/test-script-version-foundation.ts",
+		"test:integration:fact-lock": "tsx scripts/test-fact-lock.ts",
+		"test:integration:voice-config": "tsx scripts/test-voice-config.ts",
+		"test:integration:voice-preview": "tsx scripts/test-voice-preview.ts",
+		"test:integration:voice-segment": "tsx scripts/test-voice-segment-foundation.ts",
+		"test:integration:voice-segment-runtime": "tsx scripts/test-voice-segment-runtime.ts",
+		"test:live:tts": "tsx scripts/test-voice-preview-live.ts",
+		"deploy:setup": "vercel link",
+		"dev:vercel": "vercel dev -L",
+		"env:preview": "tsx scripts/sync-vercel-env.ts preview",
+		"env:production": "tsx scripts/sync-vercel-env.ts production",
+		"deploy": "vercel deploy",
+		"deploy:prod": "vercel deploy --prod",
+		"deploy:check": "vercel deploy --dry",
+		"check": "biome check --write ."
+	},
+	"dependencies": {
+		"@affichannel/auth": "workspace:*",
+		"@affichannel/core": "workspace:*",
+		"@affichannel/db": "workspace:*",
+		"@affichannel/env": "workspace:*",
+		"dotenv": "catalog:",
+		"drizzle-orm": "^0.45.2",
+		"zod": "catalog:"
+	},
+	"devDependencies": {
+		"@affichannel/config": "workspace:*",
+		"@biomejs/biome": "^2.5.6",
+		"@types/node": "^22.20.1",
+		"tsx": "^4.23.1",
+		"turbo": "^2.10.7",
+		"typescript": "catalog:",
+		"vercel": "^58.1.0"
+	},
+	"packageManager": "pnpm@11.17.0"
 }
