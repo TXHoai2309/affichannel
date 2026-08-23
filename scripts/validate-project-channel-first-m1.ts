@@ -13,6 +13,7 @@ import { sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { createNodePostgresPool } from "../packages/db/src/node-postgres-test-adapter.ts";
+import { INTEGRATION_TEST_RUNTIME_DEFAULTS } from "./test-environment.ts";
 
 const TEST_DATABASE_ENV = "AFFICHANNEL_M1_TEST_DATABASE_URL";
 const TEST_DATABASE_CONFIRM_ENV = "AFFICHANNEL_M1_TEST_DATABASE_CONFIRM";
@@ -55,6 +56,12 @@ function rowsOf<T>(result: unknown): T[] {
 type ValidatedTestDatabase = {
 	url: string;
 	host: string;
+};
+
+type PnpmInvocation = {
+	command: string;
+	args: string[];
+	displayCommand: string;
 };
 
 function requireTestDatabase(): ValidatedTestDatabase {
@@ -197,6 +204,20 @@ async function applyM1Migrations(target: ValidatedTestDatabase): Promise<void> {
 	}
 }
 
+async function assertExistingM1MigrationState(
+	target: ValidatedTestDatabase,
+): Promise<void> {
+	const pool = createNodePostgresPool(target.url);
+	const database = drizzle(pool);
+	try {
+		await printDatabaseIdentity(database, target.host);
+		await assertMigrationCount(database, 18, "Existing migration state 0017");
+		console.log("Existing migration state 0017: PASS");
+	} finally {
+		await pool.end();
+	}
+}
+
 function childEnvironment(testDatabaseUrl: string): NodeJS.ProcessEnv {
 	const environment = { ...process.env };
 	delete environment.DATABASE_URL;
@@ -204,14 +225,93 @@ function childEnvironment(testDatabaseUrl: string): NodeJS.ProcessEnv {
 	delete environment.AFF_US008_DATABASE_URL;
 	delete environment.APIKEY_FUN_API_KEY;
 	delete environment.TTS_APIKEY_FUN_API_KEY;
+	delete environment.R2_ENDPOINT;
+	delete environment.R2_BUCKET;
+	delete environment.R2_ACCESS_KEY_ID;
+	delete environment.R2_SECRET_ACCESS_KEY;
 	environment[TEST_DATABASE_ENV] = testDatabaseUrl;
 	environment[TEST_DATABASE_CONFIRM_ENV] = TEST_DATABASE_CONFIRM_VALUE;
-	environment.SKIP_ENV_VALIDATION = "1";
 	environment.NODE_ENV = "test";
-	environment.AFFICHANNEL_LIVE_AI_SMOKE = "0";
-	environment.AFFICHANNEL_LIVE_TTS_SMOKE = "0";
-	environment.AFFICHANNEL_E2E_TTS_DETERMINISTIC = "0";
+	for (const [key, value] of Object.entries(
+		INTEGRATION_TEST_RUNTIME_DEFAULTS,
+	)) {
+		environment[key] = value;
+	}
 	return environment;
+}
+
+function resolvePnpmInvocation(args: string[]): PnpmInvocation {
+	const packageManagerScript = process.env.npm_execpath?.trim();
+	if (packageManagerScript) {
+		return {
+			command: process.execPath,
+			args: [packageManagerScript, ...args],
+			displayCommand: `pnpm ${args.join(" ")}`,
+		};
+	}
+
+	if (process.platform === "win32") {
+		const safeArgument = /^[A-Za-z0-9_./:@-]+$/;
+		if (args.some((argument) => !safeArgument.test(argument))) {
+			throw new Error("REFUSED: unsafe argument passed to Windows pnpm runner.");
+		}
+		return {
+			command: process.env.ComSpec ?? "cmd.exe",
+			args: ["/d", "/s", "/c", `pnpm ${args.join(" ")}`],
+			displayCommand: `pnpm ${args.join(" ")}`,
+		};
+	}
+
+	return {
+		command: "pnpm",
+		args,
+		displayCommand: `pnpm ${args.join(" ")}`,
+	};
+}
+
+function redactChildOutput(output: string, testDatabaseUrl: string): string {
+	return output
+		.replaceAll(testDatabaseUrl, "[REDACTED_M1_TEST_DATABASE_URL]")
+		.replace(
+			/postgres(?:ql)?:\/\/[^\s'"`]+/giu,
+			"[REDACTED_POSTGRES_URL]",
+		);
+}
+
+function runPnpmChild(
+	label: string,
+	args: string[],
+	testDatabaseUrl: string,
+): boolean {
+	const invocation = resolvePnpmInvocation(args);
+	console.log(`[child:${label}] command: ${invocation.displayCommand}`);
+	const result = spawnSync(invocation.command, invocation.args, {
+		cwd: process.cwd(),
+		env: childEnvironment(testDatabaseUrl),
+		encoding: "utf8",
+		stdio: "pipe",
+		windowsHide: true,
+	});
+	const stdout = redactChildOutput(result.stdout ?? "", testDatabaseUrl);
+	const stderr = redactChildOutput(result.stderr ?? "", testDatabaseUrl);
+	const passed = !result.error && result.status === 0;
+
+	if (!passed && stdout.trim()) {
+		console.log(`[child:${label}] stdout:\n${stdout.trimEnd()}`);
+	}
+	if (!passed && stderr.trim()) {
+		console.error(`[child:${label}] stderr:\n${stderr.trimEnd()}`);
+	}
+	if (result.error) {
+		const spawnError = result.error as NodeJS.ErrnoException;
+		console.error(
+			`[child:${label}] result.error: name=${spawnError.name}; code=${spawnError.code ?? "none"}; message=${redactChildOutput(spawnError.message, testDatabaseUrl)}`,
+		);
+	}
+	console.log(
+		`[child:${label}] exit status=${result.status ?? "null"}; signal=${result.signal ?? "none"}`,
+	);
+	return passed;
 }
 
 function runSuite(
@@ -219,42 +319,48 @@ function runSuite(
 	scriptPath: string,
 	testDatabaseUrl: string,
 ): boolean {
-	const command = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-	const result = spawnSync(command, ["exec", "tsx", scriptPath], {
-		cwd: process.cwd(),
-		env: childEnvironment(testDatabaseUrl),
-		stdio: "inherit",
-	});
-	const passed = !result.error && result.status === 0;
+	const passed = runPnpmChild(
+		name,
+		["exec", "tsx", scriptPath],
+		testDatabaseUrl,
+	);
 	console.log(`Golden integration ${name}: ${passed ? "PASS" : "FAIL"}`);
 	return passed;
 }
 
 async function main(): Promise<void> {
 	const target = requireTestDatabase();
+	const goldenOnly = process.argv.includes("--golden-only");
 	console.log(
 		`Using only ${TEST_DATABASE_ENV} with explicit disposable-DB confirmation; application .env and DATABASE_URL are excluded.`,
 	);
 
-	await applyM1Migrations(target);
-	console.log("M1 DB harness: START");
-	const m1Result = spawnSync(
-		process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-		["test:integration:project-channel-first-m1"],
-		{
-			cwd: process.cwd(),
-			env: childEnvironment(target.url),
-			stdio: "inherit",
-		},
-	);
-	const m1Passed = !m1Result.error && m1Result.status === 0;
-	console.log(`M1 DB harness: ${m1Passed ? "PASS" : "FAIL"}`);
+	let m1Passed = true;
+	if (goldenOnly) {
+		await assertExistingM1MigrationState(target);
+		console.log(
+			"Runner-only mode: migration application and M1 DB harness were not rerun.",
+		);
+	} else {
+		await applyM1Migrations(target);
+		console.log("M1 DB harness: START");
+		m1Passed = runPnpmChild(
+			"m1-db-harness",
+			["test:integration:project-channel-first-m1"],
+			target.url,
+		);
+		console.log(`M1 DB harness: ${m1Passed ? "PASS" : "FAIL"}`);
+	}
 
-	const results = GOLDEN_SUITES.map(([name, scriptPath]) =>
-		runSuite(name, scriptPath, target.url),
-	);
-	if (!m1Passed || results.some((passed) => !passed)) {
-		throw new Error("M1 DB harness or one or more golden suites failed.");
+	if (!m1Passed) {
+		throw new Error("M1 DB harness failed; golden suites were not started.");
+	}
+	for (const [name, scriptPath] of GOLDEN_SUITES) {
+		if (!runSuite(name, scriptPath, target.url)) {
+			throw new Error(
+				`Golden integration ${name} failed; remaining suites were not started.`,
+			);
+		}
 	}
 }
 

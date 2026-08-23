@@ -238,12 +238,16 @@ try {
 		);
 	const firstPromise = request("runtime-race-a-1");
 	const secondPromise = request("runtime-race-b-1");
+	const raceResultsPromise = Promise.allSettled([
+		firstPromise,
+		secondPromise,
+	]);
 	await bothBeforeInsert;
 	releaseBeforeInsert();
 	await providerStarted;
 	await new Promise((resolve) => setTimeout(resolve, 250));
 	releaseProvider();
-	const raceResults = await Promise.allSettled([firstPromise, secondPromise]);
+	const raceResults = await raceResultsPromise;
 	const winner = raceResults.find(
 		(result): result is PromiseFulfilledResult<Awaited<typeof firstPromise>> =>
 			result.status === "fulfilled",
@@ -258,6 +262,25 @@ try {
 	assert(
 		providerCallCount === 1,
 		`Concurrent runtime made duplicate provider calls: ${providerCallCount}`,
+	);
+	const loserIdempotencyKey =
+		first.artifact.idempotencyKey === "runtime-race-a-1"
+			? "runtime-race-b-1"
+			: "runtime-race-a-1";
+	const raceArtifacts = await db
+		.select({ id: voiceSegmentArtifact.id, idempotencyKey: voiceSegmentArtifact.idempotencyKey })
+		.from(voiceSegmentArtifact)
+		.where(eq(voiceSegmentArtifact.workspaceId, actor.workspaceId));
+	assert(
+		raceArtifacts.length === 1 &&
+			raceArtifacts[0]?.id === first.artifact.id,
+		"Concurrent runtime did not persist exactly one winning artifact.",
+	);
+	assert(
+		!raceArtifacts.some(
+			(artifact) => artifact.idempotencyKey === loserIdempotencyKey,
+		),
+		"Concurrent runtime persisted a fake idempotency binding for the loser.",
 	);
 	assert(
 		first.artifact.durationMs === 1_045,

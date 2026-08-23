@@ -10,6 +10,7 @@ export * from "./product-fact/freshness";
 export * from "./product-fact/types";
 export * from "./product-fact/validation";
 export * from "./project/channel-first-types";
+export * from "./project/legacy-affiliate-compatibility";
 export * from "./project/project-service";
 export * from "./project/project-types";
 export * from "./project/project-validation";
