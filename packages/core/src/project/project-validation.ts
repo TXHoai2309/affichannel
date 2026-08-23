@@ -39,44 +39,7 @@ export const projectContentBriefFieldsSchema = z.object({
 		.optional(),
 });
 
-const CHANNEL_FIRST_IDENTITY_FIELD_NAMES = [
-	"contentType",
-	"creationPath",
-	"contentFormat",
-] as const;
-
-function rejectInactiveChannelFirstIdentity(
-	value: unknown,
-	ctx: z.RefinementCtx,
-): unknown {
-	if (typeof value !== "object" || value === null || Array.isArray(value)) {
-		return value;
-	}
-
-	for (const fieldName of CHANNEL_FIRST_IDENTITY_FIELD_NAMES) {
-		if (Object.hasOwn(value, fieldName)) {
-			ctx.addIssue({
-				code: "custom",
-				path: [fieldName],
-				message: "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
-			});
-		}
-	}
-	return value;
-}
-
-/** Active M3 production contract; M3B owns identity activation. */
-export const createProjectInputSchema = z.preprocess(
-	rejectInactiveChannelFirstIdentity,
-	projectContentBriefFieldsSchema,
-);
-
-export const updateProjectInputSchema = z.preprocess(
-	rejectInactiveChannelFirstIdentity,
-	projectContentBriefFieldsSchema.extend({ id: projectIdSchema }),
-);
-
-/** M3A-only contract; not used by the active production router before M3B. */
+/** M3B-compatible contract used by the active production Project router. */
 export const channelFirstCompatibleCreateProjectInputSchema =
 	projectContentBriefFieldsSchema.extend(projectWriteIdentityInputSchema.shape);
 
@@ -84,6 +47,13 @@ export const channelFirstCompatibleUpdateProjectInputSchema =
 	channelFirstCompatibleCreateProjectInputSchema.extend({
 		id: projectIdSchema,
 	});
+
+/** M3B activates the compatible identity contract in production. */
+export const createProjectInputSchema =
+	channelFirstCompatibleCreateProjectInputSchema;
+
+export const updateProjectInputSchema =
+	channelFirstCompatibleUpdateProjectInputSchema;
 
 export const projectIdInputSchema = z.object({
 	id: projectIdSchema,

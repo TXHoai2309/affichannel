@@ -218,7 +218,7 @@ describe("AFF-US-016 M3A Project write contract", () => {
 		expect(parsed.success).toBe(false);
 	});
 
-	it("keeps explicit Channel-First identity outside active production schemas", () => {
+	it("exposes the compatible identity through active production schemas in M3B", () => {
 		const createResult = createProjectInputSchema.safeParse({
 			...legacyPayload,
 			...canonicalAffiliateIdentity,
@@ -229,19 +229,15 @@ describe("AFF-US-016 M3A Project write contract", () => {
 			id: "00000000-0000-4000-8000-000000000002",
 		});
 
-		expect(createResult.success).toBe(false);
-		expect(updateResult.success).toBe(false);
-		if (!createResult.success && !updateResult.success) {
-			expect(
-				createResult.error.issues.some(
-					(issue) => issue.message === "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
-				),
-			).toBe(true);
-			expect(
-				updateResult.error.issues.some(
-					(issue) => issue.message === "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
-				),
-			).toBe(true);
+		expect(createResult.success).toBe(true);
+		expect(updateResult.success).toBe(true);
+		if (createResult.success && updateResult.success) {
+			expect(classifyProjectWriteIdentity(createResult.data).kind).toBe(
+				"canonical",
+			);
+			expect(classifyProjectWriteIdentity(updateResult.data).kind).toBe(
+				"canonical",
+			);
 		}
 	});
 });

@@ -7,6 +7,14 @@ import type {
 	CreateProjectInput,
 	UpdateProjectInput,
 } from "./project-validation";
+import {
+	classifyPersistedProjectIdentity,
+	classifyProjectWriteIdentity,
+	type PersistedProjectIdentityState,
+	type ProjectWriteIdentity,
+	type ProjectWriteIdentityRejectionReason,
+} from "./project-write-contract";
+import type { LegacyProjectExceptionReason } from "./legacy-affiliate-compatibility";
 
 export type ProjectActor = {
 	workspaceId: string;
@@ -21,10 +29,22 @@ export type ProjectWorkflowState = {
 	}>;
 };
 
-export type ProjectServiceErrorCode = "PROJECT_NOT_FOUND" | "PRODUCT_NOT_FOUND";
+export type ProjectServiceErrorCode =
+	| "PROJECT_NOT_FOUND"
+	| "PRODUCT_NOT_FOUND"
+	| "INVALID_PROJECT_WRITE_IDENTITY";
+
+export type ProjectServiceErrorMetadata = {
+	reasonCode?:
+		| ProjectWriteIdentityRejectionReason
+		| LegacyProjectExceptionReason;
+};
 
 export class ProjectServiceError extends Error {
-	constructor(public readonly code: ProjectServiceErrorCode) {
+	constructor(
+		public readonly code: ProjectServiceErrorCode,
+		public readonly metadata: ProjectServiceErrorMetadata = {},
+	) {
 		super(code);
 	}
 }
@@ -48,6 +68,7 @@ export type ProjectRepository<TProject> = {
 	createProjectBundle(input: {
 		actor: ProjectActor;
 		input: CreateProjectInput;
+		identity: ProjectWriteIdentity;
 		workflow: ProjectWorkflowState;
 	}): Promise<TProject>;
 	findProject(input: {
@@ -55,10 +76,15 @@ export type ProjectRepository<TProject> = {
 		projectId: string;
 		includeArchived?: boolean;
 	}): Promise<TProject | undefined>;
+	findProjectIdentity(input: {
+		workspaceId: string;
+		projectId: string;
+	}): Promise<PersistedProjectIdentityState | undefined>;
 	listProjects(input: { workspaceId: string }): Promise<TProject[]>;
 	updateProjectBundle(input: {
 		actor: ProjectActor;
 		input: UpdateProjectInput;
+		identity: ProjectWriteIdentity;
 	}): Promise<TProject | undefined>;
 	archiveProject(input: {
 		workspaceId: string;
@@ -71,6 +97,17 @@ export async function createProject<TProject>(
 	actor: ProjectActor,
 	input: CreateProjectInput,
 ) {
+	const classification = classifyProjectWriteIdentity(input);
+	if (classification.kind === "rejected") {
+		throw new ProjectServiceError("INVALID_PROJECT_WRITE_IDENTITY", {
+			reasonCode: classification.reasonCode,
+		});
+	}
+	const identity =
+		classification.kind === "legacy"
+			? classification.effectiveIdentity
+			: classification.identity;
+
 	const product = await repository.findAccessibleProduct({
 		workspaceId: actor.workspaceId,
 		productId: input.productId,
@@ -83,6 +120,7 @@ export async function createProject<TProject>(
 	return repository.createProjectBundle({
 		actor,
 		input,
+		identity,
 		workflow: createInitialProjectWorkflowState(),
 	});
 }
@@ -92,6 +130,13 @@ export async function updateProject<TProject>(
 	actor: ProjectActor,
 	input: UpdateProjectInput,
 ) {
+	const classification = classifyProjectWriteIdentity(input);
+	if (classification.kind === "rejected") {
+		throw new ProjectServiceError("INVALID_PROJECT_WRITE_IDENTITY", {
+			reasonCode: classification.reasonCode,
+		});
+	}
+
 	const existingProject = await repository.findProject({
 		workspaceId: actor.workspaceId,
 		projectId: input.id,
@@ -111,5 +156,37 @@ export async function updateProject<TProject>(
 		throw new ProjectServiceError("PRODUCT_NOT_FOUND");
 	}
 
-	return repository.updateProjectBundle({ actor, input });
+	const persistedIdentity = await repository.findProjectIdentity({
+		workspaceId: actor.workspaceId,
+		projectId: input.id,
+	});
+	if (!persistedIdentity) {
+		throw new ProjectServiceError("PROJECT_NOT_FOUND");
+	}
+
+	if (classification.kind === "canonical") {
+		return repository.updateProjectBundle({
+			actor,
+			input,
+			identity: classification.identity,
+		});
+	}
+
+	const persistedClassification = classifyPersistedProjectIdentity(
+		persistedIdentity,
+	);
+	if (persistedClassification.kind === "rejected") {
+		throw new ProjectServiceError("INVALID_PROJECT_WRITE_IDENTITY", {
+			reasonCode: persistedClassification.reasonCode,
+		});
+	}
+
+	return repository.updateProjectBundle({
+		actor,
+		input,
+		identity:
+			persistedClassification.kind === "legacy"
+				? persistedClassification.effectiveIdentity
+				: persistedClassification.identity,
+	});
 }

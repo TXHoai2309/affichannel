@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
+	LEGACY_AFFILIATE_IDENTITY,
+	isContentType,
+	isCreationPath,
 	type ContentFormatReadModel,
 	type ContentType,
 	type CreationPath,
@@ -14,6 +17,9 @@ import type {
 	PersistedProjectStepStatus,
 	ProjectStepKey,
 } from "@affichannel/core/project/project-types";
+import type {
+	PersistedProjectIdentityState,
+} from "@affichannel/core/project/project-write-contract";
 import {
 	contentBrief,
 	db,
@@ -29,6 +35,7 @@ export type ProjectDetails = {
 	contentType: ContentType | null;
 	creationPath: CreationPath | null;
 	contentFormat: ContentFormatReadModel | null;
+	isLegacyProjection: boolean;
 	product: {
 		id: string;
 		name: string;
@@ -56,6 +63,7 @@ export type ProjectListItem = Pick<
 	| "contentType"
 	| "creationPath"
 	| "contentFormat"
+	| "isLegacyProjection"
 	| "currentStepKey"
 	| "updatedAt"
 > & {
@@ -67,6 +75,43 @@ type FindProjectOptions = {
 	projectId: string;
 	includeArchived?: boolean;
 };
+
+function projectIdentityReadModel(input: PersistedProjectIdentityState) {
+	const isDeterministicLegacy =
+		input.productId !== null &&
+		input.contentType === null &&
+		input.creationPath === null &&
+		input.contentFormatKey === null &&
+		input.contentFormatVersion === null;
+
+	if (isDeterministicLegacy) {
+		return {
+			contentType: LEGACY_AFFILIATE_IDENTITY.contentType,
+			creationPath: LEGACY_AFFILIATE_IDENTITY.creationPath,
+			contentFormat: resolveContentFormatRef(
+				LEGACY_AFFILIATE_IDENTITY.contentFormat.key,
+				LEGACY_AFFILIATE_IDENTITY.contentFormat.version,
+			),
+			isLegacyProjection: true,
+		};
+	}
+
+	return {
+		contentType:
+			input.contentType !== null && isContentType(input.contentType)
+			? input.contentType
+			: null,
+		creationPath:
+			input.creationPath !== null && isCreationPath(input.creationPath)
+			? input.creationPath
+			: null,
+		contentFormat: resolveContentFormatRef(
+			input.contentFormatKey,
+			input.contentFormatVersion,
+		),
+		isLegacyProjection: false,
+	};
+}
 
 async function findProjectDetails(
 	options: FindProjectOptions,
@@ -116,16 +161,18 @@ async function findProjectDetails(
 		})
 		.from(projectStepStatus)
 		.where(eq(projectStepStatus.projectId, record.id));
+	const identity = projectIdentityReadModel({
+		productId: record.productId,
+		contentType: record.contentType,
+		creationPath: record.creationPath,
+		contentFormatKey: record.contentFormatKey,
+		contentFormatVersion: record.contentFormatVersion,
+	});
 
 	return {
 		id: record.id,
 		name: record.name,
-		contentType: record.contentType as ContentType | null,
-		creationPath: record.creationPath as CreationPath | null,
-		contentFormat: resolveContentFormatRef(
-			record.contentFormatKey,
-			record.contentFormatVersion,
-		),
+		...identity,
 		product: {
 			id: record.productId,
 			name: record.productName,
@@ -173,12 +220,7 @@ export async function listProjectItems(
 			records.map((record) => ({
 				id: record.id,
 				name: record.name,
-				contentType: record.contentType as ContentType | null,
-				creationPath: record.creationPath as CreationPath | null,
-				contentFormat: resolveContentFormatRef(
-					record.contentFormatKey,
-					record.contentFormatVersion,
-				),
+				...projectIdentityReadModel(record),
 				currentStepKey: record.currentStepKey as ProjectStepKey,
 				updatedAt: record.updatedAt,
 				product: { id: record.productId, name: record.productName },
@@ -227,7 +269,7 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 
 			return existingProduct;
 		},
-		async createProjectBundle({ actor, input, workflow }) {
+		async createProjectBundle({ actor, input, identity, workflow }) {
 			const projectId = randomUUID();
 
 			await db.transaction(async (transaction) => {
@@ -253,6 +295,10 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 					workspaceId: actor.workspaceId,
 					name: input.name,
 					productId: input.productId,
+					contentType: identity.contentType,
+					creationPath: identity.creationPath,
+					contentFormatKey: identity.contentFormat.key,
+					contentFormatVersion: identity.contentFormat.version,
 					currentStepKey: workflow.currentStepKey,
 					createdByUserId: actor.userId,
 				});
@@ -289,16 +335,40 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 			return createdProject;
 		},
 		findProject: findProjectDetails,
+		async findProjectIdentity({ workspaceId, projectId }) {
+			const [record] = await db
+				.select({
+					productId: project.productId,
+					contentType: project.contentType,
+					creationPath: project.creationPath,
+					contentFormatKey: project.contentFormatKey,
+					contentFormatVersion: project.contentFormatVersion,
+				})
+				.from(project)
+				.where(
+					and(
+						eq(project.id, projectId),
+						eq(project.workspaceId, workspaceId),
+					),
+				)
+				.limit(1);
+
+			return record;
+		},
 		listProjects({ workspaceId }) {
 			return listProjectDetails(workspaceId);
 		},
-		async updateProjectBundle({ actor, input }) {
+		async updateProjectBundle({ actor, input, identity }) {
 			const didUpdate = await db.transaction(async (transaction) => {
 				const [updatedProject] = await transaction
 					.update(project)
 					.set({
 						name: input.name,
 						productId: input.productId,
+						contentType: identity.contentType,
+						creationPath: identity.creationPath,
+						contentFormatKey: identity.contentFormat.key,
+						contentFormatVersion: identity.contentFormat.version,
 						updatedAt: new Date(),
 					})
 					.where(

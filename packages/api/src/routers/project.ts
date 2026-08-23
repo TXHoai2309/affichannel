@@ -20,7 +20,18 @@ import { requireWorkspaceActor } from "../services/workspace";
 
 function toOrpcError(error: unknown): never {
 	if (error instanceof ProjectServiceError) {
-		throw new ORPCError("NOT_FOUND", { message: error.message });
+		if (error.code === "INVALID_PROJECT_WRITE_IDENTITY") {
+			const reasonCode = error.metadata.reasonCode ?? error.code;
+			throw new ORPCError("BAD_REQUEST", {
+				message: reasonCode,
+				data: { code: error.code, reasonCode },
+			});
+		}
+
+		throw new ORPCError("NOT_FOUND", {
+			message: error.message,
+			data: { code: error.code },
+		});
 	}
 
 	throw error;

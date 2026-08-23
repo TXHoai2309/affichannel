@@ -24,6 +24,7 @@
 		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
 		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
 		"test:integration:project-channel-first-m1": "tsx scripts/test-project-channel-first-m1.ts",
+		"test:integration:project-channel-first-m3b": "tsx scripts/test-project-channel-first-m3b.ts",
 		"test:integration:product": "tsx scripts/test-product-management.ts",
 		"test:integration:product-facts": "tsx scripts/test-product-facts.ts",
 		"test:integration:product-fact-freshness": "tsx scripts/test-product-fact-freshness.ts",

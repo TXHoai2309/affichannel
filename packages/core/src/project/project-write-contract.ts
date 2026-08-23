@@ -11,7 +11,11 @@ import {
 	CREATION_PATHS,
 	type CreationPath,
 } from "./channel-first-types";
-import { LEGACY_AFFILIATE_IDENTITY } from "./legacy-affiliate-compatibility";
+import {
+	classifyLegacyProject,
+	LEGACY_AFFILIATE_IDENTITY,
+	type LegacyProjectExceptionReason,
+} from "./legacy-affiliate-compatibility";
 
 export const projectWriteIdentityInputSchema = z.object({
 	contentType: z.string().nullable().optional(),
@@ -38,6 +42,28 @@ export type ProjectWriteIdentity = {
 		version: number;
 	};
 };
+
+export type PersistedProjectIdentityState = {
+	productId: string | null;
+	contentType: string | null;
+	creationPath: string | null;
+	contentFormatKey: string | null;
+	contentFormatVersion: number | null;
+};
+
+export type PersistedProjectIdentityClassification =
+	| {
+			kind: "legacy";
+			effectiveIdentity: typeof LEGACY_AFFILIATE_IDENTITY;
+	  }
+	| {
+			kind: "canonical";
+			identity: ProjectWriteIdentity;
+	  }
+	| {
+			kind: "rejected";
+			reasonCode: LegacyProjectExceptionReason;
+	  };
 
 export const PROJECT_WRITE_IDENTITY_REJECTION_REASONS = [
 	"PARTIAL_CHANNEL_FIRST_IDENTITY",
@@ -215,4 +241,47 @@ export function classifyProjectWriteIdentity(
 	}
 
 	return { kind: "rejected", reasonCode: "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE" };
+}
+
+/**
+ * Resolves an already-persisted Project identity for update compatibility.
+ * This intentionally reuses the legacy classifier's locked precedence and
+ * never infers identity from Script, Fact Lock, Voice, or other artifacts.
+ */
+export function classifyPersistedProjectIdentity(
+	state: PersistedProjectIdentityState,
+): PersistedProjectIdentityClassification {
+	const classification = classifyLegacyProject({
+		contentType: state.contentType,
+		creationPath: state.creationPath,
+		contentFormatKey: state.contentFormatKey,
+		contentFormatVersion: state.contentFormatVersion,
+		hasProduct: state.productId !== null,
+	});
+
+	if (classification.kind === "candidate") {
+		return {
+			kind: "legacy",
+			effectiveIdentity: LEGACY_AFFILIATE_IDENTITY,
+		};
+	}
+
+	if (classification.kind === "exception") {
+		return {
+			kind: "rejected",
+			reasonCode: classification.reasonCode,
+		};
+	}
+
+	return {
+		kind: "canonical",
+		identity: {
+			contentType: state.contentType as ContentType,
+			creationPath: state.creationPath as CreationPath,
+			contentFormat: {
+				key: state.contentFormatKey as string,
+				version: state.contentFormatVersion as number,
+			},
+		},
+	};
 }

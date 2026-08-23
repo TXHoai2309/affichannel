@@ -167,16 +167,22 @@ try {
 	const readModel = await getProjectDetails(workspaceId, legacyId);
 	assert(readModel !== undefined, "Legacy all-null Project must be readable.");
 	assert(
-		readModel.contentType === null,
-		"Legacy ContentType must remain null in M1.",
+		readModel.contentType === "AFFILIATE",
+		"M3B legacy read must project Affiliate ContentType.",
 	);
 	assert(
-		readModel.creationPath === null,
-		"Legacy CreationPath must remain null in M1.",
+		readModel.creationPath === "SCRIPTED",
+		"M3B legacy read must project Scripted CreationPath.",
 	);
 	assert(
-		readModel.contentFormat === null,
-		"M1 must not project an effective legacy format.",
+		readModel.contentFormat?.resolution === "resolved" &&
+		readModel.contentFormat.ref.key === "SCRIPTED_STANDARD" &&
+		readModel.contentFormat.ref.version === 1,
+		"M3B legacy read must project the resolved legacy format.",
+	);
+	assert(
+		readModel.isLegacyProjection === true,
+		"M3B legacy read must expose legacy provenance.",
 	);
 	const after = await db
 		.select({
