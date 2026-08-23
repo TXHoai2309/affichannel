@@ -20,6 +20,7 @@
 		"backfill:legacy-affiliate-projects": "tsx scripts/backfill-legacy-affiliate-projects.ts",
 		"test:unit:legacy-affiliate-classifier": "pnpm --filter web exec vitest run src/features/project/legacy-affiliate-compatibility.test.ts",
 		"test:integration:legacy-affiliate-dry-run": "tsx scripts/test-legacy-affiliate-dry-run.ts",
+		"test:integration:legacy-affiliate-backfill": "tsx scripts/test-legacy-affiliate-backfill.ts",
 		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
 		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
 		"test:integration:project-channel-first-m1": "tsx scripts/test-project-channel-first-m1.ts",

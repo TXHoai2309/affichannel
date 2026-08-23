@@ -9,6 +9,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
 	CONTENT_FORMAT_DEFAULTS,
 	classifyLegacyProject,
@@ -16,6 +17,7 @@ import {
 	validateContentFormatRegistry,
 } from "@affichannel/core";
 import {
+	applyLegacyAffiliateCandidateBatch,
 	type LegacyProjectInventoryRow,
 	scanLegacyProjectInventoryBatch,
 } from "../packages/db/src/legacy-affiliate-inventory.ts";
@@ -23,20 +25,24 @@ import { createNodePostgresPool } from "../packages/db/src/node-postgres-test-ad
 
 const DATABASE_URL_ENV = "AFFICHANNEL_BACKFILL_DATABASE_URL";
 const DATABASE_CONFIRM_ENV = "AFFICHANNEL_BACKFILL_DATABASE_CONFIRM";
-const DATABASE_CONFIRM_VALUE = "BACKFILL_DRY_RUN_CONFIRMED";
+const DRY_RUN_CONFIRMATION = "BACKFILL_DRY_RUN_CONFIRMED";
+const APPLY_CONFIRMATIONS = {
+	disposable: "DISPOSABLE_BACKFILL_DB_CONFIRMED",
+	production: "PRODUCTION_BACKFILL_DB_CONFIRMED",
+} as const;
 const DEFAULT_BATCH_SIZE = 500;
 const MAX_BATCH_SIZE = 10_000;
-const CONTRACT_VERSION = "AFF-US-016-M2A-v1";
+const CONTRACT_VERSION = "AFF-US-016-M2B-v1";
 
-type CliOptions = {
+type BackfillMode = "dry-run" | "apply";
+type ApplyTarget = keyof typeof APPLY_CONFIRMATIONS;
+
+export type BackfillCliOptions = {
+	mode: BackfillMode;
+	target?: ApplyTarget;
 	batchSize: number;
 	outputRoot?: string;
 	testFailAfterBatch?: number;
-};
-
-type DatabaseAuthority = {
-	url: string;
-	host: string;
 };
 
 type InventoryCounts = {
@@ -56,6 +62,13 @@ type SanitizedDatabaseIdentity = {
 	user: string;
 };
 
+export type BackfillTestHooks = {
+	beforeApplyBatch?: (input: {
+		batchNumber: number;
+		candidateIds: string[];
+	}) => Promise<void>;
+};
+
 function parsePositiveInteger(value: string, flag: string): number {
 	const parsed = Number(value);
 	if (!Number.isInteger(parsed) || parsed <= 0 || parsed > MAX_BATCH_SIZE) {
@@ -66,16 +79,34 @@ function parsePositiveInteger(value: string, flag: string): number {
 	return parsed;
 }
 
-function parseArgs(args: string[]): CliOptions {
-	const options: CliOptions = { batchSize: DEFAULT_BATCH_SIZE };
+export function parseBackfillArgs(args: string[]): BackfillCliOptions {
+	const options: BackfillCliOptions = {
+		mode: "dry-run",
+		batchSize: DEFAULT_BATCH_SIZE,
+	};
+	let explicitMode: BackfillMode | undefined;
 	for (let index = 0; index < args.length; index += 1) {
 		const argument = args[index];
-		if (argument === "--apply") {
-			throw new Error(
-				"REFUSED: --apply is not available in AFF-US-016 M2A. This command is dry-run only.",
-			);
+		if (argument === "--apply" || argument === "--dry-run") {
+			const mode = argument === "--apply" ? "apply" : "dry-run";
+			if (explicitMode && explicitMode !== mode) {
+				throw new Error("REFUSED: choose exactly one of --dry-run or --apply.");
+			}
+			explicitMode = mode;
+			options.mode = mode;
+			continue;
 		}
-		if (argument === "--dry-run") continue;
+		if (argument === "--target") {
+			const value = args[index + 1];
+			if (value !== "disposable" && value !== "production") {
+				throw new Error(
+					"REFUSED: --target must equal disposable or production.",
+				);
+			}
+			options.target = value;
+			index += 1;
+			continue;
+		}
 		if (argument === "--batch-size") {
 			const value = args[index + 1];
 			if (!value) throw new Error("REFUSED: --batch-size requires a value.");
@@ -95,9 +126,8 @@ function parseArgs(args: string[]): CliOptions {
 			process.env.NODE_ENV === "test"
 		) {
 			const value = args[index + 1];
-			if (!value) {
+			if (!value)
 				throw new Error("REFUSED: --test-fail-after-batch requires a value.");
-			}
 			options.testFailAfterBatch = parsePositiveInteger(
 				value,
 				"--test-fail-after-batch",
@@ -107,22 +137,33 @@ function parseArgs(args: string[]): CliOptions {
 		}
 		throw new Error(`REFUSED: unknown argument ${argument ?? "<missing>"}.`);
 	}
+	if (options.mode === "apply") {
+		if (!options.target)
+			throw new Error("REFUSED: --apply requires an explicit --target.");
+		if (!options.outputRoot)
+			throw new Error("REFUSED: --apply requires an explicit --output-dir.");
+	} else if (options.target) {
+		throw new Error("REFUSED: --target is only valid with --apply.");
+	}
 	return options;
 }
 
-function requireDatabaseAuthority(): DatabaseAuthority {
+function requireDatabaseAuthority(options: BackfillCliOptions) {
 	const url = process.env[DATABASE_URL_ENV]?.trim();
 	if (!url) {
 		throw new Error(
-			`REFUSED: ${DATABASE_URL_ENV} is required. No application DB variable or .env fallback is allowed.`,
+			`REFUSED: ${DATABASE_URL_ENV} is required. No application, M1, fixture-test, or .env fallback is allowed.`,
 		);
 	}
-	if (process.env[DATABASE_CONFIRM_ENV] !== DATABASE_CONFIRM_VALUE) {
+	const expected =
+		options.mode === "dry-run"
+			? DRY_RUN_CONFIRMATION
+			: APPLY_CONFIRMATIONS[options.target as ApplyTarget];
+	if (process.env[DATABASE_CONFIRM_ENV] !== expected) {
 		throw new Error(
-			`REFUSED: ${DATABASE_CONFIRM_ENV} must equal ${DATABASE_CONFIRM_VALUE}.`,
+			`REFUSED: ${DATABASE_CONFIRM_ENV} must equal ${expected} for ${options.mode}${options.target ? ` target ${options.target}` : ""}.`,
 		);
 	}
-
 	let parsed: URL;
 	try {
 		parsed = new URL(url);
@@ -154,15 +195,16 @@ function validateRegistry(): void {
 }
 
 async function createRunDirectory(
-	options: CliOptions,
+	options: BackfillCliOptions,
 	runId: string,
 ): Promise<string> {
-	if (!options.outputRoot) {
+	if (!options.outputRoot)
 		return mkdtemp(join(tmpdir(), "affichannel-m2a-dry-run-"));
-	}
 	await mkdir(options.outputRoot, { recursive: true });
 	await access(options.outputRoot, constants.W_OK);
-	const runDirectory = join(options.outputRoot, `affichannel-m2a-${runId}`);
+	const prefix =
+		options.mode === "apply" ? "affichannel-m2b-" : "affichannel-m2a-";
+	const runDirectory = join(options.outputRoot, `${prefix}${runId}`);
 	await mkdir(runDirectory, { recursive: false });
 	await access(runDirectory, constants.W_OK);
 	return runDirectory;
@@ -184,10 +226,7 @@ async function readDatabaseIdentity(
 			user: string;
 			schema: string;
 		}>(`
-			select
-				current_database() as database,
-				current_user as "user",
-				current_schema() as schema
+			select current_database() as database, current_user as "user", current_schema() as schema
 		`);
 		await client.query("commit");
 		const identity = result.rows[0];
@@ -241,9 +280,12 @@ async function writeJsonBestEffort(
 	}
 }
 
-async function runDryRun(options: CliOptions): Promise<void> {
+export async function runLegacyAffiliateBackfill(
+	options: BackfillCliOptions,
+	hooks: BackfillTestHooks = {},
+): Promise<{ runDirectory: string; counts: InventoryCounts }> {
 	validateRegistry();
-	const authority = requireDatabaseAuthority();
+	const authority = requireDatabaseAuthority(options);
 	const runId = randomUUID();
 	const startedAt = new Date().toISOString();
 	const runDirectory = await createRunDirectory(options, runId);
@@ -252,7 +294,9 @@ async function runDryRun(options: CliOptions): Promise<void> {
 		checkpoint: join(runDirectory, "checkpoint.json"),
 		summary: join(runDirectory, "summary.json"),
 		exceptions: join(runDirectory, "exceptions.jsonl"),
+		skips: join(runDirectory, "skips.jsonl"),
 	};
+	const target = options.target ?? null;
 	const counts: InventoryCounts = {
 		totalScanned: 0,
 		legacyCandidates: 0,
@@ -267,13 +311,15 @@ async function runDryRun(options: CliOptions): Promise<void> {
 	let databaseIdentity: SanitizedDatabaseIdentity | undefined;
 	let completed = false;
 
-	const pool = createNodePostgresPool(authority.url);
+	// All evidence files are made writable before the pool or mutation path exists.
 	try {
 		await writeFile(paths.exceptions, "", "utf8");
+		await writeFile(paths.skips, "", "utf8");
 		await writeJson(paths.run, {
 			runId,
 			contractVersion: CONTRACT_VERSION,
-			mode: "dry-run",
+			mode: options.mode,
+			target,
 			status: "starting",
 			startedAt,
 			batchSize: options.batchSize,
@@ -282,114 +328,34 @@ async function runDryRun(options: CliOptions): Promise<void> {
 		await writeJson(paths.checkpoint, {
 			runId,
 			contractVersion: CONTRACT_VERSION,
-			mode: "dry-run",
+			mode: options.mode,
+			target,
+			status: "starting",
 			batchNumber,
 			batchSize: options.batchSize,
 			lastProjectId: cursor,
 			counts,
 			updatedAt: startedAt,
 		});
-		databaseIdentity = await readDatabaseIdentity(pool, authority.host);
-		console.log(
-			`Database identity: database=${databaseIdentity.database}; host=${databaseIdentity.host}; schema=${databaseIdentity.schema}; user=${databaseIdentity.user}`,
-		);
-		await writeJson(paths.run, {
-			runId,
-			contractVersion: CONTRACT_VERSION,
-			mode: "dry-run",
-			status: "running",
-			startedAt,
-			batchSize: options.batchSize,
-			outputDirectory: runDirectory,
-			databaseIdentity,
-		});
-
-		while (true) {
-			const rows = await scanLegacyProjectInventoryBatch(pool, {
-				cursor,
-				batchSize: options.batchSize,
-			});
-			if (rows.length === 0) break;
-			batchNumber += 1;
-			for (const row of rows) {
-				const classification = classifyLegacyProject(row);
-				counts.totalScanned += 1;
-				if (classification.kind === "candidate") {
-					counts.legacyCandidates += 1;
-				} else if (classification.kind === "canonical") {
-					counts.alreadyCanonical += 1;
-				} else {
-					counts.exceptions += 1;
-					await appendFile(
-						paths.exceptions,
-						`${JSON.stringify(exceptionRecord(row, classification.reasonCode))}\n`,
-						"utf8",
-					);
-				}
-			}
-			cursor = rows.at(-1)?.id ?? cursor;
-			await writeJson(paths.checkpoint, {
-				runId,
-				contractVersion: CONTRACT_VERSION,
-				mode: "dry-run",
-				batchNumber,
-				batchSize: options.batchSize,
-				lastProjectId: cursor,
-				counts,
-				updatedAt: new Date().toISOString(),
-			});
-			console.log(
-				`Batch ${batchNumber}: scanned=${counts.totalScanned}; candidates=${counts.legacyCandidates}; canonical=${counts.alreadyCanonical}; exceptions=${counts.exceptions}`,
-			);
-			if (
-				options.testFailAfterBatch !== undefined &&
-				options.testFailAfterBatch === batchNumber
-			) {
-				throw new Error("Injected M2A dry-run failure after checkpoint.");
-			}
-			if (rows.length < options.batchSize) break;
-		}
-
-		const finishedAt = new Date().toISOString();
 		await writeJson(paths.summary, {
 			runId,
 			contractVersion: CONTRACT_VERSION,
-			mode: "dry-run",
-			status: "completed",
+			mode: options.mode,
+			target,
+			status: "starting",
 			startedAt,
-			finishedAt,
-			databaseIdentity,
 			...counts,
 		});
-		await writeJson(paths.run, {
-			runId,
-			contractVersion: CONTRACT_VERSION,
-			mode: "dry-run",
-			status: "completed",
-			startedAt,
-			finishedAt,
-			batchSize: options.batchSize,
-			outputDirectory: runDirectory,
-			databaseIdentity,
-			batchNumber,
-			lastProjectId: cursor,
-			counts,
-		});
-		completed = true;
-		console.log(`Dry-run complete: output=${runDirectory}`);
-		console.log(
-			`Summary: scanned=${counts.totalScanned}; candidates=${counts.legacyCandidates}; canonical=${counts.alreadyCanonical}; exceptions=${counts.exceptions}; updated=0`,
-		);
 	} catch (error) {
-		counts.failed = Math.max(1, counts.failed + 1);
+		counts.failed = 1;
 		const finishedAt = new Date().toISOString();
-		const errorMessage = sanitizedMessage(error, authority.url);
 		await writeJsonBestEffort(
 			paths.checkpoint,
 			{
 				runId,
 				contractVersion: CONTRACT_VERSION,
-				mode: "dry-run",
+				mode: options.mode,
+				target,
 				status: "failed",
 				batchNumber,
 				batchSize: options.batchSize,
@@ -404,7 +370,191 @@ async function runDryRun(options: CliOptions): Promise<void> {
 			{
 				runId,
 				contractVersion: CONTRACT_VERSION,
-				mode: "dry-run",
+				mode: options.mode,
+				target,
+				status: "failed",
+				startedAt,
+				finishedAt,
+				...counts,
+			},
+			authority.url,
+		);
+		await writeJsonBestEffort(
+			paths.run,
+			{
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: options.mode,
+				target,
+				status: "failed",
+				startedAt,
+				finishedAt,
+				batchSize: options.batchSize,
+				outputDirectory: runDirectory,
+				batchNumber,
+				lastProjectId: cursor,
+				counts,
+				error: { message: sanitizedMessage(error, authority.url) },
+			},
+			authority.url,
+		);
+		throw error;
+	}
+
+	const pool = createNodePostgresPool(authority.url);
+	try {
+		databaseIdentity = await readDatabaseIdentity(pool, authority.host);
+		console.log(
+			`Database identity: database=${databaseIdentity.database}; host=${databaseIdentity.host}; schema=${databaseIdentity.schema}; user=${databaseIdentity.user}`,
+		);
+		await writeJson(paths.run, {
+			runId,
+			contractVersion: CONTRACT_VERSION,
+			mode: options.mode,
+			target,
+			status: "running",
+			startedAt,
+			batchSize: options.batchSize,
+			outputDirectory: runDirectory,
+			databaseIdentity,
+		});
+
+		while (true) {
+			const rows = await scanLegacyProjectInventoryBatch(pool, {
+				cursor,
+				batchSize: options.batchSize,
+			});
+			if (rows.length === 0) break;
+			batchNumber += 1;
+			const candidateIds: string[] = [];
+			for (const row of rows) {
+				const classification = classifyLegacyProject(row);
+				counts.totalScanned += 1;
+				if (classification.kind === "candidate") {
+					counts.legacyCandidates += 1;
+					candidateIds.push(row.id);
+				} else if (classification.kind === "canonical") {
+					counts.alreadyCanonical += 1;
+				} else {
+					counts.exceptions += 1;
+					await appendFile(
+						paths.exceptions,
+						`${JSON.stringify(exceptionRecord(row, classification.reasonCode))}\n`,
+						"utf8",
+					);
+				}
+			}
+
+			if (options.mode === "apply" && candidateIds.length > 0) {
+				await hooks.beforeApplyBatch?.({ batchNumber, candidateIds });
+				const result = await applyLegacyAffiliateCandidateBatch(
+					pool,
+					candidateIds,
+				);
+				counts.updated += result.updatedProjectIds.length;
+				counts.skipped += result.skippedProjectIds.length;
+				for (const projectId of result.skippedProjectIds) {
+					await appendFile(
+						paths.skips,
+						`${JSON.stringify({ projectId, reasonCode: "CONCURRENT_STATE_CHANGE" })}\n`,
+						"utf8",
+					);
+				}
+			}
+
+			cursor = rows.at(-1)?.id ?? cursor;
+			await writeJson(paths.checkpoint, {
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: options.mode,
+				target,
+				status: "running",
+				batchNumber,
+				batchSize: options.batchSize,
+				lastProjectId: cursor,
+				counts,
+				updatedAt: new Date().toISOString(),
+			});
+			console.log(
+				`Batch ${batchNumber}: scanned=${counts.totalScanned}; candidates=${counts.legacyCandidates}; canonical=${counts.alreadyCanonical}; exceptions=${counts.exceptions}; updated=${counts.updated}; skipped=${counts.skipped}`,
+			);
+			if (options.testFailAfterBatch === batchNumber) {
+				throw new Error(
+					`Injected ${options.mode} failure after committed batch.`,
+				);
+			}
+			if (rows.length < options.batchSize) break;
+		}
+
+		const finishedAt = new Date().toISOString();
+		await writeJson(paths.checkpoint, {
+			runId,
+			contractVersion: CONTRACT_VERSION,
+			mode: options.mode,
+			target,
+			status: "completed",
+			batchNumber,
+			batchSize: options.batchSize,
+			lastProjectId: cursor,
+			counts,
+			updatedAt: finishedAt,
+		});
+		await writeJson(paths.summary, {
+			runId,
+			contractVersion: CONTRACT_VERSION,
+			mode: options.mode,
+			target,
+			status: "completed",
+			startedAt,
+			finishedAt,
+			databaseIdentity,
+			...counts,
+		});
+		await writeJson(paths.run, {
+			runId,
+			contractVersion: CONTRACT_VERSION,
+			mode: options.mode,
+			target,
+			status: "completed",
+			startedAt,
+			finishedAt,
+			batchSize: options.batchSize,
+			outputDirectory: runDirectory,
+			databaseIdentity,
+			batchNumber,
+			lastProjectId: cursor,
+			counts,
+		});
+		completed = true;
+		console.log(`${options.mode} complete: output=${runDirectory}`);
+		return { runDirectory, counts };
+	} catch (error) {
+		counts.failed = Math.max(1, counts.failed + 1);
+		const finishedAt = new Date().toISOString();
+		const errorMessage = sanitizedMessage(error, authority.url);
+		await writeJsonBestEffort(
+			paths.checkpoint,
+			{
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: options.mode,
+				target,
+				status: "failed",
+				batchNumber,
+				batchSize: options.batchSize,
+				lastProjectId: cursor,
+				counts,
+				updatedAt: finishedAt,
+			},
+			authority.url,
+		);
+		await writeJsonBestEffort(
+			paths.summary,
+			{
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: options.mode,
+				target,
 				status: "failed",
 				startedAt,
 				finishedAt,
@@ -418,7 +568,8 @@ async function runDryRun(options: CliOptions): Promise<void> {
 			{
 				runId,
 				contractVersion: CONTRACT_VERSION,
-				mode: "dry-run",
+				mode: options.mode,
+				target,
 				status: "failed",
 				startedAt,
 				finishedAt,
@@ -437,20 +588,28 @@ async function runDryRun(options: CliOptions): Promise<void> {
 		try {
 			await pool.end();
 		} catch (cleanupError) {
-			const cleanupContext = completed
+			const context = completed
 				? "Completed run artifacts remain completed."
 				: "Run failure evidence was preserved.";
 			console.error(
-				`Database pool cleanup failed: ${sanitizedMessage(cleanupError, authority.url)} ${cleanupContext}`,
+				`Database pool cleanup failed: ${sanitizedMessage(cleanupError, authority.url)} ${context}`,
 			);
 		}
 	}
 }
 
-try {
-	const options = parseArgs(process.argv.slice(2));
-	await runDryRun(options);
-} catch (error) {
-	console.error(sanitizedMessage(error));
-	process.exitCode = 1;
+async function main(): Promise<void> {
+	try {
+		await runLegacyAffiliateBackfill(parseBackfillArgs(process.argv.slice(2)));
+	} catch (error) {
+		console.error(sanitizedMessage(error));
+		process.exitCode = 1;
+	}
+}
+
+if (
+	process.argv[1] &&
+	resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))
+) {
+	await main();
 }

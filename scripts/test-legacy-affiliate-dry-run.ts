@@ -131,8 +131,8 @@ delete unavailableApplyEnvironment.AFFICHANNEL_BACKFILL_DATABASE_CONFIRM;
 const unavailableApply = runCli(["--apply"], unavailableApplyEnvironment);
 assert(
 	unavailableApply.status !== 0 &&
-		unavailableApply.stderr.includes("--apply is not available"),
-	"M2A did not refuse --apply before database authority resolution.",
+		unavailableApply.stderr.includes("--apply requires an explicit --target"),
+	"Backfill did not refuse incomplete --apply before database authority resolution.",
 );
 
 const wrongConfirmationEnvironment = {
