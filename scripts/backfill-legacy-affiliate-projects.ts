@@ -73,7 +73,36 @@ function isApplyTarget(value: unknown): value is ApplyTarget {
 	return value === "disposable" || value === "production";
 }
 
+function validateBoundedBatchSize(value: unknown, label: string): void {
+	if (
+		typeof value !== "number" ||
+		!Number.isFinite(value) ||
+		!Number.isInteger(value) ||
+		value < 1 ||
+		value > MAX_BATCH_SIZE
+	) {
+		throw new Error(
+			`REFUSED: ${label} must be a finite integer from 1 through ${MAX_BATCH_SIZE}.`,
+		);
+	}
+}
+
+function validatePositiveInteger(value: unknown, label: string): void {
+	if (
+		typeof value !== "number" ||
+		!Number.isFinite(value) ||
+		!Number.isInteger(value) ||
+		value < 1
+	) {
+		throw new Error(`REFUSED: ${label} must be a finite positive integer.`);
+	}
+}
+
 function validateExecutionInvariants(options: BackfillCliOptions): void {
+	validateBoundedBatchSize(options.batchSize, "batchSize");
+	if (options.testFailAfterBatch !== undefined) {
+		validatePositiveInteger(options.testFailAfterBatch, "testFailAfterBatch");
+	}
 	if (options.mode !== "dry-run" && options.mode !== "apply") {
 		throw new Error("REFUSED: execution mode must equal dry-run or apply.");
 	}
@@ -108,11 +137,7 @@ function validateExecutionInvariants(options: BackfillCliOptions): void {
 
 function parsePositiveInteger(value: string, flag: string): number {
 	const parsed = Number(value);
-	if (!Number.isInteger(parsed) || parsed <= 0 || parsed > MAX_BATCH_SIZE) {
-		throw new Error(
-			`REFUSED: ${flag} must be an integer from 1 through ${MAX_BATCH_SIZE}.`,
-		);
-	}
+	validateBoundedBatchSize(parsed, flag);
 	return parsed;
 }
 

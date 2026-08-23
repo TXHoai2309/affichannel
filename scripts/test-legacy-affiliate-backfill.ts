@@ -232,6 +232,49 @@ try {
 	await insertProject({ id: authorityCandidate, productId });
 	const authorityBefore = await projectState(authorityCandidate);
 	const refusalOutput = await newOutputRoot("refusal");
+	for (const invalidBatchSize of [
+		0,
+		-1,
+		1.5,
+		Number.NaN,
+		Number.POSITIVE_INFINITY,
+		10_001,
+		1_000_000,
+	]) {
+		await expectDirectRefused(
+			{
+				mode: "apply",
+				target: "disposable",
+				batchSize: invalidBatchSize,
+				outputRoot: refusalOutput,
+			},
+			{
+				AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+				AFFICHANNEL_BACKFILL_DATABASE_CONFIRM:
+					"DISPOSABLE_BACKFILL_DB_CONFIRMED",
+				NODE_ENV: "test",
+			},
+			"batchSize must be a finite integer from 1 through 10000",
+		);
+	}
+	for (const invalidFailureBatch of [0, -1, 1.5]) {
+		await expectDirectRefused(
+			{
+				mode: "apply",
+				target: "disposable",
+				batchSize: 10,
+				outputRoot: refusalOutput,
+				testFailAfterBatch: invalidFailureBatch,
+			},
+			{
+				AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+				AFFICHANNEL_BACKFILL_DATABASE_CONFIRM:
+					"DISPOSABLE_BACKFILL_DB_CONFIRMED",
+				NODE_ENV: "test",
+			},
+			"testFailAfterBatch must be a finite positive integer",
+		);
+	}
 	await expectDirectRefused(
 		{ mode: "apply", batchSize: 10 },
 		{ AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl, NODE_ENV: "test" },
@@ -303,19 +346,21 @@ try {
 		(await readdir(refusalOutput)).length === 0,
 		"A refused direct invocation prepared output or attempted execution.",
 	);
-	const directDryRun = await withExecutionEnvironment(
-		{
-			AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
-			AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "BACKFILL_DRY_RUN_CONFIRMED",
-			NODE_ENV: "test",
-		},
-		() =>
-			runLegacyAffiliateBackfill({
-				mode: "dry-run",
-				batchSize: 10,
-			}),
-	);
-	await rm(directDryRun.runDirectory, { recursive: true, force: true });
+	for (const validBatchSize of [1, 500, 10_000]) {
+		const directDryRun = await withExecutionEnvironment(
+			{
+				AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+				AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "BACKFILL_DRY_RUN_CONFIRMED",
+				NODE_ENV: "test",
+			},
+			() =>
+				runLegacyAffiliateBackfill({
+					mode: "dry-run",
+					batchSize: validBatchSize,
+				}),
+		);
+		await rm(directDryRun.runDirectory, { recursive: true, force: true });
+	}
 	const refusalCases: Array<[string, string[], NodeJS.ProcessEnv, string]> = [
 		[
 			"dry-run confirmation",
