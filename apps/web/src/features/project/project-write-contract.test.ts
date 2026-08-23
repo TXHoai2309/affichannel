@@ -1,5 +1,7 @@
 import {
 	type ContentFormatRegistry,
+	channelFirstCompatibleCreateProjectInputSchema,
+	channelFirstCompatibleUpdateProjectInputSchema,
 	classifyProjectWriteIdentity,
 	createProjectInputSchema,
 	updateProjectInputSchema,
@@ -32,7 +34,10 @@ const deprecatedRegistry = [
 ] as const satisfies ContentFormatRegistry;
 
 function classify(input: Record<string, unknown>) {
-	const parsed = createProjectInputSchema.parse({ ...legacyPayload, ...input });
+	const parsed = channelFirstCompatibleCreateProjectInputSchema.parse({
+		...legacyPayload,
+		...input,
+	});
 	return classifyProjectWriteIdentity(parsed);
 }
 
@@ -41,7 +46,7 @@ describe("AFF-US-016 M3A Project write contract", () => {
 		const parsed = createProjectInputSchema.safeParse(legacyPayload);
 		expect(parsed.success).toBe(true);
 		if (parsed.success) {
-			expect(classifyProjectWriteIdentity(parsed.data).kind).toBe("legacy");
+			expect(classifyProjectWriteIdentity({}).kind).toBe("legacy");
 		}
 	});
 
@@ -52,12 +57,12 @@ describe("AFF-US-016 M3A Project write contract", () => {
 		});
 		expect(parsed.success).toBe(true);
 		if (parsed.success) {
-			expect(classifyProjectWriteIdentity(parsed.data).kind).toBe("legacy");
+			expect(classifyProjectWriteIdentity({}).kind).toBe("legacy");
 		}
 	});
 
 	it("keeps canonical identity fields visible to the parser", () => {
-		const parsed = createProjectInputSchema.parse({
+		const parsed = channelFirstCompatibleCreateProjectInputSchema.parse({
 			...legacyPayload,
 			...canonicalAffiliateIdentity,
 		});
@@ -153,7 +158,7 @@ describe("AFF-US-016 M3A Project write contract", () => {
 	});
 
 	it("distinguishes a known deprecated format from an unknown format", () => {
-		const parsed = createProjectInputSchema.parse({
+		const parsed = channelFirstCompatibleCreateProjectInputSchema.parse({
 			...legacyPayload,
 			contentType: "AFFILIATE",
 			creationPath: "SCRIPTED",
@@ -184,14 +189,14 @@ describe("AFF-US-016 M3A Project write contract", () => {
 
 	it("keeps Product required on both legacy and canonical schemas", () => {
 		expect(
-			createProjectInputSchema.safeParse({
+			channelFirstCompatibleCreateProjectInputSchema.safeParse({
 				...canonicalAffiliateIdentity,
 				...legacyPayload,
 				productId: undefined,
 			}).success,
 		).toBe(false);
 		expect(
-			updateProjectInputSchema.safeParse({
+			channelFirstCompatibleUpdateProjectInputSchema.safeParse({
 				...canonicalAffiliateIdentity,
 				...legacyPayload,
 				productId: undefined,
@@ -201,7 +206,7 @@ describe("AFF-US-016 M3A Project write contract", () => {
 	});
 
 	it("does not accept read-model-only ContentFormat fields as write input", () => {
-		const parsed = createProjectInputSchema.safeParse({
+		const parsed = channelFirstCompatibleCreateProjectInputSchema.safeParse({
 			...legacyPayload,
 			...canonicalAffiliateIdentity,
 			contentFormat: {
@@ -211,5 +216,32 @@ describe("AFF-US-016 M3A Project write contract", () => {
 			},
 		});
 		expect(parsed.success).toBe(false);
+	});
+
+	it("keeps explicit Channel-First identity outside active production schemas", () => {
+		const createResult = createProjectInputSchema.safeParse({
+			...legacyPayload,
+			...canonicalAffiliateIdentity,
+		});
+		const updateResult = updateProjectInputSchema.safeParse({
+			...legacyPayload,
+			...canonicalAffiliateIdentity,
+			id: "00000000-0000-4000-8000-000000000002",
+		});
+
+		expect(createResult.success).toBe(false);
+		expect(updateResult.success).toBe(false);
+		if (!createResult.success && !updateResult.success) {
+			expect(
+				createResult.error.issues.some(
+					(issue) => issue.message === "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
+				),
+			).toBe(true);
+			expect(
+				updateResult.error.issues.some(
+					(issue) => issue.message === "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
+				),
+			).toBe(true);
+		}
 	});
 });
