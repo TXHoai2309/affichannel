@@ -37,7 +37,8 @@ export type ProjectServiceErrorCode =
 export type ProjectServiceErrorMetadata = {
 	reasonCode?:
 		| ProjectWriteIdentityRejectionReason
-		| LegacyProjectExceptionReason;
+		| LegacyProjectExceptionReason
+		| "PROJECT_IDENTITY_CHANGED_DURING_UPDATE";
 };
 
 export class ProjectServiceError extends Error {
@@ -84,13 +85,25 @@ export type ProjectRepository<TProject> = {
 	updateProjectBundle(input: {
 		actor: ProjectActor;
 		input: UpdateProjectInput;
-		identity: ProjectWriteIdentity;
+		identityUpdate: ProjectIdentityUpdate;
 	}): Promise<TProject | undefined>;
 	archiveProject(input: {
 		workspaceId: string;
 		projectId: string;
 	}): Promise<TProject | undefined>;
 };
+
+export type ProjectIdentityUpdate =
+	| {
+			strategy: "preserve";
+			expectedIdentity: PersistedProjectIdentityState;
+	  }
+	| {
+			strategy: "set";
+			expectedIdentity: PersistedProjectIdentityState;
+			desiredIdentity: ProjectWriteIdentity;
+			requireExpectedProductLinkage: boolean;
+	  };
 
 export async function createProject<TProject>(
 	repository: ProjectRepository<TProject>,
@@ -164,14 +177,6 @@ export async function updateProject<TProject>(
 		throw new ProjectServiceError("PROJECT_NOT_FOUND");
 	}
 
-	if (classification.kind === "canonical") {
-		return repository.updateProjectBundle({
-			actor,
-			input,
-			identity: classification.identity,
-		});
-	}
-
 	const persistedClassification = classifyPersistedProjectIdentity(
 		persistedIdentity,
 	);
@@ -181,12 +186,30 @@ export async function updateProject<TProject>(
 		});
 	}
 
+	const identityUpdate: ProjectIdentityUpdate =
+		classification.kind === "canonical"
+			? {
+					strategy: "set",
+					expectedIdentity: persistedIdentity,
+					desiredIdentity: classification.identity,
+					requireExpectedProductLinkage:
+						persistedClassification.kind === "legacy",
+				  }
+			: persistedClassification.kind === "legacy"
+				? {
+						strategy: "set",
+						expectedIdentity: persistedIdentity,
+						desiredIdentity: persistedClassification.effectiveIdentity,
+						requireExpectedProductLinkage: true,
+				  }
+				: {
+						strategy: "preserve",
+						expectedIdentity: persistedIdentity,
+				  };
+
 	return repository.updateProjectBundle({
 		actor,
 		input,
-		identity:
-			persistedClassification.kind === "legacy"
-				? persistedClassification.effectiveIdentity
-				: persistedClassification.identity,
+		identityUpdate,
 	});
 }

@@ -68,12 +68,22 @@ async function rawProject(projectId: string) {
 	return record;
 }
 
-async function insertLegacyProject(projectId: string, name: string) {
+async function insertProjectFixture(
+	projectId: string,
+	name: string,
+	identity: {
+		contentType?: string | null;
+		creationPath?: string | null;
+		contentFormatKey?: string | null;
+		contentFormatVersion?: number | null;
+	} = {},
+) {
 	await db.insert(project).values({
 		id: projectId,
 		workspaceId,
 		name,
 		productId,
+		...identity,
 		currentStepKey: "product",
 		createdByUserId: userId,
 	});
@@ -86,6 +96,10 @@ async function insertLegacyProject(projectId: string, name: string) {
 		angle: "M3B legacy fixture",
 	});
 	projectIds.push(projectId);
+}
+
+async function insertLegacyProject(projectId: string, name: string) {
+	await insertProjectFixture(projectId, name);
 }
 
 async function projectCount() {
@@ -116,6 +130,32 @@ async function expectRejected(
 	assert(
 		(await projectCount()) === before,
 		`Rejected ${reasonCode} request mutated Project state.`,
+	);
+}
+
+async function expectUpdateRejected(
+	repository: ReturnType<typeof createProjectRepository>,
+	input: Parameters<typeof updateProject>[2],
+	reasonCode: string,
+) {
+	const beforeProject = await rawProject(input.id);
+	const beforeDetail = await getProjectDetails(workspaceId, input.id);
+	try {
+		await updateProject(repository, actor, input);
+		throw new Error(`Expected M3B update rejection: ${reasonCode}`);
+	} catch (error) {
+		assert(
+			error instanceof ProjectServiceError &&
+			error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
+			error.metadata.reasonCode === reasonCode,
+			`Expected typed M3B update rejection ${reasonCode}.`,
+		);
+	}
+	assert(
+		JSON.stringify(await rawProject(input.id)) === JSON.stringify(beforeProject) &&
+			JSON.stringify(await getProjectDetails(workspaceId, input.id)) ===
+				JSON.stringify(beforeDetail),
+		`Rejected ${reasonCode} update mutated Project or ContentBrief state.`,
 	);
 }
 
@@ -323,6 +363,125 @@ try {
 		canonicalizedLegacy.contentFormatKey === "SCRIPTED_STANDARD" &&
 		canonicalizedLegacy.contentFormatVersion === 1,
 		"Legacy update must deterministically canonicalize an all-null row.",
+	);
+
+	const invalidPersistedUnknownId = randomUUID();
+	await insertProjectFixture(
+		invalidPersistedUnknownId,
+		"M3B invalid persisted unknown format",
+		{
+			contentType: "AFFILIATE",
+			creationPath: "SCRIPTED",
+			contentFormatKey: "UNKNOWN_FORMAT",
+			contentFormatVersion: 1,
+		},
+	);
+	await expectUpdateRejected(
+		repository,
+		updateProjectInputSchema.parse({
+			...baseFields,
+			id: invalidPersistedUnknownId,
+			...canonicalIdentity,
+		}),
+		"INVALID_CONTENT_FORMAT_REF",
+	);
+
+	const invalidPersistedMismatchId = randomUUID();
+	await insertProjectFixture(
+		invalidPersistedMismatchId,
+		"M3B invalid persisted path mismatch",
+		{
+			contentType: "AFFILIATE",
+			creationPath: "QUICK_IMAGE",
+			contentFormatKey: "SCRIPTED_STANDARD",
+			contentFormatVersion: 1,
+		},
+	);
+	await expectUpdateRejected(
+		repository,
+		updateProjectInputSchema.parse({
+			...baseFields,
+			id: invalidPersistedMismatchId,
+		}),
+		"CONTENT_FORMAT_CREATION_PATH_MISMATCH",
+	);
+
+	const invalidPersistedPartialId = randomUUID();
+	await insertProjectFixture(
+		invalidPersistedPartialId,
+		"M3B invalid persisted partial identity",
+		{ contentType: "AFFILIATE" },
+	);
+	await expectUpdateRejected(
+		repository,
+		updateProjectInputSchema.parse({
+			...baseFields,
+			id: invalidPersistedPartialId,
+		}),
+		"PARTIAL_CHANNEL_FIRST_FIELDS",
+	);
+
+	const casProjectId = randomUUID();
+	await insertLegacyProject(casProjectId, "M3B CAS fixture");
+	const expectedCasIdentity = await repository.findProjectIdentity({
+		workspaceId,
+		projectId: casProjectId,
+	});
+	assert(expectedCasIdentity !== undefined, "CAS fixture identity must exist.");
+	const beforeCasBrief = await db
+		.select({
+			goal: contentBrief.goal,
+			angle: contentBrief.angle,
+		})
+		.from(contentBrief)
+		.where(eq(contentBrief.projectId, casProjectId));
+	await db
+		.update(project)
+		.set({
+			contentType: "AFFILIATE",
+			creationPath: "SCRIPTED",
+			contentFormatKey: "UNKNOWN_FORMAT",
+			contentFormatVersion: 1,
+		})
+		.where(eq(project.id, casProjectId));
+	const casInput = updateProjectInputSchema.parse({
+		...baseFields,
+		id: casProjectId,
+	});
+	try {
+		await repository.updateProjectBundle({
+			actor,
+			input: casInput,
+			identityUpdate: {
+				strategy: "set",
+				expectedIdentity: expectedCasIdentity,
+				desiredIdentity: canonicalIdentity,
+				requireExpectedProductLinkage: true,
+			},
+		});
+		throw new Error("Expected stale Project identity CAS to fail.");
+	} catch (error) {
+		assert(
+			error instanceof ProjectServiceError &&
+			error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
+			error.metadata.reasonCode ===
+				"PROJECT_IDENTITY_CHANGED_DURING_UPDATE",
+			"Stale identity CAS must expose its typed concurrency reason.",
+		);
+	}
+	const afterCasProject = await rawProject(casProjectId);
+	const afterCasBrief = await db
+		.select({
+			goal: contentBrief.goal,
+			angle: contentBrief.angle,
+		})
+		.from(contentBrief)
+		.where(eq(contentBrief.projectId, casProjectId));
+	assert(
+		afterCasProject?.contentFormatKey === "UNKNOWN_FORMAT" &&
+		afterCasProject.contentFormatVersion === 1 &&
+		JSON.stringify(afterCasBrief) === JSON.stringify(beforeCasBrief),
+		"Stale identity CAS must not overwrite identity or update ContentBrief.",
 	);
 
 	const projectedLegacyId = randomUUID();

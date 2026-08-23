@@ -27,7 +27,7 @@ import {
 	project,
 	projectStepStatus,
 } from "@affichannel/db";
-import { and, desc, eq, isNull, or } from "drizzle-orm";
+import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
 
 export type ProjectDetails = {
 	id: string;
@@ -75,6 +75,35 @@ type FindProjectOptions = {
 	projectId: string;
 	includeArchived?: boolean;
 };
+
+function expectedIdentityConditions(
+	expectedIdentity: PersistedProjectIdentityState,
+	requireExpectedProductLinkage: boolean,
+) {
+	const conditions = [
+		expectedIdentity.contentType === null
+			? isNull(project.contentType)
+			: eq(project.contentType, expectedIdentity.contentType),
+		expectedIdentity.creationPath === null
+			? isNull(project.creationPath)
+			: eq(project.creationPath, expectedIdentity.creationPath),
+		expectedIdentity.contentFormatKey === null
+			? isNull(project.contentFormatKey)
+			: eq(project.contentFormatKey, expectedIdentity.contentFormatKey),
+		expectedIdentity.contentFormatVersion === null
+			? isNull(project.contentFormatVersion)
+			: eq(
+					project.contentFormatVersion,
+					expectedIdentity.contentFormatVersion,
+			  ),
+	];
+
+	if (requireExpectedProductLinkage) {
+		conditions.push(isNotNull(project.productId));
+	}
+
+	return conditions;
+}
 
 function projectIdentityReadModel(input: PersistedProjectIdentityState) {
 	const isDeterministicLegacy =
@@ -358,29 +387,46 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 		listProjects({ workspaceId }) {
 			return listProjectDetails(workspaceId);
 		},
-		async updateProjectBundle({ actor, input, identity }) {
+		async updateProjectBundle({ actor, input, identityUpdate }) {
 			const didUpdate = await db.transaction(async (transaction) => {
+				const identityValues =
+					identityUpdate.strategy === "set"
+						? {
+								contentType: identityUpdate.desiredIdentity.contentType,
+								creationPath: identityUpdate.desiredIdentity.creationPath,
+								contentFormatKey:
+									identityUpdate.desiredIdentity.contentFormat.key,
+								contentFormatVersion:
+									identityUpdate.desiredIdentity.contentFormat.version,
+						  }
+						: {};
+				const expectedConditions = expectedIdentityConditions(
+					identityUpdate.expectedIdentity,
+					identityUpdate.strategy === "set" &&
+						identityUpdate.requireExpectedProductLinkage,
+				);
+
 				const [updatedProject] = await transaction
 					.update(project)
 					.set({
 						name: input.name,
 						productId: input.productId,
-						contentType: identity.contentType,
-						creationPath: identity.creationPath,
-						contentFormatKey: identity.contentFormat.key,
-						contentFormatVersion: identity.contentFormat.version,
+						...identityValues,
 						updatedAt: new Date(),
 					})
 					.where(
 						and(
 							eq(project.id, input.id),
 							eq(project.workspaceId, actor.workspaceId),
+							...expectedConditions,
 						),
 					)
 					.returning({ id: project.id });
 
 				if (!updatedProject) {
-					return false;
+					throw new ProjectServiceError("INVALID_PROJECT_WRITE_IDENTITY", {
+						reasonCode: "PROJECT_IDENTITY_CHANGED_DURING_UPDATE",
+					});
 				}
 
 				await transaction
