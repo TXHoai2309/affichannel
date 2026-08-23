@@ -14,6 +14,7 @@ export * from "./project/legacy-affiliate-compatibility";
 export * from "./project/project-service";
 export * from "./project/project-types";
 export * from "./project/project-validation";
+export * from "./project/project-write-contract";
 export * from "./script-generation/canonical-json";
 export * from "./script-generation/errors";
 export * from "./script-generation/input-contract";

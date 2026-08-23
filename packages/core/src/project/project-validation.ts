@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { productNameSchema } from "../product/validation";
 import { CONTENT_BRIEF_PLATFORMS } from "./project-types";
+import { projectWriteIdentityInputSchema } from "./project-write-contract";
 
 export const projectNameSchema = z
 	.string()
@@ -38,9 +39,11 @@ export const projectContentBriefFieldsSchema = z.object({
 		.optional(),
 });
 
-export const createProjectInputSchema = projectContentBriefFieldsSchema;
+export const createProjectInputSchema = projectContentBriefFieldsSchema.extend(
+	projectWriteIdentityInputSchema.shape,
+);
 
-export const updateProjectInputSchema = projectContentBriefFieldsSchema.extend({
+export const updateProjectInputSchema = createProjectInputSchema.extend({
 	id: projectIdSchema,
 });
 
