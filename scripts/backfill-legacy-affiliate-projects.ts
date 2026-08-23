@@ -69,6 +69,43 @@ export type BackfillTestHooks = {
 	}) => Promise<void>;
 };
 
+function isApplyTarget(value: unknown): value is ApplyTarget {
+	return value === "disposable" || value === "production";
+}
+
+function validateExecutionInvariants(options: BackfillCliOptions): void {
+	if (options.mode !== "dry-run" && options.mode !== "apply") {
+		throw new Error("REFUSED: execution mode must equal dry-run or apply.");
+	}
+	if (options.mode === "apply") {
+		if (!isApplyTarget(options.target)) {
+			throw new Error(
+				"REFUSED: apply execution requires target disposable or production.",
+			);
+		}
+		if (
+			typeof options.outputRoot !== "string" ||
+			options.outputRoot.trim().length === 0
+		) {
+			throw new Error(
+				"REFUSED: apply execution requires an explicit outputRoot.",
+			);
+		}
+	} else if (options.target !== undefined) {
+		throw new Error(
+			"REFUSED: dry-run execution cannot specify an apply target.",
+		);
+	}
+	if (
+		options.testFailAfterBatch !== undefined &&
+		process.env.NODE_ENV !== "test"
+	) {
+		throw new Error(
+			"REFUSED: testFailAfterBatch is available only when NODE_ENV=test.",
+		);
+	}
+}
+
 function parsePositiveInteger(value: string, flag: string): number {
 	const parsed = Number(value);
 	if (!Number.isInteger(parsed) || parsed <= 0 || parsed > MAX_BATCH_SIZE) {
@@ -158,8 +195,19 @@ function requireDatabaseAuthority(options: BackfillCliOptions) {
 	const expected =
 		options.mode === "dry-run"
 			? DRY_RUN_CONFIRMATION
-			: APPLY_CONFIRMATIONS[options.target as ApplyTarget];
-	if (process.env[DATABASE_CONFIRM_ENV] !== expected) {
+			: isApplyTarget(options.target)
+				? APPLY_CONFIRMATIONS[options.target]
+				: undefined;
+	if (!expected) {
+		throw new Error(
+			"REFUSED: no exact database confirmation exists for this execution target.",
+		);
+	}
+	const confirmation = process.env[DATABASE_CONFIRM_ENV]?.trim();
+	if (!confirmation) {
+		throw new Error(`REFUSED: ${DATABASE_CONFIRM_ENV} is required.`);
+	}
+	if (confirmation !== expected) {
 		throw new Error(
 			`REFUSED: ${DATABASE_CONFIRM_ENV} must equal ${expected} for ${options.mode}${options.target ? ` target ${options.target}` : ""}.`,
 		);
@@ -177,6 +225,18 @@ function requireDatabaseAuthority(options: BackfillCliOptions) {
 	) {
 		throw new Error(
 			`REFUSED: ${DATABASE_URL_ENV} must identify an explicit PostgreSQL database.`,
+		);
+	}
+	const normalizedHostname = parsed.hostname
+		.toLowerCase()
+		.replace(/^\[(.*)\]$/u, "$1");
+	if (
+		options.mode === "apply" &&
+		options.target === "disposable" &&
+		!new Set(["localhost", "127.0.0.1", "::1"]).has(normalizedHostname)
+	) {
+		throw new Error(
+			"REFUSED: disposable apply target requires a local loopback PostgreSQL host.",
 		);
 	}
 	return { url, host: parsed.host };
@@ -284,6 +344,7 @@ export async function runLegacyAffiliateBackfill(
 	options: BackfillCliOptions,
 	hooks: BackfillTestHooks = {},
 ): Promise<{ runDirectory: string; counts: InventoryCounts }> {
+	validateExecutionInvariants(options);
 	validateRegistry();
 	const authority = requireDatabaseAuthority(options);
 	const runId = randomUUID();

@@ -4,6 +4,7 @@ import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createNodePostgresPool } from "../packages/db/src/node-postgres-test-adapter.ts";
+import type { BackfillCliOptions } from "./backfill-legacy-affiliate-projects.ts";
 import { runLegacyAffiliateBackfill } from "./backfill-legacy-affiliate-projects.ts";
 import { requireBackfillTestDatabaseAuthority } from "./backfill-test-database-authority.ts";
 
@@ -54,8 +55,10 @@ function runCli(args: string[], overrides: NodeJS.ProcessEnv) {
 async function withApplyAuthority<T>(action: () => Promise<T>): Promise<T> {
 	const previousUrl = process.env[APPLY_URL_ENV];
 	const previousConfirm = process.env[APPLY_CONFIRM_ENV];
+	const previousNodeEnv = process.env.NODE_ENV;
 	process.env[APPLY_URL_ENV] = databaseUrl;
 	process.env[APPLY_CONFIRM_ENV] = "DISPOSABLE_BACKFILL_DB_CONFIRMED";
+	process.env.NODE_ENV = "test";
 	try {
 		return await action();
 	} finally {
@@ -63,7 +66,52 @@ async function withApplyAuthority<T>(action: () => Promise<T>): Promise<T> {
 		else process.env[APPLY_URL_ENV] = previousUrl;
 		if (previousConfirm === undefined) delete process.env[APPLY_CONFIRM_ENV];
 		else process.env[APPLY_CONFIRM_ENV] = previousConfirm;
+		if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+		else process.env.NODE_ENV = previousNodeEnv;
 	}
+}
+
+async function withExecutionEnvironment<T>(
+	overrides: NodeJS.ProcessEnv,
+	action: () => Promise<T>,
+): Promise<T> {
+	const previousUrl = process.env[APPLY_URL_ENV];
+	const previousConfirm = process.env[APPLY_CONFIRM_ENV];
+	const previousNodeEnv = process.env.NODE_ENV;
+	delete process.env[APPLY_URL_ENV];
+	delete process.env[APPLY_CONFIRM_ENV];
+	for (const [key, value] of Object.entries(overrides)) {
+		if (value !== undefined) process.env[key] = value;
+	}
+	try {
+		return await action();
+	} finally {
+		if (previousUrl === undefined) delete process.env[APPLY_URL_ENV];
+		else process.env[APPLY_URL_ENV] = previousUrl;
+		if (previousConfirm === undefined) delete process.env[APPLY_CONFIRM_ENV];
+		else process.env[APPLY_CONFIRM_ENV] = previousConfirm;
+		if (previousNodeEnv === undefined) delete process.env.NODE_ENV;
+		else process.env.NODE_ENV = previousNodeEnv;
+	}
+}
+
+async function expectDirectRefused(
+	options: BackfillCliOptions,
+	environment: NodeJS.ProcessEnv,
+	expectedMessage: string,
+): Promise<void> {
+	let observed = "";
+	await withExecutionEnvironment(environment, async () => {
+		try {
+			await runLegacyAffiliateBackfill(options);
+		} catch (error) {
+			observed = error instanceof Error ? error.message : String(error);
+		}
+	});
+	assert(
+		observed.includes(expectedMessage),
+		`Direct invocation was not refused with ${expectedMessage}; observed=${observed || "none"}.`,
+	);
 }
 
 async function newOutputRoot(label: string): Promise<string> {
@@ -184,6 +232,90 @@ try {
 	await insertProject({ id: authorityCandidate, productId });
 	const authorityBefore = await projectState(authorityCandidate);
 	const refusalOutput = await newOutputRoot("refusal");
+	await expectDirectRefused(
+		{ mode: "apply", batchSize: 10 },
+		{ AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl, NODE_ENV: "test" },
+		"apply execution requires target",
+	);
+	await expectDirectRefused(
+		{
+			mode: "apply",
+			batchSize: 10,
+			outputRoot: refusalOutput,
+		},
+		{
+			AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+			AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "DISPOSABLE_BACKFILL_DB_CONFIRMED",
+			NODE_ENV: "test",
+		},
+		"apply execution requires target",
+	);
+	await expectDirectRefused(
+		{ mode: "apply", target: "disposable", batchSize: 10 },
+		{
+			AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+			AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "DISPOSABLE_BACKFILL_DB_CONFIRMED",
+			NODE_ENV: "test",
+		},
+		"explicit outputRoot",
+	);
+	await expectDirectRefused(
+		{
+			mode: "apply",
+			target: "disposable",
+			batchSize: 10,
+			outputRoot: refusalOutput,
+		},
+		{ AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl, NODE_ENV: "test" },
+		"AFFICHANNEL_BACKFILL_DATABASE_CONFIRM is required",
+	);
+	await expectDirectRefused(
+		{
+			mode: "apply",
+			target: "disposable",
+			batchSize: 10,
+			outputRoot: refusalOutput,
+		},
+		{
+			AFFICHANNEL_BACKFILL_DATABASE_URL:
+				"postgresql://db.example.invalid/affichannel",
+			AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "DISPOSABLE_BACKFILL_DB_CONFIRMED",
+			NODE_ENV: "test",
+		},
+		"local loopback PostgreSQL host",
+	);
+	await expectDirectRefused(
+		{
+			mode: "apply",
+			target: "disposable",
+			batchSize: 10,
+			outputRoot: refusalOutput,
+			testFailAfterBatch: 1,
+		},
+		{
+			AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+			AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "DISPOSABLE_BACKFILL_DB_CONFIRMED",
+			NODE_ENV: "production",
+		},
+		"available only when NODE_ENV=test",
+	);
+	assert(
+		(await readdir(refusalOutput)).length === 0,
+		"A refused direct invocation prepared output or attempted execution.",
+	);
+	const directDryRun = await withExecutionEnvironment(
+		{
+			AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+			AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "BACKFILL_DRY_RUN_CONFIRMED",
+			NODE_ENV: "test",
+		},
+		() =>
+			runLegacyAffiliateBackfill({
+				mode: "dry-run",
+				batchSize: 10,
+			}),
+	);
+	await rm(directDryRun.runDirectory, { recursive: true, force: true });
 	const refusalCases: Array<[string, string[], NodeJS.ProcessEnv, string]> = [
 		[
 			"dry-run confirmation",
