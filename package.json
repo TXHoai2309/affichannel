@@ -15,6 +15,7 @@
 		"db:studio": "turbo run db:studio -F @affichannel/db",
 		"db:generate": "turbo run db:generate -F @affichannel/db",
 		"db:migrate": "turbo run db:migrate -F @affichannel/db",
+		"validate:integration:project-channel-first-m1": "tsx scripts/validate-project-channel-first-m1.ts",
 		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
 		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
 		"test:integration:project-channel-first-m1": "tsx scripts/test-project-channel-first-m1.ts",

@@ -1,12 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
-import { resolve } from "node:path";
 import type { ScriptVersionEditableSnapshot } from "@affichannel/core";
-import dotenv from "dotenv";
+import { configureIntegrationEnvironment } from "./test-environment.ts";
 
-dotenv.config({
-	path: resolve(process.cwd(), "apps/web/.env"),
-	override: true,
-});
+configureIntegrationEnvironment();
 
 const { SCRIPT_OUTPUT_SCHEMA_VERSION, scriptGenerationSections } = await import(
 	"@affichannel/core"

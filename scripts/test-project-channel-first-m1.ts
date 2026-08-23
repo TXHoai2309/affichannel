@@ -1,20 +1,15 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import dotenv from "dotenv";
 
-const testDatabaseUrl = process.env.AFFICHANNEL_M1_TEST_DATABASE_URL;
+const testDatabaseUrl = process.env.AFFICHANNEL_M1_TEST_DATABASE_URL?.trim();
 if (!testDatabaseUrl) {
-	console.log(
+	console.error(
 		"NOT RUN: set AFFICHANNEL_M1_TEST_DATABASE_URL to an approved disposable/test database.",
 	);
-	process.exit(0);
+	process.exit(1);
 }
 
-dotenv.config({
-	path: resolve(process.cwd(), "apps/web/.env"),
-	override: true,
-});
 process.env.DATABASE_URL = testDatabaseUrl;
+process.env.DATABASE_URL_DIRECT = testDatabaseUrl;
 process.env.NODE_ENV = "test";
 
 const { contentBrief, db, product, project, user, workspace } = await import(

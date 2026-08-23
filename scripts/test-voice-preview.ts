@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
 import type {
 	FactLockInputSnapshot,
 	ScriptVersionEditableSnapshot,
 } from "@affichannel/core";
-import dotenv from "dotenv";
+import { configureIntegrationEnvironment } from "./test-environment.ts";
 
-dotenv.config({
-	path: resolve(process.cwd(), "apps/web/.env"),
-	override: true,
-});
+configureIntegrationEnvironment();
 
 const { eq, inArray } = await import("drizzle-orm");
 const {

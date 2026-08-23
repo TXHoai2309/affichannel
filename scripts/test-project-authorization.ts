@@ -1,11 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { resolve } from "node:path";
-import dotenv from "dotenv";
+import { configureIntegrationEnvironment } from "./test-environment.ts";
 
-dotenv.config({
-	path: resolve(process.cwd(), "apps/web/.env"),
-	override: true,
-});
+configureIntegrationEnvironment();
 
 const { contentBrief, db, product, project, user, workspace, workspaceMember } =
 	await import("@affichannel/db");
