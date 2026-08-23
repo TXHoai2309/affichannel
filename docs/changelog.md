@@ -8,6 +8,19 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Canonical backlog reassignment AFF-US-013–030
+
+- Thêm DEC-027: giữ nguyên implementation/acceptance history `AFF-US-001–012`;
+  supersede definitions pre-v0.8 của `AFF-US-013–030` trước implementation và tái
+  sử dụng liên tục các ID này cho canonical Channel-First backlog.
+- Thêm bảng 18 User Story canonical `AFF-US-013–030` vào roadmap và khóa ranh giới
+  giữa Project capability/creation UX, Applicability Resolver/adaptive UI và
+  ContentFormat/composition implementation.
+- Sửa nhãn roadmap để `AFF-US-013–020` cũ không còn bị hiểu nhầm là historical
+  completed work. Chỉ `AFF-US-001–012` là implemented/golden baseline.
+- Đây là thay đổi backlog/document contract; không sửa code, schema, migration,
+  API, UI hoặc test và không overwrite completion history.
+
 ### Domain Evolution Preparation / Phase 0
 
 - Thêm DEC-026, khóa ContentFormat là versioned server-owned preset với identity
@@ -30,8 +43,9 @@ sử dụng Semantic Versioning.
 - Làm rõ current execution roadmap theo thứ tự Freeze US12 → Domain Evolution →
   ClaimManifest/Fact Lock → Quick Image → Channel-first UI → Library/Calendar →
   Analytics → AI Visual.
-- Đánh dấu các slice affiliate-first cũ là historical/golden baseline, không phải
-  current execution order; không sửa acceptance history AFF-US-008–012.
+- Đánh dấu implementation `AFF-US-001–012` là historical/golden baseline, không
+  phải current execution order; definitions `AFF-US-013–030` cũ sau đó được xác
+  nhận là unimplemented và superseded bởi DEC-027.
 - Đồng bộ Architecture với `packages/core` và `VoiceAudioStorage` local/private-R2
   đã tồn tại, đồng thời giữ Media Library/render storage là target theo slice sau.
 - Tại thời điểm finalization, ContentFormat được ghi nhận là blocker trước M1;

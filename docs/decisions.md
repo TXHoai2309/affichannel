@@ -11,6 +11,44 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-027 — Supersede và tái sử dụng backlog ID AFF-US-013–030
+
+- Trạng thái: Đã chấp nhận
+- Ngày: 2026-08-22
+- Liên quan: DEC-025, canonical roadmap v0.8
+
+### Bối cảnh
+
+Implementation và acceptance history thực tế mới hoàn thành đến `AFF-US-012`.
+Các định nghĩa pre-v0.8 mang ID `AFF-US-013–030` trong roadmap/Lark chỉ là backlog
+cũ chưa triển khai: không có completed acceptance, migration hoặc source change
+được ghi nhận cho các story đó. Giữ các định nghĩa cũ chỉ để bảo toàn số thứ tự sẽ
+tạo khoảng trống và buộc canonical backlog nhảy ID không cần thiết.
+
+### Quyết định
+
+> Pre-v0.8 definitions of AFF-US-013–030 are superseded before implementation.
+> Their IDs are retained and reassigned to the v0.8 Channel-First backlog. No
+> completed implementation history is overwritten.
+
+- `AFF-US-001–012` giữ nguyên ID, definition và implementation/acceptance history.
+- Định nghĩa pre-v0.8 của `AFF-US-013–030` mất hiệu lực trước implementation;
+  không được dùng làm current scope hoặc acceptance source.
+- `AFF-US-013–030` được gán lại liên tục cho 18 User Story canonical v0.8 theo
+  bảng trong `docs/roadmap.md`.
+- Snapshot roadmap/Lark cũ có thể được giữ làm planning history nhưng phải mang
+  nhãn `superseded before implementation`, không phải historical completed work.
+- Từ quyết định này, commit, branch, migration plan, acceptance evidence và tài
+  liệu story mới dùng definition v0.8 tương ứng với ID đã gán lại.
+
+### Hệ quả
+
+- Không đánh lại số hoặc sửa lịch sử hoàn thành của `AFF-US-001–012`.
+- Không có implementation history nào bị overwrite vì range cũ `013–030` chưa
+  từng được triển khai.
+- Việc tái gán ID chỉ đổi backlog/document contract; không ngụ ý code, schema hay
+  migration của `AFF-US-013–030` đã tồn tại.
+
 ## DEC-026 — ContentFormat registry, identity và migration contract
 
 - Trạng thái: Đã chấp nhận
@@ -102,7 +140,9 @@ Affiliate.
 
 ### Version semantics
 
-- `(key, version)` là immutable identity; version là integer bắt đầu từ 1.
+- Mỗi `key` đại diện một format family và có thể có nhiều version. Chỉ
+  `(key, version)` là immutable unique identity; version là integer bắt đầu từ 1
+  và không được trùng trong cùng key.
 - Thay đổi cấu trúc, semantic preset, validation hoặc default ảnh hưởng generated/
   rendered output phải tạo version mới; không mutate version cũ.
 - Sửa label, description, icon hoặc copy cosmetic không làm thay semantic output
@@ -120,7 +160,11 @@ Affiliate.
 - Backfill không thay Product, Script, FactLockRun, Voice artifact,
   `project_step_status` hoặc `currentStepKey`.
 - M3 dual read/write: all-null legacy row được compatibility adapter project thành
-  default legacy triple; partial/invalid pair là unresolved và fail closed.
+  default legacy triple với `isLegacyProjection=true` hoặc metadata provenance
+  tương đương. Partial ref trả `unsupported` với
+  `reasonCode=PARTIAL_CONTENT_FORMAT_REF`; version không hợp lệ trả `unsupported`
+  với `reasonCode=INVALID_CONTENT_FORMAT_VERSION`. Legacy provenance không được
+  overload `resolution`.
 - M5 enforce, sau M4 resolver shadow: khi zero legacy-null/invalid row được chứng
   minh, đặt hai cột
   `NOT NULL` nhưng vẫn không đặt database default; server default là authority.
@@ -159,7 +203,8 @@ workflow state.
 
 ### Acceptance cho implementation sau
 
-- key và `(key, version)` unique; version dương;
+- mỗi key là một format family có thể có nhiều version; chỉ `(key, version)`
+  unique, version không trùng trong cùng key và luôn dương;
 - mỗi MVP CreationPath có đúng một default active và default support path đó;
 - legacy backfill target tồn tại và old versions còn resolve được;
 - invalid key/version và format/path mismatch bị từ chối;

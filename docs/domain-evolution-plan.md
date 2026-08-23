@@ -100,12 +100,19 @@ trong Phase 0.
 
 1. Thêm `content_type`, `creation_path`, `content_format_key` và
    `content_format_version` ở trạng thái nullable; hai format columns phải cùng
-   null hoặc cùng hợp lệ với version dương.
+   null hoặc cùng hợp lệ với version dương. Đổi `project.product_id` từ `NOT NULL`
+   sang nullable nhưng giữ nguyên FK, `ON DELETE RESTRICT` và
+   `project_product_id_idx`.
 2. Không đặt DB default và không thêm index riêng cho ContentFormat; chưa đổi
    read/write mặc định.
-3. Chuẩn bị `claim_manifest` và cột Manifest provenance cho FactLockRun theo
-   `docs/claim-manifest-fact-lock-contract.md` trong migration riêng.
-4. Không drop/rename cột, không rewrite FactLockRun lịch sử.
+3. Bổ sung M1 compatibility-read foundation cho các field nullable: all-null read
+   được, không mutate, không auto-upgrade và không project legacy triple trước M3;
+   golden Affiliate regression phải tiếp tục đạt.
+4. Migration/slice `AFF-US-013` M1 chỉ expand Project domain; không tạo
+   `claim_manifest` hoặc Manifest provenance cho FactLockRun. ClaimManifest vẫn
+   thuộc Domain Evolution tổng thể nhưng được triển khai riêng trong
+   `AFF-US-017 — ClaimManifest Foundation`.
+5. Không drop/rename cột, không rewrite FactLockRun lịch sử.
 
 ### M2 — Backfill có thể tiếp tục
 
@@ -118,7 +125,10 @@ trong Phase 0.
 ### M3 — Dual-read/compatible write
 
 1. Read model hiểu cả row chưa backfill và row mới; all-null legacy row được
-   project thành legacy triple, partial/invalid format pair trả unresolved.
+   project thành legacy triple với `isLegacyProjection=true` hoặc metadata
+   provenance tương đương. Partial format ref trả `unsupported` với
+   `reasonCode=PARTIAL_CONTENT_FORMAT_REF`; version không hợp lệ trả `unsupported`
+   với `reasonCode=INVALID_CONTENT_FORMAT_VERSION`.
 2. New write luôn ghi Content Type/Creation Path và ContentFormat ref hợp lệ.
    Create thiếu format dùng server default; supplied ref phải tồn tại/active và
    support CreationPath.

@@ -25,7 +25,9 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ### ContentFormat registry contract
 
-- [ ] Mọi key và cặp `(key, version)` là duy nhất; version là số nguyên dương.
+- [ ] Mỗi key đại diện một format family và có thể có nhiều version; chỉ cặp
+  `(key, version)` là duy nhất, version không trùng trong cùng key và là số nguyên
+  dương.
 - [ ] Mỗi MVP CreationPath có đúng một active default và default đó support path.
 - [ ] `SCRIPTED_STANDARD v1` tồn tại làm legacy backfill target; version cũ hoặc
   deprecated còn được resolve để đọc Project đã pin.
@@ -36,6 +38,12 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   server không silently rewrite.
 - [ ] Unknown reference vẫn trả raw `(key, version)`, Project page không crash,
   không fallback latest và action cần definition bị block có kiểm soát.
+- [ ] Partial ContentFormat ref trả `unsupported` với
+  `reasonCode=PARTIAL_CONTENT_FORMAT_REF`; version không hợp lệ trả `unsupported`
+  với `reasonCode=INVALID_CONTENT_FORMAT_VERSION`.
+- [ ] ContentFormat resolution chỉ dùng `resolved | deprecated | unsupported`;
+  legacy provenance dùng metadata riêng như `isLegacyProjection`, không overload
+  resolution.
 - [ ] Registry không chứa Product/Script/Fact Lock/Voice/Render applicability rule.
 - [ ] Expand M1 dùng nullable pair có whole-pair integrity, không DB default và
   không index format riêng.

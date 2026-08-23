@@ -66,6 +66,7 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 			"Project không tồn tại trong workspace.",
 		);
 	}
+	const productId = projectRecord.productId;
 
 	const [currentScript] = await db
 		.select({
@@ -84,6 +85,15 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 		.orderBy(desc(scriptVersion.updatedAt), desc(scriptVersion.id))
 		.limit(1);
 
+	const currentScriptVersion = currentScript
+		? {
+				id: currentScript.id,
+				revision: currentScript.revision,
+				snapshot:
+					currentScript.editableSnapshotJson as ScriptVersionEditableSnapshot,
+			}
+		: null;
+
 	const runs = await db
 		.select()
 		.from(factLockRun)
@@ -97,15 +107,22 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 
 	if (runs.length === 0) {
 		return {
-			currentScriptVersion: currentScript
-				? {
-						id: currentScript.id,
-						revision: currentScript.revision,
-						snapshot:
-							currentScript.editableSnapshotJson as ScriptVersionEditableSnapshot,
-					}
-				: null,
+			currentScriptVersion,
 			runs: [],
+		};
+	}
+
+	if (productId === null) {
+		return {
+			currentScriptVersion,
+			runs: runs.map((run) => ({
+				id: run.id,
+				scriptVersionId: run.scriptVersionId,
+				sourceScriptRevision: run.sourceScriptRevision,
+				status: run.status as FactLockRunStatus,
+				dependenciesCurrent: false,
+				createdAt: run.createdAt,
+			})),
 		};
 	}
 
@@ -147,20 +164,13 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 					.where(
 						and(
 							eq(productFact.workspaceId, actor.workspaceId),
-							eq(productFact.productId, projectRecord.productId),
+							eq(productFact.productId, productId),
 							inArray(productFact.id, factIds),
 						),
 					);
 
 	return {
-		currentScriptVersion: currentScript
-			? {
-					id: currentScript.id,
-					revision: currentScript.revision,
-					snapshot:
-						currentScript.editableSnapshotJson as ScriptVersionEditableSnapshot,
-				}
-			: null,
+		currentScriptVersion,
 		runs: runs.map((run) => ({
 			id: run.id,
 			scriptVersionId: run.scriptVersionId,
@@ -170,7 +180,7 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 				run,
 				dependencyByRun.get(run.id) ?? [],
 				facts,
-				projectRecord.productId,
+				productId,
 			),
 			createdAt: run.createdAt,
 		})),

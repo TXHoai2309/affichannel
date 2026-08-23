@@ -4,6 +4,21 @@
   M1 READY for review nhưng implementation/ClaimManifest/Quick Image chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-22
 
+## 2026-08-22 — Tái gán canonical backlog AFF-US-013–030
+
+Chủ dự án xác nhận implementation thực tế mới hoàn thành đến `AFF-US-012`; các
+definition `AFF-US-013–030` pre-v0.8 trong roadmap/Lark chỉ là backlog chưa triển
+khai. DEC-027 đã supersede các definition đó trước implementation, giữ nguyên ID
+và tái gán liên tục cho 18 User Story Channel-First canonical v0.8. Không có
+completed implementation history bị overwrite.
+
+Roadmap hiện có bảng source of truth `AFF-US-013–030`, đồng thời phân biệt rõ
+implemented/golden baseline `AFF-US-001–012` với superseded planning context.
+Ranh giới overlap được khóa giữa Project domain capability và creation UX,
+Applicability Resolver và adaptive workflow UI, ContentFormat và composition
+implementation. Không sửa code/schema/migration/API/UI/test, không commit/push/
+deploy và không thay migration head `0016_gifted_microbe.sql`.
+
 ## 2026-08-22 — Domain Evolution Preparation / Phase 0
 
 Đã audit canonical docs và source hiện tại cho Project schema/repository/service,
@@ -39,9 +54,11 @@ paid provider và không commit/push/merge/deploy.
 
 ## 2026-08-22 — Finalize bộ tài liệu canonical v0.8
 
-Đã đưa `CURRENT EXECUTION ORDER — CANONICAL v0.8` lên đầu roadmap và đánh dấu
-toàn bộ slice affiliate-first cũ là historical/golden baseline. Thứ tự công việc
-mới là Freeze US12 → Domain Evolution → ClaimManifest/Fact Lock → Quick Image →
+Đã đưa `CURRENT EXECUTION ORDER — CANONICAL v0.8` lên đầu roadmap. Tại thời điểm
+này các slice affiliate-first cũ được mô tả chung là historical/golden; DEC-027
+sau đó làm rõ chỉ `AFF-US-001–012` đã implement, còn definitions
+`AFF-US-013–030` cũ là backlog chưa triển khai đã superseded. Thứ tự công việc mới
+là Freeze US12 → Domain Evolution → ClaimManifest/Fact Lock → Quick Image →
 Channel-first UI → Library/Calendar → Analytics → AI Visual.
 
 Architecture đã phản ánh `packages/core` đang được sử dụng và VoiceSegment đã có

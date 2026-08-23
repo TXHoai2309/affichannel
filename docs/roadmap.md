@@ -6,9 +6,10 @@
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
-Đây là thứ tự duy nhất dùng để chọn công việc mới. Các Slice/AFF-US
-affiliate-first bên dưới được giữ nguyên làm historical/golden baseline; **không
-tiếp tục triển khai backlog mới theo thứ tự các slice lịch sử đó**.
+Đây là thứ tự duy nhất dùng để chọn công việc mới. Implementation/acceptance của
+`AFF-US-001–012` được giữ nguyên làm historical/golden baseline. Các định nghĩa
+pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã bị supersede;
+**không tiếp tục triển khai theo scope cũ**.
 
 1. Freeze US12 baseline.
 2. Domain Evolution.
@@ -27,6 +28,49 @@ trước khi có authorization triển khai M1.
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
 `docs/domain-evolution-acceptance.md`.
+
+## CANONICAL v0.8 BACKLOG — AFF-US-013–030
+
+Theo DEC-027:
+
+> Pre-v0.8 definitions of AFF-US-013–030 are superseded before implementation.
+> Their IDs are retained and reassigned to the v0.8 Channel-First backlog. No
+> completed implementation history is overwritten.
+
+| ID | Canonical User Story v0.8 |
+|---|---|
+| `AFF-US-013` | Là người dùng, tôi muốn tạo Project Organic hoặc Affiliate với CreationPath và ContentFormat phù hợp để có thể bắt đầu xây kênh mà không bị bắt buộc phải chọn Product cho mọi nội dung. |
+| `AFF-US-014` | Là người dùng, tôi muốn hệ thống tự xác định Product, Script, Fact Lock, Voice và các bước khác là bắt buộc, tùy chọn, không áp dụng hay đang bị chặn để workflow phù hợp với từng loại nội dung. |
+| `AFF-US-015` | Là người dùng, tôi muốn giao diện workflow tự thích ứng theo kết quả Applicability Resolver và phân biệt rõ bước cần làm, không cần làm và đang bị chặn để không phải đi qua các bước không liên quan. |
+| `AFF-US-016` | Là người dùng hiện tại, tôi muốn các Project Affiliate đã tạo trước canonical v0.8 tiếp tục hoạt động đúng sau khi hệ thống chuyển sang kiến trúc Channel-First để không mất dữ liệu hoặc phá workflow cũ. |
+| `AFF-US-017` | Là người dùng, tôi muốn các claim cần kiểm chứng được hệ thống tạo và lưu thành ClaimManifest bất biến để việc kiểm tra nội dung không còn phụ thuộc bắt buộc vào việc Project có ScriptVersion hay không. |
+| `AFF-US-018` | Là người dùng, tôi muốn Fact Lock kiểm tra claim từ ClaimManifest và liên kết chính xác với Product Facts khi applicable để cả nội dung có Script và không có Script đều được kiểm chứng nhất quán. |
+| `AFF-US-019` | Là người dùng, tôi muốn tạo nội dung Organic có Script mà không cần chọn Product để có thể làm video kiến thức, kể chuyện, chia sẻ, giải trí hoặc nội dung xây kênh trước khi triển khai Affiliate. |
+| `AFF-US-020` | Là người dùng, tôi muốn lưu và quản lý ảnh, video và audio trong một Media Library dùng chung để có thể tái sử dụng tài nguyên giữa Organic, Affiliate và các CreationPath khác nhau. |
+| `AFF-US-021` | Là người dùng, tôi muốn tạo một video dọc ngắn từ một ảnh bằng chuyển động local deterministic đơn giản để có thể sản xuất nhanh các video bình thường, nhẹ nhàng và tiết kiệm chi phí để xây kênh. |
+| `AFF-US-022` | Là người dùng, tôi muốn tùy chỉnh thời lượng, zoom, pan, crop, text và audio cho video tạo từ ảnh để có thể tạo nhiều biến thể nội dung từ cùng một tài nguyên. |
+| `AFF-US-023` | Là người dùng, tôi muốn hoàn thiện cả Organic và Affiliate video trong một Video Studio thống nhất theo các vùng Content, Resources, Compose và Export để không phải sử dụng các workflow dựng video riêng biệt. |
+| `AFF-US-024` | Là người dùng, tôi muốn theo dõi toàn bộ Organic và Affiliate Content theo ContentType, CreationPath, ContentFormat và trạng thái sản xuất để quản lý lịch sử nội dung trong cùng một thư viện. |
+| `AFF-US-025` | Là người dùng, tôi muốn thiết lập chiến lược kênh gồm niche, audience, content pillars, series, phong cách và các kiểu nội dung ưu tiên để AffiChannel có định hướng nhất quán khi hỗ trợ tôi xây kênh từ đầu. |
+| `AFF-US-026` | Là người dùng, tôi muốn lập kế hoạch nội dung 7/30 ngày dựa trên Channel Strategy, Pillars, Series và tỷ lệ Organic/Affiliate để duy trì lịch đăng đều và không biến kênh thành kênh chỉ đăng sản phẩm. |
+| `AFF-US-027` | Là người dùng, tôi muốn phân tích cả hiệu quả xây kênh và hiệu quả Affiliate theo ContentType, Pillar, Series, ContentFormat và Product để biết nội dung nào nên tiếp tục, điều chỉnh hoặc dùng để kiếm tiền. |
+| `AFF-US-028` | Là người dùng, tôi muốn có thể dùng provider AI để tạo hoặc làm chuyển động visual từ ảnh khi cần để tạo video sinh động hơn các chuyển động local deterministic. |
+| `AFF-US-029` | Là người dùng nội bộ, tôi muốn các provider AI, model, giới hạn chi phí và chính sách sử dụng được quản lý tập trung để có thể sử dụng AI mà không phát sinh chi phí ngoài dự kiến. |
+| `AFF-US-030` | Là người dùng nội bộ, tôi muốn theo dõi request AI, usage, lỗi, retry và các trạng thái không xác định để có thể phát hiện sự cố, phục hồi an toàn và tránh tạo trùng các tác vụ có tính phí. |
+
+Ranh giới tránh overlap:
+
+- `AFF-US-013` khóa capability/domain contract của Project và conditional Product;
+  `AFF-US-016` giữ compatibility cho legacy Affiliate trong rollout.
+- `AFF-US-014` là server-authoritative Applicability Resolver;
+  `AFF-US-015` là adaptive workflow presentation/navigation dùng resolver đó.
+- `AFF-US-017` sở hữu ClaimManifest foundation; `AFF-US-018` chuyển Fact Lock sang
+  Manifest-first mà không nhập hai lifecycle thành một.
+- Shared composition pipeline là technical enabler của Video Studio/Quick Image,
+  không phải ContentFormat hoặc một User Story thay thế.
+- `AFF-US-029` sở hữu provider governance/cost guardrails; `AFF-US-030` sở hữu
+  operational monitoring/recovery. Mọi story gọi paid provider phải đạt safety
+  acceptance liên quan trước khi bật provider.
 
 ## 1. Phương pháp triển khai
 
@@ -54,10 +98,11 @@ Slice chỉ bắt đầu khi có:
 - cách kiểm thử;
 - không còn quyết định chưa xử lý có thể làm thay đổi lớn implementation.
 
-## Historical Affiliate Baseline — Giai đoạn 0
+## Pre-v0.8 implementation baseline và backlog context
 
-> Historical — do not use as current execution order. Nội dung từ đây đến hết
-> Slice 9 phản ánh trình tự xây golden affiliate flow và được giữ để regression.
+> `AFF-US-001–012` là historical implemented/golden baseline và được giữ để
+> regression. Mọi definition pre-v0.8 của `AFF-US-013–030` trong phần planning cũ
+> là unimplemented backlog đã superseded theo DEC-027, không phải completion evidence.
 
 Kết quả: có cơ sở triển khai được thống nhất trước feature code.
 
@@ -251,9 +296,11 @@ Acceptance Criteria tuân theo `product-spec.md`. TTS và Render bị khóa nế
 version hiện tại chưa có run đạt. Chi tiết Phase 3 tại
 `docs/aff-us-010-phase-3-gate-runtime.md`.
 
-## Historical — Slice 8: Voice và media
+## Historical implemented — Slice 8: Voice
 
-Backlog liên quan: `AFF-US-011` đến `AFF-US-014`.
+Implementation history trong slice này chỉ thuộc `AFF-US-011–012`. Các definition
+pre-v0.8 từng dự kiến cho `AFF-US-013–014` chưa được triển khai và đã superseded
+trước implementation theo DEC-027.
 
 AFF-US-011 Phase 0 — Contract & Architecture Freeze đã được chấp nhận ngày
 2026-08-19. Capability probe xác nhận APIKEY.FUN relay được Grok/xAI TTS qua
@@ -331,14 +378,17 @@ Fact Lock hoặc Voice chưa đạt; thay đổi script/config không rollback c
 nhưng làm gate và persisted status phản ánh trạng thái cần xem lại. Chi tiết tại
 `docs/aff-us-012-phase-4-final-acceptance.md`.
 
-- Test TTS tiếng Việt bằng script đại diện.
-- Tạo voice theo segment và cache bằng normalized input hash.
-- Upload và validate media thật.
-- Gắn media và voice vào scene có thứ tự.
+- Test TTS tiếng Việt và segment voice cache thuộc acceptance đã hoàn thành của
+  `AFF-US-011–012`.
+- Upload/validate media và gắn media vào scene trong definition cũ của
+  `AFF-US-013–014` chưa được triển khai; scope mới nằm trong canonical backlog ở
+  đầu tài liệu.
 
-## Historical — Slice 9: Preview và render
+## Superseded before implementation — pre-v0.8 Slice 9: Preview và render
 
-Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
+Các definition pre-v0.8 từng gắn với `AFF-US-015–020` chỉ là backlog chưa triển
+khai và đã superseded theo DEC-027. Các bullet dưới đây được giữ như planning
+context cũ, không phải completed scope hoặc current acceptance source:
 
 - Scene editor tuần tự cố định.
 - Overlay, subtitle, CTA và audio preset cơ bản.
@@ -346,12 +396,14 @@ Backlog liên quan: `AFF-US-015` đến `AFF-US-020`.
 - Local worker riêng và persistent render job.
 - MP4 retry được và có render version history.
 
-MVP 0 hoàn thành khi slice này đạt end-to-end.
+Slice cũ chưa đạt end-to-end và không còn là current execution scope.
 
 ## Chuỗi kích hoạt canonical v0.8 — chi tiết
 
-Các slice 1–9 ở trên là lịch sử và golden affiliate baseline. Không đánh lại số
-story hoặc bulk rewrite implementation cũ. Công việc mới đi theo thứ tự phụ thuộc:
+Implementation/acceptance của `AFF-US-001–012` ở các slice trên là golden
+affiliate baseline. Definitions pre-v0.8 của `AFF-US-013–030` là unimplemented
+backlog đã superseded; numbering được tái gán theo DEC-027 mà không rewrite
+implementation history. Công việc mới đi theo thứ tự phụ thuộc:
 
 ### 1. Freeze baseline AFF-US-012
 

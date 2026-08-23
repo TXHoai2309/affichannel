@@ -1,3 +1,4 @@
+export * from "./content-format";
 export * from "./fact-lock";
 export * from "./product/product-errors";
 export * from "./product/product-types";
@@ -8,6 +9,7 @@ export * from "./product-fact/errors";
 export * from "./product-fact/freshness";
 export * from "./product-fact/types";
 export * from "./product-fact/validation";
+export * from "./project/channel-first-types";
 export * from "./project/project-service";
 export * from "./project/project-types";
 export * from "./project/project-validation";

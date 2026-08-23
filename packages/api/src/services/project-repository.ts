@@ -1,4 +1,10 @@
 import { randomUUID } from "node:crypto";
+import {
+	type ContentFormatReadModel,
+	type ContentType,
+	type CreationPath,
+	resolveContentFormatRef,
+} from "@affichannel/core";
 import type {
 	ProjectRepository,
 	ProjectWorkflowState,
@@ -20,6 +26,9 @@ import { and, desc, eq, isNull, or } from "drizzle-orm";
 export type ProjectDetails = {
 	id: string;
 	name: string;
+	contentType: ContentType | null;
+	creationPath: CreationPath | null;
+	contentFormat: ContentFormatReadModel | null;
 	product: {
 		id: string;
 		name: string;
@@ -42,7 +51,13 @@ export type ProjectDetails = {
 
 export type ProjectListItem = Pick<
 	ProjectDetails,
-	"id" | "name" | "currentStepKey" | "updatedAt"
+	| "id"
+	| "name"
+	| "contentType"
+	| "creationPath"
+	| "contentFormat"
+	| "currentStepKey"
+	| "updatedAt"
 > & {
 	product: ProjectDetails["product"];
 };
@@ -69,6 +84,10 @@ async function findProjectDetails(
 		.select({
 			id: project.id,
 			name: project.name,
+			contentType: project.contentType,
+			creationPath: project.creationPath,
+			contentFormatKey: project.contentFormatKey,
+			contentFormatVersion: project.contentFormatVersion,
 			currentStepKey: project.currentStepKey,
 			archivedAt: project.archivedAt,
 			updatedAt: project.updatedAt,
@@ -101,6 +120,12 @@ async function findProjectDetails(
 	return {
 		id: record.id,
 		name: record.name,
+		contentType: record.contentType as ContentType | null,
+		creationPath: record.creationPath as CreationPath | null,
+		contentFormat: resolveContentFormatRef(
+			record.contentFormatKey,
+			record.contentFormatVersion,
+		),
 		product: {
 			id: record.productId,
 			name: record.productName,
@@ -129,6 +154,10 @@ export async function listProjectItems(
 		.select({
 			id: project.id,
 			name: project.name,
+			contentType: project.contentType,
+			creationPath: project.creationPath,
+			contentFormatKey: project.contentFormatKey,
+			contentFormatVersion: project.contentFormatVersion,
 			currentStepKey: project.currentStepKey,
 			updatedAt: project.updatedAt,
 			productId: product.id,
@@ -144,6 +173,12 @@ export async function listProjectItems(
 			records.map((record) => ({
 				id: record.id,
 				name: record.name,
+				contentType: record.contentType as ContentType | null,
+				creationPath: record.creationPath as CreationPath | null,
+				contentFormat: resolveContentFormatRef(
+					record.contentFormatKey,
+					record.contentFormatVersion,
+				),
 				currentStepKey: record.currentStepKey as ProjectStepKey,
 				updatedAt: record.updatedAt,
 				product: { id: record.productId, name: record.productName },

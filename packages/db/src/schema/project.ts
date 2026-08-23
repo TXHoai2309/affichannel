@@ -21,9 +21,13 @@ export const project = pgTable(
 			.notNull()
 			.references(() => workspace.id, { onDelete: "cascade" }),
 		name: text("name").notNull(),
-		productId: text("product_id")
-			.notNull()
-			.references(() => product.id, { onDelete: "restrict" }),
+		productId: text("product_id").references(() => product.id, {
+			onDelete: "restrict",
+		}),
+		contentType: text("content_type"),
+		creationPath: text("creation_path"),
+		contentFormatKey: text("content_format_key"),
+		contentFormatVersion: integer("content_format_version"),
 		currentStepKey: text("current_step_key").notNull(),
 		createdByUserId: text("created_by_user_id")
 			.notNull()
@@ -38,6 +42,26 @@ export const project = pgTable(
 			.notNull(),
 	},
 	(table) => [
+		check(
+			"project_content_type_check",
+			sql`${table.contentType} is null or ${table.contentType} in ('ORGANIC', 'AFFILIATE')`,
+		),
+		check(
+			"project_creation_path_check",
+			sql`${table.creationPath} is null or ${table.creationPath} in ('QUICK_IMAGE', 'SCRIPTED', 'MEDIA_FIRST')`,
+		),
+		check(
+			"project_content_format_pair_check",
+			sql`(
+				(${table.contentFormatKey} is null and ${table.contentFormatVersion} is null)
+				or
+				(
+					${table.contentFormatKey} is not null
+					and ${table.contentFormatVersion} is not null
+					and ${table.contentFormatVersion} > 0
+				)
+			)`,
+		),
 		check(
 			"project_current_step_key_check",
 			sql`${table.currentStepKey} in ('product', 'content', 'fact-lock', 'voice', 'video', 'preview', 'completed')`,

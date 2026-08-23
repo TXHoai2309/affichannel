@@ -17,6 +17,7 @@
 		"db:migrate": "turbo run db:migrate -F @affichannel/db",
 		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",
 		"test:integration:project-auth": "tsx scripts/test-project-authorization.ts",
+		"test:integration:project-channel-first-m1": "tsx scripts/test-project-channel-first-m1.ts",
 		"test:integration:product": "tsx scripts/test-product-management.ts",
 		"test:integration:product-facts": "tsx scripts/test-product-facts.ts",
 		"test:integration:product-fact-freshness": "tsx scripts/test-product-fact-freshness.ts",
@@ -53,7 +54,7 @@
 		"@biomejs/biome": "^2.5.6",
 		"@types/node": "^22.20.1",
 		"tsx": "^4.23.1",
-		"turbo": "^2.10.7",
+		"turbo": "^2.10.11",
 		"typescript": "catalog:",
 		"vercel": "^58.1.0"
 	},
