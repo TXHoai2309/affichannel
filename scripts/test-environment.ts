@@ -9,6 +9,14 @@ export function configureIntegrationEnvironment(): void {
 			"REFUSED: set AFFICHANNEL_M1_TEST_DATABASE_URL to an approved disposable/test database.",
 		);
 	}
+	if (
+		process.env.AFFICHANNEL_M1_TEST_DATABASE_CONFIRM !==
+		"DISPOSABLE_DB_CONFIRMED"
+	) {
+		throw new Error(
+			"REFUSED: AFFICHANNEL_M1_TEST_DATABASE_CONFIRM must equal DISPOSABLE_DB_CONFIRMED.",
+		);
+	}
 
 	process.env.DATABASE_URL = testDatabaseUrl;
 	process.env.DATABASE_URL_DIRECT = testDatabaseUrl;

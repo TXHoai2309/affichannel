@@ -4,9 +4,11 @@ import { configureIntegrationEnvironment } from "./test-environment.ts";
 
 configureIntegrationEnvironment();
 
-const { SCRIPT_OUTPUT_SCHEMA_VERSION, scriptGenerationSections } = await import(
-	"@affichannel/core"
-);
+const {
+	INTERNAL_WORKSPACE_ID,
+	SCRIPT_OUTPUT_SCHEMA_VERSION,
+	scriptGenerationSections,
+} = await import("@affichannel/core");
 const {
 	contentBrief,
 	db,
@@ -17,6 +19,7 @@ const {
 	scriptGeneration,
 	scriptVersion,
 	user,
+	workspaceMember,
 } = await import("@affichannel/db");
 const { and, eq, inArray } = await import("drizzle-orm");
 const {
@@ -32,11 +35,9 @@ const { getWorkspaceActor } = await import(
 	"../packages/api/src/services/workspace"
 );
 
-const email = process.env.E2E_AUTH_EMAIL?.trim();
-
-if (!email) {
-	throw new Error("E2E_AUTH_EMAIL is required for ScriptVersion integration.");
-}
+const fixtureUserId = `us009-script-version-user-${randomUUID()}`;
+const fixtureMembershipId = `us009-script-version-member-${randomUUID()}`;
+const fixtureEmail = `${fixtureUserId}@example.test`;
 
 const baseSnapshot: ScriptVersionEditableSnapshot = {
 	schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
@@ -68,6 +69,7 @@ const baseSnapshot: ScriptVersionEditableSnapshot = {
 type Fixture = {
 	workspaceId: string;
 	userId: string;
+	membershipId: string;
 	projectIds: string[];
 	productIds: string[];
 	generationIds: string[];
@@ -77,6 +79,7 @@ type Fixture = {
 const fixture: Fixture = {
 	workspaceId: "",
 	userId: "",
+	membershipId: "",
 	projectIds: [],
 	productIds: [],
 	generationIds: [],
@@ -285,18 +288,26 @@ async function expectError(operation: () => Promise<unknown>, code: string) {
 }
 
 async function run() {
-	const [fixedUser] = await db
-		.select({ id: user.id })
-		.from(user)
-		.where(eq(user.email, email))
-		.limit(1);
-	if (!fixedUser) throw new Error("E2E fixed account does not exist.");
-	const actor = await getWorkspaceActor(fixedUser.id);
-	if (!actor) throw new Error("E2E fixed account has no internal workspace.");
-	fixture.workspaceId = actor.workspaceId;
-	fixture.userId = actor.userId;
-
 	try {
+		fixture.workspaceId = INTERNAL_WORKSPACE_ID;
+		fixture.userId = fixtureUserId;
+		fixture.membershipId = fixtureMembershipId;
+		await db.insert(user).values({
+			id: fixtureUserId,
+			name: "AFF-US-009 ScriptVersion Test User",
+			email: fixtureEmail,
+			emailVerified: true,
+		});
+		await db.insert(workspaceMember).values({
+			id: fixtureMembershipId,
+			workspaceId: INTERNAL_WORKSPACE_ID,
+			userId: fixtureUserId,
+		});
+		const actor = await getWorkspaceActor(fixtureUserId);
+		if (!actor) {
+			throw new Error("ScriptVersion fixture user has no internal workspace.");
+		}
+
 		const primaryProjectId = await createFixtureProject(actor, "primary");
 		if ((await getCurrentScriptVersion(actor, primaryProjectId)) !== null) {
 			throw new Error("Empty project did not return a null current version.");
@@ -854,6 +865,14 @@ async function cleanup() {
 	}
 	if (fixture.productIds.length > 0) {
 		await db.delete(product).where(inArray(product.id, fixture.productIds));
+	}
+	if (fixture.membershipId) {
+		await db
+			.delete(workspaceMember)
+			.where(eq(workspaceMember.id, fixture.membershipId));
+	}
+	if (fixture.userId) {
+		await db.delete(user).where(eq(user.id, fixture.userId));
 	}
 }
 
