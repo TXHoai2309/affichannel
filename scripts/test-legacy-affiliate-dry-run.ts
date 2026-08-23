@@ -4,21 +4,7 @@ import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createNodePostgresPool } from "../packages/db/src/node-postgres-test-adapter.ts";
-
-const databaseUrl = process.env.AFFICHANNEL_BACKFILL_DATABASE_URL?.trim();
-if (!databaseUrl) {
-	throw new Error(
-		"NOT RUN: AFFICHANNEL_BACKFILL_DATABASE_URL is required for the disposable M2A integration test.",
-	);
-}
-if (
-	process.env.AFFICHANNEL_BACKFILL_DATABASE_CONFIRM !==
-	"BACKFILL_DRY_RUN_CONFIRMED"
-) {
-	throw new Error(
-		"NOT RUN: AFFICHANNEL_BACKFILL_DATABASE_CONFIRM must equal BACKFILL_DRY_RUN_CONFIRMED.",
-	);
-}
+import { requireBackfillTestDatabaseAuthority } from "./backfill-test-database-authority.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -30,7 +16,7 @@ const commandScript = resolve(
 	"scripts/backfill-legacy-affiliate-projects.ts",
 );
 
-function runCli(args: string[], environment: NodeJS.ProcessEnv = process.env) {
+function runCli(args: string[], environment: NodeJS.ProcessEnv) {
 	return spawnSync(process.execPath, [tsxCli, commandScript, ...args], {
 		cwd: process.cwd(),
 		env: environment,
@@ -40,22 +26,109 @@ function runCli(args: string[], environment: NodeJS.ProcessEnv = process.env) {
 	});
 }
 
-const missingAuthorityEnvironment = { ...process.env };
-delete missingAuthorityEnvironment.AFFICHANNEL_BACKFILL_DATABASE_URL;
-delete missingAuthorityEnvironment.AFFICHANNEL_BACKFILL_DATABASE_CONFIRM;
-missingAuthorityEnvironment.DATABASE_URL = databaseUrl;
-missingAuthorityEnvironment.DATABASE_URL_DIRECT = databaseUrl;
-missingAuthorityEnvironment.AFFICHANNEL_M1_TEST_DATABASE_URL = databaseUrl;
-const missingAuthority = runCli(["--dry-run"], missingAuthorityEnvironment);
-assert(
-	missingAuthority.status !== 0 &&
-		missingAuthority.stderr.includes(
-			"AFFICHANNEL_BACKFILL_DATABASE_URL is required",
-		),
-	"Dry-run accepted application or M1 database authority fallback.",
+const authorityEnvironmentKeys = [
+	"AFFICHANNEL_BACKFILL_TEST_DATABASE_URL",
+	"AFFICHANNEL_BACKFILL_TEST_DATABASE_CONFIRM",
+	"AFFICHANNEL_BACKFILL_DATABASE_URL",
+	"AFFICHANNEL_BACKFILL_DATABASE_CONFIRM",
+	"DATABASE_URL",
+	"DATABASE_URL_DIRECT",
+	"AFFICHANNEL_M1_TEST_DATABASE_URL",
+	"AFFICHANNEL_M1_TEST_DATABASE_CONFIRM",
+] as const;
+
+function withAuthorityEnvironment<T>(
+	environment: NodeJS.ProcessEnv,
+	action: () => T,
+): T {
+	const previous = Object.fromEntries(
+		authorityEnvironmentKeys.map((key) => [key, process.env[key]]),
+	);
+	for (const key of authorityEnvironmentKeys) delete process.env[key];
+	Object.assign(process.env, environment);
+	try {
+		return action();
+	} finally {
+		for (const key of authorityEnvironmentKeys) {
+			const value = previous[key];
+			if (value === undefined) delete process.env[key];
+			else process.env[key] = value;
+		}
+	}
+}
+
+const testAuthority = requireBackfillTestDatabaseAuthority();
+const databaseUrl = testAuthority.url;
+
+function expectFixtureAuthorityRefused(
+	environment: NodeJS.ProcessEnv,
+	label: string,
+) {
+	const refused = withAuthorityEnvironment(environment, () => {
+		try {
+			requireBackfillTestDatabaseAuthority();
+			return false;
+		} catch {
+			return true;
+		}
+	});
+	assert(refused, `${label} authorized destructive integration fixtures.`);
+}
+
+expectFixtureAuthorityRefused({}, "Missing test authority");
+expectFixtureAuthorityRefused(
+	{
+		AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+		AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "BACKFILL_DRY_RUN_CONFIRMED",
+	},
+	"Production backfill authority",
+);
+expectFixtureAuthorityRefused({ DATABASE_URL: databaseUrl }, "DATABASE_URL");
+expectFixtureAuthorityRefused(
+	{ DATABASE_URL_DIRECT: databaseUrl },
+	"DATABASE_URL_DIRECT",
+);
+expectFixtureAuthorityRefused(
+	{ AFFICHANNEL_M1_TEST_DATABASE_URL: databaseUrl },
+	"M1 test authority",
+);
+expectFixtureAuthorityRefused(
+	{
+		AFFICHANNEL_BACKFILL_TEST_DATABASE_URL: databaseUrl,
+		AFFICHANNEL_BACKFILL_TEST_DATABASE_CONFIRM: "WRONG_CONFIRMATION",
+	},
+	"Incorrect test confirmation",
 );
 
-const unavailableApply = runCli(["--apply"], missingAuthorityEnvironment);
+const dryRunEnvironment = {
+	...process.env,
+	NODE_ENV: "test",
+	AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
+	AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "BACKFILL_DRY_RUN_CONFIRMED",
+};
+
+for (const [label, fallbackEnvironment] of [
+	["DATABASE_URL", { DATABASE_URL: databaseUrl }],
+	["DATABASE_URL_DIRECT", { DATABASE_URL_DIRECT: databaseUrl }],
+	["M1 test URL", { AFFICHANNEL_M1_TEST_DATABASE_URL: databaseUrl }],
+] as const) {
+	const environment = { ...process.env, ...fallbackEnvironment };
+	delete environment.AFFICHANNEL_BACKFILL_DATABASE_URL;
+	delete environment.AFFICHANNEL_BACKFILL_DATABASE_CONFIRM;
+	const fallbackResult = runCli(["--dry-run"], environment);
+	assert(
+		fallbackResult.status !== 0 &&
+			fallbackResult.stderr.includes(
+				"AFFICHANNEL_BACKFILL_DATABASE_URL is required",
+			),
+		`Backfill command accepted ${label} fallback.`,
+	);
+}
+
+const unavailableApplyEnvironment = { ...process.env };
+delete unavailableApplyEnvironment.AFFICHANNEL_BACKFILL_DATABASE_URL;
+delete unavailableApplyEnvironment.AFFICHANNEL_BACKFILL_DATABASE_CONFIRM;
+const unavailableApply = runCli(["--apply"], unavailableApplyEnvironment);
 assert(
 	unavailableApply.status !== 0 &&
 		unavailableApply.stderr.includes("--apply is not available"),
@@ -63,7 +136,7 @@ assert(
 );
 
 const wrongConfirmationEnvironment = {
-	...process.env,
+	...dryRunEnvironment,
 	AFFICHANNEL_BACKFILL_DATABASE_URL: databaseUrl,
 	AFFICHANNEL_BACKFILL_DATABASE_CONFIRM: "WRONG_CONFIRMATION",
 };
@@ -77,6 +150,9 @@ assert(
 const pool = createNodePostgresPool(databaseUrl);
 const outputRoot = await mkdtemp(
 	join(tmpdir(), "affichannel-m2a-test-output-"),
+);
+const failureOutputRoot = await mkdtemp(
+	join(tmpdir(), "affichannel-m2a-test-failure-output-"),
 );
 const workspaceId = randomUUID();
 const userId = randomUUID();
@@ -185,13 +261,10 @@ try {
 		[projectIds.candidate],
 	);
 
-	const result = runCli([
-		"--dry-run",
-		"--batch-size",
-		"2",
-		"--output-dir",
-		outputRoot,
-	]);
+	const result = runCli(
+		["--dry-run", "--batch-size", "2", "--output-dir", outputRoot],
+		dryRunEnvironment,
+	);
 	assert(
 		result.status === 0,
 		`M2A dry-run failed:\n${result.stdout}\n${result.stderr}`,
@@ -281,8 +354,85 @@ try {
 		"Dry-run mutated candidate identity or audit timestamps.",
 	);
 
+	const failedResult = runCli(
+		[
+			"--dry-run",
+			"--batch-size",
+			"2",
+			"--output-dir",
+			failureOutputRoot,
+			"--test-fail-after-batch",
+			"1",
+		],
+		dryRunEnvironment,
+	);
+	assert(
+		failedResult.status !== 0,
+		"Injected dry-run failure unexpectedly passed.",
+	);
+	const failureRunDirectories = await readdir(failureOutputRoot);
+	assert(
+		failureRunDirectories.length === 1,
+		"Failed dry-run did not retain one run-owned directory.",
+	);
+	const failureRunDirectory = join(
+		failureOutputRoot,
+		failureRunDirectories[0] ?? "missing",
+	);
+	const failedRunText = await readFile(
+		join(failureRunDirectory, "run.json"),
+		"utf8",
+	);
+	const failedSummaryText = await readFile(
+		join(failureRunDirectory, "summary.json"),
+		"utf8",
+	);
+	const failedCheckpointText = await readFile(
+		join(failureRunDirectory, "checkpoint.json"),
+		"utf8",
+	);
+	const failedRun = JSON.parse(failedRunText) as Record<string, unknown>;
+	const failedSummary = JSON.parse(failedSummaryText) as Record<
+		string,
+		unknown
+	>;
+	const failedCheckpoint = JSON.parse(failedCheckpointText) as Record<
+		string,
+		unknown
+	>;
+	assert(
+		failedRun.status === "failed",
+		"run.json was not finalized as failed.",
+	);
+	assert(
+		failedSummary.status === "failed" &&
+			Number(failedSummary.updated) === 0 &&
+			Number(failedSummary.failed) >= 1,
+		"summary.json does not contain failed zero-mutation evidence.",
+	);
+	assert(
+		failedCheckpoint.status === "failed" &&
+			Number(failedCheckpoint.batchNumber) >= 1,
+		"Final failure checkpoint was not retained.",
+	);
+	const failureEvidence = [
+		failedRunText,
+		failedSummaryText,
+		failedCheckpointText,
+		failedResult.stdout,
+		failedResult.stderr,
+	].join("\n");
+	const parsedDatabaseUrl = new URL(databaseUrl);
+	const credentialAuthority = `${parsedDatabaseUrl.username}:${parsedDatabaseUrl.password}@`;
+	assert(
+		!failureEvidence.includes(databaseUrl) &&
+			!failureEvidence.includes(credentialAuthority) &&
+			!/[?&](?:password|sslpassword)=[^&\s]+/iu.test(failureEvidence),
+		"Failed-run evidence leaked database credentials.",
+	);
+
 	console.log(
-		"AFF-US-016 M2A dry-run integration passed: fail-closed authority, apply refusal, keyset inventory, reports, precedence and zero mutation.",
+		"AFF-US-016 M2A dry-run integration passed: separated disposable authority, fallback/apply refusal, keyset inventory, completed/failed reports, precedence and zero command mutation.",
 	);
 } finally {
 	await pool.query("delete from project where workspace_id = $1", [
@@ -295,4 +445,5 @@ try {
 	await pool.query("delete from workspace where id = $1", [workspaceId]);
 	await pool.end();
 	await rm(outputRoot, { recursive: true, force: true });
+	await rm(failureOutputRoot, { recursive: true, force: true });
 }

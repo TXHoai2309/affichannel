@@ -31,6 +31,7 @@ const CONTRACT_VERSION = "AFF-US-016-M2A-v1";
 type CliOptions = {
 	batchSize: number;
 	outputRoot?: string;
+	testFailAfterBatch?: number;
 };
 
 type DatabaseAuthority = {
@@ -86,6 +87,21 @@ function parseArgs(args: string[]): CliOptions {
 			const value = args[index + 1]?.trim();
 			if (!value) throw new Error("REFUSED: --output-dir requires a value.");
 			options.outputRoot = resolve(value);
+			index += 1;
+			continue;
+		}
+		if (
+			argument === "--test-fail-after-batch" &&
+			process.env.NODE_ENV === "test"
+		) {
+			const value = args[index + 1];
+			if (!value) {
+				throw new Error("REFUSED: --test-fail-after-batch requires a value.");
+			}
+			options.testFailAfterBatch = parsePositiveInteger(
+				value,
+				"--test-fail-after-batch",
+			);
 			index += 1;
 			continue;
 		}
@@ -200,6 +216,31 @@ function exceptionRecord(row: LegacyProjectInventoryRow, reasonCode: string) {
 	};
 }
 
+function sanitizedMessage(error: unknown, databaseUrl?: string): string {
+	const message = error instanceof Error ? error.message : String(error);
+	const withoutExactUrl = databaseUrl
+		? message.replaceAll(databaseUrl, "[REDACTED_DATABASE_URL]")
+		: message;
+	return withoutExactUrl.replace(
+		/postgres(?:ql)?:\/\/[^\s'"`]+/giu,
+		"[REDACTED_POSTGRES_URL]",
+	);
+}
+
+async function writeJsonBestEffort(
+	path: string,
+	value: unknown,
+	databaseUrl: string,
+): Promise<void> {
+	try {
+		await writeJson(path, value);
+	} catch (error) {
+		console.error(
+			`Could not finalize ${path}: ${sanitizedMessage(error, databaseUrl)}`,
+		);
+	}
+}
+
 async function runDryRun(options: CliOptions): Promise<void> {
 	validateRegistry();
 	const authority = requireDatabaseAuthority();
@@ -223,30 +264,32 @@ async function runDryRun(options: CliOptions): Promise<void> {
 	};
 	let cursor: string | null = null;
 	let batchNumber = 0;
-	await writeFile(paths.exceptions, "", "utf8");
-	await writeJson(paths.run, {
-		runId,
-		contractVersion: CONTRACT_VERSION,
-		mode: "dry-run",
-		status: "starting",
-		startedAt,
-		batchSize: options.batchSize,
-		outputDirectory: runDirectory,
-	});
-	await writeJson(paths.checkpoint, {
-		runId,
-		contractVersion: CONTRACT_VERSION,
-		mode: "dry-run",
-		batchNumber,
-		batchSize: options.batchSize,
-		lastProjectId: cursor,
-		counts,
-		updatedAt: startedAt,
-	});
+	let databaseIdentity: SanitizedDatabaseIdentity | undefined;
+	let completed = false;
 
 	const pool = createNodePostgresPool(authority.url);
 	try {
-		const databaseIdentity = await readDatabaseIdentity(pool, authority.host);
+		await writeFile(paths.exceptions, "", "utf8");
+		await writeJson(paths.run, {
+			runId,
+			contractVersion: CONTRACT_VERSION,
+			mode: "dry-run",
+			status: "starting",
+			startedAt,
+			batchSize: options.batchSize,
+			outputDirectory: runDirectory,
+		});
+		await writeJson(paths.checkpoint, {
+			runId,
+			contractVersion: CONTRACT_VERSION,
+			mode: "dry-run",
+			batchNumber,
+			batchSize: options.batchSize,
+			lastProjectId: cursor,
+			counts,
+			updatedAt: startedAt,
+		});
+		databaseIdentity = await readDatabaseIdentity(pool, authority.host);
 		console.log(
 			`Database identity: database=${databaseIdentity.database}; host=${databaseIdentity.host}; schema=${databaseIdentity.schema}; user=${databaseIdentity.user}`,
 		);
@@ -298,6 +341,12 @@ async function runDryRun(options: CliOptions): Promise<void> {
 			console.log(
 				`Batch ${batchNumber}: scanned=${counts.totalScanned}; candidates=${counts.legacyCandidates}; canonical=${counts.alreadyCanonical}; exceptions=${counts.exceptions}`,
 			);
+			if (
+				options.testFailAfterBatch !== undefined &&
+				options.testFailAfterBatch === batchNumber
+			) {
+				throw new Error("Injected M2A dry-run failure after checkpoint.");
+			}
 			if (rows.length < options.batchSize) break;
 		}
 
@@ -306,6 +355,7 @@ async function runDryRun(options: CliOptions): Promise<void> {
 			runId,
 			contractVersion: CONTRACT_VERSION,
 			mode: "dry-run",
+			status: "completed",
 			startedAt,
 			finishedAt,
 			databaseIdentity,
@@ -321,13 +371,79 @@ async function runDryRun(options: CliOptions): Promise<void> {
 			batchSize: options.batchSize,
 			outputDirectory: runDirectory,
 			databaseIdentity,
+			batchNumber,
+			lastProjectId: cursor,
+			counts,
 		});
+		completed = true;
 		console.log(`Dry-run complete: output=${runDirectory}`);
 		console.log(
 			`Summary: scanned=${counts.totalScanned}; candidates=${counts.legacyCandidates}; canonical=${counts.alreadyCanonical}; exceptions=${counts.exceptions}; updated=0`,
 		);
+	} catch (error) {
+		counts.failed = Math.max(1, counts.failed + 1);
+		const finishedAt = new Date().toISOString();
+		const errorMessage = sanitizedMessage(error, authority.url);
+		await writeJsonBestEffort(
+			paths.checkpoint,
+			{
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: "dry-run",
+				status: "failed",
+				batchNumber,
+				batchSize: options.batchSize,
+				lastProjectId: cursor,
+				counts,
+				updatedAt: finishedAt,
+			},
+			authority.url,
+		);
+		await writeJsonBestEffort(
+			paths.summary,
+			{
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: "dry-run",
+				status: "failed",
+				startedAt,
+				finishedAt,
+				databaseIdentity,
+				...counts,
+			},
+			authority.url,
+		);
+		await writeJsonBestEffort(
+			paths.run,
+			{
+				runId,
+				contractVersion: CONTRACT_VERSION,
+				mode: "dry-run",
+				status: "failed",
+				startedAt,
+				finishedAt,
+				batchSize: options.batchSize,
+				outputDirectory: runDirectory,
+				databaseIdentity,
+				batchNumber,
+				lastProjectId: cursor,
+				counts,
+				error: { message: errorMessage },
+			},
+			authority.url,
+		);
+		throw error;
 	} finally {
-		await pool.end();
+		try {
+			await pool.end();
+		} catch (cleanupError) {
+			const cleanupContext = completed
+				? "Completed run artifacts remain completed."
+				: "Run failure evidence was preserved.";
+			console.error(
+				`Database pool cleanup failed: ${sanitizedMessage(cleanupError, authority.url)} ${cleanupContext}`,
+			);
+		}
 	}
 }
 
@@ -335,12 +451,6 @@ try {
 	const options = parseArgs(process.argv.slice(2));
 	await runDryRun(options);
 } catch (error) {
-	const message = error instanceof Error ? error.message : String(error);
-	console.error(
-		message.replace(
-			/postgres(?:ql)?:\/\/[^\s'"`]+/giu,
-			"[REDACTED_POSTGRES_URL]",
-		),
-	);
+	console.error(sanitizedMessage(error));
 	process.exitCode = 1;
 }
