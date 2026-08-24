@@ -201,8 +201,24 @@ Implementation evidence Phase 15B1 — 2026-08-24:
 - Web mapper typed/exhaustive theo reason code, delegate canonical tuple validity
   cho pure core invariant, fail closed invalid/unsupported và
   Overview CTA dùng adaptive next route;
-- layout Stepper không còn Fact Lock/Voice reconciliation read; 15B2 list/dashboard/
-  navigation và 15C route/deep-link vẫn pending.
+- layout Stepper không còn Fact Lock/Voice reconciliation read; 15B2 entry surfaces
+  đã cut over và 15C route/deep-link vẫn pending.
+
+Implementation evidence Phase 15B2 — 2026-08-24:
+
+- Project List, Dashboard Recent Projects và post-create Continue dùng non-persisted
+  Adaptive Workflow entry summary/`nextRouteKey`; Product-detail generic Open dùng
+  Project Overview;
+- unsupported và Render `COMING_SOON` không vào arbitrary deep route; Continue
+  fail closed về Overview và Render giữ nhãn `Sắp có`;
+- Dashboard progress dùng visible capability completion, Affiliate baseline `5`,
+  completed-through-Voice `4/5`; không còn hardcoded persisted `/7`;
+- batch reader gather nguồn theo tập Project ID bằng số query cố định rồi resolve
+  trong bộ nhớ; không gọi full Adaptive Workflow pipeline theo từng card và không
+  có global cross-request cache;
+- `currentStepKey`/`project_step_status` vẫn persist nhưng không còn presentation/
+  navigation authority trong 15B2 surfaces; 15C deep-link gates vẫn pending và
+  full AFF-US-015 chưa DONE.
 
 ### M5 — Enforce và cutover
 

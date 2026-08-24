@@ -3,14 +3,10 @@ import type {
 	DashboardProjectRecord,
 	DashboardRepository,
 } from "@affichannel/core/dashboard/dashboard-types";
-import {
-	db,
-	product,
-	productFact,
-	project,
-	projectStepStatus,
-} from "@affichannel/db";
-import { and, count, desc, eq, inArray, isNull, ne } from "drizzle-orm";
+import { db, product, productFact, project } from "@affichannel/db";
+import { and, count, desc, eq, inArray, isNull } from "drizzle-orm";
+
+import { listProjectWorkflowEntrySummaries } from "./project-workflow-entry-service";
 
 export function createDashboardRepository(): DashboardRepository {
 	return {
@@ -19,23 +15,18 @@ export function createDashboardRepository(): DashboardRepository {
 				.select({ value: count() })
 				.from(project)
 				.where(
-					and(
-						eq(project.workspaceId, workspaceId),
-						isNull(project.archivedAt),
-						ne(project.currentStepKey, "completed"),
-					),
+					and(eq(project.workspaceId, workspaceId), isNull(project.archivedAt)),
 				);
 
 			return Number(result?.value ?? 0);
 		},
 
-		async listRecentProjects({ workspaceId, limit }) {
+		async listRecentProjects({ workspaceId, userId, limit }) {
 			const records = await db
 				.select({
 					id: project.id,
 					name: project.name,
 					productName: product.name,
-					currentStepKey: project.currentStepKey,
 					createdAt: project.createdAt,
 					updatedAt: project.updatedAt,
 				})
@@ -51,46 +42,28 @@ export function createDashboardRepository(): DashboardRepository {
 				return [];
 			}
 
-			const statuses = await db
-				.select({
-					projectId: projectStepStatus.projectId,
-					stepKey: projectStepStatus.stepKey,
-					status: projectStepStatus.status,
-				})
-				.from(projectStepStatus)
-				.where(
-					inArray(
-						projectStepStatus.projectId,
-						records.map((record) => record.id),
-					),
-				);
+			const summaries = await listProjectWorkflowEntrySummaries(
+				{ workspaceId, userId },
+				records.map((record) => record.id),
+			);
+			const summariesByProject = new Map(
+				summaries.map((summary) => [summary.projectId, summary]),
+			);
 
-			const statusesByProject = new Map<
-				string,
-				DashboardProjectRecord["stepStatuses"]
-			>();
-
-			for (const status of statuses) {
-				const projectStatuses = statusesByProject.get(status.projectId) ?? [];
-				projectStatuses.push({
-					stepKey:
-						status.stepKey as DashboardProjectRecord["stepStatuses"][number]["stepKey"],
-					status:
-						status.status as DashboardProjectRecord["stepStatuses"][number]["status"],
-				});
-				statusesByProject.set(status.projectId, projectStatuses);
-			}
-
-			return records.map((record) => ({
-				id: record.id,
-				name: record.name,
-				productName: record.productName,
-				currentStepKey:
-					record.currentStepKey as DashboardProjectRecord["currentStepKey"],
-				createdAt: record.createdAt,
-				updatedAt: record.updatedAt,
-				stepStatuses: statusesByProject.get(record.id) ?? [],
-			}));
+			return records.flatMap((record) => {
+				const workflowEntry = summariesByProject.get(record.id);
+				if (!workflowEntry) return [];
+				return [
+					{
+						id: record.id,
+						name: record.name,
+						productName: record.productName,
+						createdAt: record.createdAt,
+						updatedAt: record.updatedAt,
+						workflowEntry,
+					} satisfies DashboardProjectRecord,
+				];
+			});
 		},
 
 		async listFactFreshnessRecords({ workspaceId }) {

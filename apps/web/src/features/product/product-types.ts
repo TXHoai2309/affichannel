@@ -1,5 +1,3 @@
-import type { ProjectStepKey } from "@affichannel/core/project/project-types";
-
 export type ProductStatus = "active" | "inactive";
 export type ProductArchiveScope = "activeOnly" | "archivedOnly" | "all";
 
@@ -30,7 +28,6 @@ export type ProductUsage = {
 	projects: Array<{
 		id: string;
 		name: string;
-		currentStepKey: ProjectStepKey;
 		archivedAt: string | Date | null;
 	}>;
 };

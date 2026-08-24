@@ -4,10 +4,6 @@ import {
 	FACT_FRESHNESS_POLICY,
 	resolveBusinessToday,
 } from "../product-fact/freshness";
-import {
-	getProjectStepRoute,
-	PROJECT_STEP_KEYS,
-} from "../project/project-types";
 import type {
 	DashboardActivity,
 	DashboardFactFreshnessRecord,
@@ -25,31 +21,31 @@ export type DashboardActor = {
 };
 
 export function calculateDashboardProgress(
-	project: Pick<DashboardProjectRecord, "currentStepKey" | "stepStatuses">,
+	project: Pick<DashboardProjectRecord, "workflowEntry">,
 ) {
-	if (project.currentStepKey === "completed") {
-		return 100;
-	}
-
-	const completedSteps = project.stepStatuses.filter(
-		(step) => step.status === "completed",
-	).length;
-
-	return Math.round((completedSteps / PROJECT_STEP_KEYS.length) * 100);
+	const { completedVisibleSteps, totalVisibleSteps } = project.workflowEntry;
+	return totalVisibleSteps === 0
+		? 0
+		: Math.round((completedVisibleSteps / totalVisibleSteps) * 100);
 }
 
 export function getDashboardProjectStatus(
-	project: Pick<DashboardProjectRecord, "currentStepKey" | "stepStatuses">,
+	project: Pick<DashboardProjectRecord, "workflowEntry">,
 ): DashboardProjectStatus {
-	if (project.currentStepKey === "completed") {
+	const entry = project.workflowEntry;
+	if (
+		entry.totalVisibleSteps > 0 &&
+		entry.completedVisibleSteps === entry.totalVisibleSteps
+	) {
 		return "completed";
 	}
-
-	if (project.stepStatuses.some((step) => step.status === "blocked")) {
+	if (entry.nextActionKind === "COMING_SOON") {
+		return "coming_soon";
+	}
+	if (entry.unsupported || entry.nextState === "BLOCKED") {
 		return "blocked";
 	}
-
-	if (project.stepStatuses.some((step) => step.status === "needs_review")) {
+	if (entry.nextState === "STALE") {
 		return "needs_review";
 	}
 
@@ -63,11 +59,17 @@ export function toDashboardRecentProject(
 		id: project.id,
 		name: project.name,
 		productName: project.productName,
-		currentStepKey: project.currentStepKey,
+		workflowEntry: project.workflowEntry,
 		status: getDashboardProjectStatus(project),
 		progressPercent: calculateDashboardProgress(project),
+		completedVisibleSteps: project.workflowEntry.completedVisibleSteps,
+		totalVisibleSteps: project.workflowEntry.totalVisibleSteps,
 		updatedAt: project.updatedAt.toISOString(),
-		targetUrl: getProjectStepRoute(project.id, project.currentStepKey),
+		targetUrl: `/projects/${project.id}`,
+		continueUrl:
+			project.workflowEntry.canContinue && project.workflowEntry.nextRouteKey
+				? `/projects/${project.id}/${project.workflowEntry.nextRouteKey}`
+				: `/projects/${project.id}`,
 	};
 }
 
@@ -83,7 +85,7 @@ export function toDashboardActivity(
 			? `Bạn đã tạo dự án “${project.name}”`
 			: `Dự án “${project.name}” vừa được cập nhật`,
 		occurredAt: (created ? project.createdAt : project.updatedAt).toISOString(),
-		targetUrl: getProjectStepRoute(project.id, project.currentStepKey),
+		targetUrl: `/projects/${project.id}`,
 	};
 }
 
@@ -145,6 +147,7 @@ export async function getDashboardOverview(
 			repository.countActiveProjects({ workspaceId: actor.workspaceId }),
 			repository.listRecentProjects({
 				workspaceId: actor.workspaceId,
+				userId: actor.userId,
 				limit: DASHBOARD_RECENT_PROJECT_LIMIT,
 			}),
 			repository.listFactFreshnessRecords

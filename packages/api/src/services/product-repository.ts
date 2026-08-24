@@ -60,7 +60,6 @@ export type ProductUsageRecord = {
 	projects: Array<{
 		id: string;
 		name: string;
-		currentStepKey: string;
 		archivedAt: Date | null;
 	}>;
 };
@@ -246,7 +245,6 @@ export async function findProductUsage(
 			.select({
 				id: project.id,
 				name: project.name,
-				currentStepKey: project.currentStepKey,
 				archivedAt: project.archivedAt,
 			})
 			.from(project)

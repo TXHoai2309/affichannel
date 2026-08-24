@@ -8,6 +8,21 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-015 Phase 15B2 Project entry navigation cutover
+
+- Thêm non-persisted `ProjectWorkflowEntrySummary` derived từ canonical Adaptive
+  Workflow và batch reader workspace-scoped cho Project List/Dashboard; không chạy
+  full snapshot waterfall theo từng card.
+- Project List, Dashboard Continue và post-create dùng adaptive `nextRouteKey`;
+  stale `currentStepKey` không còn quyết định entry route.
+- Generic Open Project ở Dashboard/Product detail mở Overview. Unsupported và
+  Render `COMING_SOON` cũng về Overview, hiển thị trạng thái kiểm tra/`Sắp có`,
+  không tạo fake execution CTA.
+- Dashboard progress chuyển từ persisted `/7` sang visible completion: Affiliate
+  baseline `5`, completed-through-Voice `4/5`, Render chưa được tính complete.
+- Giữ legacy persistence và deep-link/execution guards. Phase 15C vẫn pending;
+  full AFF-US-015 chưa DONE.
+
 ### AFF-US-015 Phase 15B1 Project presentation cutover
 
 - Project Stepper dùng Adaptive Workflow để render capability visible, ordinal,
@@ -17,8 +32,8 @@ sử dụng Semantic Versioning.
   fail closed thành trạng thái cần kiểm tra, không invent readiness.
 - Harden fail-closed bằng canonical Applicability tuple invariant ở core; Web không
   còn tự suy reason/state/completion validity theo capability prefix.
-- Project layout không còn gọi Fact Lock/Voice reconciliation cho Stepper. 15B2,
-  15C, execution guards và legacy route shells chưa đổi.
+- Project layout không còn gọi Fact Lock/Voice reconciliation cho Stepper. 15B2
+  đã chuyển entry surfaces; 15C, execution guards và legacy route shells chưa đổi.
 
 ### AFF-US-015 Phase 15A Adaptive Workflow read foundation
 

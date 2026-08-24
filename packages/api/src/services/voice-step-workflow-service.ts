@@ -65,29 +65,35 @@ async function findCurrentVoiceConfig(
 	return record ?? null;
 }
 
-async function loadEvaluation(
-	actor: WorkspaceActor,
-	projectId: string,
-	readSources?: VoiceStepWorkflowReadSources,
-	temporalContext: VoiceSegmentReadTemporalContext = {
-		now: new Date(),
-		pendingLeaseMs: Number(env.VOICE_SEGMENT_PENDING_LEASE_MS),
-	},
-): Promise<VoiceStepWorkflowEvaluation> {
-	const [sources, currentVoiceConfig, artifacts] = await Promise.all([
-		readSources
-			? Promise.resolve(readSources)
-			: Promise.all([
-					FactLockGate.evaluate(actor, projectId),
-					findCurrentScriptVersion(actor, projectId),
-				]).then(([factLockGate, currentScriptVersion]) => ({
-					factLockGate,
-					currentScriptVersion,
-				})),
-		findCurrentVoiceConfig(actor, projectId),
-		listVoiceSegmentArtifacts(actor, projectId),
-	]);
-	const { factLockGate, currentScriptVersion } = sources;
+export type VoiceStepWorkflowReadInput = {
+	workspaceId: string;
+	projectId: string;
+	factLockGate: VoiceStepWorkflowReadSources["factLockGate"];
+	currentScriptVersion: VoiceStepWorkflowReadSources["currentScriptVersion"];
+	currentVoiceConfig: {
+		provider: string;
+		voiceId: string;
+		language: string;
+		speed: number;
+		revision: number;
+	} | null;
+	artifacts: VoiceSegmentArtifact[];
+	temporalContext: VoiceSegmentReadTemporalContext;
+};
+
+/** Pure batch/single-read projection over already authorized Voice sources. */
+export function evaluateVoiceStepWorkflowReadInput(
+	input: VoiceStepWorkflowReadInput,
+): VoiceStepWorkflowEvaluation {
+	const {
+		workspaceId,
+		projectId,
+		factLockGate,
+		currentScriptVersion,
+		currentVoiceConfig,
+		artifacts,
+		temporalContext,
+	} = input;
 	const segments: VoiceStepSegmentEvaluation[] = [];
 
 	if (currentScriptVersion) {
@@ -106,7 +112,7 @@ async function loadEvaluation(
 		for (const segment of voiceoverSegments) {
 			const text = validateVoiceSegmentText(segment.text);
 			const fingerprint = {
-				workspaceId: actor.workspaceId,
+				workspaceId,
 				projectId,
 				sourceScriptVersionId: currentScriptVersion.id,
 				sourceScriptRevision: currentScriptVersion.revision,
@@ -142,6 +148,39 @@ async function loadEvaluation(
 			segments,
 		}),
 	};
+}
+
+async function loadEvaluation(
+	actor: WorkspaceActor,
+	projectId: string,
+	readSources?: VoiceStepWorkflowReadSources,
+	temporalContext: VoiceSegmentReadTemporalContext = {
+		now: new Date(),
+		pendingLeaseMs: Number(env.VOICE_SEGMENT_PENDING_LEASE_MS),
+	},
+): Promise<VoiceStepWorkflowEvaluation> {
+	const [sources, currentVoiceConfig, artifacts] = await Promise.all([
+		readSources
+			? Promise.resolve(readSources)
+			: Promise.all([
+					FactLockGate.evaluate(actor, projectId),
+					findCurrentScriptVersion(actor, projectId),
+				]).then(([factLockGate, currentScriptVersion]) => ({
+					factLockGate,
+					currentScriptVersion,
+				})),
+		findCurrentVoiceConfig(actor, projectId),
+		listVoiceSegmentArtifacts(actor, projectId),
+	]);
+	return evaluateVoiceStepWorkflowReadInput({
+		workspaceId: actor.workspaceId,
+		projectId,
+		factLockGate: sources.factLockGate,
+		currentScriptVersion: sources.currentScriptVersion,
+		currentVoiceConfig,
+		artifacts,
+		temporalContext,
+	});
 }
 
 /** Read-only Voice snapshot for non-authoritative observers such as M4. */

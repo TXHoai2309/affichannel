@@ -1,6 +1,5 @@
 "use client";
 
-import { getProjectStepRoute } from "@affichannel/core/project/project-types";
 import { Button } from "@affichannel/ui/components/button";
 import {
 	Card,
@@ -37,6 +36,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FactList } from "@/features/product-facts/fact-list";
+import { getProductRelatedProjectHref } from "@/features/project-navigation/project-entry-presentation";
 import { orpc } from "@/utils/orpc";
 
 import { getProductErrorMessage } from "./product-errors";
@@ -469,10 +469,7 @@ export function ProductDetail({ productId }: { productId: string }) {
 												render={
 													<Link
 														href={
-															getProjectStepRoute(
-																project.id,
-																project.currentStepKey,
-															) as Route
+															getProductRelatedProjectHref(project.id) as Route
 														}
 													/>
 												}

@@ -60,7 +60,7 @@ export default function DashboardOverview() {
 				className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
 			>
 				<SummaryCard
-					detail="Dự án chưa hoàn thành"
+					detail="Dự án chưa lưu trữ"
 					icon={FolderKanban}
 					label="Dự án đang làm"
 					tone="blue"

@@ -1,6 +1,7 @@
 import {
 	evaluateFactLockGate,
 	FactLockError,
+	type FactLockGateEvaluationInput,
 	type FactLockGateResult,
 	type FactLockInputSnapshot,
 } from "@affichannel/core";
@@ -46,6 +47,43 @@ function dependenciesAreCurrent(
 			currentFact.status === "verified"
 		);
 	});
+}
+
+export function buildFactLockGateEvaluationInput(input: {
+	productId: string | null;
+	currentScriptVersion: FactLockGateEvaluationInput["currentScriptVersion"];
+	runs: GateRunRow[];
+	dependencies: Array<typeof factDependency.$inferSelect>;
+	facts: Array<typeof productFact.$inferSelect>;
+}): FactLockGateEvaluationInput {
+	const dependenciesByRun = new Map<
+		string,
+		Array<typeof factDependency.$inferSelect>
+	>();
+	for (const dependency of input.dependencies) {
+		const current = dependenciesByRun.get(dependency.dependentId) ?? [];
+		current.push(dependency);
+		dependenciesByRun.set(dependency.dependentId, current);
+	}
+
+	return {
+		currentScriptVersion: input.currentScriptVersion,
+		runs: input.runs.map((run) => ({
+			id: run.id,
+			scriptVersionId: run.scriptVersionId,
+			sourceScriptRevision: run.sourceScriptRevision,
+			status: run.status as FactLockRunStatus,
+			dependenciesCurrent:
+				input.productId !== null &&
+				dependenciesAreCurrent(
+					run,
+					dependenciesByRun.get(run.id) ?? [],
+					input.facts,
+					input.productId,
+				),
+			createdAt: run.createdAt,
+		})),
+	};
 }
 
 async function loadGateInput(actor: WorkspaceActor, projectId: string) {
@@ -106,24 +144,23 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 		.orderBy(desc(factLockRun.createdAt), desc(factLockRun.id));
 
 	if (runs.length === 0) {
-		return {
+		return buildFactLockGateEvaluationInput({
+			productId,
 			currentScriptVersion,
 			runs: [],
-		};
+			dependencies: [],
+			facts: [],
+		});
 	}
 
 	if (productId === null) {
-		return {
+		return buildFactLockGateEvaluationInput({
+			productId,
 			currentScriptVersion,
-			runs: runs.map((run) => ({
-				id: run.id,
-				scriptVersionId: run.scriptVersionId,
-				sourceScriptRevision: run.sourceScriptRevision,
-				status: run.status as FactLockRunStatus,
-				dependenciesCurrent: false,
-				createdAt: run.createdAt,
-			})),
-		};
+			runs,
+			dependencies: [],
+			facts: [],
+		});
 	}
 
 	const runIds = runs.map((run) => run.id);
@@ -137,16 +174,6 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 				inArray(factDependency.dependentId, runIds),
 			),
 		);
-	const dependencyByRun = new Map<
-		string,
-		Array<typeof factDependency.$inferSelect>
-	>();
-	for (const dependency of dependencies) {
-		const current = dependencyByRun.get(dependency.dependentId) ?? [];
-		current.push(dependency);
-		dependencyByRun.set(dependency.dependentId, current);
-	}
-
 	const factIds = [
 		...new Set(
 			runs.flatMap((run) => {
@@ -169,22 +196,13 @@ async function loadGateInput(actor: WorkspaceActor, projectId: string) {
 						),
 					);
 
-	return {
+	return buildFactLockGateEvaluationInput({
+		productId,
 		currentScriptVersion,
-		runs: runs.map((run) => ({
-			id: run.id,
-			scriptVersionId: run.scriptVersionId,
-			sourceScriptRevision: run.sourceScriptRevision,
-			status: run.status as FactLockRunStatus,
-			dependenciesCurrent: dependenciesAreCurrent(
-				run,
-				dependencyByRun.get(run.id) ?? [],
-				facts,
-				productId,
-			),
-			createdAt: run.createdAt,
-		})),
-	};
+		runs,
+		dependencies,
+		facts,
+	});
 }
 
 export const FactLockGate = {

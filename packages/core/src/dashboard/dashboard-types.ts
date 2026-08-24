@@ -1,13 +1,11 @@
-import type {
-	PersistedProjectStepStatus,
-	ProjectStepKey,
-} from "../project/project-types";
+import type { ProjectWorkflowEntrySummary } from "../adaptive-workflow/entry-summary";
 
 export type DashboardProjectStatus =
 	| "in_progress"
 	| "completed"
 	| "needs_review"
-	| "blocked";
+	| "blocked"
+	| "coming_soon";
 
 export type DashboardWarningType = "fact_stale" | "fact_lock" | "job_failed";
 
@@ -24,11 +22,14 @@ export type DashboardRecentProject = {
 	id: string;
 	name: string;
 	productName: string;
-	currentStepKey: ProjectStepKey;
+	workflowEntry: ProjectWorkflowEntrySummary;
 	status: DashboardProjectStatus;
 	progressPercent: number;
+	completedVisibleSteps: number;
+	totalVisibleSteps: number;
 	updatedAt: string;
 	targetUrl: string;
+	continueUrl: string;
 };
 
 export type DashboardActivity = {
@@ -58,13 +59,9 @@ export type DashboardProjectRecord = {
 	id: string;
 	name: string;
 	productName: string;
-	currentStepKey: ProjectStepKey;
 	createdAt: Date;
 	updatedAt: Date;
-	stepStatuses: Array<{
-		stepKey: ProjectStepKey;
-		status: PersistedProjectStepStatus;
-	}>;
+	workflowEntry: ProjectWorkflowEntrySummary;
 };
 
 export type DashboardFactFreshnessRecord = {
@@ -83,6 +80,7 @@ export type DashboardRepository = {
 	countActiveProjects(input: { workspaceId: string }): Promise<number>;
 	listRecentProjects(input: {
 		workspaceId: string;
+		userId: string;
 		limit: number;
 	}): Promise<DashboardProjectRecord[]>;
 	listFactFreshnessRecords?(input: {

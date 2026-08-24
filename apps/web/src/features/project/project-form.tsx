@@ -1,6 +1,5 @@
 "use client";
 
-import { getProjectStepRoute } from "@affichannel/core/project/project-types";
 import {
 	type CreateProjectInput,
 	createProjectInputSchema,
@@ -16,6 +15,7 @@ import { type FormEvent, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
 
+import { getPostCreateProjectHref } from "../project-navigation/project-entry-presentation";
 import { ProductSelector } from "./product-selector";
 import { getProjectErrorMessage } from "./project-errors";
 
@@ -122,9 +122,7 @@ export function ProjectForm() {
 
 		createProject.mutate(parsed.data, {
 			onSuccess: (project) => {
-				router.push(
-					getProjectStepRoute(project.id, project.currentStepKey) as Route,
-				);
+				router.push(getPostCreateProjectHref(project) as Route);
 				router.refresh();
 			},
 			onError: (error) => {

@@ -11,18 +11,21 @@ const baseProject: DashboardProjectRecord = {
 	id: "project-1",
 	name: "Review tai nghe",
 	productName: "Tai nghe X1",
-	currentStepKey: "fact-lock",
 	createdAt: new Date("2026-08-11T08:00:00.000Z"),
 	updatedAt: new Date("2026-08-11T08:30:00.000Z"),
-	stepStatuses: [
-		{ stepKey: "product", status: "completed" },
-		{ stepKey: "content", status: "completed" },
-		{ stepKey: "fact-lock", status: "not_started" },
-		{ stepKey: "voice", status: "not_started" },
-		{ stepKey: "video", status: "not_started" },
-		{ stepKey: "preview", status: "not_started" },
-		{ stepKey: "completed", status: "not_started" },
-	],
+	workflowEntry: {
+		projectId: "project-1",
+		nextCapability: "RENDER",
+		nextRouteKey: "video",
+		nextState: "BLOCKED",
+		nextCompletion: "NOT_STARTED",
+		nextReasonCode: "RENDER_FEATURE_NOT_IMPLEMENTED",
+		nextActionKind: "COMING_SOON",
+		completedVisibleSteps: 4,
+		totalVisibleSteps: 5,
+		unsupported: false,
+		canContinue: false,
+	},
 };
 
 const factRecords = [
@@ -51,27 +54,27 @@ const factRecords = [
 ];
 
 describe("dashboard domain service", () => {
-	it("calculates progress from completed persisted steps", () => {
-		expect(calculateDashboardProgress(baseProject)).toBe(29);
+	it("calculates progress from visible Adaptive Workflow capabilities", () => {
+		expect(calculateDashboardProgress(baseProject)).toBe(80);
 		expect(
 			calculateDashboardProgress({
-				...baseProject,
-				currentStepKey: "product",
-				stepStatuses: baseProject.stepStatuses.map((step) => ({
-					...step,
-					status: "not_started" as const,
-				})),
+				workflowEntry: {
+					...baseProject.workflowEntry,
+					completedVisibleSteps: 0,
+				},
 			}),
 		).toBe(0);
 		expect(
 			calculateDashboardProgress({
-				...baseProject,
-				currentStepKey: "completed",
+				workflowEntry: {
+					...baseProject.workflowEntry,
+					completedVisibleSteps: 5,
+				},
 			}),
 		).toBe(100);
 	});
 
-	it("maps creation and update activity to the current project step", () => {
+	it("maps activity links to the generic Project overview", () => {
 		const created = toDashboardActivity({
 			...baseProject,
 			updatedAt: baseProject.createdAt,
@@ -79,7 +82,7 @@ describe("dashboard domain service", () => {
 		const updated = toDashboardActivity(baseProject);
 
 		expect(created.type).toBe("project_created");
-		expect(created.targetUrl).toBe("/projects/project-1/fact-lock");
+		expect(created.targetUrl).toBe("/projects/project-1");
 		expect(updated.type).toBe("project_updated");
 		expect(updated.title).toContain("Review tai nghe");
 	});
@@ -93,9 +96,11 @@ describe("dashboard domain service", () => {
 			},
 			listRecentProjects: async ({
 				workspaceId,
+				userId: _userId,
 				limit,
 			}: {
 				workspaceId: string;
+				userId: string;
 				limit: number;
 			}) => {
 				calls.workspaceId = workspaceId;
@@ -119,7 +124,11 @@ describe("dashboard domain service", () => {
 		expect(overview.warnings).toEqual([]);
 		expect(overview.recentProjects[0]).toMatchObject({
 			id: "project-1",
-			progressPercent: 29,
+			status: "coming_soon",
+			progressPercent: 80,
+			completedVisibleSteps: 4,
+			totalVisibleSteps: 5,
+			continueUrl: "/projects/project-1",
 		});
 	});
 

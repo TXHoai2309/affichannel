@@ -126,9 +126,15 @@ try {
 	);
 	assert(
 		overview.recentProjects.every(
-			(projectItem) => projectItem.currentStepKey === "product",
+			(projectItem) =>
+				projectItem.workflowEntry.nextCapability === "SCRIPT" &&
+				projectItem.workflowEntry.nextRouteKey === "content" &&
+				projectItem.completedVisibleSteps === 1 &&
+				projectItem.totalVisibleSteps === 5 &&
+				projectItem.targetUrl === `/projects/${projectItem.id}` &&
+				projectItem.continueUrl === `/projects/${projectItem.id}/content`,
 		),
-		"Dashboard must expose the persisted current step.",
+		"Dashboard must expose the Adaptive entry summary and separate Open from Continue.",
 	);
 
 	const overviewForB = await getDashboardOverview(dashboardRepository, {

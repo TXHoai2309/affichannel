@@ -2,8 +2,28 @@
 
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
   shadow runtime đã đạt parity; AFF-US-015 Phase 15A accepted và Phase 15B1 đã
-  cut over Project Stepper/Overview; 15B2/15C chưa bắt đầu.
+  cut over Project Stepper/Overview; Phase 15B2 đã chuyển Project entry surfaces
+  sang Adaptive Workflow; 15C vẫn pending và full AFF-US-015 chưa DONE.
 - Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-015 Phase 15B2 Project entry navigation cutover
+
+Project List, Dashboard Recent Projects và post-create navigation hiện dùng
+`ProjectWorkflowEntrySummary` derived từ canonical Adaptive Workflow
+`nextRouteKey`; Product-detail generic “Mở dự án” luôn mở Overview. Open và Continue
+được tách rõ: Open vào `/projects/{id}`, Continue chỉ vào adaptive route khi action
+có thể thực thi; unsupported và Render `COMING_SOON` fail closed về Overview.
+
+List/Dashboard dùng workspace-authorized batch loader với một subject read, các
+nguồn Script/ScriptVersion/Fact Lock/Product Fact/Voice theo tập ID và một dependency
+read, rồi resolve từng Project trong bộ nhớ. Không có per-card full workflow
+waterfall hoặc global cache. Dashboard progress dùng visible capability completion;
+Affiliate baseline là năm capability và completed-through-Voice là `4/5`.
+
+Legacy `currentStepKey`/`project_step_status` vẫn được persist nhưng không còn là
+navigation/applicability authority ở các surface của 15B2. Deep-link route gates,
+execution guards, Organic/Quick Image/Media First, OPTIONAL persistence, Render,
+M5 và AFF-US-017 không đổi. Phase 15C vẫn pending; full AFF-US-015 chưa DONE.
 
 ## 2026-08-24 — AFF-US-015 Phase 15B1 Project presentation cutover
 
@@ -18,8 +38,8 @@ Web chỉ còn sở hữu localization và presentation consistency.
 Project shell không còn đọc `currentStepKey`, `project_step_status`, Fact Lock gate
 hoặc Voice reconciliation để trình bày applicability. Overview load Project metadata
 và Adaptive Workflow song song, CTA dùng `nextApplicableStep/nextRouteKey`. Project
-List, Dashboard, product-detail/post-create navigation và deep-link route shells vẫn
-được giữ cho 15B2/15C; full AFF-US-015 chưa DONE.
+List, Dashboard và product-detail/post-create navigation được chuyển ở 15B2;
+deep-link route shells vẫn được giữ cho 15C. Full AFF-US-015 chưa DONE.
 
 ## 2026-08-24 — AFF-US-015 Phase 15A Adaptive Workflow read foundation
 

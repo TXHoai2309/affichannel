@@ -14,7 +14,7 @@ import {
 import { ArrowRight, FolderPlus } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { getProjectStep } from "@/features/project-navigation/project-steps";
+import { getProjectEntryPresentation } from "@/features/project-navigation/project-entry-presentation";
 import { formatRelativeTime } from "./format-relative-time";
 
 const STATUS_LABELS: Record<DashboardProjectStatus, string> = {
@@ -22,32 +22,33 @@ const STATUS_LABELS: Record<DashboardProjectStatus, string> = {
 	completed: "Hoàn thành",
 	needs_review: "Cần xem lại",
 	blocked: "Bị chặn",
+	coming_soon: "Sắp có",
 };
 
 const STATUS_VARIANTS: Record<
 	DashboardProjectStatus,
-	"default" | "success" | "warning" | "destructive"
+	"default" | "secondary" | "success" | "warning" | "destructive"
 > = {
 	in_progress: "default",
 	completed: "success",
 	needs_review: "warning",
 	blocked: "destructive",
+	coming_soon: "secondary",
 };
 
 function ProjectRow({ project }: { project: DashboardRecentProject }) {
-	const stepLabel =
-		getProjectStep(project.currentStepKey)?.label ?? "Chưa xác định";
+	const entry = getProjectEntryPresentation(project.id, project.workflowEntry);
 
 	return (
-		<Link
-			aria-label={`Mở dự án ${project.name}`}
-			className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 border-affi-blue-border/60 border-t px-5 py-4 transition-colors hover:bg-affi-blue-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:grid-cols-[minmax(0,1.5fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,1fr)_auto] md:gap-4"
-			href={project.targetUrl as Route}
-		>
+		<div className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 border-affi-blue-border/60 border-t px-5 py-4 transition-colors hover:bg-affi-blue-soft/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset md:grid-cols-[minmax(0,1.5fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,1fr)_auto] md:gap-4">
 			<div className="min-w-0">
-				<p className="truncate font-medium text-sm group-hover:text-affi-blue">
+				<Link
+					aria-label={`Mở dự án ${project.name}`}
+					className="truncate font-medium text-sm hover:underline group-hover:text-affi-blue"
+					href={project.targetUrl as Route}
+				>
 					{project.name}
-				</p>
+				</Link>
 				<p className="mt-1 truncate text-muted-foreground text-xs">
 					{project.productName}
 				</p>
@@ -58,14 +59,16 @@ function ProjectRow({ project }: { project: DashboardRecentProject }) {
 				</Badge>
 			</div>
 			<div className="col-span-2 flex items-center gap-2 text-muted-foreground text-xs md:col-span-1">
-				<span className="truncate">{stepLabel}</span>
+				<span className="truncate">
+					{entry.nextLabel} · {entry.statusLabel}
+				</span>
 			</div>
 			<div className="col-span-2 flex items-center gap-3 md:col-span-1">
 				<div
-					aria-label={`Tiến trình ${project.progressPercent}%`}
-					aria-valuemax={100}
+					aria-label={`Tiến trình ${project.completedVisibleSteps}/${project.totalVisibleSteps}`}
+					aria-valuemax={project.totalVisibleSteps}
 					aria-valuemin={0}
-					aria-valuenow={project.progressPercent}
+					aria-valuenow={project.completedVisibleSteps}
 					className="h-2 min-w-20 flex-1 overflow-hidden rounded-full bg-affi-blue-soft"
 					role="progressbar"
 				>
@@ -75,13 +78,21 @@ function ProjectRow({ project }: { project: DashboardRecentProject }) {
 					/>
 				</div>
 				<span className="w-9 text-right font-medium text-xs">
-					{project.progressPercent}%
+					{project.completedVisibleSteps}/{project.totalVisibleSteps}
 				</span>
 			</div>
-			<div className="col-start-2 row-start-3 justify-self-end text-muted-foreground text-xs md:col-start-auto md:row-start-auto md:justify-self-start">
-				{formatRelativeTime(project.updatedAt)}
+			<div className="col-start-2 row-start-3 flex items-center gap-2 justify-self-end text-muted-foreground text-xs md:col-start-auto md:row-start-auto md:justify-self-start">
+				<span>{formatRelativeTime(project.updatedAt)}</span>
+				<Button
+					nativeButton={false}
+					render={<Link href={project.continueUrl as Route} />}
+					size="sm"
+					variant="ghost"
+				>
+					{entry.actionLabel}
+				</Button>
 			</div>
-		</Link>
+		</div>
 	);
 }
 
@@ -96,7 +107,7 @@ export default function RecentProjects({
 				<div>
 					<CardTitle className="text-base">Dự án gần đây</CardTitle>
 					<p className="mt-1 text-muted-foreground text-xs">
-						Mở dự án để tiếp tục tại bước đang làm.
+						Mở tổng quan hoặc tiếp tục theo workflow hiện tại.
 					</p>
 				</div>
 				<CardAction>
@@ -133,7 +144,7 @@ export default function RecentProjects({
 						<div className="hidden grid-cols-[minmax(0,1.5fr)_minmax(8rem,1fr)_minmax(7rem,0.8fr)_minmax(8rem,1fr)_auto] gap-4 px-5 py-3 text-muted-foreground text-xs md:grid">
 							<span>Dự án / Sản phẩm</span>
 							<span>Trạng thái</span>
-							<span>Bước hiện tại</span>
+							<span>Bước tiếp theo</span>
 							<span>Tiến trình</span>
 							<span>Cập nhật</span>
 						</div>

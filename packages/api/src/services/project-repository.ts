@@ -62,7 +62,6 @@ export type ProjectListItem = Pick<
 	| "creationPath"
 	| "contentFormat"
 	| "isLegacyProjection"
-	| "currentStepKey"
 	| "updatedAt"
 > & {
 	product: ProjectDetails["product"];
@@ -239,7 +238,6 @@ export async function listProjectItems(
 			creationPath: project.creationPath,
 			contentFormatKey: project.contentFormatKey,
 			contentFormatVersion: project.contentFormatVersion,
-			currentStepKey: project.currentStepKey,
 			updatedAt: project.updatedAt,
 			productId: product.id,
 			productName: product.name,
@@ -255,7 +253,6 @@ export async function listProjectItems(
 				id: record.id,
 				name: record.name,
 				...projectIdentityReadModel(record),
-				currentStepKey: record.currentStepKey as ProjectStepKey,
 				updatedAt: record.updatedAt,
 				product: { id: record.productId, name: record.productName },
 			})),

@@ -1,6 +1,5 @@
 "use client";
 
-import { getProjectStepRoute } from "@affichannel/core/project/project-types";
 import { Badge } from "@affichannel/ui/components/badge";
 import { Button } from "@affichannel/ui/components/button";
 import {
@@ -14,10 +13,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { Route } from "next";
 import Link from "next/link";
 import { orpc } from "@/utils/orpc";
-import {
-	getProjectStep,
-	PROJECT_STEP_STATUS_LABELS,
-} from "../project-navigation/project-steps";
+import { getProjectEntryPresentation } from "../project-navigation/project-entry-presentation";
 
 export function ProjectList() {
 	const projects = useQuery(orpc.project.list.queryOptions());
@@ -55,7 +51,10 @@ export function ProjectList() {
 	return (
 		<div className="divide-y overflow-hidden rounded-xl border bg-card">
 			{projects.data.map((project) => {
-				const currentStep = getProjectStep(project.currentStepKey);
+				const entry = getProjectEntryPresentation(
+					project.id,
+					project.workflowEntry,
+				);
 
 				return (
 					<div
@@ -64,9 +63,22 @@ export function ProjectList() {
 					>
 						<div className="min-w-0">
 							<div className="flex flex-wrap items-center gap-2">
-								<p className="font-medium">{project.name}</p>
-								<Badge variant="outline">
-									{PROJECT_STEP_STATUS_LABELS.current}: {currentStep?.label}
+								<Link
+									className="font-medium hover:underline"
+									href={entry.overviewHref}
+								>
+									{project.name}
+								</Link>
+								<Badge
+									variant={
+										entry.comingSoon
+											? "secondary"
+											: entry.needsAttention
+												? "destructive"
+												: "outline"
+									}
+								>
+									{entry.nextLabel}: {entry.statusLabel}
 								</Badge>
 							</div>
 							<p className="mt-1 text-muted-foreground text-sm">
@@ -75,19 +87,10 @@ export function ProjectList() {
 						</div>
 						<Button
 							nativeButton={false}
-							render={
-								<Link
-									href={
-										getProjectStepRoute(
-											project.id,
-											project.currentStepKey,
-										) as Route
-									}
-								/>
-							}
+							render={<Link href={entry.continueHref as Route} />}
 							variant="outline"
 						>
-							Mở dự án
+							{entry.actionLabel}
 						</Button>
 					</div>
 				);

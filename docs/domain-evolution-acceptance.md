@@ -148,8 +148,9 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   count/ordinal, pathname active route, Render `Sắp có`, unsupported/invalid
   fail-closed qua canonical core tuple invariant và Overview next CTA có
   deterministic tests.
-- [ ] Phase 15B2: Project List, Dashboard, product-detail và post-create navigation
-  chuyển sang adaptive summary/route.
+- [x] Phase 15B2: Project List, Dashboard, product-detail và post-create navigation
+  dùng adaptive summary/route; Open vs Continue tách biệt, unsupported/Render về
+  Overview, visible Affiliate progress `4/5`, batch query không per-card waterfall.
 - [ ] Phase 15C: deep-link/page-shell presentation cutover; execution guards giữ
   server authority.
 - [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi

@@ -1,3 +1,4 @@
+import { mapProjectWorkflowEntrySummary } from "@affichannel/core";
 import {
 	createProject,
 	ProjectServiceError,
@@ -20,7 +21,12 @@ import {
 	getProjectDetails,
 	listProjectItems,
 } from "../services/project-repository";
-import { createProjectWorkflowRequestReader } from "../services/project-workflow-read-service";
+import { listProjectWorkflowEntrySummaries } from "../services/project-workflow-entry-service";
+import {
+	createProjectWorkflowRequestReader,
+	gatherProjectWorkflowSnapshot,
+	projectDetailsToWorkflowSubject,
+} from "../services/project-workflow-read-service";
 import { requireWorkspaceActor } from "../services/workspace";
 
 function toOrpcError(error: unknown): never {
@@ -47,7 +53,18 @@ const repository = createDatabaseProjectRepository();
 export const projectRouter = {
 	list: protectedProcedure.handler(async ({ context }) => {
 		const actor = await requireWorkspaceActor(context.session.user.id);
-		return listProjectItems(actor.workspaceId);
+		const projects = await listProjectItems(actor.workspaceId);
+		const summaries = await listProjectWorkflowEntrySummaries(
+			actor,
+			projects.map((project) => project.id),
+		);
+		const byProject = new Map(
+			summaries.map((summary) => [summary.projectId, summary]),
+		);
+		return projects.flatMap((project) => {
+			const workflowEntry = byProject.get(project.id);
+			return workflowEntry ? [{ ...project, workflowEntry }] : [];
+		});
 	}),
 	get: protectedProcedure
 		.input(projectIdInputSchema)
@@ -82,7 +99,19 @@ export const projectRouter = {
 			const actor = await requireWorkspaceActor(context.session.user.id);
 
 			try {
-				return await createProject(repository, actor, input);
+				const created = await createProject(repository, actor, input);
+				const snapshot = await gatherProjectWorkflowSnapshot(
+					actor,
+					projectDetailsToWorkflowSubject(created),
+				);
+				observeProjectApplicabilityShadowFromSnapshot(actor, snapshot);
+				return {
+					...created,
+					workflowEntry: mapProjectWorkflowEntrySummary(
+						created.id,
+						snapshot.adaptiveWorkflow,
+					),
+				};
 			} catch (error) {
 				return toOrpcError(error);
 			}
