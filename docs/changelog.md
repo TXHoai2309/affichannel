@@ -8,6 +8,21 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-015 Phase 15C Adaptive deep-link presentation cutover
+
+- `/content`, `/fact-lock`, `/voice`, `/video` và `/preview` dùng shared Adaptive
+  route gate; READY mở UI hiện hữu, còn prerequisite/not-applicable/blocked/stale
+  dùng typed presentation và remediation CTA từ `primaryAction`.
+- Unsupported/invalid workflow fail closed về trạng thái “Project cần được kiểm
+  tra”; không redirect loop và không render arbitrary execution controls.
+- `/video` và `/preview` dùng cùng Render capability truth, cùng hiển thị `Sắp có`
+  cho `RENDER_FEATURE_NOT_IMPLEMENTED`, không có fake readiness/execution CTA.
+- Generic Project route read bỏ legacy Fact Lock/Voice reconciliation; layout và
+  page reuse request-owned Adaptive snapshot. Server mutation guards không đổi.
+- A–J route matrix `10/10`, five-route wiring, six-state/unsupported/invalid,
+  15B1/15B2, M4/M3B/M2C/M1 và chín golden suites đều xanh. Phase 15D vẫn pending;
+  full AFF-US-015 chưa DONE.
+
 ### AFF-US-015 Phase 15B2 Project entry navigation cutover
 
 - Thêm non-persisted `ProjectWorkflowEntrySummary` derived từ canonical Adaptive
@@ -25,8 +40,8 @@ sử dụng Semantic Versioning.
   budget và zero mutation/reconciliation/provider call.
 - Product joins hiện vẫn Affiliate-only; `AFFILIATE_PRODUCT_NOT_LINKED` là follow-up
   cho productless activation/hardening, không phải capability đã active ở 15B2.
-- Giữ legacy persistence và deep-link/execution guards. Phase 15C vẫn pending;
-  full AFF-US-015 chưa DONE.
+- Giữ legacy persistence và deep-link/execution guards tại boundary 15B2; 15C nay
+  đã cut over presentation và full AFF-US-015 vẫn chưa DONE.
 
 ### AFF-US-015 Phase 15B1 Project presentation cutover
 
@@ -38,7 +53,8 @@ sử dụng Semantic Versioning.
 - Harden fail-closed bằng canonical Applicability tuple invariant ở core; Web không
   còn tự suy reason/state/completion validity theo capability prefix.
 - Project layout không còn gọi Fact Lock/Voice reconciliation cho Stepper. 15B2
-  đã chuyển entry surfaces; 15C, execution guards và legacy route shells chưa đổi.
+  đã chuyển entry surfaces; route shells sau đó được chuyển ở 15C, execution guards
+  vẫn không đổi.
 
 ### AFF-US-015 Phase 15A Adaptive Workflow read foundation
 

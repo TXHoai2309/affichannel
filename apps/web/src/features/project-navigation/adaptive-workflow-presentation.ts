@@ -337,6 +337,177 @@ export function adaptiveWorkflowHref(
 	return `/projects/${projectId}/${routeKey}` as const;
 }
 
+export type AdaptiveProjectRouteKey = Extract<
+	AdaptiveWorkflowRouteKey,
+	"content" | "fact-lock" | "voice" | "video" | "preview"
+>;
+
+const ROUTE_CAPABILITY = {
+	content: "SCRIPT",
+	"fact-lock": "FACT_LOCK",
+	voice: "VOICE",
+	video: "RENDER",
+	preview: "RENDER",
+} as const satisfies Record<AdaptiveProjectRouteKey, ApplicabilityCapability>;
+
+function remediationAction(
+	projectId: string,
+	step: AdaptiveWorkflowStep,
+	showContent: boolean,
+) {
+	const action = step.primaryAction;
+	if (
+		showContent ||
+		!action?.targetRouteKey ||
+		action.kind === "COMING_SOON" ||
+		action.kind === "OPT_IN"
+	) {
+		return null;
+	}
+	const targetLabel = action.targetCapability
+		? ADAPTIVE_CAPABILITY_LABELS[action.targetCapability]
+		: null;
+	return {
+		label: targetLabel ? `Mở ${targetLabel}` : "Tiếp tục",
+		href: adaptiveWorkflowHref(projectId, action.targetRouteKey),
+	};
+}
+
+/**
+ * Route presentation only. Applicability remains owned by the Resolver and
+ * execution remains owned by the server-side mutation services.
+ */
+export function getAdaptiveRouteGatePresentation(
+	workflow: AdaptiveWorkflowReadModel,
+	routeKey: AdaptiveProjectRouteKey,
+	projectId: string,
+) {
+	const overviewHref = `/projects/${projectId}` as const;
+	if (workflow.unsupportedState.isUnsupported) {
+		const overview = getAdaptiveWorkflowOverviewPresentation(
+			workflow,
+			projectId,
+		);
+		return {
+			capability: ROUTE_CAPABILITY[routeKey],
+			mode: "gated" as const,
+			title: "Project cần được kiểm tra",
+			statusLabel: "Cần kiểm tra",
+			helperText: overview.helperText,
+			semantic: "attention" as const,
+			badgeVariant: "destructive" as const,
+			action: { label: "Về tổng quan Project", href: overviewHref },
+		};
+	}
+
+	const capability = ROUTE_CAPABILITY[routeKey];
+	const step = workflow.steps.find((item) => item.capability === capability);
+	if (!step) {
+		return {
+			capability,
+			mode: "gated" as const,
+			title: "Project cần được kiểm tra",
+			statusLabel: "Cần kiểm tra",
+			helperText: "Workflow không có capability cần thiết cho route này.",
+			semantic: "attention" as const,
+			badgeVariant: "destructive" as const,
+			action: { label: "Về tổng quan Project", href: overviewHref },
+		};
+	}
+	if (
+		step.applicabilityState === "OPTIONAL" &&
+		step.optionalSelection !== "SELECTED"
+	) {
+		return {
+			capability,
+			mode: "gated" as const,
+			title: "Bước tùy chọn chưa được bật",
+			statusLabel: "Tùy chọn",
+			helperText: "Project chưa có lựa chọn bền vững để bật bước tùy chọn này.",
+			semantic: "waiting" as const,
+			badgeVariant: "outline" as const,
+			action: { label: "Về tổng quan Project", href: overviewHref },
+		};
+	}
+
+	const presentation = getAdaptiveStepPresentation(step);
+	if (!presentation.valid) {
+		return {
+			capability,
+			mode: "gated" as const,
+			title: "Project cần được kiểm tra",
+			statusLabel: presentation.statusLabel,
+			helperText: presentation.helperText,
+			semantic: presentation.semantic,
+			badgeVariant: presentation.badgeVariant,
+			action: { label: "Về tổng quan Project", href: overviewHref },
+		};
+	}
+
+	if (step.reasonCode === "RENDER_FEATURE_NOT_IMPLEMENTED") {
+		return {
+			capability,
+			mode: "gated" as const,
+			title: "Sắp có",
+			statusLabel: presentation.statusLabel,
+			helperText: presentation.helperText,
+			semantic: presentation.semantic,
+			badgeVariant: presentation.badgeVariant,
+			action: null,
+		};
+	}
+
+	if (step.applicabilityState === "READY") {
+		return {
+			capability,
+			mode: "content" as const,
+			title: presentation.label,
+			statusLabel: presentation.statusLabel,
+			helperText: presentation.helperText,
+			semantic: presentation.semantic,
+			badgeVariant: presentation.badgeVariant,
+			action: null,
+		};
+	}
+
+	const actionTargetsCurrentCapability =
+		(step.applicabilityState === "BLOCKED" ||
+			step.applicabilityState === "STALE") &&
+		step.primaryAction?.targetCapability === step.capability &&
+		step.primaryAction.targetRouteKey === step.primaryRoute.key;
+	const mode = actionTargetsCurrentCapability ? "remediation" : "gated";
+	const targetLabel = step.primaryAction?.targetCapability
+		? ADAPTIVE_CAPABILITY_LABELS[step.primaryAction.targetCapability]
+		: null;
+	const title =
+		step.applicabilityState === "NOT_REQUIRED"
+			? "Bước này không áp dụng cho Project hiện tại"
+			: step.applicabilityState === "OPTIONAL"
+				? "Bước tùy chọn chưa được bật"
+				: step.applicabilityState === "REQUIRED" &&
+						targetLabel &&
+						step.primaryAction?.targetCapability !== step.capability
+					? `Hoàn tất ${targetLabel} trước`
+					: step.applicabilityState === "STALE"
+						? "Cần cập nhật"
+						: presentation.statusLabel;
+
+	return {
+		capability,
+		mode,
+		title,
+		statusLabel: presentation.statusLabel,
+		helperText: presentation.helperText,
+		semantic: presentation.semantic,
+		badgeVariant: presentation.badgeVariant,
+		action:
+			step.applicabilityState === "NOT_REQUIRED" ||
+			step.applicabilityState === "OPTIONAL"
+				? { label: "Về tổng quan Project", href: overviewHref }
+				: remediationAction(projectId, step, mode === "remediation"),
+	};
+}
+
 export function getAdaptiveStepPresentation(step: AdaptiveWorkflowStep) {
 	const state = statePresentation(step);
 	const valid = state.semantic !== "attention";

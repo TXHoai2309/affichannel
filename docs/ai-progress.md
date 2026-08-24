@@ -3,8 +3,27 @@
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
   shadow runtime đã đạt parity; AFF-US-015 Phase 15A accepted và Phase 15B1 đã
   cut over Project Stepper/Overview; Phase 15B2 đã chuyển Project entry surfaces
-  sang Adaptive Workflow; 15C vẫn pending và full AFF-US-015 chưa DONE.
+  sang Adaptive Workflow; Phase 15C đã chuyển internal deep-link presentation;
+  15D vẫn pending và full AFF-US-015 chưa DONE.
 - Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-015 Phase 15C Adaptive deep-link cutover
+
+Các route `/content`, `/fact-lock`, `/voice`, `/video` và `/preview` hiện dùng
+request-cached `AdaptiveWorkflowReadModel` làm presentation/gating authority.
+Shared gate phân biệt NOT_REQUIRED, OPTIONAL chưa chọn, REQUIRED, READY, BLOCKED,
+STALE, unsupported và invalid canonical tuple; pathname vẫn là active-route
+authority và không redirect tự động.
+
+READY mở chức năng hiện hữu. BLOCKED/STALE chỉ giữ nội dung remediation khi typed
+`primaryAction` trỏ đúng capability; downstream route bị chặn không render execution
+UI. Video và Preview cùng dùng một Render truth, đều hiển thị `Sắp có` và không có
+execution CTA. Generic route read không còn Fact Lock evaluation hoặc Voice
+reconciliation; layout/page dùng cùng `React.cache()` snapshot.
+
+Route matrix A–J đạt `10/10`; execution golden, 15B1/15B2, zero mutation,
+reconciliation/provider và fixed-query regressions tiếp tục xanh. M4 shadow được
+giữ nguyên; 15D, M5 và AFF-US-017 chưa bắt đầu.
 
 ## 2026-08-24 — AFF-US-015 Phase 15B2 Project entry navigation cutover
 
@@ -31,7 +50,8 @@ trong 15B2.
 Legacy `currentStepKey`/`project_step_status` vẫn được persist nhưng không còn là
 navigation/applicability authority ở các surface của 15B2. Deep-link route gates,
 execution guards, Organic/Quick Image/Media First, OPTIONAL persistence, Render,
-M5 và AFF-US-017 không đổi. Phase 15C vẫn pending; full AFF-US-015 chưa DONE.
+M5 và AFF-US-017 không đổi tại 15B2; Phase 15C nay đã hoàn tất, 15D vẫn pending và
+full AFF-US-015 chưa DONE.
 
 ## 2026-08-24 — AFF-US-015 Phase 15B1 Project presentation cutover
 
@@ -47,7 +67,7 @@ Project shell không còn đọc `currentStepKey`, `project_step_status`, Fact L
 hoặc Voice reconciliation để trình bày applicability. Overview load Project metadata
 và Adaptive Workflow song song, CTA dùng `nextApplicableStep/nextRouteKey`. Project
 List, Dashboard và product-detail/post-create navigation được chuyển ở 15B2;
-deep-link route shells vẫn được giữ cho 15C. Full AFF-US-015 chưa DONE.
+deep-link route shells sau đó được chuyển ở 15C. Full AFF-US-015 chưa DONE.
 
 ## 2026-08-24 — AFF-US-015 Phase 15A Adaptive Workflow read foundation
 

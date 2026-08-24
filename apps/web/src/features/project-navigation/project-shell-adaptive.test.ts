@@ -13,6 +13,7 @@ vi.mock("@/lib/project-loader", () => loader);
 
 import ProjectLayout from "../../app/(protected)/projects/[projectId]/layout";
 import ProjectOverviewPage from "../../app/(protected)/projects/[projectId]/page";
+import GatedProjectStepPage from "./gated-project-step-page";
 
 function workflow(): AdaptiveWorkflowReadModel {
 	return {
@@ -108,6 +109,26 @@ describe("AFF-US-015 Project shell adaptive cutover", () => {
 		expect(result.props).toMatchObject({
 			projectId: "project-shell",
 			workflow: workflow(),
+		});
+	});
+
+	it("uses the same cached Adaptive loader for route gating without legacy gate or reconciliation reads", async () => {
+		const result = await GatedProjectStepPage({
+			projectId: "project-shell",
+			stepKey: "voice",
+			children: "voice-content",
+		});
+
+		expect(loader.getAdaptiveWorkflowForCurrentUser).toHaveBeenCalledWith(
+			"project-shell",
+		);
+		expect(loader.getFactLockGateForCurrentUser).not.toHaveBeenCalled();
+		expect(loader.getVoiceStepSummaryForCurrentUser).not.toHaveBeenCalled();
+		expect(result?.props).toMatchObject({
+			projectId: "project-shell",
+			stepKey: "voice",
+			workflow: workflow(),
+			content: "voice-content",
 		});
 	});
 });

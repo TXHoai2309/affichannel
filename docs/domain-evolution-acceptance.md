@@ -1,6 +1,7 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 shadow runtime AC-014-01–15 đạt, authority cutover chưa mở
+- Trạng thái: Canonical; M4 shadow AC-014-01–15 đạt, Adaptive presentation đã cut
+  over qua Phase 15C; M5 chưa mở
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-24
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028
@@ -156,22 +157,24 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   budget, zero mutation và zero reconciliation/provider call.
 - [ ] Productless activation/hardening cho `AFFILIATE_PRODUCT_NOT_LINKED`; Product
   joins của 15B2 tiếp tục Affiliate-only.
-- [ ] Phase 15C: deep-link/page-shell presentation cutover; execution guards giữ
+- [x] Phase 15C: deep-link/page-shell presentation cutover; execution guards giữ
   server authority.
-- [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi
-  là complete, STALE không bị flatten thành blocked/failed.
+- [x] Shared route gate phân biệt đủ sáu state và completion bằng text/icon; READY
+  không bị coi là complete, STALE không bị flatten thành blocked/failed.
 - [ ] Product picker chỉ bắt buộc khi policy yêu cầu và giải thích lý do.
 - [ ] `NOT_REQUIRED` ẩn khỏi primary stepper với visible numbering liên tục; direct
   URL hiện controlled N/A state. OPTIONAL chỉ active sau durable server opt-in.
-- [ ] Bốn tab Studio không làm mất deep link/bảy persisted step routes; Product,
-  Content, Fact Lock, Voice, Video và Preview bookmarks vẫn hợp lệ.
-- [ ] Video/Preview dùng cùng Render result và hiện `Sắp có` khi reason là
+- [x] Internal route cutover không làm mất deep link/bảy persisted step routes;
+  Product, Content, Fact Lock, Voice, Video và Preview bookmarks vẫn hợp lệ.
+- [x] Video/Preview dùng cùng Render result và hiện `Sắp có` khi reason là
   `RENDER_FEATURE_NOT_IMPLEMENTED`; không expose execution CTA.
 - [ ] Loading, empty, validation, conflict, unauthorized, provider error và success đều có state.
 - [ ] Keyboard/focus/label/contrast, semantic link/button, `aria-current` và mobile
   no-overflow đạt baseline hiện hữu.
-- [ ] Adaptive read reuse một authorized snapshot, không provider/mutation hoặc
+- [x] Adaptive read reuse một authorized snapshot, không provider/mutation hoặc
   duplicate Project + shadow + adaptive gather waterfall.
+- [ ] Phase 15D: authenticated direct-route/manual, loading/error, accessibility,
+  mobile và final query-budget acceptance; full AFF-US-015 chưa DONE.
 
 ## 11. Regression suite tối thiểu
 
