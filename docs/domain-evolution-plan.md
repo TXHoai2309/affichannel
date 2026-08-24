@@ -154,6 +154,11 @@ trong Phase 0.
    `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` cho đến slice Render thật.
 6. Chỉ mở authority-cutover task riêng khi 100% matrix A–J/golden Affiliate parity,
    zero exception/unmapped case và golden regression đạt. M4 tự nó không cut over.
+7. Runtime implementation tests phải thêm negative domain fixtures fail-closed cho
+   `AFFILIATE + missing Product`, unsupported ContentFormat và partial/invalid
+   Project identity. Các fixture này kiểm tra primary reason precedence; chúng
+   không mở rộng production shadow baseline ngoài
+   `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` và không activate future flow.
 
 ### M5 — Enforce và cutover
 

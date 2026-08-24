@@ -24,6 +24,9 @@ ready; route accessible không phải capability readiness.
 Task này chỉ sửa canonical docs. Không tạo runtime Resolver/service/router/UI,
 không schema/migration/telemetry, không mutate `currentStepKey`, không activate
 Organic/Quick Image/Media First, không bắt đầu AFF-US-015/M5 và không deploy.
+DEC-028 supersede shorthand lịch sử “transactional `nextApplicableStep`”: M4
+Resolver chỉ derive; persisted workflow synchronization là business action riêng
+sau parity và explicit authority-cutover approval.
 
 ## 2026-08-22 — Tái gán canonical backlog AFF-US-013–030
 

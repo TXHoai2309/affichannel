@@ -424,8 +424,11 @@ implementation history. Công việc mới đi theo thứ tự phụ thuộc:
   `content_format_key`, `content_format_version`; backfill project cũ thành
   `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` theo DEC-026.
 - Cho `productId` nullable ở DB, giữ service invariants cho Affiliate/Product claim.
-- Thêm Applicability Resolver dùng chung cho UI/API/worker và transactional
-  `nextApplicableStep`; không sửa enum persisted step status.
+- Thêm Applicability Resolver pure dùng chung cho UI/API/worker để derive
+  `nextApplicableStep`; Resolver không persist applicability hoặc mutate
+  `currentStepKey`. Sau M4 parity/approved authority cutover, business action
+  transactional riêng mới có thể đồng bộ persisted workflow; không sửa enum
+  persisted step status.
 - Thêm ScriptGeneration input source mode
   `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`; không thay persisted operation mode
   `full | repair` hiện hữu.

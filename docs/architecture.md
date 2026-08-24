@@ -370,8 +370,12 @@ credential.
 
 Voice Studio hiện hữu reuse server-side `FactLockGate.assertPassed(actor,
 projectId)` cho golden affiliate flow. Sau Domain Evolution, route và mutation phải
-gọi Applicability Resolver: chỉ assert Fact Lock khi gate `REQUIRED`; Organic
-claimless có thể dùng Voice khi gate `NOT_REQUIRED`. Không lưu unlock boolean.
+giữ defensive execution-boundary check: reassert Fact Lock khi Fact Lock là
+mandatory theo Project identity/claim policy; bỏ qua assertion khi Resolver policy
+trả `NOT_REQUIRED`. Không được dùng `state === REQUIRED` để quyết định capability
+có mandatory hay không, vì mandatory Fact Lock có thể derive `REQUIRED`, `READY`,
+`BLOCKED` hoặc `STALE`. Không lưu unlock boolean. M4 docs task chưa thay runtime
+gate hiện hữu.
 Preview dùng text do server derive từ current ScriptVersion, gọi provider ngoài
 database transaction và trả audio tạm thời qua protected binary endpoint với
 canonical MIME `audio/mpeg`. Audio preview không lưu DB/object storage.

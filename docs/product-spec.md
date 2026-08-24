@@ -103,8 +103,10 @@ Foundation không bao gồm Video AI, tạo lịch nội dung, analytics nâng c
   `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`.
 - Cho `productId` nullable ở database nhưng enforce Product cho Affiliate và mọi
   Organic Product claim.
-- Thêm runtime Applicability Resolver và server transition `nextApplicableStep`;
-  giữ nguyên enum của `project_step_status`.
+- Thêm runtime Applicability Resolver pure để derive `nextApplicableStep`; Resolver
+  không persist applicability hoặc mutate `currentStepKey`. Sau M4 parity/approved
+  authority cutover, business action transactional riêng mới có thể đồng bộ
+  persisted workflow; giữ nguyên enum của `project_step_status`.
 - Hỗ trợ ScriptGeneration input source mode
   `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`, tách khỏi operation mode `full | repair`.
 - Thêm server-built ClaimManifest và FactLockRun Manifest-first, tương thích run cũ.
@@ -459,8 +461,10 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 - Organic có Product claim nhưng `productId=null` bị reject; link Product hợp lệ
   không làm Content Type tự chuyển thành Affiliate.
 - Organic Scripted AI dùng `ORGANIC_NO_PRODUCT` mà không lookup Product Facts.
-- UI phân biệt `NOT_REQUIRED` và `BLOCKED`; server bỏ qua step không áp dụng bằng
-  `nextApplicableStep` mà không ghi enum mới vào `project_step_status`.
+- UI phân biệt `NOT_REQUIRED` và `BLOCKED`; Resolver derive
+  `nextApplicableStep` mà không persist applicability hoặc mutate workflow. Sau
+  approved cutover, business action riêng mới có thể đồng bộ persisted step mà
+  không ghi enum applicability vào `project_step_status`.
 - Affiliate luôn có server-built ClaimManifest và Fact Lock policy check trước
   TTS/render; Organic no-claim không bị Fact Lock chặn.
 - ClaimManifest empty chỉ PASS sau server normalization thành công; client không
