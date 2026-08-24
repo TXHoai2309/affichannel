@@ -6,9 +6,10 @@ với các tài liệu tại đây.
 
 Product/UI Specification v0.8 là **canonical product specification** và đã được
 chấp nhận ở cấp tài liệu qua DEC-025. DEC-026 đã khóa ContentFormat và đóng Phase 0;
-M1 hiện **READY for review** nhưng chưa được tạo hoặc apply. Repo chỉ được coi là
-canonical-activated sau migration review và regression gates trong
-`domain-evolution-acceptance.md`; trạng thái hiện tại chưa ngụ ý đã đổi schema/code.
+M1/M2/M3 đã hoàn tất cho current Affiliate compatibility baseline. DEC-028 khóa
+AFF-US-014/M4 shadow contract nhưng runtime Resolver/cutover chưa triển khai. Repo
+chỉ được coi là canonical-activated cho future identities sau các regression gate
+trong `domain-evolution-acceptance.md` và explicit authority cutover.
 
 ## Thứ tự đọc
 
@@ -19,9 +20,10 @@ canonical-activated sau migration review và regression gates trong
 5. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
 6. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
 7. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
-8. [Hệ thống thiết kế](./design-system.md)
-9. [Tiến trình AI agent](./ai-progress.md)
-10. [Nhật ký thay đổi](./changelog.md)
+8. [AFF-US-014 / M4 Resolver Shadow Contract](./aff-us-014-m4-applicability-resolver-shadow.md)
+9. [Hệ thống thiết kế](./design-system.md)
+10. [Tiến trình AI agent](./ai-progress.md)
+11. [Nhật ký thay đổi](./changelog.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 

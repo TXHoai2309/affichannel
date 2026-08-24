@@ -1,8 +1,29 @@
 # Tiến trình AI agent
 
-- Trạng thái: US12 baseline frozen/completed; Domain Evolution Phase 0 hoàn tất;
-  M1 READY for review nhưng implementation/ClaimManifest/Quick Image chưa bắt đầu.
-- Cập nhật lần cuối: 2026-08-22
+- Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
+  acceptance contract đã khóa, runtime shadow chưa triển khai.
+- Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-014 / M4 Resolver Shadow contract
+
+Đã audit toàn repo cho Product/Project write invariants, Script generation/current
+ScriptVersion, Fact Lock gate/staleness, VoiceConfig/Preview/VoiceSegment,
+Video/Preview placeholder, persisted step status, `currentStepKey`, UI mapping và
+golden fixtures. Kết luận: các domain gate hiện có authority riêng; không có một
+comprehensive next-step authority. `currentStepKey` được tạo ở Product và current
+runtime chỉ tiến `voice -> video` qua Voice reconciliation, nên M4 phải dùng
+normalized legacy oracle thay vì coi key này là applicability truth.
+
+DEC-028 và
+`docs/aff-us-014-m4-applicability-resolver-shadow.md` khóa pure derived Resolver
+cho PRODUCT/SCRIPT/FACT_LOCK/VOICE/RENDER, đúng six-state union, completion riêng,
+typed reason precedence, matrix A–J, sanitized shadow mismatch và parity exit gate
+100%. Current Render là `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` sau khi upstream
+ready; route accessible không phải capability readiness.
+
+Task này chỉ sửa canonical docs. Không tạo runtime Resolver/service/router/UI,
+không schema/migration/telemetry, không mutate `currentStepKey`, không activate
+Organic/Quick Image/Media First, không bắt đầu AFF-US-015/M5 và không deploy.
 
 ## 2026-08-22 — Tái gán canonical backlog AFF-US-013–030
 

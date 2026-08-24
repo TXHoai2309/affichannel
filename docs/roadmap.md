@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-22
+- Cập nhật lần cuối: 2026-08-24
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -20,10 +20,10 @@ pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã 
 7. Analytics.
 8. AI Visual.
 
-Current pointer: US12 baseline đã frozen/completed. Domain Evolution preparation /
-Phase 0 đã hoàn tất qua DEC-026; **M1 READY for review**, nhưng migration chưa được
-tạo hoặc apply. Bước tiếp theo là review migration plan và baseline preflight
-trước khi có authorization triển khai M1.
+Current pointer: US12 baseline frozen/completed; AFF-US-013 M1 và AFF-US-016
+M2A/M2B/M2C/M3A/M3B đã accepted, migration `0017` và legacy reconciliation đã
+hoàn tất. AFF-US-014 M4 repository audit/acceptance contract đã khóa qua DEC-028;
+runtime Resolver/shadow comparison chưa triển khai và chưa authority cutover.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
@@ -71,6 +71,13 @@ Ranh giới tránh overlap:
 - `AFF-US-029` sở hữu provider governance/cost guardrails; `AFF-US-030` sở hữu
   operational monitoring/recovery. Mọi story gọi paid provider phải đạt safety
   acceptance liên quan trước khi bật provider.
+
+AFF-US-014/M4 dùng contract tại
+`docs/aff-us-014-m4-applicability-resolver-shadow.md`. M4 chỉ compute/compare
+shadow trên golden Affiliate identity; legacy gates vẫn authority, Resolver không
+mutate `currentStepKey`, UI chưa chuyển sang adaptive workflow và current
+Video/Render placeholder phải được biểu diễn
+`BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready.
 
 ## 1. Phương pháp triển khai
 

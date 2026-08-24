@@ -1,9 +1,9 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical test contract; chưa chạy
+- Trạng thái: Canonical; M4 contract AC-014-01–07 locked, runtime gates pending
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-22
-- Quyết định liên quan: DEC-025, DEC-026
+- Cập nhật lần cuối: 2026-08-24
+- Quyết định liên quan: DEC-025, DEC-026, DEC-028
 
 ## 1. Nguyên tắc đạt
 
@@ -50,19 +50,34 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ## 3. Gate B — Applicability Resolver
 
-- [ ] `AFFILIATE + SCRIPTED` có parity với golden flow hiện hữu.
-- [ ] `ORGANIC + QUICK_IMAGE` claimless trả Product/Script/Fact Lock `NOT_REQUIRED`.
-- [ ] Organic Scripted claimless yêu cầu Script nhưng không yêu cầu Product/Fact Lock.
-- [ ] Organic có Product claim bị block nếu thiếu Product hoặc Product Facts evidence.
-- [ ] Affiliate thiếu Product bị từ chối ở application service và protected API.
-- [ ] Runtime states không được persist vào `project_step_status.status`.
-- [ ] UI, API readiness và worker preflight dùng cùng resolver result/reason code.
+- [x] `AC-014-01–07`: khóa six-state semantics, completion separation, năm
+  capabilities, typed reason/precedence, sanitized dependencies và pure
+  `nextApplicableStep` tại
+  `docs/aff-us-014-m4-applicability-resolver-shadow.md`.
+- [ ] `AC-014-08`: matrix A–J và golden `AFFILIATE + SCRIPTED` đạt 100% state,
+  completion, primary reason và next-step parity.
+- [ ] `AC-014-09`: Script revision, Product Fact dependency và Voice fingerprint
+  tạo đúng `STALE`, không flatten thành generic blocked.
+- [ ] `AC-014-10–12`: shadow-only, legacy authority giữ nguyên, zero mutation và
+  không cut over API/UI/worker.
+- [ ] `AC-014-13`: future Organic/Quick Image/Media First fixtures không activate
+  production write/route behavior.
+- [ ] `AC-014-14`: Video/Render placeholder trả
+  `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready.
+- [ ] `AC-014-15`: zero resolver exception/unmapped case và golden regression xanh
+  trước khi mở authority-cutover task.
+- [ ] Affiliate thiếu Product tiếp tục bị từ chối ở application service/protected
+  API; DB nullability không phải applicability policy.
+- [ ] Runtime states không được persist vào `project_step_status.status`, Project
+  column hoặc Resolver snapshot table.
 
 ## 4. Gate C — Workflow transition
 
 - [ ] `nextApplicableStep` bỏ qua đúng step `NOT_REQUIRED` theo canonical order.
 - [ ] Step bị bỏ qua không được ghi `completed`.
-- [ ] Transition cập nhật `currentStepKey` atomic dưới concurrent request.
+- [ ] M4 shadow không cập nhật `currentStepKey`; Resolver chỉ derive result.
+- [ ] Trong task cutover riêng sau M4, transition cập nhật `currentStepKey` atomic
+  dưới concurrent request.
 - [ ] Direct URL không mutate workflow current.
 - [ ] Back/forward/refresh hiển thị đúng viewed step và current workflow state.
 - [ ] Resolver change làm downstream gate lại nhưng không tự rollback current step.

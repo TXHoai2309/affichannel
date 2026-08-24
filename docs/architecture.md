@@ -1,8 +1,8 @@
 # Kiến trúc AffiChannel
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; triển khai qua migration và regression gate
+- Trạng thái: Affiliate M1/M2/M3 implemented; M4 contract canonical, shadow pending
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-22
+- Cập nhật lần cuối: 2026-08-24
 
 ## 1. Mục tiêu kiến trúc
 
@@ -170,13 +170,12 @@ vertical slice thực sự sử dụng nó.
 ### 7.1. Contract Domain Evolution v0.8
 
 `Project` tiếp tục là content production unit và đóng vai trò Content Item trong
-MVP. Migration thêm `content_type`, `creation_path`, `content_format_key` và
-`content_format_version`; backfill toàn bộ project lịch sử thành
-`AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` trước khi đặt not-null. Không dùng
-DB default để che row chưa backfill. `productId` được phép nullable ở database,
-nhưng application service phải enforce Product cho Affiliate và mọi Organic
-content có Product claim. Read path phải chịu được cả dữ liệu trước và sau
-migration trong cửa sổ rollout.
+MVP. Migration `0017` đã thêm `content_type`, `creation_path`,
+`content_format_key` và `content_format_version`; deterministic reconciliation đã
+đưa legacy Project về `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`. Không dùng DB
+default để che row chưa backfill. `productId` nullable ở database, nhưng current
+M3 application service vẫn enforce Product cho Affiliate và rollout policy chưa
+activate Organic. Read path tiếp tục giữ compatibility trong rollout.
 
 ContentFormat registry là readonly server-owned contract trong `packages/core`.
 Identity là immutable `(key, version)`; registry MVP chỉ có
@@ -192,10 +191,13 @@ vẫn resolve cho historical Project nhưng không được gán mới. Chi ti�
 
 Applicability Resolver là pure domain policy dùng chung cho UI, API readiness và
 worker preflight. Resolver trả runtime DTO `NOT_REQUIRED | OPTIONAL | REQUIRED |
-READY | BLOCKED | STALE`; không ghi các giá trị này vào
-`project_step_status.status`. Khi current persisted step là `NOT_REQUIRED`,
-server tính `nextApplicableStep` theo thứ tự bảy step, khóa project và cập nhật
-`currentStepKey` trong transaction. Step bị bỏ qua không được giả là `completed`.
+READY | BLOCKED | STALE`, cùng completion/reason/dependency summary riêng; không
+ghi các giá trị này vào `project_step_status.status` hoặc persistence mới.
+Resolver derive `nextApplicableStep` theo năm capability M4 và không mutate
+`currentStepKey`. Sau shadow parity, một write operation riêng mới có thể được
+phê duyệt để khóa Project và đồng bộ persisted workflow trong transaction. Step
+bị bỏ qua không được giả là `completed`. Contract chi tiết nằm tại DEC-028 và
+`docs/aff-us-014-m4-applicability-resolver-shadow.md`.
 
 Script generation nhận discriminated input source mode do server chọn:
 `PRODUCT_BACKED` hoặc `ORGANIC_NO_PRODUCT`. Đây là dimension riêng, không thay cột

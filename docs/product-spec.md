@@ -1,8 +1,8 @@
 # Đặc tả sản phẩm AffiChannel Personal
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; repo activation qua migration và regression gate
+- Trạng thái: Canonical; Affiliate M1/M2/M3 active, future identities vẫn gated
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-22
+- Cập nhật lần cuối: 2026-08-24
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -200,8 +200,10 @@ quyết Product, Script, Fact Lock, Voice hay Render. DEC-026 là contract chi t
 Applicability Resolver tính runtime state cho Product, Script, Fact Lock, Voice và
 Render: `NOT_REQUIRED | OPTIONAL | REQUIRED | READY | BLOCKED | STALE`. Các state
 này không được ghi trực tiếp vào enum persisted `project_step_status.status`.
-Khi current step không áp dụng, server dùng business action có transaction để
-chuyển `currentStepKey` tới persisted step tiếp theo thực sự áp dụng.
+Resolver chỉ derive `nextApplicableStep` và không mutate `currentStepKey`. Sau M4
+shadow parity, việc đồng bộ persisted step nếu được phê duyệt phải đi qua business
+action transactional riêng. Completion/progress là metadata riêng, không thêm
+`COMPLETED` vào applicability state.
 
 ### Script generation
 
@@ -257,8 +259,10 @@ tăng giữa các snapshot và không cộng trực tiếp nhiều snapshot tíc
 
 ## 8. Hành vi Fact Lock
 
-Fact Lock chỉ áp dụng khi resolver trả `REQUIRED`: mọi Affiliate trước TTS/render
-và mọi Organic có Product claim. Organic không Product claim trả `NOT_REQUIRED`;
+Fact Lock là mandatory capability cho mọi Affiliate trước TTS/render và mọi
+Organic có Product claim. Khi mandatory, runtime state có thể là `REQUIRED`,
+`READY`, `BLOCKED` hoặc `STALE`; không được kiểm tra applicability bằng riêng phép
+so sánh `state === REQUIRED`. Organic không Product claim trả `NOT_REQUIRED`;
 factual knowledge không dựa trên Product Facts thuộc manual evidence flow riêng.
 
 Classification của claim trong một Fact Lock run:
@@ -367,8 +371,9 @@ sang `video` khi ready; thay đổi script/config làm Video bị gate lại mà
 rollback current step. Pending quá lease thành indeterminate không retry provider.
 Video của flow này yêu cầu đồng thời Fact Lock PASS và Voice ready. E2E dùng
 deterministic TTS, không gọi live APIKEY.FUN/R2; không tạo migration mới.
-AFF-US-012 đã DONE. Với path mới v0.8, resolver thay điều kiện Fact Lock PASS bằng
-`Fact Lock PASS khi REQUIRED`; Organic claimless vẫn có thể opt-in Voice/TTS.
+AFF-US-012 đã DONE. Với path mới v0.8, resolver thay điều kiện global bằng
+`Fact Lock PASS khi Fact Lock là mandatory/applicable`; Organic claimless vẫn có
+thể opt-in Voice/TTS. M4 chỉ shadow contract, chưa thay gate hiện hữu.
 
 ## 9. Các màn hình chính
 
@@ -463,29 +468,29 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 - FactLockRun new write persist Manifest ID/fingerprint; no-script run không cần
   ScriptVersion và legacy Script-linked rows vẫn đọc được.
 - Organic no-claim có thể opt-in Voice/TTS khi Fact Lock là `NOT_REQUIRED`; khi
-  Fact Lock `REQUIRED`, Voice/TTS vẫn fail closed đến khi PASS.
+  Fact Lock là mandatory/applicable, Voice/TTS vẫn fail closed đến khi PASS.
 - Quick Image render tạo immutable MP4 variation; retry idempotent không làm mất
   Project hoặc tạo duplicate charge/output ngoài contract.
 - Golden affiliate scripted regression tiếp tục đạt sau migration.
 - Secret không xuất hiện trong source, client bundle, log, database hoặc file
   export.
 
-## 13. Quyết định còn mở và migration readiness
+## 13. Quyết định còn mở và rollout readiness
 
 | Phân loại | Quyết định | Gate |
 |---|---|---|
-| **CLOSED FOR M1 — DEC-026** | ContentFormat là server-owned versioned registry, persist bằng `content_format_key` + `content_format_version`; initial defaults và legacy backfill đã khóa. | M1 đủ điều kiện review; chưa tạo/apply migration trong Phase 0. |
+| **DONE — DEC-026** | ContentFormat là server-owned versioned registry, persist bằng `content_format_key` + `content_format_version`; initial defaults và legacy backfill đã khóa. | Migration `0017`, M2 reconciliation và M3 compatible read/write đã hoàn tất cho Affiliate baseline. |
 | **NON-BLOCKER for Domain Evolution** | Schema chi tiết của applicability provenance snapshot trên artifact. | Trước khi ClaimManifest/Quick Image ghi artifact mới; resolver runtime và Project backfill không phải chờ. |
 | **NON-BLOCKER for Domain Evolution** | MVP manual evidence review cho Organic factual knowledge không dựa trên Product Facts. | Trước khi bật factual Organic path tương ứng; Organic claimless/no-product vẫn được triển khai. |
-| **NON-BLOCKER — contract đã khóa** | Conditional workflow resolver persistence. | DEC-025 đã khóa: applicability là runtime DTO, không mở rộng enum step status; chỉ `currentStepKey` transition bằng business action transactional. Chỉ còn implementation detail/audit shape. |
+| **M4 CONTRACT LOCKED — DEC-028** | Applicability Resolver derived/non-persisted; completion tách riêng và không mở rộng enum step status. | Runtime shadow chưa triển khai; Resolver không mutate `currentStepKey`. Future synchronization là transactional operation riêng sau parity/cutover approval. |
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
-Kết luận go/no-go: DEC-026 đã đóng blocker ContentFormat. **M1 READY for review**;
-việc tạo/apply migration vẫn phải là task implementation riêng với preflight,
-generated diff review và regression evidence.
+Kết luận hiện tại: M1/M2/M3 đã hoàn tất cho canonical Affiliate identity. DEC-028
+đã khóa AFF-US-014/M4 acceptance contract; bước tiếp theo chỉ là runtime shadow
+implementation/review, chưa authority cutover, Organic activation hoặc M5.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

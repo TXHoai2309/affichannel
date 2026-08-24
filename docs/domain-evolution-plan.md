@@ -1,9 +1,9 @@
 # Kế hoạch Domain Evolution v0.8
 
-- Trạng thái: Canonical plan; Phase 0 hoàn tất, M1 READY for review nhưng chưa được tạo/apply
+- Trạng thái: M1/M2/M3 hoàn tất; M4 acceptance contract đã khóa, runtime shadow chưa triển khai
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-22
-- Quyết định liên quan: DEC-025, DEC-026
+- Cập nhật lần cuối: 2026-08-24
+- Quyết định liên quan: DEC-025, DEC-026, DEC-028
 
 ## 1. Mục tiêu
 
@@ -55,7 +55,11 @@ Server chọn một trong hai input source mode:
 Input source mode không thay persisted operation mode `full | repair`. Output
 ScriptDraft, versioning, repair, idempotency và audit hiện hữu được giữ nguyên.
 
-## 3. Baseline readiness audit từ source hiện tại
+## 3. Phase 0 baseline readiness audit (historical)
+
+Snapshot dưới đây ghi lại repository trước M1 để bảo toàn migration reasoning; nó
+không mô tả current HEAD sau M1/M2/M3. Current accepted baseline đã có migration
+`0017`, canonical reconciliation và M3 compatible create/update/read.
 
 - Migration head: `0016_gifted_microbe.sql`; không có `0017`.
 - `project.product_id` hiện `NOT NULL`, FK `product(id)` với `ON DELETE RESTRICT`
@@ -137,9 +141,19 @@ trong Phase 0.
 
 ### M4 — Resolver shadow mode
 
-1. Chạy Applicability Resolver ở shadow mode trên golden affiliate projects.
-2. So sánh quyết định với gate hiện hữu; mismatch phải có reason code/audit.
-3. Chỉ bật resolver làm authority khi affiliate parity đạt acceptance.
+1. Contract/audit source of truth là
+   `docs/aff-us-014-m4-applicability-resolver-shadow.md`; Resolver cover
+   `PRODUCT | SCRIPT | FACT_LOCK | VOICE | RENDER` với đúng sáu state canonical.
+2. Chạy pure Resolver song song với normalized legacy gates trên golden
+   `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`; legacy vẫn production authority.
+3. So sánh state, completion, primary reason và `nextApplicableStep`; mismatch dùng
+   typed taxonomy, sanitized diagnostic và không đổi user-visible behavior.
+4. Resolver/shadow path không mutate DB/artifact/`project_step_status`/
+   `currentStepKey`, không gọi provider và không activate future identity.
+5. Video/Render placeholder không được báo READY; sau khi upstream ready phải là
+   `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` cho đến slice Render thật.
+6. Chỉ mở authority-cutover task riêng khi 100% matrix A–J/golden Affiliate parity,
+   zero exception/unmapped case và golden regression đạt. M4 tự nó không cut over.
 
 ### M5 — Enforce và cutover
 
@@ -164,19 +178,27 @@ không còn row cũ chưa backfill. Drop/rename là migration riêng, cần phê
 | Organic claimless + Scripted | Not required | Required | Not required | Optional | Cho phép khi composition ready |
 | Organic có Product claim | Required | Theo path | Required | Optional | Chỉ khi gate đạt |
 
-`Not required` trong bảng là runtime applicability, không phải persisted completion.
+`Required/Optional/Not required` trong bảng là requirement policy class ở mức
+identity, không phải full runtime state hay persisted completion. Tại runtime,
+mandatory capability có thể derive `REQUIRED`, `READY`, `BLOCKED` hoặc `STALE`
+theo DEC-028.
 
 ## 6. `nextApplicableStep`
 
-Business action phải:
+Resolver pure phải:
 
-1. khóa Project hoặc dùng optimistic concurrency tương đương;
-2. đọc snapshot server mới nhất;
-3. tính applicability cho toàn bộ bảy persisted steps;
-4. chọn step tiếp theo theo canonical order;
-5. cập nhật `currentStepKey` trong cùng transaction;
-6. không tạo `completed` giả cho step `NOT_REQUIRED`;
-7. ghi reason code/audit để UI giải thích được.
+1. nhận domain snapshot server đã scope theo workspace;
+2. tính applicability cho năm capability M4;
+3. chọn capability tiếp theo theo canonical order, bỏ qua `NOT_REQUIRED` và
+   unselected `OPTIONAL`;
+4. không coi `READY` là `completed`;
+5. không mutate `currentStepKey` hoặc tạo persisted `completed` giả;
+6. trả typed reason/dependency summary để comparison giải thích được.
+
+Sau M4 parity, nếu được phê duyệt cutover, business action đồng bộ persisted
+workflow mới phải khóa Project hoặc dùng optimistic concurrency tương đương, đọc
+snapshot mới nhất, tính lại Resolver result và cập nhật `currentStepKey` trong cùng
+transaction. Operation đó không thuộc M4 shadow.
 
 Direct URL có thể xem step khác, nhưng không được trở thành workflow source of truth.
 

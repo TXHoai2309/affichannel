@@ -8,6 +8,24 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-014 / M4 Applicability Resolver Shadow contract
+
+- Audit Project/Product, Script, Fact Lock, Voice, Video/Render,
+  `project_step_status`, `currentStepKey`, UI gates và golden fixtures; ghi exact
+  authority inventory tại
+  `docs/aff-us-014-m4-applicability-resolver-shadow.md`.
+- Thêm DEC-028 và khóa đúng sáu state
+  `NOT_REQUIRED | OPTIONAL | REQUIRED | READY | BLOCKED | STALE`, completion tách
+  riêng, typed reason precedence, sanitized dependencies và
+  `nextApplicableStep` pure/non-persisted.
+- Khóa matrix Affiliate A–J, shadow mismatch taxonomy và exit gate 100%; legacy
+  behavior vẫn authority, không UI/API/worker cutover.
+- Xác nhận current Video/Preview chỉ là gated placeholder; Render phải là
+  `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready, không được suy ra
+  READY từ route accessibility.
+- Chỉ sửa canonical docs: không runtime Resolver, source/schema/migration, provider
+  call, `currentStepKey` mutation, Organic activation, AFF-US-015 hoặc M5.
+
 ### Canonical backlog reassignment AFF-US-013–030
 
 - Thêm DEC-027: giữ nguyên implementation/acceptance history `AFF-US-001–012`;

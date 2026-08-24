@@ -2,8 +2,8 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation pending
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-22
-- Quyết định liên quan: DEC-025
+- Cập nhật lần cuối: 2026-08-24
+- Quyết định liên quan: DEC-025, DEC-028
 
 ## 1. Mục đích
 
@@ -79,9 +79,11 @@ Reader phải hỗ trợ hai mode; không backfill bằng cách tạo Manifest g
 
 ## 7. Applicability policy
 
-- Affiliate: Fact Lock `REQUIRED` trước TTS/render, kể cả Manifest empty.
+- Affiliate: Fact Lock là mandatory/applicable trước TTS/render, kể cả Manifest
+  empty; runtime state có thể là `REQUIRED`, `READY`, `BLOCKED` hoặc `STALE`.
 - Organic claimless: Fact Lock `NOT_REQUIRED`.
-- Organic có Product claim: Product, Product Facts evidence và Fact Lock `REQUIRED`.
+- Organic có Product claim: Product, Product Facts evidence và Fact Lock đều
+  mandatory/applicable.
 - Factual knowledge không dựa trên Product Facts: đi qua manual evidence/review
   flow riêng; không được tự map thành supported Product claim.
 

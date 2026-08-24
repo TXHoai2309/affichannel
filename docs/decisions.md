@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-22
+- Cập nhật lần cuối: 2026-08-24
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -10,6 +10,59 @@ DEC-025 là canonical direction hiện tại cho Channel-first v0.8. Các ADR c�
 Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ làm lịch sử;
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
+
+## DEC-028 — Applicability Resolver M4 shadow contract
+
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; runtime chưa triển khai
+- Ngày: 2026-08-24
+- Mở rộng: DEC-025, DEC-026
+
+### Bối cảnh
+
+Golden Affiliate flow hiện có nhiều authority riêng: Project service enforce
+Product, Script service/validator quyết readiness, Fact Lock có pure gate riêng,
+Voice có fingerprint/readiness và reconciliation riêng, còn Video/Preview mới là
+route có gate kèm placeholder. `currentStepKey` không phải comprehensive
+applicability authority: create khởi tạo ở Product và Voice reconciliation hiện
+chỉ có thể tiến `voice -> video`.
+
+### Quyết định
+
+- Applicability Resolver là pure, deterministic, server-owned derived policy cho
+  đúng năm capability `PRODUCT | SCRIPT | FACT_LOCK | VOICE | RENDER`.
+- Canonical state union có đúng
+  `NOT_REQUIRED | OPTIONAL | REQUIRED | READY | BLOCKED | STALE`; completion là
+  summary riêng, không thêm `COMPLETED` vào union và không persist state này vào
+  `project_step_status` hoặc bảng/JSON mới.
+- `REQUIRED` là mandatory nhưng chưa actionable do normal upstream work;
+  `BLOCKED` là concrete invalid/error/unsupported condition cần remediation;
+  `READY` không đồng nghĩa complete; `STALE` yêu cầu prior usable/current output
+  đã mất freshness do dependency/fingerprint đổi.
+- Repository/service gather authenticated domain summaries; Resolver không query
+  DB, gọi provider/storage, mutate state, ghi `currentStepKey` hoặc chứa raw ORM/
+  user-authored text.
+- ContentFormat chỉ là resolved semantic/presentation input theo DEC-026; registry
+  không sở hữu applicability rule.
+- M4 production chạy shadow trên
+  `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`: legacy behavior vẫn authority,
+  Resolver chỉ compute/compare. Mismatch không đổi API/UI/worker behavior.
+- Current Render capability trả
+  `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready. Route accessible
+  không chứng minh capability READY.
+- Resolver derive `nextApplicableStep` theo capability order và bỏ qua
+  `NOT_REQUIRED`/unselected `OPTIONAL`, nhưng không mutate `currentStepKey`. Future
+  synchronization là explicit transactional write operation riêng.
+- `ORGANIC`, `QUICK_IMAGE` và `MEDIA_FIRST` có thể được model trong pure fixtures
+  khi canonical policy đã định nghĩa, nhưng M4 không production-activate chúng.
+- Chi tiết reason precedence, matrix A–J, mismatch taxonomy và stable AC nằm tại
+  `docs/aff-us-014-m4-applicability-resolver-shadow.md`.
+
+### Exit gate
+
+M4 chỉ đạt khi 100% golden Affiliate scenarios khớp state/completion/reason/
+`nextApplicableStep`, không còn Resolver exception hoặc legacy-unmapped case,
+không có mutation/provider call/UI behavior change và golden suites vẫn xanh.
+Authority cutover là task được phê duyệt riêng; không nằm trong quyết định này.
 
 ## DEC-027 — Supersede và tái sử dụng backlog ID AFF-US-013–030
 
@@ -254,11 +307,11 @@ không thay thế hoặc đánh lại số ADR hiện hữu trong file này.
 | `V08-DEC-012` | Script generation hỗ trợ server-selected input source mode `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; đây không thay persisted operation mode `full | repair`. Output ScriptDraft/versioning hiện tại giữ nguyên. |
 | `V08-DEC-013` | FactLockRun new writes lưu ClaimManifest ID/fingerprint; Script fields là optional provenance. Legacy Script-linked rows tiếp tục đọc được; pending/idempotency của new writes dựa trên Manifest fingerprint. |
 
-Resolver là authority dùng chung cho UI, API readiness và worker preflight. Khi
-persisted step hiện tại là `NOT_REQUIRED`, server tính `nextApplicableStep` theo
-thứ tự bảy step và cập nhật `currentStepKey` bằng business action có transaction;
-không đánh dấu step bị bỏ qua là `completed`. Golden affiliate flow không đổi vì
-các step cũ vẫn applicable.
+Resolver là derived policy dùng chung cho UI, API readiness và worker preflight.
+Nó tính `nextApplicableStep` nhưng không mutate `currentStepKey`. Khi authority
+cutover được phê duyệt sau M4, một business action riêng mới được khóa Project và
+đồng bộ `currentStepKey` trong transaction; step bị bỏ qua không được đánh dấu giả
+là `completed`. Golden affiliate flow không đổi vì các step cũ vẫn applicable.
 
 ClaimManifest phải được build phía server từ mọi output-bearing source, gồm
 ScriptVersion, overlay, caption, CTA, voice text, declared claim và composition
