@@ -20,6 +20,11 @@ sử dụng Semantic Versioning.
   không tạo fake execution CTA.
 - Dashboard progress chuyển từ persisted `/7` sang visible completion: Affiliate
   baseline `5`, completed-through-Voice `4/5`, Render chưa được tính complete.
+- Khóa parity batch-vs-single A–J `10/10`, gồm expired Voice pending, unsupported,
+  ordering, dependencies, Channel Settings/Product Facts; batch path giữ fixed query
+  budget và zero mutation/reconciliation/provider call.
+- Product joins hiện vẫn Affiliate-only; `AFFILIATE_PRODUCT_NOT_LINKED` là follow-up
+  cho productless activation/hardening, không phải capability đã active ở 15B2.
 - Giữ legacy persistence và deep-link/execution guards. Phase 15C vẫn pending;
   full AFF-US-015 chưa DONE.
 

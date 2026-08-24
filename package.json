@@ -26,6 +26,7 @@
 		"test:unit:adaptive-project-navigation": "pnpm --filter web exec vitest run src/features/project-navigation/adaptive-workflow-presentation.test.ts src/features/project-navigation/project-shell-adaptive.test.ts",
 		"test:integration:applicability-shadow": "tsx scripts/test-applicability-shadow.ts",
 		"test:integration:adaptive-workflow": "tsx scripts/test-applicability-shadow.ts",
+		"test:integration:adaptive-entry-parity": "tsx scripts/test-adaptive-entry-batch-parity.ts",
 		"test:integration:legacy-affiliate-dry-run": "tsx scripts/test-legacy-affiliate-dry-run.ts",
 		"test:integration:legacy-affiliate-backfill": "tsx scripts/test-legacy-affiliate-backfill.ts",
 		"auth:bootstrap": "tsx scripts/bootstrap-auth.ts",

@@ -34,6 +34,7 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 
 import { buildFactLockGateEvaluationInput } from "./fact-lock-gate-service";
 import type { ProjectWorkflowSubject } from "./project-repository";
+import type { ProjectWorkflowSnapshot } from "./project-workflow-read-service";
 import { mapScriptVersionRecord } from "./script-version-repository";
 import { toVoiceSegmentArtifact } from "./voice-segment-repository";
 import { evaluateVoiceStepWorkflowReadInput } from "./voice-step-workflow-service";
@@ -169,14 +170,14 @@ function productFactsUsable(facts: readonly ProductFactRow[], today: string) {
 	);
 }
 
-export function buildProjectWorkflowEntrySummaries(
+export function buildProjectWorkflowEntrySnapshots(
 	actor: WorkspaceActor,
 	rows: ProjectWorkflowEntryBatchRows,
 	temporalContext = {
 		now: new Date(),
 		pendingLeaseMs: Number(env.VOICE_SEGMENT_PENDING_LEASE_MS),
 	},
-): ProjectWorkflowEntrySummary[] {
+): ProjectWorkflowSnapshot[] {
 	const generationsByProject = groupBy(
 		rows.scriptGenerations,
 		(row) => row.projectId,
@@ -265,7 +266,7 @@ export function buildProjectWorkflowEntrySummaries(
 					),
 					usableGenerationPresent: usableGeneration !== undefined,
 					sourceDependencyCurrent:
-						usableGeneration !== undefined &&
+						usableGeneration === undefined ||
 						(
 							dependenciesByTarget.get(
 								`script_generation:${usableGeneration.id}`,
@@ -305,8 +306,30 @@ export function buildProjectWorkflowEntrySummaries(
 		const workflow = mapAdaptiveWorkflowReadModel(result, {
 			identityClassification: classification,
 		});
-		return mapProjectWorkflowEntrySummary(subject.id, workflow);
+		return {
+			projectId: subject.id,
+			applicabilityInput: input,
+			applicabilityResult: result,
+			adaptiveWorkflow: workflow,
+		};
 	});
+}
+
+export function buildProjectWorkflowEntrySummaries(
+	actor: WorkspaceActor,
+	rows: ProjectWorkflowEntryBatchRows,
+	temporalContext = {
+		now: new Date(),
+		pendingLeaseMs: Number(env.VOICE_SEGMENT_PENDING_LEASE_MS),
+	},
+): ProjectWorkflowEntrySummary[] {
+	return buildProjectWorkflowEntrySnapshots(actor, rows, temporalContext).map(
+		(snapshot) =>
+			mapProjectWorkflowEntrySummary(
+				snapshot.projectId,
+				snapshot.adaptiveWorkflow,
+			),
+	);
 }
 
 export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBatchRepository =

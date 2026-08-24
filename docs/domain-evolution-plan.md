@@ -216,6 +216,11 @@ Implementation evidence Phase 15B2 — 2026-08-24:
 - batch reader gather nguồn theo tập Project ID bằng số query cố định rồi resolve
   trong bộ nhớ; không gọi full Adaptive Workflow pipeline theo từng card và không
   có global cross-request cache;
+- integration parity batch-vs-single đạt A–J `10/10`, gồm expired Voice pending,
+  unsupported, ordering, source dependencies và Channel Settings/Product Facts;
+  evidence giữ zero mutation, zero reconciliation/provider call và fixed query budget;
+- Product joins hiện chỉ dành cho Affiliate; `AFFILIATE_PRODUCT_NOT_LINKED` vẫn là
+  follow-up của productless activation/hardening và không được active trong 15B2;
 - `currentStepKey`/`project_step_status` vẫn persist nhưng không còn presentation/
   navigation authority trong 15B2 surfaces; 15C deep-link gates vẫn pending và
   full AFF-US-015 chưa DONE.

@@ -20,6 +20,14 @@ read, rồi resolve từng Project trong bộ nhớ. Không có per-card full wo
 waterfall hoặc global cache. Dashboard progress dùng visible capability completion;
 Affiliate baseline là năm capability và completed-through-Voice là `4/5`.
 
+Batch projection có integration parity A–J `10/10` với canonical single-project
+Adaptive Workflow, gồm ordering, source dependencies, Channel Settings/Product
+Facts, expired Voice pending và unsupported state. Evidence xác nhận zero read
+mutation, zero Voice reconciliation/provider call và vẫn giữ fixed query budget.
+Các Product join hiện chỉ áp dụng cho Affiliate; `AFFILIATE_PRODUCT_NOT_LINKED`
+được giữ làm follow-up cho productless activation/hardening, không được kích hoạt
+trong 15B2.
+
 Legacy `currentStepKey`/`project_step_status` vẫn được persist nhưng không còn là
 navigation/applicability authority ở các surface của 15B2. Deep-link route gates,
 execution guards, Organic/Quick Image/Media First, OPTIONAL persistence, Render,

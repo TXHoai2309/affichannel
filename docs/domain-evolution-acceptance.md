@@ -151,6 +151,11 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 - [x] Phase 15B2: Project List, Dashboard, product-detail và post-create navigation
   dùng adaptive summary/route; Open vs Continue tách biệt, unsupported/Render về
   Overview, visible Affiliate progress `4/5`, batch query không per-card waterfall.
+- [x] Phase 15B2 batch-vs-single canonical parity A–J `10/10`: expired Voice pending,
+  unsupported, ordering, dependencies, Channel Settings/Product Facts; fixed query
+  budget, zero mutation và zero reconciliation/provider call.
+- [ ] Productless activation/hardening cho `AFFILIATE_PRODUCT_NOT_LINKED`; Product
+  joins của 15B2 tiếp tục Affiliate-only.
 - [ ] Phase 15C: deep-link/page-shell presentation cutover; execution guards giữ
   server authority.
 - [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi
