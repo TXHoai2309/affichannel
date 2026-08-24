@@ -13,6 +13,7 @@ import {
 	getLatestUsableArtifact,
 	getPersistedScriptGenerationErrorMessage,
 	getScriptGenerationErrorMessage,
+	getScriptStudioCtaState,
 	getStudioStatus,
 	hasNewerScriptGeneration,
 	hasUsableFacts,
@@ -136,6 +137,33 @@ function makeModel(
 }
 
 describe("Script Studio state", () => {
+	it("uses the canonical CTA matrix for empty and generated read-only views", () => {
+		expect(
+			getScriptStudioCtaState({
+				hasUsableArtifact: false,
+				canEdit: false,
+				generationPending: false,
+			}),
+		).toEqual({ editLabel: null, generationLabel: "Tạo kịch bản" });
+		expect(
+			getScriptStudioCtaState({
+				hasUsableArtifact: true,
+				canEdit: true,
+				generationPending: false,
+			}),
+		).toEqual({ editLabel: "Chỉnh sửa", generationLabel: "Tạo lại kịch bản" });
+		expect(
+			getScriptStudioCtaState({
+				hasUsableArtifact: true,
+				canEdit: true,
+				generationPending: true,
+			}),
+		).toEqual({
+				editLabel: "Chỉnh sửa",
+				generationLabel: "Đang tạo lại kịch bản...",
+			});
+	});
+
 	it("keeps the latest usable artifact visible when a newer request is pending", () => {
 		const usable = makeArtifact();
 		const model = makeModel({

@@ -33,6 +33,23 @@ export const SCRIPT_STATUS_LABELS: Record<
 
 export type StudioStatus = ScriptGenerationStatus | "empty";
 
+export function getScriptStudioCtaState(input: {
+	hasUsableArtifact: boolean;
+	canEdit: boolean;
+	generationPending: boolean;
+}) {
+	return {
+		editLabel: input.hasUsableArtifact && input.canEdit ? "Chỉnh sửa" : null,
+		generationLabel: input.generationPending
+			? input.hasUsableArtifact
+				? "Đang tạo lại kịch bản..."
+				: "Đang tạo kịch bản..."
+			: input.hasUsableArtifact
+				? "Tạo lại kịch bản"
+				: "Tạo kịch bản",
+	};
+}
+
 export function getStudioStatus(
 	model: ScriptGenerationReadModel,
 ): StudioStatus {

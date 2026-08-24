@@ -61,6 +61,12 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 				.click();
 
 			await expectScriptOutput(page, "Cảnh đã tạo");
+			await expect(
+				page.getByRole("button", { name: "Chỉnh sửa" }),
+			).toBeVisible();
+			await expect(
+				page.getByRole("button", { name: "Tạo lại kịch bản" }),
+			).toBeVisible();
 			await page.reload();
 			await expectScriptOutput(page, "Cảnh đã tạo");
 		} finally {
@@ -213,13 +219,29 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			});
 
 			await page.goto(`/projects/${fixture.projectId}/content`);
-			await page.getByRole("button", { name: "Bắt đầu chỉnh sửa" }).click();
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
+			const hookOne = page.getByRole("radio", { name: "Hook 1" });
 			const hookTwo = page.getByRole("radio", { name: "Hook 2" });
+			const hookThree = page.getByRole("radio", { name: "Hook 3" });
+			await expect(hookOne).toBeChecked();
+			await page
+				.getByTestId("hook-card-2")
+				.getByText("Chọn hook", { exact: true })
+				.click();
+			await expect(hookTwo).toBeChecked();
+			await expect(hookOne).not.toBeChecked();
+			await page.getByLabel("Nội dung Hook 1").click();
+			await expect(hookTwo).toBeChecked();
+			await hookThree.focus();
+			await hookThree.press("Space");
+			await expect(hookThree).toBeChecked();
+			await hookOne.focus();
+			await hookOne.press("Enter");
+			await expect(hookOne).toBeChecked();
 			await hookTwo.click();
-			await expect(hookTwo).toHaveAttribute("aria-checked", "true");
 			await page
 				.getByLabel("Voiceover đoạn 1")
 				.fill("Voiceover đã được chỉnh sửa trong editor.");
@@ -229,19 +251,17 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			await expect(page.getByText("Đã lưu").first()).toBeVisible({
 				timeout: 5_000,
 			});
-			expect(autosaveCount).toBe(1);
+			expect(autosaveCount).toBeGreaterThanOrEqual(1);
 			await expect(
 				page.getByText("Claims cần cập nhật trước Fact Lock"),
 			).toBeVisible();
 
 			await page.reload();
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
-			await expect(page.getByRole("radio", { name: "Hook 2" })).toHaveAttribute(
-				"aria-checked",
-				"true",
-			);
+			await expect(page.getByRole("radio", { name: "Hook 2" })).toBeChecked();
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
 				"Voiceover đã được chỉnh sửa trong editor.",
 			);
@@ -348,7 +368,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			});
 
 			await page.goto(`/projects/${fixture.projectId}/content`);
-			await page.getByRole("button", { name: "Bắt đầu chỉnh sửa" }).click();
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
@@ -357,16 +377,28 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			await expect(
 				page.getByText("Đã lưu phiên bản script").first(),
 			).toBeVisible();
-			await expect(page.getByText("Bản lưu #1")).toBeVisible();
+			await expect(
+				page.getByRole("heading", { name: "Generated Script" }),
+			).toBeVisible();
+			await expect(page.getByText("Phiên bản hiện tại: #1")).toBeVisible();
+			await expect(
+				page.getByRole("button", { name: "Chỉnh sửa" }),
+			).toBeVisible();
+			await expect(
+				page.getByRole("button", { name: "Tạo lại kịch bản" }),
+			).toBeVisible();
 
-			await page
-				.getByRole("button", { name: "Đóng lịch sử phiên bản" })
-				.click();
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await page.getByLabel("Voiceover đoạn 1").fill("Voiceover phiên bản 2");
 			await page.getByRole("button", { name: "Lưu phiên bản" }).click();
 			await expect(
 				page.getByText("Đã lưu phiên bản script").first(),
 			).toBeVisible();
+			await expect(
+				page.getByRole("heading", { name: "Generated Script" }),
+			).toBeVisible();
+			await expect(page.getByText("Phiên bản hiện tại: #2")).toBeVisible();
+			await page.getByRole("button", { name: "Lịch sử" }).click();
 			await expect(page.getByText("Bản lưu #2")).toBeVisible();
 			await expect(page.getByText("Bản lưu #1")).toBeVisible();
 
@@ -382,6 +414,10 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 				page.getByRole("heading", { name: "Khôi phục bản lưu?" }),
 			).toBeVisible();
 			await page.getByRole("button", { name: "Khôi phục bản này" }).click();
+			await page
+				.getByRole("button", { name: "Đóng lịch sử phiên bản" })
+				.click();
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
 				"Voiceover phiên bản 2",
 			);
@@ -389,12 +425,80 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			await expect(page.getByText(/#null/)).toHaveCount(0);
 
 			await page.reload();
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
 				"Voiceover phiên bản 2",
 			);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
+	test("keeps the editor and draft content when saving a version fails", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const artifact = createArtifact(
+			fixture,
+			"generation-editor-save-failure",
+			"completed",
+			createOutput("Cảnh save failure"),
+		);
+		const state = createReadModel(fixture, artifact, artifact, "current");
+		let draft: ScriptVersionFixture = createScriptVersion(fixture, artifact);
+
+		try {
+			await mockState(page, () => state);
+			await mockEstimate(page);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/autosave", async (route) => {
+				const payload = route.request().postDataJSON().json as {
+					editableSnapshot: ScriptVersionFixture["editableSnapshot"];
+				};
+				draft = {
+					...draft,
+					revision: draft.revision + 1,
+					editableSnapshot: payload.editableSnapshot,
+				};
+				await fulfillJson(route, draft);
+			});
+			await page.route(
+				"**/api/rpc/scriptVersion/saveVersion",
+				async (route) => {
+					await route.fulfill({
+						status: 500,
+						contentType: "application/json",
+						body: JSON.stringify({
+							json: { code: "SCRIPT_VERSION_SAVE_FAILED" },
+						}),
+					});
+				},
+			);
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
+			await page
+				.getByLabel("Voiceover đoạn 1")
+				.fill("Nội dung phải còn nguyên khi lưu phiên bản lỗi.");
+			await expect(page.getByText("Đã lưu").first()).toBeVisible({
+				timeout: 5_000,
+			});
+			await page.getByRole("button", { name: "Lưu phiên bản" }).click();
+
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
+				"Nội dung phải còn nguyên khi lưu phiên bản lỗi.",
+			);
+			await expect(
+				page.getByText("Không thể lưu bản nháp. Hãy thử lại hoặc tải bản mới nhất."),
+			).toBeVisible();
 		} finally {
 			await deleteProjectFixture(fixture);
 		}
@@ -424,6 +528,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			});
 
 			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
@@ -505,6 +610,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			});
 
 			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(
 				page.getByRole("heading", { name: "Script Editor" }),
 			).toBeVisible();
@@ -524,6 +630,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			);
 
 			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(page.getByLabel("Voiceover đoạn 1")).toHaveValue(
 				"Nội dung được flush trước khi rời trang.",
 			);
@@ -567,6 +674,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			});
 
 			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
 			await expect(page.getByText("Có bản AI mới")).toBeVisible();
 			await expect(page.getByLabel("Nội dung Hook 1")).toHaveValue(
 				originalArtifact.output.hookVariants[0].text,

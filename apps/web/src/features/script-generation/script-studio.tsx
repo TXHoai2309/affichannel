@@ -5,7 +5,10 @@ import type {
 	ScriptGenerationReadModel,
 	ScriptGenerationSection,
 } from "@affichannel/core/script-generation/types";
-import type { ScriptVersionReadModel } from "@affichannel/core/script-version/types";
+import type {
+	ScriptVersionHistoryItem,
+	ScriptVersionReadModel,
+} from "@affichannel/core/script-version/types";
 import { Badge } from "@affichannel/ui/components/badge";
 import { Button } from "@affichannel/ui/components/button";
 import {
@@ -33,9 +36,11 @@ import {
 	Clock3,
 	Copy,
 	FileText,
+	History,
 	Image,
 	Info,
 	LockKeyhole,
+	Pencil,
 	RefreshCw,
 	Sparkles,
 	TriangleAlert,
@@ -61,6 +66,7 @@ import {
 	getLatestUsableArtifact,
 	getPersistedScriptGenerationErrorMessage,
 	getScriptGenerationErrorMessage,
+	getScriptStudioCtaState,
 	getStudioStatus,
 	hasNewerScriptGeneration,
 	hasUsableFacts,
@@ -1025,6 +1031,9 @@ function ErrorPanel({ onRetry }: { onRetry: () => void }) {
 
 export default function ScriptStudio({ projectId }: { projectId: string }) {
 	const [actionError, setActionError] = useState<string | null>(null);
+	const [editorOpen, setEditorOpen] = useState(false);
+	const [historyOpenedFromReadOnly, setHistoryOpenedFromReadOnly] =
+		useState(false);
 	const stateQuery = useQuery(
 		orpc.scriptGeneration.getState.queryOptions({
 			input: { projectId },
@@ -1052,12 +1061,19 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		| ScriptVersionReadModel
 		| null
 		| undefined;
+	const historySummaryQuery = useQuery(
+		orpc.scriptVersion.listHistory.queryOptions({
+			input: { projectId },
+			enabled: Boolean(model?.latestUsableArtifact),
+			meta: { suppressGlobalErrorToast: true },
+			retry: false,
+			staleTime: 0,
+		}),
+	);
 	const estimateQuery = useQuery(
 		orpc.scriptGeneration.estimate.queryOptions({
 			input: { projectId },
-			enabled: Boolean(
-				model && !currentDraft && isGenerationContextReady(model),
-			),
+			enabled: Boolean(model && !editorOpen && isGenerationContextReady(model)),
 			meta: { suppressGlobalErrorToast: true },
 			retry: false,
 			staleTime: 30_000,
@@ -1101,6 +1117,15 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 			model.dependencyState?.state !== "invalidated" &&
 			!initializeMutation.isPending,
 	);
+	const canOpenEditor = Boolean(currentDraft) || canInitialize;
+	const ctaState = getScriptStudioCtaState({
+		hasUsableArtifact: Boolean(latestUsableArtifact),
+		canEdit: canOpenEditor,
+		generationPending: generateMutation.isPending || hasPendingRequest,
+	});
+	const latestSavedVersion = (
+		historySummaryQuery.data as ScriptVersionHistoryItem[] | undefined
+	)?.[0];
 
 	async function refreshState() {
 		await stateQuery.refetch();
@@ -1138,6 +1163,11 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	}
 
 	async function initializeEditor() {
+		if (currentDraft) {
+			setHistoryOpenedFromReadOnly(false);
+			setEditorOpen(true);
+			return;
+		}
 		if (!latestUsableArtifact || !canInitialize) return;
 		setActionError(null);
 		try {
@@ -1146,12 +1176,16 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 				sourceGenerationId: latestUsableArtifact.id,
 			});
 			await scriptVersionQuery.refetch();
+			setHistoryOpenedFromReadOnly(false);
+			setEditorOpen(true);
 		} catch (error) {
 			if (
 				getScriptVersionErrorCode(error) ===
 				"SCRIPT_VERSION_DRAFT_ALREADY_EXISTS"
 			) {
 				await scriptVersionQuery.refetch();
+				setHistoryOpenedFromReadOnly(false);
+				setEditorOpen(true);
 				return;
 			}
 			setActionError(getScriptVersionErrorMessage(error));
@@ -1163,7 +1197,23 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		return (result.data as ScriptVersionReadModel | null | undefined) ?? null;
 	}
 
-	if (currentDraft) {
+	async function finishVersionSave() {
+		await Promise.allSettled([
+			stateQuery.refetch(),
+			scriptVersionQuery.refetch(),
+			historySummaryQuery.refetch(),
+		]);
+		setHistoryOpenedFromReadOnly(false);
+		setEditorOpen(false);
+	}
+
+	function openHistoryFromReadOnly() {
+		if (!currentDraft) return;
+		setHistoryOpenedFromReadOnly(true);
+		setEditorOpen(true);
+	}
+
+	if (currentDraft && editorOpen) {
 		return (
 			<ScriptEditor
 				draft={currentDraft}
@@ -1173,6 +1223,16 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 					latestUsableArtifact,
 				)}
 				onReloadLatest={reloadCurrentDraft}
+				onVersionSaved={finishVersionSave}
+				initialHistoryOpen={historyOpenedFromReadOnly}
+				onHistoryClosed={
+					historyOpenedFromReadOnly
+						? () => {
+								setHistoryOpenedFromReadOnly(false);
+								setEditorOpen(false);
+							}
+						: undefined
+				}
 				save={(request) => autosaveMutation.mutateAsync(request)}
 			/>
 		);
@@ -1195,36 +1255,53 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
 					{latestUsableArtifact ? (
-						<span className="text-muted-foreground text-xs">
-							Bản dùng được: {formatDate(latestUsableArtifact.createdAt)}
-						</span>
+						<div className="mr-1 text-muted-foreground text-xs sm:text-right">
+							<p>Bản dùng được: {formatDate(latestUsableArtifact.createdAt)}</p>
+							{latestSavedVersion?.versionNumber ? (
+								<p className="mt-0.5">
+									Phiên bản hiện tại: #{latestSavedVersion.versionNumber} · Đã lưu{" "}
+									{formatDate(latestSavedVersion.savedAt)}
+								</p>
+							) : null}
+						</div>
 					) : null}
-					{latestUsableArtifact?.status === "completed" ? (
+					{ctaState.editLabel ? (
 						<Button
-							disabled={!canInitialize}
+							disabled={!canOpenEditor}
 							onClick={() => void initializeEditor()}
 							type="button"
 						>
 							{initializeMutation.isPending ? (
 								<RefreshCw aria-hidden="true" className="animate-spin" />
-							) : null}
-							Bắt đầu chỉnh sửa
+							) : (
+								<Pencil aria-hidden="true" />
+							)}
+							{ctaState.editLabel}
 						</Button>
 					) : null}
 					<Button
 						disabled={!canGenerate}
 						onClick={() => void generateScript()}
 						type="button"
+						variant={latestUsableArtifact ? "outline" : "default"}
 					>
 						{generateMutation.isPending || hasPendingRequest ? (
 							<RefreshCw aria-hidden="true" className="animate-spin" />
 						) : (
 							<Sparkles aria-hidden="true" />
 						)}
-						{generateMutation.isPending || hasPendingRequest
-							? "Đang tạo kịch bản..."
-							: "Tạo kịch bản"}
+						{ctaState.generationLabel}
 					</Button>
+					{currentDraft ? (
+						<Button
+							onClick={openHistoryFromReadOnly}
+							type="button"
+							variant="outline"
+						>
+							<History aria-hidden="true" />
+							Lịch sử
+						</Button>
+					) : null}
 				</div>
 			</header>
 

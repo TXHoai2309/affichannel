@@ -62,6 +62,7 @@ import {
 	type ScriptAutosaveResult,
 	useScriptAutosave,
 } from "./script-editor-autosave";
+import { selectScriptHook } from "./script-editor-state";
 
 type ScriptEditorProps = {
 	draft: ScriptVersionReadModel;
@@ -69,6 +70,9 @@ type ScriptEditorProps = {
 	hasNewerGeneration: boolean;
 	onReloadLatest: () => Promise<ScriptVersionReadModel | null>;
 	save: (request: ScriptAutosaveRequest) => Promise<ScriptAutosaveResult>;
+	onVersionSaved: () => Promise<void>;
+	initialHistoryOpen?: boolean;
+	onHistoryClosed?: () => void;
 };
 
 function EditorCard({
@@ -451,6 +455,9 @@ export default function ScriptEditor({
 	hasNewerGeneration,
 	onReloadLatest,
 	save,
+	onVersionSaved,
+	initialHistoryOpen = false,
+	onHistoryClosed,
 }: ScriptEditorProps) {
 	const autosave = useScriptAutosave({
 		scriptVersionId: draft.id,
@@ -461,7 +468,7 @@ export default function ScriptEditor({
 	const { state } = autosave;
 	const [reloadPending, setReloadPending] = useState(false);
 	const [reloadError, setReloadError] = useState<string | null>(null);
-	const [historyOpen, setHistoryOpen] = useState(false);
+	const [historyOpen, setHistoryOpen] = useState(initialHistoryOpen);
 	const [selectedVersion, setSelectedVersion] =
 		useState<ScriptVersionReadModel | null>(null);
 	const [restoreTarget, setRestoreTarget] =
@@ -543,6 +550,11 @@ export default function ScriptEditor({
 		await historyQuery.refetch();
 	}
 
+	function changeHistoryOpen(open: boolean) {
+		setHistoryOpen(open);
+		if (!open) onHistoryClosed?.();
+	}
+
 	async function selectVersion(versionId: string) {
 		try {
 			const version = await getVersionMutation.mutateAsync({
@@ -574,8 +586,7 @@ export default function ScriptEditor({
 				baseRevision: flushed.baseRevision,
 			});
 			toast.success("Đã lưu phiên bản script");
-			setHistoryOpen(true);
-			await historyQuery.refetch();
+			await onVersionSaved();
 		} catch (error) {
 			toast.error(getScriptVersionErrorMessage(error));
 		}
@@ -739,47 +750,67 @@ export default function ScriptEditor({
 				<main className="space-y-5">
 					<EditorCard
 						title="Hook"
-						description="Chọn một hook và chỉnh nội dung. Key hook được giữ cố định."
+						description="Chọn 1 hook chính cho phiên bản này. Hook được chọn sẽ được dùng khi kiểm tra Fact Lock."
 					>
 						<div aria-label="Chọn hook" className="space-y-3" role="radiogroup">
-							{state.snapshot.hookVariants.map((hook, index) => (
-								<div
-									className={`flex items-start gap-3 rounded-xl border p-3 transition-colors ${
-										state.snapshot.selectedHookKey === hook.key
-											? "border-primary bg-primary/5"
-											: ""
-									}`}
-									key={hook.key}
-								>
-									<Button
-										aria-checked={state.snapshot.selectedHookKey === hook.key}
-										aria-label={`Hook ${index + 1}`}
-										className="mt-0.5 shrink-0"
-										onClick={() => {
-											updateSnapshot((current) => ({
-												...current,
-												selectedHookKey: hook.key,
-											}));
+							{state.snapshot.hookVariants.map((hook, index) => {
+								const selected = state.snapshot.selectedHookKey === hook.key;
+								const selectHook = () => {
+									if (selected) return;
+									updateSnapshot((current) => selectScriptHook(current, hook.key));
+								};
+								return (
+									<fieldset
+										className={`rounded-xl border p-4 transition-colors ${
+											selected
+												? "border-primary bg-primary/5 shadow-sm"
+												: "border-border bg-background hover:border-primary/40 hover:bg-muted/20"
+										}`}
+										data-selected={selected ? "true" : "false"}
+										data-testid={`hook-card-${index + 1}`}
+										key={hook.key}
+										onClick={(event) => {
+											const target = event.target as HTMLElement;
+											if (target.closest("textarea, input, button, a")) return;
+											selectHook();
 										}}
-										role="radio"
-										size="icon"
-										type="button"
-										variant="outline"
+										onKeyDown={(event) => {
+											if (event.target !== event.currentTarget) return;
+											if (event.key !== "Enter" && event.key !== " ") return;
+											event.preventDefault();
+											selectHook();
+										}}
 									>
-										<span
-											aria-hidden="true"
-											className={`size-2.5 rounded-full ${
-												state.snapshot.selectedHookKey === hook.key
-													? "bg-primary"
-													: "bg-muted-foreground/30"
-											}`}
-										/>
-									</Button>
-									<span className="min-w-0 flex-1">
-										<p className="font-medium text-sm">Hook {index + 1}</p>
+										<legend className="sr-only">
+											Thẻ chọn Hook {index + 1}
+										</legend>
+										<div className="flex items-center justify-between gap-3">
+											<div className="flex items-center gap-2.5">
+												<input
+													aria-label={`Hook ${index + 1}`}
+													checked={selected}
+													className="size-5 cursor-pointer accent-primary outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+													name="script-hook"
+													onChange={selectHook}
+													onKeyDown={(event) => {
+														if (event.key !== "Enter") return;
+														event.preventDefault();
+														selectHook();
+													}}
+													type="radio"
+												/>
+												<Badge variant={selected ? "default" : "outline"}>
+													{selected ? <Check aria-hidden="true" /> : null}
+													{selected ? "Đang chọn" : "Chọn hook"}
+												</Badge>
+											</div>
+											<span className="font-medium text-muted-foreground text-sm">
+												Hook {index + 1}
+											</span>
+										</div>
 										<Textarea
 											aria-label={`Nội dung Hook ${index + 1}`}
-											className="mt-2 bg-background"
+											className="mt-3 bg-background"
 											value={hook.text}
 											onChange={(event) =>
 												updateSnapshot((current) => ({
@@ -792,9 +823,9 @@ export default function ScriptEditor({
 												}))
 											}
 										/>
-									</span>
-								</div>
-							))}
+									</fieldset>
+								);
+							})}
 						</div>
 					</EditorCard>
 
@@ -1025,7 +1056,7 @@ export default function ScriptEditor({
 
 			<HistoryDrawer
 				open={historyOpen}
-				onOpenChange={setHistoryOpen}
+				onOpenChange={changeHistoryOpen}
 				items={
 					(historyQuery.data as ScriptVersionHistoryItem[] | undefined) ?? []
 				}

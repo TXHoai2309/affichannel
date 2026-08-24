@@ -5,6 +5,7 @@ import {
 	createScriptAutosaveController,
 	SCRIPT_AUTOSAVE_DEBOUNCE_MS,
 } from "./script-editor-autosave";
+import { selectScriptHook } from "./script-editor-state";
 
 const snapshot: ScriptVersionEditableSnapshot = {
 	schemaVersion: "script-draft.v2",
@@ -39,6 +40,34 @@ afterEach(() => {
 });
 
 describe("Script Editor autosave controller", () => {
+	it("autosaves a hook-card selection through the existing debounce path", async () => {
+		vi.useFakeTimers();
+		const save = vi.fn(async (request) => ({
+			revision: request.baseRevision + 1,
+			editableSnapshot: request.editableSnapshot,
+		}));
+		const controller = createScriptAutosaveController({
+			scriptVersionId: "draft-1",
+			initialSnapshot: { ...snapshot, selectedHookKey: "hook-1" },
+			initialRevision: 1,
+			save,
+		});
+
+		controller.updateSnapshot((current) => selectScriptHook(current, "hook-2"));
+		expect(controller.getState()).toMatchObject({
+			dirty: true,
+			status: "dirty",
+			snapshot: { selectedHookKey: "hook-2" },
+		});
+		await vi.advanceTimersByTimeAsync(SCRIPT_AUTOSAVE_DEBOUNCE_MS);
+
+		expect(save).toHaveBeenCalledTimes(1);
+		expect(save.mock.calls[0]?.[0].editableSnapshot.selectedHookKey).toBe(
+			"hook-2",
+		);
+		expect(controller.getState().status).toBe("saved");
+	});
+
 	it("debounces one edit until 1000ms and saves the latest snapshot", async () => {
 		vi.useFakeTimers();
 		const save = vi.fn(async (request) => ({
