@@ -20,6 +20,7 @@
 		"backfill:legacy-affiliate-projects": "tsx scripts/backfill-legacy-affiliate-projects.ts",
 		"test:unit:legacy-affiliate-classifier": "pnpm --filter web exec vitest run src/features/project/legacy-affiliate-compatibility.test.ts",
 		"test:unit:applicability-resolver": "pnpm --filter web exec vitest run src/features/project/applicability-resolver.test.ts",
+		"test:unit:applicability-invariant": "pnpm --filter web exec vitest run src/features/project/applicability-invariant.test.ts",
 		"test:unit:applicability-shadow": "pnpm --filter web exec vitest run src/features/project/applicability-shadow.test.ts",
 		"test:unit:adaptive-workflow": "pnpm --filter web exec vitest run src/features/project/adaptive-workflow.test.ts src/features/project/adaptive-workflow-service.test.ts",
 		"test:unit:adaptive-project-navigation": "pnpm --filter web exec vitest run src/features/project-navigation/adaptive-workflow-presentation.test.ts src/features/project-navigation/project-shell-adaptive.test.ts",

@@ -15,6 +15,8 @@ sử dụng Semantic Versioning.
   Completed cards, Render hiển thị `Sắp có`.
 - Project Overview dùng adaptive next step/CTA; unsupported hoặc invalid workflow
   fail closed thành trạng thái cần kiểm tra, không invent readiness.
+- Harden fail-closed bằng canonical Applicability tuple invariant ở core; Web không
+  còn tự suy reason/state/completion validity theo capability prefix.
 - Project layout không còn gọi Fact Lock/Voice reconciliation cho Stepper. 15B2,
   15C, execution guards và legacy route shells chưa đổi.
 

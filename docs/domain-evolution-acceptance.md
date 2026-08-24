@@ -146,7 +146,8 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   mismatch taxonomy, exception isolation và legacy `project.get` response giữ nguyên.
 - [x] Phase 15B1: Project Stepper/Overview dùng Adaptive Workflow; dynamic visible
   count/ordinal, pathname active route, Render `Sắp có`, unsupported/invalid
-  fail-closed và Overview next CTA có deterministic tests.
+  fail-closed qua canonical core tuple invariant và Overview next CTA có
+  deterministic tests.
 - [ ] Phase 15B2: Project List, Dashboard, product-detail và post-create navigation
   chuyển sang adaptive summary/route.
 - [ ] Phase 15C: deep-link/page-shell presentation cutover; execution guards giữ

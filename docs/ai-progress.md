@@ -11,7 +11,9 @@ Project layout và Overview hiện consume request-cached Adaptive Workflow. Ste
 render năm capability visible theo server-owned ordinal, pathname chỉ sở hữu active
 view, Preview là secondary Render route và Render hiển thị `Sắp có`. Web-owned typed
 mapper tập trung state/completion/reason/CTA localization và fail closed cho
-unsupported/invalid combinations.
+unsupported/invalid combinations. Fail-closed presentation hiện delegate tính hợp
+lệ của canonical capability/reason/state/completion tuple cho pure core invariant;
+Web chỉ còn sở hữu localization và presentation consistency.
 
 Project shell không còn đọc `currentStepKey`, `project_step_status`, Fact Lock gate
 hoặc Voice reconciliation để trình bày applicability. Overview load Project metadata

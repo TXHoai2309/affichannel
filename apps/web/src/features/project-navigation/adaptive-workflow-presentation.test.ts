@@ -108,6 +108,7 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"READY + NOT_STARTED",
 			"READY",
 			"NOT_STARTED",
+			"SCRIPT_GENERATION_REQUIRED",
 			"Sẵn sàng",
 			"default",
 			true,
@@ -116,15 +117,25 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"READY + IN_PROGRESS",
 			"READY",
 			"IN_PROGRESS",
+			"CURRENT_SCRIPT_VERSION_REQUIRED",
 			"Đang thực hiện",
 			"secondary",
 			true,
 		],
-		["READY + COMPLETE", "READY", "COMPLETE", "Hoàn thành", "success", true],
+		[
+			"READY + COMPLETE",
+			"READY",
+			"COMPLETE",
+			"SCRIPT_READY",
+			"Hoàn thành",
+			"success",
+			true,
+		],
 		[
 			"REQUIRED + NOT_STARTED",
 			"REQUIRED",
 			"NOT_STARTED",
+			"SCRIPT_REQUIRES_ACCESSIBLE_PRODUCT",
 			"Cần hoàn tất bước trước",
 			"outline",
 			true,
@@ -133,6 +144,7 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"REQUIRED + IN_PROGRESS",
 			"REQUIRED",
 			"IN_PROGRESS",
+			"SCRIPT_GENERATION_PENDING",
 			"Đang thực hiện",
 			"secondary",
 			true,
@@ -141,6 +153,7 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"BLOCKED + NOT_STARTED",
 			"BLOCKED",
 			"NOT_STARTED",
+			"SCRIPT_CHANNEL_SETTINGS_INCOMPLETE",
 			"Đang bị chặn",
 			"destructive",
 			true,
@@ -149,6 +162,7 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"BLOCKED + IN_PROGRESS",
 			"BLOCKED",
 			"IN_PROGRESS",
+			"SCRIPT_GENERATION_FAILED",
 			"Đang bị chặn",
 			"destructive",
 			true,
@@ -157,15 +171,16 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"STALE + IN_PROGRESS",
 			"STALE",
 			"IN_PROGRESS",
+			"SCRIPT_SOURCE_DEPENDENCY_STALE",
 			"Cần cập nhật",
 			"warning",
 			true,
 		],
 	] as const)(
 		"maps %s without changing domain truth",
-		(_name, applicabilityState, completion, label, variant, valid) => {
+		(_name, applicabilityState, completion, reasonCode, label, variant, valid) => {
 			const presentation = getAdaptiveStepPresentation(
-				step({ applicabilityState, completion }),
+				step({ applicabilityState, completion, reasonCode }),
 			);
 			expect(presentation).toMatchObject({
 				statusLabel: label,
@@ -202,6 +217,30 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			valid: false,
 		});
 	});
+
+	it.each([
+		["SCRIPT_GENERATION_PENDING", "SCRIPT", "READY", "COMPLETE"],
+		["SCRIPT_READY", "SCRIPT", "BLOCKED", "IN_PROGRESS"],
+		["FACT_LOCK_PASSED", "FACT_LOCK", "REQUIRED", "NOT_STARTED"],
+		["FACT_LOCK_REVIEW_REQUIRED", "FACT_LOCK", "READY", "COMPLETE"],
+		["VOICE_READY", "VOICE", "REQUIRED", "IN_PROGRESS"],
+		["VOICE_SEGMENTS_FAILED", "VOICE", "READY", "COMPLETE"],
+		["RENDER_FEATURE_NOT_IMPLEMENTED", "RENDER", "READY", "COMPLETE"],
+	] as const)(
+		"fails closed for non-canonical tuple %s / %s / %s / %s",
+		(reasonCode, capability, applicabilityState, completion) => {
+			const presentation = getAdaptiveStepPresentation(
+				step({ reasonCode, capability, applicabilityState, completion }),
+			);
+			expect(presentation).toMatchObject({
+				statusLabel: "Project cần được kiểm tra",
+				semantic: "attention",
+				badgeVariant: "destructive",
+				actionAvailable: false,
+				valid: false,
+			});
+		},
+	);
 
 	it("maps unimplemented Render to informational coming-soon without execution action", () => {
 		const presentation = getAdaptiveStepPresentation(

@@ -198,7 +198,8 @@ Implementation evidence Phase 15B1 — 2026-08-24:
   Workflow làm presentation authority;
 - primary stepper dùng visible capability/ordinal động, active route theo pathname,
   Video/Preview cùng map Render và Render unimplemented hiển thị `Sắp có`;
-- Web mapper typed/exhaustive theo reason code, fail closed invalid/unsupported và
+- Web mapper typed/exhaustive theo reason code, delegate canonical tuple validity
+  cho pure core invariant, fail closed invalid/unsupported và
   Overview CTA dùng adaptive next route;
 - layout Stepper không còn Fact Lock/Voice reconciliation read; 15B2 list/dashboard/
   navigation và 15C route/deep-link vẫn pending.

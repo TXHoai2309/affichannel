@@ -6,6 +6,7 @@ import type {
 	ApplicabilityCapability,
 	ApplicabilityReasonCode,
 } from "@affichannel/core";
+import { isCanonicalApplicabilityCapabilityResult } from "@affichannel/core";
 
 export type AdaptiveWorkflowSemantic =
 	| "waiting"
@@ -207,38 +208,24 @@ const UNSUPPORTED_REASON_TEXT = {
 	AFFILIATE_PRODUCT_NOT_LINKED: "Project Affiliate chưa liên kết sản phẩm.",
 } as const satisfies Record<AdaptiveWorkflowUnsupportedReason, string>;
 
-function isValidCombination(step: AdaptiveWorkflowStep) {
-	const reasonMatchesCapability =
-		step.reasonCode === "PROJECT_IDENTITY_UNSUPPORTED" ||
-		(step.capability === "PRODUCT" &&
-			(step.reasonCode.startsWith("PRODUCT_") ||
-				step.reasonCode === "AFFILIATE_PRODUCT_NOT_LINKED")) ||
-		(step.capability === "SCRIPT" &&
-			(step.reasonCode.startsWith("SCRIPT_") ||
-				step.reasonCode === "CURRENT_SCRIPT_VERSION_REQUIRED")) ||
-		(step.capability === "FACT_LOCK" &&
-			step.reasonCode.startsWith("FACT_LOCK_")) ||
-		(step.capability === "VOICE" && step.reasonCode.startsWith("VOICE_")) ||
-		(step.capability === "RENDER" && step.reasonCode.startsWith("RENDER_"));
-	if (!reasonMatchesCapability) return false;
-	if (
-		step.reasonCode === "RENDER_FEATURE_NOT_IMPLEMENTED" &&
-		(step.applicabilityState !== "BLOCKED" || step.completion !== "NOT_STARTED")
-	) {
-		return false;
+function isValidPresentationStep(step: AdaptiveWorkflowStep) {
+	const canonicalTuple = isCanonicalApplicabilityCapabilityResult({
+		capability: step.capability,
+		state: step.applicabilityState,
+		completion: step.completion,
+		reasonCode: step.reasonCode,
+	});
+	if (!canonicalTuple) return false;
+
+	const comingSoon = step.primaryAction?.kind === "COMING_SOON";
+	if (step.reasonCode === "RENDER_FEATURE_NOT_IMPLEMENTED") {
+		return (
+			comingSoon &&
+			step.primaryAction?.targetCapability === null &&
+			step.primaryAction.targetRouteKey === null
+		);
 	}
-	if (step.applicabilityState === "NOT_REQUIRED") {
-		return step.completion === "NOT_STARTED";
-	}
-	if (step.applicabilityState === "OPTIONAL") return true;
-	if (step.applicabilityState === "REQUIRED") {
-		return step.completion !== "COMPLETE";
-	}
-	if (step.applicabilityState === "READY") return true;
-	if (step.applicabilityState === "BLOCKED") {
-		return step.completion !== "COMPLETE";
-	}
-	return step.completion === "IN_PROGRESS";
+	return !comingSoon;
 }
 
 function statePresentation(step: AdaptiveWorkflowStep): {
@@ -246,7 +233,7 @@ function statePresentation(step: AdaptiveWorkflowStep): {
 	semantic: AdaptiveWorkflowSemantic;
 	badgeVariant: AdaptiveWorkflowBadgeVariant;
 } {
-	if (!isValidCombination(step)) {
+	if (!isValidPresentationStep(step)) {
 		return {
 			statusLabel: "Project cần được kiểm tra",
 			semantic: "attention",
