@@ -1,8 +1,26 @@
 # Tiến trình AI agent
 
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
-  acceptance contract đã khóa, runtime shadow chưa triển khai.
+  shadow runtime đã triển khai và đạt parity gate, chưa authority cutover.
 - Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-014 / M4 Applicability Resolver Shadow Runtime
+
+Đã triển khai pure Resolver trong `packages/core` cho đúng năm capability và sáu
+state canonical, completion riêng, typed reason precedence, sanitized dependency
+summary và `nextApplicableStep` không dựa vào `currentStepKey`. API orchestration
+gom snapshot chỉ-đọc từ Project, ScriptGeneration/current ScriptVersion, Fact Lock
+gate và Voice readiness; normalized legacy oracle vẫn là authority so sánh.
+
+Shadow observer chỉ chạy tại protected Project read boundary cho
+`AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`. Mismatch/exception chỉ phát
+sanitized internal diagnostic, không đổi response và không chặn legacy flow.
+Matrix A–J đạt 10/10; negative identity fixtures fail closed; dedicated disposable
+DB integration xác nhận zero mismatch, zero mutation và zero provider call. M3B,
+M2C, M1 harness, chín golden integration suites, type-check và web tests đều PASS.
+Không schema/migration, không persist Resolver result, không UI/API authority
+cutover, không activate Organic/Quick Image/Media First, không implement Render và
+không bắt đầu AFF-US-015/M5.
 
 ## 2026-08-24 — AFF-US-014 / M4 Resolver Shadow contract
 

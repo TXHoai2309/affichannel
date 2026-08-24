@@ -1,6 +1,6 @@
 # Kế hoạch Domain Evolution v0.8
 
-- Trạng thái: M1/M2/M3 hoàn tất; M4 acceptance contract đã khóa, runtime shadow chưa triển khai
+- Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đã triển khai và đạt parity gate, chưa authority cutover
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-24
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028
@@ -159,6 +159,10 @@ trong Phase 0.
    Project identity. Các fixture này kiểm tra primary reason precedence; chúng
    không mở rộng production shadow baseline ngoài
    `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` và không activate future flow.
+8. Implementation evidence 2026-08-24: matrix A–J `10/10`, negative fixtures,
+   sanitized exception isolation và disposable-DB zero-mutation shadow integration
+   PASS; M1/M3B/M2C cùng chín golden suites tiếp tục xanh. Legacy vẫn authority;
+   không mở M5/cutover trong slice này.
 
 ### M5 — Enforce và cutover
 

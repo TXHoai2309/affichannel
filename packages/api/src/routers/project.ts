@@ -11,6 +11,7 @@ import {
 import { ORPCError } from "@orpc/server";
 
 import { protectedProcedure } from "../index";
+import { observeProjectApplicabilityShadow } from "../services/applicability-shadow-service";
 import {
 	createProjectRepository as createDatabaseProjectRepository,
 	getProjectDetails,
@@ -54,6 +55,7 @@ export const projectRouter = {
 				throw new ORPCError("NOT_FOUND");
 			}
 
+			await observeProjectApplicabilityShadow(actor, project);
 			return project;
 		}),
 	create: protectedProcedure

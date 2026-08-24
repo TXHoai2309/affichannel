@@ -1,6 +1,6 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 contract AC-014-01–07 locked, runtime gates pending
+- Trạng thái: Canonical; M4 shadow runtime AC-014-01–15 đạt, authority cutover chưa mở
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-24
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028
@@ -54,31 +54,31 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   capabilities, typed reason/precedence, sanitized dependencies và pure
   `nextApplicableStep` tại
   `docs/aff-us-014-m4-applicability-resolver-shadow.md`.
-- [ ] `AC-014-08`: matrix A–J và golden `AFFILIATE + SCRIPTED` đạt 100% state,
+- [x] `AC-014-08`: matrix A–J và golden `AFFILIATE + SCRIPTED` đạt 100% state,
   completion, primary reason và next-step parity.
-- [ ] `AC-014-09`: Script revision, Product Fact dependency và Voice fingerprint
+- [x] `AC-014-09`: Script revision, Product Fact dependency và Voice fingerprint
   tạo đúng `STALE`, không flatten thành generic blocked.
-- [ ] `AC-014-10–12`: shadow-only, legacy authority giữ nguyên, zero mutation và
+- [x] `AC-014-10–12`: shadow-only, legacy authority giữ nguyên, zero mutation và
   không cut over API/UI/worker.
-- [ ] `AC-014-13`: future Organic/Quick Image/Media First fixtures không activate
+- [x] `AC-014-13`: future Organic/Quick Image/Media First fixtures không activate
   production write/route behavior.
-- [ ] `AC-014-14`: Video/Render placeholder trả
+- [x] `AC-014-14`: Video/Render placeholder trả
   `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready.
-- [ ] `AC-014-15`: zero resolver exception/unmapped case và golden regression xanh
+- [x] `AC-014-15`: zero resolver exception/unmapped case và golden regression xanh
   trước khi mở authority-cutover task.
 - [ ] Affiliate thiếu Product tiếp tục bị từ chối ở application service/protected
   API; DB nullability không phải applicability policy.
-- [ ] Runtime states không được persist vào `project_step_status.status`, Project
+- [x] Runtime states không được persist vào `project_step_status.status`, Project
   column hoặc Resolver snapshot table.
 
 ## 4. Gate C — Workflow transition
 
-- [ ] `nextApplicableStep` bỏ qua đúng step `NOT_REQUIRED` theo canonical order.
-- [ ] Step bị bỏ qua không được ghi `completed`.
-- [ ] M4 shadow không cập nhật `currentStepKey`; Resolver chỉ derive result.
+- [x] `nextApplicableStep` bỏ qua đúng step `NOT_REQUIRED` theo canonical order.
+- [x] Step bị bỏ qua không được ghi `completed`.
+- [x] M4 shadow không cập nhật `currentStepKey`; Resolver chỉ derive result.
 - [ ] Trong task cutover riêng sau M4, transition cập nhật `currentStepKey` atomic
   dưới concurrent request.
-- [ ] Direct URL không mutate workflow current.
+- [x] Direct Project read/shadow observation không mutate workflow current.
 - [ ] Back/forward/refresh hiển thị đúng viewed step và current workflow state.
 - [ ] Resolver change làm downstream gate lại nhưng không tự rollback current step.
 

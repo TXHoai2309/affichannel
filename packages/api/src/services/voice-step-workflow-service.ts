@@ -25,6 +25,11 @@ export type VoiceStepWorkflowEvaluation = {
 	segments: VoiceStepSegmentEvaluation[];
 };
 
+export type VoiceStepWorkflowReadSources = {
+	factLockGate: Awaited<ReturnType<typeof FactLockGate.evaluate>>;
+	currentScriptVersion: Awaited<ReturnType<typeof findCurrentScriptVersion>>;
+};
+
 function sortArtifacts(
 	left: VoiceSegmentArtifact,
 	right: VoiceSegmentArtifact,
@@ -61,14 +66,22 @@ async function findCurrentVoiceConfig(
 async function loadEvaluation(
 	actor: WorkspaceActor,
 	projectId: string,
+	readSources?: VoiceStepWorkflowReadSources,
 ): Promise<VoiceStepWorkflowEvaluation> {
-	const [factLockGate, currentScriptVersion, currentVoiceConfig] =
-		await Promise.all([
-			FactLockGate.evaluate(actor, projectId),
-			findCurrentScriptVersion(actor, projectId),
-			findCurrentVoiceConfig(actor, projectId),
-		]);
+	const [sources, currentVoiceConfig] = await Promise.all([
+		readSources
+			? Promise.resolve(readSources)
+			: Promise.all([
+					FactLockGate.evaluate(actor, projectId),
+					findCurrentScriptVersion(actor, projectId),
+				]).then(([factLockGate, currentScriptVersion]) => ({
+					factLockGate,
+					currentScriptVersion,
+				})),
+		findCurrentVoiceConfig(actor, projectId),
+	]);
 	const artifacts = await listVoiceSegmentArtifacts(actor, projectId);
+	const { factLockGate, currentScriptVersion } = sources;
 	const segments: VoiceStepSegmentEvaluation[] = [];
 
 	if (currentScriptVersion) {
@@ -122,6 +135,15 @@ async function loadEvaluation(
 			segments,
 		}),
 	};
+}
+
+/** Read-only Voice snapshot for non-authoritative observers such as M4. */
+export function getVoiceStepWorkflowReadSnapshot(
+	actor: WorkspaceActor,
+	projectId: string,
+	readSources?: VoiceStepWorkflowReadSources,
+) {
+	return loadEvaluation(actor, projectId, readSources);
 }
 
 export async function getVoiceStepWorkflowEvaluation(

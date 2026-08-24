@@ -1,3 +1,4 @@
+export * from "./applicability";
 export * from "./content-format";
 export * from "./fact-lock";
 export * from "./product/product-errors";

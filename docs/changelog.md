@@ -8,6 +8,20 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-014 / M4 Applicability Resolver Shadow Runtime
+
+- Thêm pure Applicability Resolver server-owned cho Product, Script, Fact Lock,
+  Voice và Render; giữ đúng six-state union, completion riêng, typed reason và
+  deterministic `nextApplicableStep`.
+- Thêm sanitized snapshot adapter, normalized legacy oracle và shadow comparison
+  tại protected Project read boundary; legacy behavior vẫn authority và public
+  Project response không đổi.
+- Matrix A–J đạt 10/10, negative fixtures fail closed; disposable DB integration
+  xác nhận zero mismatch, zero mutation và không gọi provider.
+- Render vẫn `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED`; không schema/migration,
+  không persist resolver output, không UI gate/cutover và không activate future
+  identity.
+
 ### AFF-US-014 / M4 Applicability Resolver Shadow contract
 
 - Audit Project/Product, Script, Fact Lock, Voice, Video/Render,
@@ -23,8 +37,8 @@ sử dụng Semantic Versioning.
 - Xác nhận current Video/Preview chỉ là gated placeholder; Render phải là
   `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready, không được suy ra
   READY từ route accessibility.
-- Chỉ sửa canonical docs: không runtime Resolver, source/schema/migration, provider
-  call, `currentStepKey` mutation, Organic activation, AFF-US-015 hoặc M5.
+- Contract task này chỉ sửa canonical docs; runtime implementation được ghi ở mục
+  riêng phía trên và không thay đổi policy đã khóa.
 
 ### Canonical backlog reassignment AFF-US-013–030
 
