@@ -1,3 +1,4 @@
+export * from "./adaptive-workflow";
 export * from "./applicability";
 export * from "./content-format";
 export * from "./fact-lock";

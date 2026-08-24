@@ -2,8 +2,10 @@ import {
 	compareApplicabilityResults,
 	normalizeLegacyApplicability,
 	observeProjectApplicabilityShadow,
+	observeProjectApplicabilityShadowFromSnapshot,
 } from "@affichannel/api/services/applicability-shadow-service";
 import type { ProjectDetails } from "@affichannel/api/services/project-repository";
+import type { ProjectWorkflowSnapshot } from "@affichannel/api/services/project-workflow-read-service";
 import type {
 	ApplicabilityCapabilityResult,
 	ProjectApplicabilityInput,
@@ -88,6 +90,16 @@ function mutableCapability(
 	index = 0,
 ): ApplicabilityCapabilityResult {
 	return result.capabilities[index] as ApplicabilityCapabilityResult;
+}
+
+function snapshot(): ProjectWorkflowSnapshot {
+	const applicabilityInput = input();
+	return {
+		projectId: "project-shadow",
+		applicabilityInput,
+		applicabilityResult: resolveProjectApplicability(applicabilityInput),
+		adaptiveWorkflow: {} as ProjectWorkflowSnapshot["adaptiveWorkflow"],
+	};
 }
 
 describe("AFF-US-014 legacy oracle and comparison", () => {
@@ -180,6 +192,35 @@ describe("AFF-US-014 legacy oracle and comparison", () => {
 });
 
 describe("AFF-US-014 shadow boundary", () => {
+	it("isolates snapshot-oracle exceptions without failing the read request", () => {
+		const emitDiagnostic = vi.fn(() => {
+			throw new Error("telemetry unavailable");
+		});
+		const observation = observeProjectApplicabilityShadowFromSnapshot(
+			{ workspaceId: "workspace-shadow", userId: "user-shadow" },
+			snapshot(),
+			{
+				normalizeLegacy: () => {
+					throw new Error("secret-bearing programmer detail");
+				},
+				emitDiagnostic,
+			},
+		);
+
+		expect(observation).toEqual({
+			status: "isolated_failure",
+			mismatch: { type: "RESOLVER_EXCEPTION" },
+		});
+		expect(emitDiagnostic).toHaveBeenCalledWith({
+			projectId: "project-shadow",
+			workspaceId: "workspace-shadow",
+			type: "RESOLVER_EXCEPTION",
+		});
+		expect(JSON.stringify(emitDiagnostic.mock.calls)).not.toContain(
+			"secret-bearing",
+		);
+	});
+
 	it("observes parity without mutating Project state", async () => {
 		const actor = { workspaceId: "workspace-shadow", userId: "user-shadow" };
 		const projectValue = Object.freeze(project());

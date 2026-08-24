@@ -1,9 +1,30 @@
 # Tiến trình AI agent
 
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
-  shadow runtime đã đạt parity; AFF-US-015 acceptance contract đã khóa, chưa UI
-  authority cutover.
+  shadow runtime đã đạt parity; AFF-US-015 Phase 15A read foundation đã triển khai,
+  chưa UI authority cutover.
 - Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-015 Phase 15A Adaptive Workflow read foundation
+
+Đã thêm pure Adaptive Workflow mapper/types trong `packages/core`, giữ nguyên
+Resolver state/completion/reason/next-step và map năm capability vào Product,
+Content, Fact Lock, Voice, Video/Preview routes. Model có visible ordinal,
+NOT_REQUIRED/OPTIONAL selection, typed action, terminal và controlled unsupported
+state; không chứa UI prose hoặc persist output.
+
+API có protected `project.getAdaptiveWorkflow` và request-owned reader keyed bằng
+workspace/user/project primitives. Một sanitized read-only snapshot gather Script,
+current ScriptVersion và Fact Lock song song, dùng pure Voice snapshot, resolve một
+lần rồi reuse cho Adaptive mapper và M4 shadow comparator. Current RSC binding dùng
+`React.cache(projectId)` nhưng chưa có consumer; legacy Project layout/stepper và
+write-capable `reconcileVoiceStep()` không đổi.
+
+Unit 22/22, M4 unit, disposable-DB shared-snapshot/zero-mutation integration, M3B,
+M2C, M1, chín golden suites, web 346/346 và type-check đều PASS. Adaptive read có
+zero Project/status/artifact mutation, zero Voice reconciliation và zero provider
+call. Không UI/landing/deep-link cutover, future identity activation, Render, M5,
+schema/migration hoặc deploy.
 
 ## 2026-08-24 — AFF-US-015 Adaptive Workflow UI acceptance contract
 

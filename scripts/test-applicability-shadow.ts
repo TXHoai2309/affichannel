@@ -22,8 +22,14 @@ const { and, eq } = await import("drizzle-orm");
 const { getProjectDetails } = await import(
 	"../packages/api/src/services/project-repository.ts"
 );
-const { observeProjectApplicabilityShadow } = await import(
+const {
+	observeProjectApplicabilityShadow,
+	observeProjectApplicabilityShadowFromSnapshot,
+} = await import(
 	"../packages/api/src/services/applicability-shadow-service.ts"
+);
+const { createProjectWorkflowRequestReader } = await import(
+	"../packages/api/src/services/project-workflow-read-service.ts"
 );
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -141,6 +147,28 @@ try {
 		actor,
 		projectDetails,
 	);
+	const requestReader = createProjectWorkflowRequestReader();
+	const [snapshot, reusedSnapshot] = await Promise.all([
+		requestReader.get(actor, projectId),
+		requestReader.get(actor, projectId),
+	]);
+	assert(snapshot, "Adaptive Workflow snapshot must be readable.");
+	assert(
+		snapshot === reusedSnapshot,
+		"Request-owned reader must reuse one snapshot promise/result.",
+	);
+	const inaccessibleSnapshot = await requestReader.get(
+		{ workspaceId: `${workspaceId}-other`, userId },
+		projectId,
+	);
+	assert(
+		inaccessibleSnapshot === undefined,
+		"Adaptive Workflow snapshot must preserve workspace authorization.",
+	);
+	const reusedObservation = observeProjectApplicabilityShadowFromSnapshot(
+		actor,
+		snapshot,
+	);
 	const after = await projectOwnedRows();
 
 	assert(observation.status === "compared", "M4 baseline must be compared.");
@@ -149,11 +177,28 @@ try {
 		"M4 baseline must have zero shadow mismatches.",
 	);
 	assert(
+		reusedObservation.status === "compared" &&
+			reusedObservation.mismatches.length === 0,
+		"M4 comparison must reuse the Adaptive Workflow snapshot without mismatch.",
+	);
+	assert(
+		snapshot.adaptiveWorkflow.nextApplicableStep === "SCRIPT" &&
+			snapshot.adaptiveWorkflow.nextRouteKey === "content",
+		"Adaptive Workflow must map the current Affiliate fixture to Content.",
+	);
+	assert(
+		snapshot.adaptiveWorkflow.steps.length === 5 &&
+			snapshot.adaptiveWorkflow.steps.every(
+				(step, index) => step.visibleOrdinal === index + 1,
+			),
+		"Adaptive Workflow must expose five ordered canonical capabilities.",
+	);
+	assert(
 		before === after,
 		"M4 shadow execution must not mutate Project state.",
 	);
 	console.log(
-		"AFF-US-014 M4 shadow runtime integration passed: parity=PASS; mutation=0; providerCalls=0.",
+		"AFF-US-014/M4 + AFF-US-015/15A integration passed: parity=PASS; requestReuse=PASS; mutation=0; voiceReconciliation=0; providerCalls=0.",
 	);
 } finally {
 	await db

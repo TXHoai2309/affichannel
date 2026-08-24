@@ -135,6 +135,12 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 - [x] `AC-015-01–18` đã khóa ở cấp tài liệu tại
   `docs/aff-us-015-adaptive-workflow-ui.md`; runtime/UI acceptance vẫn chưa chạy.
+- [x] Phase 15A: derived typed mapper, exact route descriptors, completion/state
+  separation, controlled unsupported state và A–J `10/10` đã có deterministic tests.
+- [x] Phase 15A: protected read-only aggregation reuse một request-owned snapshot;
+  zero workflow/artifact mutation, zero Voice reconciliation và zero provider call.
+- [x] Phase 15A: M4 shadow consume resolved snapshot ở adaptive read boundary;
+  mismatch taxonomy, exception isolation và legacy `project.get` response giữ nguyên.
 - [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi
   là complete, STALE không bị flatten thành blocked/failed.
 - [ ] Product picker chỉ bắt buộc khi policy yêu cầu và giải thích lý do.

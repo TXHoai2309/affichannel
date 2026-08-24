@@ -68,7 +68,7 @@ async function loadEvaluation(
 	projectId: string,
 	readSources?: VoiceStepWorkflowReadSources,
 ): Promise<VoiceStepWorkflowEvaluation> {
-	const [sources, currentVoiceConfig] = await Promise.all([
+	const [sources, currentVoiceConfig, artifacts] = await Promise.all([
 		readSources
 			? Promise.resolve(readSources)
 			: Promise.all([
@@ -79,8 +79,8 @@ async function loadEvaluation(
 					currentScriptVersion,
 				})),
 		findCurrentVoiceConfig(actor, projectId),
+		listVoiceSegmentArtifacts(actor, projectId),
 	]);
-	const artifacts = await listVoiceSegmentArtifacts(actor, projectId);
 	const { factLockGate, currentScriptVersion } = sources;
 	const segments: VoiceStepSegmentEvaluation[] = [];
 

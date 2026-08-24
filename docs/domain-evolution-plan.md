@@ -179,6 +179,17 @@ trong Phase 0.
 7. OPTIONAL chỉ được activate sau durable server-owned selection contract; current
    baseline không có OPTIONAL.
 
+Implementation evidence Phase 15A — 2026-08-24:
+
+- pure mapper/read model, protected unused query và request-owned cache đã có;
+- Project subject query workspace-authorized, read-only và giữ nullable/invalid
+  identity để trả controlled unsupported state;
+- Script/ScriptVersion/Fact Lock reads chạy song song, Voice dùng pure snapshot;
+  Resolver chạy một lần và snapshot được reuse cho M4 comparison;
+- A–J `10/10`, unsupported fixtures, Render placeholder, request reuse và
+  disposable-DB zero mutation/provider/reconciliation evidence PASS;
+- current stepper/landing/routes và legacy reconciliation behavior chưa cut over.
+
 ### M5 — Enforce và cutover
 
 1. Đặt not-null cho field đã backfill khi evidence cho phép; không đặt database

@@ -1,5 +1,7 @@
+import { observeProjectApplicabilityShadowFromSnapshot } from "@affichannel/api/services/applicability-shadow-service";
 import { FactLockGate } from "@affichannel/api/services/fact-lock-gate-service";
 import { getProjectDetails } from "@affichannel/api/services/project-repository";
+import { getProjectWorkflowSnapshot } from "@affichannel/api/services/project-workflow-read-service";
 import { reconcileVoiceStep } from "@affichannel/api/services/voice-step-workflow-service";
 import { getWorkspaceActor } from "@affichannel/api/services/workspace";
 import { auth } from "@affichannel/auth";
@@ -19,6 +21,18 @@ export const getProjectForCurrentUser = cache(async (projectId: string) => {
 	const actor = await getCurrentWorkspaceActor();
 	return actor ? getProjectDetails(actor.workspaceId, projectId) : undefined;
 });
+
+/** Unused by current UI; Phase 15A request-scoped foundation for later cutover. */
+export const getAdaptiveWorkflowForCurrentUser = cache(
+	async (projectId: string) => {
+		const actor = await getCurrentWorkspaceActor();
+		if (!actor) return undefined;
+		const snapshot = await getProjectWorkflowSnapshot(actor, projectId);
+		if (!snapshot) return undefined;
+		observeProjectApplicabilityShadowFromSnapshot(actor, snapshot);
+		return snapshot.adaptiveWorkflow;
+	},
+);
 
 export const getFactLockGateForCurrentUser = cache(
 	async (projectId: string) => {

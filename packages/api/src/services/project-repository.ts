@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
-	LEGACY_AFFILIATE_IDENTITY,
-	isContentType,
-	isCreationPath,
 	type ContentFormatReadModel,
 	type ContentType,
 	type CreationPath,
+	isContentType,
+	isCreationPath,
+	LEGACY_AFFILIATE_IDENTITY,
 	resolveContentFormatRef,
 } from "@affichannel/core";
 import type {
@@ -17,9 +17,7 @@ import type {
 	PersistedProjectStepStatus,
 	ProjectStepKey,
 } from "@affichannel/core/project/project-types";
-import type {
-	PersistedProjectIdentityState,
-} from "@affichannel/core/project/project-write-contract";
+import type { PersistedProjectIdentityState } from "@affichannel/core/project/project-write-contract";
 import {
 	contentBrief,
 	db,
@@ -70,6 +68,16 @@ export type ProjectListItem = Pick<
 	product: ProjectDetails["product"];
 };
 
+export type ProjectWorkflowSubject = {
+	id: string;
+	contentType: string | null;
+	creationPath: string | null;
+	contentFormatKey: string | null;
+	contentFormatVersion: number | null;
+	productId: string | null;
+	productAccessible: boolean;
+};
+
 type FindProjectOptions = {
 	workspaceId: string;
 	projectId: string;
@@ -92,10 +100,7 @@ function expectedIdentityConditions(
 			: eq(project.contentFormatKey, expectedIdentity.contentFormatKey),
 		expectedIdentity.contentFormatVersion === null
 			? isNull(project.contentFormatVersion)
-			: eq(
-					project.contentFormatVersion,
-					expectedIdentity.contentFormatVersion,
-			  ),
+			: eq(project.contentFormatVersion, expectedIdentity.contentFormatVersion),
 	];
 
 	if (requireExpectedProductLinkage) {
@@ -128,12 +133,12 @@ function projectIdentityReadModel(input: PersistedProjectIdentityState) {
 	return {
 		contentType:
 			input.contentType !== null && isContentType(input.contentType)
-			? input.contentType
-			: null,
+				? input.contentType
+				: null,
 		creationPath:
 			input.creationPath !== null && isCreationPath(input.creationPath)
-			? input.creationPath
-			: null,
+				? input.creationPath
+				: null,
 		contentFormat: resolveContentFormatRef(
 			input.contentFormatKey,
 			input.contentFormatVersion,
@@ -375,10 +380,7 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 				})
 				.from(project)
 				.where(
-					and(
-						eq(project.id, projectId),
-						eq(project.workspaceId, workspaceId),
-					),
+					and(eq(project.id, projectId), eq(project.workspaceId, workspaceId)),
 				)
 				.limit(1);
 
@@ -398,7 +400,7 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 									identityUpdate.desiredIdentity.contentFormat.key,
 								contentFormatVersion:
 									identityUpdate.desiredIdentity.contentFormat.version,
-						  }
+							}
 						: {};
 				const expectedConditions = expectedIdentityConditions(
 					identityUpdate.expectedIdentity,
@@ -504,6 +506,51 @@ export async function getProjectDetails(
 	projectId: string,
 ) {
 	return findProjectDetails({ workspaceId, projectId });
+}
+
+/** Minimal workspace-authorized Project identity for read-only workflow policy. */
+export async function getProjectWorkflowSubject(
+	workspaceId: string,
+	projectId: string,
+): Promise<ProjectWorkflowSubject | undefined> {
+	const [record] = await db
+		.select({
+			id: project.id,
+			contentType: project.contentType,
+			creationPath: project.creationPath,
+			contentFormatKey: project.contentFormatKey,
+			contentFormatVersion: project.contentFormatVersion,
+			productId: project.productId,
+			accessibleProductId: product.id,
+		})
+		.from(project)
+		.leftJoin(
+			product,
+			and(
+				eq(project.productId, product.id),
+				eq(product.workspaceId, workspaceId),
+			),
+		)
+		.where(
+			and(
+				eq(project.id, projectId),
+				eq(project.workspaceId, workspaceId),
+				isNull(project.archivedAt),
+			),
+		)
+		.limit(1);
+
+	return record
+		? {
+				id: record.id,
+				contentType: record.contentType,
+				creationPath: record.creationPath,
+				contentFormatKey: record.contentFormatKey,
+				contentFormatVersion: record.contentFormatVersion,
+				productId: record.productId,
+				productAccessible: record.accessibleProductId !== null,
+			}
+		: undefined;
 }
 
 export function toWorkflowState(

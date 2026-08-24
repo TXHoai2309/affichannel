@@ -8,6 +8,20 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-015 Phase 15A Adaptive Workflow read foundation
+
+- Thêm pure typed Adaptive Workflow mapper/read model với exact capability-route,
+  state/completion, visible ordinal, OPTIONAL selection, action, terminal và
+  unsupported descriptors.
+- Thêm protected `project.getAdaptiveWorkflow`, workspace-authorized minimal Project
+  subject và request-owned read cache; existing Project endpoint shape không đổi.
+- Shared sanitized snapshot chạy independent reads song song, Resolver một lần và
+  reuse kết quả cho mapper/M4 shadow; Voice read path không reconcile/mutate.
+- A–J 10/10, unsupported/Render/request-reuse và disposable-DB zero-mutation tests
+  PASS; full Affiliate golden regression xanh.
+- Chưa đổi stepper/dashboard/list/landing/routes, không activate future identity,
+  không schema/migration/Render/M5/deploy.
+
 ### AFF-US-015 Adaptive Workflow UI acceptance contract
 
 - Thêm DEC-029 và dedicated contract với exact repository UI/authority audit,

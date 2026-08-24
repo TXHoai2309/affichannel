@@ -11,12 +11,16 @@ import {
 import { ORPCError } from "@orpc/server";
 
 import { protectedProcedure } from "../index";
-import { observeProjectApplicabilityShadow } from "../services/applicability-shadow-service";
+import {
+	observeProjectApplicabilityShadow,
+	observeProjectApplicabilityShadowFromSnapshot,
+} from "../services/applicability-shadow-service";
 import {
 	createProjectRepository as createDatabaseProjectRepository,
 	getProjectDetails,
 	listProjectItems,
 } from "../services/project-repository";
+import { createProjectWorkflowRequestReader } from "../services/project-workflow-read-service";
 import { requireWorkspaceActor } from "../services/workspace";
 
 function toOrpcError(error: unknown): never {
@@ -57,6 +61,20 @@ export const projectRouter = {
 
 			await observeProjectApplicabilityShadow(actor, project);
 			return project;
+		}),
+	getAdaptiveWorkflow: protectedProcedure
+		.input(projectIdInputSchema)
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			const requestReader = createProjectWorkflowRequestReader();
+			const snapshot = await requestReader.get(actor, input.id);
+
+			if (!snapshot) {
+				throw new ORPCError("NOT_FOUND");
+			}
+
+			observeProjectApplicabilityShadowFromSnapshot(actor, snapshot);
+			return snapshot.adaptiveWorkflow;
 		}),
 	create: protectedProcedure
 		.input(createProjectInputSchema)

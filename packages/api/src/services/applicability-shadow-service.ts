@@ -7,14 +7,14 @@ import {
 	type ProjectApplicabilityInput,
 	type ProjectApplicabilityResult,
 	resolveProjectApplicability,
-	validateScriptVersionForFactLockRun,
 } from "@affichannel/core";
-import { FactLockGate } from "./fact-lock-gate-service";
 import { findProduct } from "./product-repository";
 import type { ProjectDetails } from "./project-repository";
-import { getScriptGenerationReadModel } from "./script-generation-service";
-import { findCurrentScriptVersion } from "./script-version-repository";
-import { getVoiceStepWorkflowReadSnapshot } from "./voice-step-workflow-service";
+import {
+	gatherProjectApplicabilityInput as gatherSharedProjectApplicabilityInput,
+	type ProjectWorkflowSnapshot,
+	projectDetailsToWorkflowSubject,
+} from "./project-workflow-read-service";
 import type { WorkspaceActor } from "./workspace";
 
 export const APPLICABILITY_MISMATCH_TYPES = [
@@ -379,115 +379,16 @@ export function compareApplicabilityResults(
 	return mismatches;
 }
 
-function generationStatus(
-	readModel: Awaited<ReturnType<typeof getScriptGenerationReadModel>>,
-): ProjectApplicabilityInput["script"]["generationStatus"] {
-	const latest = readModel.latestRequest;
-	if (!latest) return "NONE";
-	if (latest.status === "pending") return "PENDING";
-	if (latest.status === "failed") return "FAILED";
-	if (latest.status === "indeterminate") return "INDETERMINATE";
-	return readModel.latestUsableArtifact ? "USABLE" : "INDETERMINATE";
-}
-
 export async function gatherProjectApplicabilityInput(
 	actor: WorkspaceActor,
 	project: ProjectDetails,
 ): Promise<ProjectApplicabilityInput> {
 	const accessibleProduct = await findProduct(actor, project.product.id);
-	if (!accessibleProduct) {
-		return {
-			projectIdentity: {
-				contentType: project.contentType,
-				creationPath: project.creationPath,
-				contentFormatKey: project.contentFormat?.ref.key ?? null,
-				contentFormatVersion: project.contentFormat?.ref.version ?? null,
-				hasProduct: true,
-			},
-			product: { accessible: false },
-			script: {
-				generationStatus: "NONE",
-				usableGenerationPresent: false,
-				sourceDependencyCurrent: false,
-				currentVersionPresent: false,
-				currentVersionFactLockReady: false,
-				channelSettingsComplete: false,
-				productFactsUsable: false,
-			},
-			factLock: { gateReason: "NO_SCRIPT_VERSION" },
-			voice: {
-				configPresent: false,
-				previewPresent: false,
-				totalSegments: 0,
-				attemptedSegments: 0,
-				usableSegments: 0,
-				pendingSegments: 0,
-				failedSegments: 0,
-				indeterminateSegments: 0,
-				staleSegments: 0,
-			},
-			render: { featureImplemented: false, inputsStale: false },
-		};
-	}
-	const [scriptReadModel, currentScriptVersion, factLockGate] =
-		await Promise.all([
-			getScriptGenerationReadModel(actor, project.id),
-			findCurrentScriptVersion(actor, project.id),
-			FactLockGate.evaluate(actor, project.id),
-		]);
-	const voice = await getVoiceStepWorkflowReadSnapshot(actor, project.id, {
-		factLockGate,
-		currentScriptVersion,
+	const subject = projectDetailsToWorkflowSubject(project);
+	return gatherSharedProjectApplicabilityInput(actor, {
+		...subject,
+		productAccessible: accessibleProduct !== undefined,
 	});
-	const effectiveStatuses = voice.segments.map(
-		(segment) => segment.readModel.effectiveStatus,
-	);
-
-	return {
-		projectIdentity: {
-			contentType: project.contentType,
-			creationPath: project.creationPath,
-			contentFormatKey: project.contentFormat?.ref.key ?? null,
-			contentFormatVersion: project.contentFormat?.ref.version ?? null,
-			hasProduct: true,
-		},
-		product: { accessible: true },
-		script: {
-			generationStatus: generationStatus(scriptReadModel),
-			usableGenerationPresent: scriptReadModel.latestUsableArtifact !== null,
-			sourceDependencyCurrent:
-				scriptReadModel.dependencyState?.state !== "invalidated",
-			currentVersionPresent: currentScriptVersion !== undefined,
-			currentVersionFactLockReady: currentScriptVersion
-				? validateScriptVersionForFactLockRun(
-						currentScriptVersion.editableSnapshot,
-					).success
-				: false,
-			channelSettingsComplete: scriptReadModel.context.channelSettings !== null,
-			productFactsUsable: scriptReadModel.context.facts.some(
-				(fact) => fact.generationUsability !== "blocked",
-			),
-		},
-		factLock: { gateReason: factLockGate.reason },
-		voice: {
-			configPresent: voice.summary.voiceConfigPresent,
-			// Preview audio is ephemeral in the current repository and is not completion.
-			previewPresent: false,
-			totalSegments: voice.summary.totalSegments,
-			attemptedSegments: effectiveStatuses.filter(
-				(status) => status !== "not_generated",
-			).length,
-			usableSegments: voice.summary.completedSegments,
-			pendingSegments: voice.summary.pendingSegments,
-			failedSegments: effectiveStatuses.filter((status) => status === "failed")
-				.length,
-			indeterminateSegments: effectiveStatuses.filter(
-				(status) => status === "indeterminate",
-			).length,
-			staleSegments: voice.summary.staleSegments,
-		},
-		render: { featureImplemented: false, inputsStale: false },
-	};
 }
 
 export function isM4ShadowBaselineProject(project: ProjectDetails) {
@@ -514,13 +415,64 @@ const defaultDependencies: ShadowDependencies = {
 };
 
 function emitDiagnosticBestEffort(
-	dependencies: ShadowDependencies,
+	dependencies: Pick<ShadowDependencies, "emitDiagnostic">,
 	diagnostic: ApplicabilityShadowDiagnostic,
 ) {
 	try {
 		dependencies.emitDiagnostic(diagnostic);
 	} catch {
 		// Observability must never gain authority over the legacy request path.
+	}
+}
+
+type SnapshotObservationDependencies = Pick<
+	ShadowDependencies,
+	"normalizeLegacy" | "emitDiagnostic"
+>;
+
+/** Reuses an already-resolved request snapshot without gathering or resolving again. */
+export function observeProjectApplicabilityShadowFromSnapshot(
+	actor: WorkspaceActor,
+	snapshot: ProjectWorkflowSnapshot,
+	dependencies: SnapshotObservationDependencies = defaultDependencies,
+): ApplicabilityShadowObservation {
+	const input = snapshot.applicabilityInput;
+	const identity = input.projectIdentity;
+	const allNull =
+		identity.contentType === null &&
+		identity.creationPath === null &&
+		identity.contentFormatKey === null &&
+		identity.contentFormatVersion === null;
+	const canonical =
+		identity.contentType === "AFFILIATE" &&
+		identity.creationPath === "SCRIPTED" &&
+		identity.contentFormatKey === "SCRIPTED_STANDARD" &&
+		identity.contentFormatVersion === 1;
+	const baseline = identity.hasProduct && (allNull || canonical);
+	if (!baseline) return { status: "skipped" };
+
+	try {
+		const legacy = dependencies.normalizeLegacy(input);
+		const mismatches = compareApplicabilityResults(
+			legacy,
+			snapshot.applicabilityResult,
+		);
+		for (const mismatch of mismatches) {
+			emitDiagnosticBestEffort(dependencies, {
+				projectId: snapshot.projectId,
+				workspaceId: actor.workspaceId,
+				...mismatch,
+			});
+		}
+		return { status: "compared", mismatches };
+	} catch {
+		const mismatch = { type: "RESOLVER_EXCEPTION" as const };
+		emitDiagnosticBestEffort(dependencies, {
+			projectId: snapshot.projectId,
+			workspaceId: actor.workspaceId,
+			...mismatch,
+		});
+		return { status: "isolated_failure", mismatch };
 	}
 }
 
