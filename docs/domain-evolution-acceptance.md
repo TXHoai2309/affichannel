@@ -133,11 +133,22 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ## 10. Gate I — UX và accessibility
 
-- [ ] UI phân biệt `NOT_REQUIRED`, `OPTIONAL`, `BLOCKED`, `STALE` bằng text/icon.
+- [x] `AC-015-01–18` đã khóa ở cấp tài liệu tại
+  `docs/aff-us-015-adaptive-workflow-ui.md`; runtime/UI acceptance vẫn chưa chạy.
+- [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi
+  là complete, STALE không bị flatten thành blocked/failed.
 - [ ] Product picker chỉ bắt buộc khi policy yêu cầu và giải thích lý do.
-- [ ] Bốn tab Studio không làm mất deep link/bảy persisted step routes.
+- [ ] `NOT_REQUIRED` ẩn khỏi primary stepper với visible numbering liên tục; direct
+  URL hiện controlled N/A state. OPTIONAL chỉ active sau durable server opt-in.
+- [ ] Bốn tab Studio không làm mất deep link/bảy persisted step routes; Product,
+  Content, Fact Lock, Voice, Video và Preview bookmarks vẫn hợp lệ.
+- [ ] Video/Preview dùng cùng Render result và hiện `Sắp có` khi reason là
+  `RENDER_FEATURE_NOT_IMPLEMENTED`; không expose execution CTA.
 - [ ] Loading, empty, validation, conflict, unauthorized, provider error và success đều có state.
-- [ ] Keyboard/focus/label/contrast đạt baseline hiện hữu.
+- [ ] Keyboard/focus/label/contrast, semantic link/button, `aria-current` và mobile
+  no-overflow đạt baseline hiện hữu.
+- [ ] Adaptive read reuse một authorized snapshot, không provider/mutation hoặc
+  duplicate Project + shadow + adaptive gather waterfall.
 
 ## 11. Regression suite tối thiểu
 

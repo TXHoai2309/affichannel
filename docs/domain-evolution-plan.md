@@ -164,6 +164,21 @@ trong Phase 0.
    PASS; M1/M3B/M2C cùng chín golden suites tiếp tục xanh. Legacy vẫn authority;
    không mở M5/cutover trong slice này.
 
+### M4.1 — AFF-US-015 Adaptive Workflow UI cutover contract
+
+1. Contract source of truth là `docs/aff-us-015-adaptive-workflow-ui.md` và DEC-029.
+2. 15A thêm read-model mapper/shared read-only snapshot + tests, chưa UI consumer.
+3. 15B chuyển stepper/landing presentation sang Resolver; execution guards giữ
+   authority và không mutate persisted workflow.
+4. 15C chuyển gated route shells sang cùng snapshot, giữ bookmarked Affiliate URLs
+   và server defensive checks.
+5. 15D chạy Affiliate A–J, direct-route, loading/error, accessibility/mobile và
+   query-budget acceptance. Future identity vẫn inactive.
+6. M4 shadow được retain qua adoption; reduce/remove cần explicit decision sau
+   zero mismatch/exception/unmapped observation window.
+7. OPTIONAL chỉ được activate sau durable server-owned selection contract; current
+   baseline không có OPTIONAL.
+
 ### M5 — Enforce và cutover
 
 1. Đặt not-null cho field đã backfill khi evidence cho phép; không đặt database
@@ -210,6 +225,8 @@ snapshot mới nhất, tính lại Resolver result và cập nhật `currentStep
 transaction. Operation đó không thuộc M4 shadow.
 
 Direct URL có thể xem step khác, nhưng không được trở thành workflow source of truth.
+AFF-US-015 dùng controlled route states thay vì auto-redirect: NOT_REQUIRED hiện
+N/A + CTA, BLOCKED hiện typed remediation, STALE hiện prior safe artifact + rerun.
 
 ## 7. Rollback
 

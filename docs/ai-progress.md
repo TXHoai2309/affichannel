@@ -1,8 +1,29 @@
 # Tiến trình AI agent
 
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
-  shadow runtime đã triển khai và đạt parity gate, chưa authority cutover.
+  shadow runtime đã đạt parity; AFF-US-015 acceptance contract đã khóa, chưa UI
+  authority cutover.
 - Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-015 Adaptive Workflow UI acceptance contract
+
+Đã audit current seven-step UI, Project layout/loaders, Content/Fact Lock/Voice/
+Video/Preview routes, dashboard/list navigation, persisted `currentStepKey`/
+`project_step_status`, Voice reconciliation và M4 Project read observation. Audit
+xác nhận web đang duplicate Fact Lock/Voice readiness, Video/Preview placeholder có
+thể bị báo ready, RSC read path gọi Voice reconciliation và direct service Project
+loader bypass M4 observer trong router.
+
+DEC-029 và `docs/aff-us-015-adaptive-workflow-ui.md` khóa một read-only Adaptive
+Workflow model trên năm capability, mapping giữ route hiện có, six-state/completion
+presentation, dynamic visible numbering, controlled deep links, durable server
+OPTIONAL opt-in extension, Affiliate A–J UI parity và Render `Sắp có`. Target API
+dùng một authorized gathered snapshot được reuse, không duplicate waterfall hoặc
+read mutation; M4 shadow được retain qua rollout 15A–15D.
+
+Task chỉ sửa canonical docs. Không React/UI/API/runtime/schema/migration, không
+mutate workflow, không activate Organic/Quick Image/Media First, không M5 và không
+deploy.
 
 ## 2026-08-24 — AFF-US-014 / M4 Applicability Resolver Shadow Runtime
 

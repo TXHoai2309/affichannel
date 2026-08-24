@@ -11,9 +11,58 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-029 — Adaptive Workflow UI read authority
+
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; chưa UI/runtime cutover
+- Ngày: 2026-08-24
+- Mở rộng: DEC-025, DEC-028
+
+### Bối cảnh
+
+Current Project UI dùng bảy step hardcode, persisted `currentStepKey`/
+`project_step_status`, Fact Lock gate và Voice summary để tự suy trạng thái hiển
+thị. `/video` và `/preview` mới là placeholder nhưng có thể bị báo “Có thể tiếp
+tục”. RSC Project layout còn gọi Voice reconciliation trong read/render path. M4
+Resolver đã đạt shadow parity nhưng chưa là UI authority.
+
+### Quyết định
+
+- Adaptive Workflow read model là derived, typed, serializable và read-only. Nó
+  map một Resolver result cho đúng năm capability, route descriptors, visibility,
+  navigation/action kind và `nextApplicableStep`; không persist hoặc chứa UI prose.
+- `currentStepKey` là legacy progress/landing cursor;
+  `project_step_status` là legacy completion projection. Cả hai không phải
+  applicability truth và không bị mutate bởi GET/page render/navigation.
+- `NOT_REQUIRED` ẩn khỏi primary stepper, direct URL hiện controlled N/A state và
+  numbering dùng visible order liên tục. `OPTIONAL` chỉ vào primary flow sau durable
+  server-owned opt-in; current Affiliate baseline không có OPTIONAL.
+- Applicability và completion trình bày riêng. BLOCKED dùng typed remediation;
+  STALE giữ warning/rerun riêng. Reason-code-to-copy thuộc web presentation layer.
+- `SCRIPT` map route lịch sử `content`. Một `RENDER` capability map primary
+  `/video` và secondary `/preview`; `/completed` là terminal presentation, không
+  phải capability. Current Render hiển thị `Sắp có`, không execution CTA.
+- Deep links không bị đổi tên hoặc auto-redirect. Mỗi state render controlled route
+  view; execution guard/authorization vẫn kiểm tra server-side.
+- Target aggregation là một protected, workspace-authorized, request-owned
+  adaptive snapshot được reuse bởi stepper/landing/routes và M4 comparison; không
+  chạy `project.get + shadow gather + adaptive gather` riêng lẻ. Adaptive reads
+  dùng Voice read snapshot, không gọi reconciliation.
+- M4 shadow được giữ trong rollout 15A–15D và chỉ reduce/remove sau quyết định riêng
+  với parity/zero-mismatch evidence.
+
+Contract đầy đủ, audit matrix, Affiliate A–J presentation và `AC-015-01–18` nằm tại
+`docs/aff-us-015-adaptive-workflow-ui.md`.
+
+### Hệ quả
+
+AFF-US-015 implementation phải cut over presentation theo phase, không biến UI
+resolver thành authorization và không activate Organic/Quick Image/Media First.
+Persisted workflow synchronization, nếu cần, là explicit transactional command
+được phê duyệt riêng.
+
 ## DEC-028 — Applicability Resolver M4 shadow contract
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; runtime chưa triển khai
+- Trạng thái: Runtime shadow đã accepted; legacy behavior vẫn authority
 - Ngày: 2026-08-24
 - Mở rộng: DEC-025, DEC-026
 

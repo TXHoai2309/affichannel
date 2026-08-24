@@ -8,6 +8,20 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-015 Adaptive Workflow UI acceptance contract
+
+- Thêm DEC-029 và dedicated contract với exact repository UI/authority audit,
+  Adaptive Workflow read model, capability-route mapping và `AC-015-01–18`.
+- Khóa `NOT_REQUIRED` hidden + dynamic numbering, durable server-owned OPTIONAL
+  opt-in, controlled direct routes, BLOCKED/STALE presentation và exhaustive web
+  reason-code mapper.
+- Khóa Affiliate A–J UI parity; `/video` và `/preview` cùng map Render và phải hiện
+  `Sắp có` cho `RENDER_FEATURE_NOT_IMPLEMENTED`, không execution CTA.
+- Chọn một protected, read-only gathered snapshot được reuse bởi stepper/routes/M4
+  comparison; GET/render không gọi reconciliation hoặc mutate persisted workflow.
+- Docs-only: chưa đổi React, API, schema/migration, current workflow behavior, future
+  identity activation, M5 hoặc deploy.
+
 ### AFF-US-014 / M4 Applicability Resolver Shadow Runtime
 
 - Thêm pure Applicability Resolver server-owned cho Product, Script, Fact Lock,

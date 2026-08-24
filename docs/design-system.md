@@ -188,6 +188,27 @@ Applicability dùng đúng label `Không cần`, `Tùy chọn`, `Bắt buộc`, 
 `Đang bị chặn`, `Đã lỗi thời` tương ứng với runtime state. Không hiển thị
 `NOT_REQUIRED` như completed. Blocked/stale luôn có reason và hành động tiếp theo.
 
+Adaptive Workflow dùng copy cụ thể hơn theo context: `NOT_REQUIRED` direct route là
+`Không áp dụng`; current Render `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` là
+`Sắp có`, không phải lỗi user. `READY` và `COMPLETE` phải có treatment riêng.
+Reason-code-to-copy mapper thuộc web presentation layer và phải exhaustive.
+
+### Adaptive project stepper
+
+- Primary stepper ẩn `NOT_REQUIRED` nhất quán và đánh số động liên tục theo các
+  capability visible; secondary Render route không tạo thêm capability number.
+- OPTIONAL chưa selected nằm ở optional affordance với explicit opt-in; không giả
+  selected từ việc user mở URL.
+- Active route (`aria-current`) khác next-step highlight. Blocked/stale/ready luôn
+  có visible text/icon, không chỉ màu.
+- Blocked deep link hiện explanation và CTA đến blocker; stale giữ prior safe
+  artifact cùng explicit refresh/rerun. N/A deep link hiện controlled state, không
+  auto-redirect.
+- `/video` và `/preview` cùng dùng Render state. Khi chưa implement, chúng chỉ là
+  informational placeholder, không có execution CTA.
+- Mobile dùng compact/vertical layout không overflow ngang; reason và primary CTA
+  vẫn đọc/điều khiển được. Sau navigation, focus chuyển tới heading phù hợp.
+
 ### Product và Product claim
 
 - Product picker chỉ có dấu bắt buộc khi resolver yêu cầu.
@@ -298,5 +319,9 @@ hoặc cancel.
 - Thuật ngữ UI khớp đặc tả sản phẩm.
 - Content Type và Creation Path được trình bày như hai quyết định độc lập.
 - Step `NOT_REQUIRED` không bị hiển thị thành completed.
-- Product/Fact Lock chỉ chặn khi resolver trả `REQUIRED`.
+- Product/Fact Lock chỉ chặn khi Resolver policy/result xác định capability đang
+  applicable và mandatory; runtime state cụ thể có thể là REQUIRED, READY, BLOCKED
+  hoặc STALE.
 - Bốn tab Studio và bảy persisted step routes giữ navigation nhất quán.
+- Adaptive workflow không flash legacy readiness trong lúc loading snapshot.
+- Hidden `NOT_REQUIRED` dùng visible numbering liên tục; không có numbering gap.

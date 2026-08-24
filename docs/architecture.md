@@ -199,6 +199,20 @@ phê duyệt để khóa Project và đồng bộ persisted workflow trong trans
 bị bỏ qua không được giả là `completed`. Contract chi tiết nằm tại DEC-028 và
 `docs/aff-us-014-m4-applicability-resolver-shadow.md`.
 
+AFF-US-015 target thêm một protected, workspace-authorized Adaptive Workflow query
+trên một request-owned read-only snapshot. Snapshot Project/Script/Fact Lock/Voice
+được gather một lần, independent reads chạy song song khi có thể, rồi pure Resolver
+và structural mapper chạy một lần. Stepper, landing, gated routes và M4 comparison
+reuse result này; không tạo waterfall `project.get + shadow + adaptive`. RSC có thể
+dùng request-scoped cache với primitive stable arguments, nhưng chỉ serialize DTO
+tối thiểu qua client boundary.
+
+Adaptive read không gọi `reconcileVoiceStep()` hoặc bất kỳ write/provider path nào;
+nó dùng Voice read snapshot. `currentStepKey`/`project_step_status` tiếp tục tồn tại
+cho legacy coexistence nhưng không là applicability truth. Exact route mapping,
+deep-link policy và read-model schema nằm tại DEC-029 và
+`docs/aff-us-015-adaptive-workflow-ui.md`.
+
 Script generation nhận discriminated input source mode do server chọn:
 `PRODUCT_BACKED` hoặc `ORGANIC_NO_PRODUCT`. Đây là dimension riêng, không thay cột
 operation mode `full | repair` hiện hữu. Input source mode thứ hai không lookup

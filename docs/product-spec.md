@@ -385,10 +385,17 @@ Dashboard, Channel, Content/Projects, Products, Video Studio, Content Library,
 Calendar, Analytics và Settings; route chưa có business logic phải dùng placeholder
 trung thực.
 
-Project tiếp tục persist bảy step keys: Sản phẩm, Nội dung, Fact Lock, Giọng đọc,
-Dựng video, Preview & Render và Hoàn thành. Applicability Resolver quyết định step
-nào được hiển thị, thu gọn hoặc bỏ qua. `NOT_REQUIRED` không được hiển thị như lỗi
-hoặc `BLOCKED`.
+Project tiếp tục persist bảy historical step keys trong giai đoạn coexistence:
+Sản phẩm, Nội dung, Fact Lock, Giọng đọc, Dựng video, Preview & Render và Hoàn
+thành. Chúng là legacy cursor/completion projection, không phải applicability
+truth. Adaptive Workflow render từ Resolver result: `NOT_REQUIRED` ẩn khỏi primary
+stepper với visible numbering liên tục; direct URL hiện controlled N/A state,
+không coi là lỗi hoặc completed. Applicability và completion luôn tách riêng.
+
+Năm capability canonical map vào route hiện có: Product → `product`, Script →
+`content`, Fact Lock → `fact-lock`, Voice → `voice`; Render dùng primary `video`
+và secondary `preview`. `completed` là terminal presentation, không phải capability.
+Current Render placeholder phải hiện `Sắp có`, không được báo “Có thể tiếp tục”.
 
 Video Studio target dùng bốn tab trình bày:
 
@@ -465,6 +472,9 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
   `nextApplicableStep` mà không persist applicability hoặc mutate workflow. Sau
   approved cutover, business action riêng mới có thể đồng bộ persisted step mà
   không ghi enum applicability vào `project_step_status`.
+- UI phân biệt đủ sáu state và completion; OPTIONAL chưa selected bị skip và chỉ
+  thành authoritative sau durable server-owned opt-in. Deep link render controlled
+  state, không dựa vào disabled stepper hoặc redirect loop.
 - Affiliate luôn có server-built ClaimManifest và Fact Lock policy check trước
   TTS/render; Organic no-claim không bị Fact Lock chặn.
 - ClaimManifest empty chỉ PASS sau server normalization thành công; client không
@@ -486,15 +496,17 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **DONE — DEC-026** | ContentFormat là server-owned versioned registry, persist bằng `content_format_key` + `content_format_version`; initial defaults và legacy backfill đã khóa. | Migration `0017`, M2 reconciliation và M3 compatible read/write đã hoàn tất cho Affiliate baseline. |
 | **NON-BLOCKER for Domain Evolution** | Schema chi tiết của applicability provenance snapshot trên artifact. | Trước khi ClaimManifest/Quick Image ghi artifact mới; resolver runtime và Project backfill không phải chờ. |
 | **NON-BLOCKER for Domain Evolution** | MVP manual evidence review cho Organic factual knowledge không dựa trên Product Facts. | Trước khi bật factual Organic path tương ứng; Organic claimless/no-product vẫn được triển khai. |
-| **M4 CONTRACT LOCKED — DEC-028** | Applicability Resolver derived/non-persisted; completion tách riêng và không mở rộng enum step status. | Runtime shadow chưa triển khai; Resolver không mutate `currentStepKey`. Future synchronization là transactional operation riêng sau parity/cutover approval. |
+| **M4 RUNTIME ACCEPTED — DEC-028** | Applicability Resolver derived/non-persisted; completion tách riêng và không mở rộng enum step status. | Shadow matrix A–J đã đạt parity; Resolver không mutate `currentStepKey`, legacy behavior vẫn authority. |
+| **US15 CONTRACT LOCKED — DEC-029** | Adaptive Workflow read model, six-state UX, route/deep-link mapping, OPTIONAL opt-in và read aggregation. | Thực hiện 15A–15D; chưa UI/API cutover, không activate future identity. |
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
-Kết luận hiện tại: M1/M2/M3 đã hoàn tất cho canonical Affiliate identity. DEC-028
-đã khóa AFF-US-014/M4 acceptance contract; bước tiếp theo chỉ là runtime shadow
-implementation/review, chưa authority cutover, Organic activation hoặc M5.
+Kết luận hiện tại: M1/M2/M3 đã hoàn tất cho canonical Affiliate identity; M4
+Resolver shadow runtime đã đạt parity. DEC-029 và
+`docs/aff-us-015-adaptive-workflow-ui.md` khóa acceptance contract cho bước UI
+tiếp theo, nhưng chưa authority cutover, Organic activation hoặc M5.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.
