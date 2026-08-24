@@ -1,9 +1,23 @@
 # Tiến trình AI agent
 
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
-  shadow runtime đã đạt parity; AFF-US-015 Phase 15A read foundation đã triển khai,
-  chưa UI authority cutover.
+  shadow runtime đã đạt parity; AFF-US-015 Phase 15A accepted và Phase 15B1 đã
+  cut over Project Stepper/Overview; 15B2/15C chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-24
+
+## 2026-08-24 — AFF-US-015 Phase 15B1 Project presentation cutover
+
+Project layout và Overview hiện consume request-cached Adaptive Workflow. Stepper
+render năm capability visible theo server-owned ordinal, pathname chỉ sở hữu active
+view, Preview là secondary Render route và Render hiển thị `Sắp có`. Web-owned typed
+mapper tập trung state/completion/reason/CTA localization và fail closed cho
+unsupported/invalid combinations.
+
+Project shell không còn đọc `currentStepKey`, `project_step_status`, Fact Lock gate
+hoặc Voice reconciliation để trình bày applicability. Overview load Project metadata
+và Adaptive Workflow song song, CTA dùng `nextApplicableStep/nextRouteKey`. Project
+List, Dashboard, product-detail/post-create navigation và deep-link route shells vẫn
+được giữ cho 15B2/15C; full AFF-US-015 chưa DONE.
 
 ## 2026-08-24 — AFF-US-015 Phase 15A Adaptive Workflow read foundation
 

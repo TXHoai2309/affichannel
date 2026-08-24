@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getProjectFixture } from "@/features/project-navigation/project-fixtures";
 import ProjectOverview from "@/features/project-navigation/project-overview";
 import {
+	getAdaptiveWorkflowForCurrentUser,
 	getCurrentWorkspaceActor,
 	getProjectForCurrentUser,
 } from "@/lib/project-loader";
@@ -22,23 +23,33 @@ export default async function ProjectOverviewPage({
 	const fixture = getProjectFixture(projectId);
 
 	if (fixture) {
-		return <ProjectOverview project={fixture} />;
+		return (
+			<ProjectOverview
+				project={fixture}
+				projectId={fixture.id}
+				workflow={fixture.workflow}
+			/>
+		);
 	}
 
-	const project = await getProjectForCurrentUser(projectId);
+	const [project, workflow] = await Promise.all([
+		getProjectForCurrentUser(projectId),
+		getAdaptiveWorkflowForCurrentUser(projectId),
+	]);
 
-	if (!project) {
+	if (!project || !workflow) {
 		notFound();
 	}
 
 	return (
 		<ProjectOverview
+			projectId={project.id}
 			project={{
 				name: project.name,
 				productName: project.product.name,
-				currentStepKey: project.currentStepKey,
 				brief: project.brief,
 			}}
+			workflow={workflow}
 		/>
 	);
 }

@@ -22,7 +22,7 @@ export const getProjectForCurrentUser = cache(async (projectId: string) => {
 	return actor ? getProjectDetails(actor.workspaceId, projectId) : undefined;
 });
 
-/** Unused by current UI; Phase 15A request-scoped foundation for later cutover. */
+/** Request-scoped adaptive presentation source for the Project shell. */
 export const getAdaptiveWorkflowForCurrentUser = cache(
 	async (projectId: string) => {
 		const actor = await getCurrentWorkspaceActor();

@@ -144,6 +144,13 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   nhưng không persist status/error/finishedAt.
 - [x] Phase 15A: M4 shadow consume resolved snapshot ở adaptive read boundary;
   mismatch taxonomy, exception isolation và legacy `project.get` response giữ nguyên.
+- [x] Phase 15B1: Project Stepper/Overview dùng Adaptive Workflow; dynamic visible
+  count/ordinal, pathname active route, Render `Sắp có`, unsupported/invalid
+  fail-closed và Overview next CTA có deterministic tests.
+- [ ] Phase 15B2: Project List, Dashboard, product-detail và post-create navigation
+  chuyển sang adaptive summary/route.
+- [ ] Phase 15C: deep-link/page-shell presentation cutover; execution guards giữ
+  server authority.
 - [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi
   là complete, STALE không bị flatten thành blocked/failed.
 - [ ] Product picker chỉ bắt buộc khi policy yêu cầu và giải thích lý do.

@@ -22,6 +22,7 @@
 		"test:unit:applicability-resolver": "pnpm --filter web exec vitest run src/features/project/applicability-resolver.test.ts",
 		"test:unit:applicability-shadow": "pnpm --filter web exec vitest run src/features/project/applicability-shadow.test.ts",
 		"test:unit:adaptive-workflow": "pnpm --filter web exec vitest run src/features/project/adaptive-workflow.test.ts src/features/project/adaptive-workflow-service.test.ts",
+		"test:unit:adaptive-project-navigation": "pnpm --filter web exec vitest run src/features/project-navigation/adaptive-workflow-presentation.test.ts src/features/project-navigation/project-shell-adaptive.test.ts",
 		"test:integration:applicability-shadow": "tsx scripts/test-applicability-shadow.ts",
 		"test:integration:adaptive-workflow": "tsx scripts/test-applicability-shadow.ts",
 		"test:integration:legacy-affiliate-dry-run": "tsx scripts/test-legacy-affiliate-dry-run.ts",

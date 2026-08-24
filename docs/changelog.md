@@ -8,6 +8,16 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-015 Phase 15B1 Project presentation cutover
+
+- Project Stepper dùng Adaptive Workflow để render capability visible, ordinal,
+  state/completion/reason và pathname-based active route; bỏ primary Preview và
+  Completed cards, Render hiển thị `Sắp có`.
+- Project Overview dùng adaptive next step/CTA; unsupported hoặc invalid workflow
+  fail closed thành trạng thái cần kiểm tra, không invent readiness.
+- Project layout không còn gọi Fact Lock/Voice reconciliation cho Stepper. 15B2,
+  15C, execution guards và legacy route shells chưa đổi.
+
 ### AFF-US-015 Phase 15A Adaptive Workflow read foundation
 
 - Adaptive Voice snapshot dùng lease-aware effective projection: expired pending

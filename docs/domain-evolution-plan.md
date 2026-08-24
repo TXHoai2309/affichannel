@@ -192,6 +192,17 @@ Implementation evidence Phase 15A — 2026-08-24:
   disposable-DB zero mutation/provider/reconciliation evidence PASS;
 - current stepper/landing/routes và legacy reconciliation behavior chưa cut over.
 
+Implementation evidence Phase 15B1 — 2026-08-24:
+
+- Project layout/Stepper và Project Overview đã dùng request-cached Adaptive
+  Workflow làm presentation authority;
+- primary stepper dùng visible capability/ordinal động, active route theo pathname,
+  Video/Preview cùng map Render và Render unimplemented hiển thị `Sắp có`;
+- Web mapper typed/exhaustive theo reason code, fail closed invalid/unsupported và
+  Overview CTA dùng adaptive next route;
+- layout Stepper không còn Fact Lock/Voice reconciliation read; 15B2 list/dashboard/
+  navigation và 15C route/deep-link vẫn pending.
+
 ### M5 — Enforce và cutover
 
 1. Đặt not-null cho field đã backfill khi evidence cho phép; không đặt database

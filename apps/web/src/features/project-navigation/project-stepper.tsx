@@ -1,6 +1,6 @@
 "use client";
 
-import type { FactLockGateResult } from "@affichannel/core";
+import type { AdaptiveWorkflowReadModel } from "@affichannel/core";
 import { Badge } from "@affichannel/ui/components/badge";
 import { cn } from "@affichannel/ui/lib/utils";
 import {
@@ -15,41 +15,30 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import {
-	DEMO_PROJECT_STEP_STATUSES,
-	getActiveProjectStepKey,
-	getProjectStepDisplayStatus,
-	getProjectStepReadinessLabel,
-	getProjectStepStatus,
-	getProjectStepStatusVariant,
-	type PersistedProjectStepStatus,
-	PROJECT_STEP_STATUS_LABELS,
-	PROJECT_STEPS,
-	type ProjectStepKey,
-} from "./project-steps";
+	type AdaptiveWorkflowSemantic,
+	buildAdaptiveStepperItems,
+} from "./adaptive-workflow-presentation";
 
 const STATUS_ICONS = {
-	completed: Check,
-	current: CircleDot,
-	needs_review: CircleAlert,
+	waiting: Circle,
+	progress: CircleDot,
+	ready: CircleDot,
+	complete: Check,
 	blocked: CircleSlash2,
-	not_started: Circle,
-} as const;
+	stale: CircleAlert,
+	coming_soon: Circle,
+	attention: CircleAlert,
+} as const satisfies Record<AdaptiveWorkflowSemantic, typeof Circle>;
 
 export default function ProjectStepper({
 	projectId,
-	currentStepKey = "fact-lock",
-	persistedStatuses = DEMO_PROJECT_STEP_STATUSES,
-	factLockGate = null,
-	voiceReady,
+	workflow,
 }: {
 	projectId: string;
-	currentStepKey?: ProjectStepKey;
-	persistedStatuses?: Record<ProjectStepKey, PersistedProjectStepStatus>;
-	factLockGate?: FactLockGateResult | null;
-	voiceReady?: boolean;
+	workflow: AdaptiveWorkflowReadModel;
 }) {
 	const pathname = usePathname();
-	const activeStepKey = getActiveProjectStepKey(pathname, projectId);
+	const items = buildAdaptiveStepperItems(workflow, pathname, projectId);
 
 	return (
 		<nav
@@ -58,90 +47,91 @@ export default function ProjectStepper({
 		>
 			<div className="mb-4 flex items-center justify-between gap-4">
 				<div>
-					<p className="font-medium">Project steps</p>
+					<p className="font-medium">Các bước Project</p>
 					<p className="mt-1 text-muted-foreground text-xs">
-						Trạng thái workflow được lưu theo từng dự án; route chỉ xác định
+						Workflow phản ánh trạng thái nội dung hiện tại; route chỉ xác định
 						bước bạn đang xem.
 					</p>
 				</div>
-				<Badge variant="outline">7 bước</Badge>
+				<Badge variant="outline">{items.length} bước</Badge>
 			</div>
-			<fieldset className="mb-4 flex flex-wrap gap-2 border-t pt-3">
-				<legend className="sr-only">Chú giải trạng thái step</legend>
-				{(
-					[
-						"completed",
-						"current",
-						"needs_review",
-						"blocked",
-						"not_started",
-					] as const
-				).map((status) => {
-					const Icon = STATUS_ICONS[status];
 
-					return (
-						<Badge key={status} variant={getProjectStepStatusVariant(status)}>
-							<Icon aria-hidden="true" className="size-3" />
-							{PROJECT_STEP_STATUS_LABELS[status]}
-						</Badge>
-					);
-				})}
-			</fieldset>
-
-			<ol className="grid gap-2 md:grid-cols-7">
-				{PROJECT_STEPS.map((step) => {
-					const workflowStatus = getProjectStepStatus(
-						step.key,
-						currentStepKey,
-						persistedStatuses[step.key],
-					);
-					const status = getProjectStepDisplayStatus(
-						step.key,
-						workflowStatus,
-						factLockGate,
-						voiceReady,
-					);
-					const readinessLabel = getProjectStepReadinessLabel(
-						step.key,
-						factLockGate,
-						voiceReady,
-					);
-					const Icon = STATUS_ICONS[status];
-					const active = step.key === activeStepKey;
-
-					return (
-						<li key={step.key}>
-							<Link
-								aria-current={active ? "step" : undefined}
-								className={cn(
-									"flex min-h-20 flex-col justify-between rounded-lg border p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-									active && "border-primary bg-primary/5",
-								)}
-								href={`/projects/${projectId}/${step.key}` as Route}
-							>
+			{workflow.unsupportedState.isUnsupported ? (
+				<div
+					aria-live="polite"
+					className="rounded-lg border border-destructive/20 bg-destructive/5 p-4"
+					role="status"
+				>
+					<div className="flex items-center gap-2">
+						<CircleAlert aria-hidden="true" className="size-4" />
+						<p className="font-medium">Project cần được kiểm tra</p>
+					</div>
+					<p className="mt-1 text-muted-foreground text-xs">
+						Workflow chưa thể xác định các bước một cách an toàn.
+					</p>
+				</div>
+			) : (
+				<ol className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2">
+					{items.map(({ step, presentation, active, next, href }) => {
+						const Icon = STATUS_ICONS[presentation.semantic];
+						const content = (
+							<>
 								<span className="flex items-center justify-between gap-2">
 									<span className="font-semibold text-muted-foreground text-xs">
-										0{step.order}
+										{String(step.visibleOrdinal).padStart(2, "0")}
 									</span>
-									<Icon
-										aria-hidden="true"
-										className={cn(
-											"size-4",
-											status === "completed" && "text-green-600",
-											status === "blocked" && "text-destructive",
-											status === "needs_review" && "text-amber-600",
-										)}
-									/>
+									<Badge variant={presentation.badgeVariant}>
+										<Icon aria-hidden="true" className="size-3" />
+										{presentation.statusLabel}
+									</Badge>
 								</span>
-								<span className="mt-3 font-medium text-sm">{step.label}</span>
+								<span className="mt-3 font-medium text-sm">
+									{presentation.label}
+								</span>
 								<span className="mt-1 text-muted-foreground text-xs">
-									{readinessLabel ?? PROJECT_STEP_STATUS_LABELS[status]}
+									{presentation.helperText}
 								</span>
-							</Link>
-						</li>
-					);
-				})}
-			</ol>
+								{next ? (
+									<span className="mt-2 font-medium text-primary text-xs">
+										Bước tiếp theo
+									</span>
+								) : null}
+							</>
+						);
+
+						return (
+							<li key={step.capability}>
+								{step.navigable && presentation.valid ? (
+									<Link
+										aria-current={active ? "step" : undefined}
+										className={cn(
+											"flex min-h-28 flex-col rounded-lg border p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+											next && !active && "border-primary/50",
+											active && "border-primary bg-primary/5",
+										)}
+										data-next={next ? "true" : undefined}
+										href={href as Route}
+									>
+										{content}
+									</Link>
+								) : (
+									<div
+										aria-disabled="true"
+										className={cn(
+											"flex min-h-28 flex-col rounded-lg border bg-muted/30 p-3",
+											next && !active && "border-primary/50",
+											active && "border-primary bg-primary/5",
+										)}
+										data-next={next ? "true" : undefined}
+									>
+										{content}
+									</div>
+								)}
+							</li>
+						);
+					})}
+				</ol>
+			)}
 		</nav>
 	);
 }
