@@ -139,6 +139,9 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   separation, controlled unsupported state và A–J `10/10` đã có deterministic tests.
 - [x] Phase 15A: protected read-only aggregation reuse một request-owned snapshot;
   zero workflow/artifact mutation, zero Voice reconciliation và zero provider call.
+- [x] Phase 15A: Voice read projection dùng configured pending lease và explicit
+  clock; expired pending trả effective `indeterminate` tương đương reconciliation
+  nhưng không persist status/error/finishedAt.
 - [x] Phase 15A: M4 shadow consume resolved snapshot ở adaptive read boundary;
   mismatch taxonomy, exception isolation và legacy `project.get` response giữ nguyên.
 - [ ] UI phân biệt đủ sáu state và completion bằng text/icon; READY không bị coi

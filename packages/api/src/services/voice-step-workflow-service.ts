@@ -3,12 +3,14 @@ import {
 	deriveVoiceSegmentReadModel,
 	evaluateVoiceStepReadiness,
 	type VoiceSegmentArtifact,
+	type VoiceSegmentReadTemporalContext,
 	type VoiceStepSegmentEvaluation,
 	type VoiceStepSummary,
 	validateVoiceConfigFields,
 	validateVoiceSegmentText,
 } from "@affichannel/core";
 import { db, project, projectStepStatus, voiceConfig } from "@affichannel/db";
+import { env } from "@affichannel/env/server";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { FactLockGate } from "./fact-lock-gate-service";
@@ -67,6 +69,10 @@ async function loadEvaluation(
 	actor: WorkspaceActor,
 	projectId: string,
 	readSources?: VoiceStepWorkflowReadSources,
+	temporalContext: VoiceSegmentReadTemporalContext = {
+		now: new Date(),
+		pendingLeaseMs: Number(env.VOICE_SEGMENT_PENDING_LEASE_MS),
+	},
 ): Promise<VoiceStepWorkflowEvaluation> {
 	const [sources, currentVoiceConfig, artifacts] = await Promise.all([
 		readSources
@@ -121,6 +127,7 @@ async function loadEvaluation(
 						.filter((artifact) => artifact.segmentKey === segment.key)
 						.sort(sortArtifacts),
 					fingerprint,
+					temporalContext,
 				),
 			});
 		}
@@ -142,8 +149,9 @@ export function getVoiceStepWorkflowReadSnapshot(
 	actor: WorkspaceActor,
 	projectId: string,
 	readSources?: VoiceStepWorkflowReadSources,
+	temporalContext?: VoiceSegmentReadTemporalContext,
 ) {
-	return loadEvaluation(actor, projectId, readSources);
+	return loadEvaluation(actor, projectId, readSources, temporalContext);
 }
 
 export async function getVoiceStepWorkflowEvaluation(

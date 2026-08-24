@@ -330,6 +330,45 @@ describe("AFF-US-015 Adaptive Workflow mapper", () => {
 		expect(model.terminalState.eligible).toBe(false);
 	});
 
+	it.each([
+		[
+			"active pending",
+			{ pendingSegments: 1, indeterminateSegments: 0 },
+			"REQUIRED",
+			"VOICE_SEGMENTS_PENDING",
+		],
+		[
+			"expired pending",
+			{ pendingSegments: 0, indeterminateSegments: 1 },
+			"BLOCKED",
+			"VOICE_SEGMENTS_INDETERMINATE",
+		],
+	] as const)(
+		"preserves the Resolver Voice result for %s",
+		(_name, counts, state, reasonCode) => {
+			const input = baseInput();
+			passedFactLock(input);
+			Object.assign(input.voice, {
+				configPresent: true,
+				totalSegments: 1,
+				attemptedSegments: 1,
+				...counts,
+			});
+			const model = mapAdaptiveWorkflowReadModel(
+				resolveProjectApplicability(input),
+			);
+			const voice = model.steps.find((step) => step.capability === "VOICE");
+
+			expect(voice).toMatchObject({
+				applicabilityState: state,
+				completion: "IN_PROGRESS",
+				reasonCode,
+			});
+			expect(model.nextApplicableStep).toBe("VOICE");
+			expect(model.nextRouteKey).toBe("voice");
+		},
+	);
+
 	it("distinguishes NOT_REQUIRED and all OPTIONAL selection states", () => {
 		const conceptual: ProjectApplicabilityResult = {
 			capabilities: [

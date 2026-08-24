@@ -7,6 +7,13 @@
 
 ## 2026-08-24 — AFF-US-015 Phase 15A Adaptive Workflow read foundation
 
+Patch lease-aware: Adaptive Voice read hiện truyền explicit temporal context vào
+pure VoiceSegment derivation. Pending còn lease giữ `pending`; pending hết lease
+được project transient thành effective `indeterminate` mà không sửa persisted
+status/error/finishedAt. Expired + older completed và stale fingerprint giữ đúng
+precedence canonical; disposable-DB evidence xác nhận mutation/reconciliation/provider
+đều bằng 0 và M4 shadow vẫn parity.
+
 Đã thêm pure Adaptive Workflow mapper/types trong `packages/core`, giữ nguyên
 Resolver state/completion/reason/next-step và map năm capability vào Product,
 Content, Fact Lock, Voice, Video/Preview routes. Model có visible ordinal,
@@ -20,8 +27,8 @@ lần rồi reuse cho Adaptive mapper và M4 shadow comparator. Current RSC bind
 `React.cache(projectId)` nhưng chưa có consumer; legacy Project layout/stepper và
 write-capable `reconcileVoiceStep()` không đổi.
 
-Unit 22/22, M4 unit, disposable-DB shared-snapshot/zero-mutation integration, M3B,
-M2C, M1, chín golden suites, web 346/346 và type-check đều PASS. Adaptive read có
+Adaptive unit 24/24, M4 unit, disposable-DB shared-snapshot/zero-mutation integration,
+M3B, M2C, M1, chín golden suites, web 353/353 và type-check đều PASS. Adaptive read có
 zero Project/status/artifact mutation, zero Voice reconciliation và zero provider
 call. Không UI/landing/deep-link cutover, future identity activation, Render, M5,
 schema/migration hoặc deploy.

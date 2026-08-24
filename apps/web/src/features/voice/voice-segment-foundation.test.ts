@@ -198,6 +198,81 @@ describe("AFF-US-012 VoiceSegment foundation", () => {
 		).toBe(true);
 	});
 
+	it("keeps an active pending request pending in the read-only projection", () => {
+		const now = new Date("2026-08-21T00:05:00.000Z");
+		const pending = artifact({
+			status: "pending",
+			createdAt: new Date(
+				now.getTime() - DEFAULT_VOICE_SEGMENT_PENDING_LEASE_MS + 1,
+			),
+		});
+		const model = deriveVoiceSegmentReadModel([pending], fingerprint, {
+			now,
+			pendingLeaseMs: DEFAULT_VOICE_SEGMENT_PENDING_LEASE_MS,
+		});
+
+		expect(model.effectiveStatus).toBe("pending");
+		expect(model.latestRequest).toBe(pending);
+		expect(pending.status).toBe("pending");
+	});
+
+	it("projects an expired pending request as indeterminate without mutation", () => {
+		const now = new Date("2026-08-21T00:05:00.000Z");
+		const pending = artifact({
+			status: "pending",
+			createdAt: new Date(
+				now.getTime() - DEFAULT_VOICE_SEGMENT_PENDING_LEASE_MS,
+			),
+		});
+		const model = deriveVoiceSegmentReadModel([pending], fingerprint, {
+			now,
+			pendingLeaseMs: DEFAULT_VOICE_SEGMENT_PENDING_LEASE_MS,
+		});
+
+		expect(model.effectiveStatus).toBe("indeterminate");
+		expect(model.latestRequest).toBe(pending);
+		expect(pending).toMatchObject({ status: "pending", errorCode: null });
+	});
+
+	it("does not fall back to older completed audio after latest pending expires", () => {
+		const now = new Date("2026-08-21T00:10:00.000Z");
+		const completed = artifact({
+			id: "completed",
+			createdAt: new Date("2026-08-21T00:00:00.000Z"),
+		});
+		const pending = artifact({
+			id: "pending",
+			status: "pending",
+			createdAt: new Date("2026-08-21T00:01:00.000Z"),
+		});
+		const model = deriveVoiceSegmentReadModel(
+			[completed, pending],
+			fingerprint,
+			{ now, pendingLeaseMs: DEFAULT_VOICE_SEGMENT_PENDING_LEASE_MS },
+		);
+
+		expect(model.latestRequest?.id).toBe("pending");
+		expect(model.latestUsableArtifact?.id).toBe("completed");
+		expect(model.effectiveStatus).toBe("indeterminate");
+	});
+
+	it("keeps an expired pending artifact stale when its fingerprint is stale", () => {
+		const now = new Date("2026-08-21T00:10:00.000Z");
+		const stalePending = artifact({
+			status: "pending",
+			sourceScriptRevision: 1,
+			createdAt: new Date("2026-08-21T00:00:00.000Z"),
+		});
+		const model = deriveVoiceSegmentReadModel([stalePending], fingerprint, {
+			now,
+			pendingLeaseMs: DEFAULT_VOICE_SEGMENT_PENDING_LEASE_MS,
+		});
+
+		expect(model.effectiveStatus).toBe("stale");
+		expect(model.latestRequest).toBe(stalePending);
+		expect(stalePending.status).toBe("pending");
+	});
+
 	it("creates versioned safe storage keys and rejects traversal", () => {
 		expect(
 			createVoiceAudioStorageKey({

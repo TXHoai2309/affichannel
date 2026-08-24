@@ -8,6 +8,11 @@ import type {
 	VoiceSegmentFingerprint,
 } from "./types";
 
+export type VoiceSegmentReadTemporalContext = {
+	now: Date;
+	pendingLeaseMs: number;
+};
+
 export function isVoiceSegmentPendingExpired(
 	artifact: Pick<VoiceSegmentArtifact, "status" | "createdAt">,
 	now: Date,
@@ -31,6 +36,7 @@ function newestFirst(left: VoiceSegmentArtifact, right: VoiceSegmentArtifact) {
 export function deriveVoiceSegmentReadModel(
 	artifacts: VoiceSegmentArtifact[],
 	currentFingerprint: VoiceSegmentFingerprint,
+	temporalContext?: VoiceSegmentReadTemporalContext,
 ): VoiceSegmentArtifactReadModel {
 	const ordered = [...artifacts].sort(newestFirst);
 	const currentAttempts = ordered.filter((artifact) =>
@@ -59,9 +65,17 @@ export function deriveVoiceSegmentReadModel(
 		};
 	}
 	const effectiveStatus =
-		latestCurrentRequest.status === "completed" && latestUsableArtifact
-			? "completed"
-			: latestCurrentRequest.status;
+		latestCurrentRequest.status === "pending" &&
+		temporalContext &&
+		isVoiceSegmentPendingExpired(
+			latestCurrentRequest,
+			temporalContext.now,
+			temporalContext.pendingLeaseMs,
+		)
+			? "indeterminate"
+			: latestCurrentRequest.status === "completed" && latestUsableArtifact
+				? "completed"
+				: latestCurrentRequest.status;
 
 	return {
 		latestRequest,

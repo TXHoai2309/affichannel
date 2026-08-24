@@ -10,6 +10,9 @@ sử dụng Semantic Versioning.
 
 ### AFF-US-015 Phase 15A Adaptive Workflow read foundation
 
+- Adaptive Voice snapshot dùng lease-aware effective projection: expired pending
+  được đọc là `indeterminate` nhưng DB vẫn giữ nguyên để write reconciliation tiếp
+  tục là authority persist transition.
 - Thêm pure typed Adaptive Workflow mapper/read model với exact capability-route,
   state/completion, visible ordinal, OPTIONAL selection, action, terminal và
   unsupported descriptors.

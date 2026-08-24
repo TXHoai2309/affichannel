@@ -186,6 +186,8 @@ Implementation evidence Phase 15A — 2026-08-24:
   identity để trả controlled unsupported state;
 - Script/ScriptVersion/Fact Lock reads chạy song song, Voice dùng pure snapshot;
   Resolver chạy một lần và snapshot được reuse cho M4 comparison;
+- pure Voice snapshot project pending quá configured lease thành effective
+  `indeterminate` bằng explicit temporal context; persisted artifact không đổi;
 - A–J `10/10`, unsupported fixtures, Render placeholder, request reuse và
   disposable-DB zero mutation/provider/reconciliation evidence PASS;
 - current stepper/landing/routes và legacy reconciliation behavior chưa cut over.
