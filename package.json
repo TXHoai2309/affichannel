@@ -34,6 +34,7 @@
 		"test:integration:script-generation-live": "tsx scripts/test-script-generation-live.ts",
 		"test:integration:script-version": "tsx scripts/test-script-version-foundation.ts",
 		"test:integration:fact-lock": "tsx scripts/test-fact-lock.ts",
+		"test:integration:fact-lock-script-version-flow": "tsx scripts/test-fact-lock-script-version-flow.ts",
 		"test:integration:voice-config": "tsx scripts/test-voice-config.ts",
 		"test:integration:voice-preview": "tsx scripts/test-voice-preview.ts",
 		"test:integration:voice-segment": "tsx scripts/test-voice-segment-foundation.ts",

@@ -33,7 +33,11 @@ function createInitialSnapshot(
 	}
 	return {
 		...parsed.data,
-		selectedHookKey: null,
+		// A generated Script must have a deterministic selected hook before it
+		// can be handed to Fact Lock. The draft validator still permits null for
+		// intermediate/manual snapshots, but the normal generation -> editor flow
+		// starts in a runnable state without weakening Fact Lock validation.
+		selectedHookKey: parsed.data.hookVariants[0]?.key ?? null,
 		claimsSourceRevision: 1,
 		claimsStatus: "current",
 	};
