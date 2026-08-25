@@ -690,6 +690,78 @@ async function runConstraintMatrix(pool: Pool, owners: Owners): Promise<void> {
 		await expectRejected(label, () => pool.query(query, parameters));
 }
 
+async function runWorkspaceCascadeBehavior(
+	pool: Pool,
+	unrelatedWorkspaceId: string,
+): Promise<void> {
+	const unrelatedBefore = await pool.query<{ count: number }>(
+		"select count(*)::int as count from claim_manifest where workspace_id = $1",
+		[unrelatedWorkspaceId],
+	);
+	const unrelatedManifestCount = unrelatedBefore.rows[0]?.count ?? 0;
+	assert(
+		unrelatedManifestCount > 0,
+		"Unrelated fixture must contain ClaimManifest evidence before cascade test.",
+	);
+
+	const cascadeOwners = await seedOwners(pool);
+	const cascadeManifest = await buildClaimManifestFromScriptVersion({
+		workspaceId: cascadeOwners.workspaceId,
+		projectId: cascadeOwners.projectId,
+		productId: cascadeOwners.productId,
+		scriptVersionId: cascadeOwners.scriptVersionId,
+		scriptVersionRevision: 1,
+		snapshot: snapshot(),
+	});
+	const cascadeManifestId = await insertManifest(
+		pool,
+		manifestValues(cascadeManifest, cascadeOwners),
+	);
+	const manifestBefore = await pool.query<{ count: number }>(
+		"select count(*)::int as count from claim_manifest where id = $1",
+		[cascadeManifestId],
+	);
+	assert(
+		manifestBefore.rows[0]?.count === 1,
+		"Cascade fixture ClaimManifest must exist before Workspace deletion.",
+	);
+
+	const deleted = await pool.query<{ id: string }>(
+		"delete from workspace where id = $1 returning id",
+		[cascadeOwners.workspaceId],
+	);
+	assert(
+		deleted.rows.length === 1 &&
+			deleted.rows[0]?.id === cascadeOwners.workspaceId,
+		"Isolated Workspace delete must succeed exactly once.",
+	);
+	const manifestAfter = await pool.query<{ count: number }>(
+		"select count(*)::int as count from claim_manifest where id = $1",
+		[cascadeManifestId],
+	);
+	assert(
+		manifestAfter.rows[0]?.count === 0,
+		"Workspace CASCADE must delete its referenced ClaimManifest row.",
+	);
+	const unrelatedAfter = await pool.query<{
+		workspaceCount: number;
+		manifestCount: number;
+	}>(
+		`select
+			(select count(*)::int from workspace where id = $1) as "workspaceCount",
+			(select count(*)::int from claim_manifest where workspace_id = $1) as "manifestCount"`,
+		[unrelatedWorkspaceId],
+	);
+	assert(
+		unrelatedAfter.rows[0]?.workspaceCount === 1 &&
+			unrelatedAfter.rows[0]?.manifestCount === unrelatedManifestCount,
+		"Workspace CASCADE must preserve the unrelated fixture and its Manifests.",
+	);
+	console.log(
+		"Workspace delete CASCADE removes ClaimManifest and preserves unrelated fixture: PASS",
+	);
+}
+
 const pool = createNodePostgresPool(authority.url);
 try {
 	const identity = await pool.query<{
@@ -734,6 +806,7 @@ try {
 	await assertSchema(pool);
 	const owners = await seedOwners(pool);
 	await runConstraintMatrix(pool, owners);
+	await runWorkspaceCascadeBehavior(pool, owners.workspaceId);
 	console.log(
 		"ClaimManifest persistence migration/schema/constraint matrix: PASS",
 	);
