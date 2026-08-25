@@ -1,7 +1,7 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 và AFF-US-015 DONE; M5A/M5B accepted; M5C production
-  enforcement PASS; M5D final acceptance pending
+- Trạng thái: Canonical; M4/AFF-US-015 retained/accepted; Domain Evolution M5,
+  AFF-US-013 và AFF-US-016 DONE; AFF-US-017 UNBLOCKED/NEXT nhưng chưa bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -26,27 +26,27 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ### ContentFormat registry contract
 
-- [ ] Mỗi key đại diện một format family và có thể có nhiều version; chỉ cặp
+- [x] Mỗi key đại diện một format family và có thể có nhiều version; chỉ cặp
   `(key, version)` là duy nhất, version không trùng trong cùng key và là số nguyên
   dương.
-- [ ] Mỗi MVP CreationPath có đúng một active default và default đó support path.
-- [ ] `SCRIPTED_STANDARD v1` tồn tại làm legacy backfill target; version cũ hoặc
+- [x] Mỗi MVP CreationPath có đúng một active default và default đó support path.
+- [x] `SCRIPTED_STANDARD v1` tồn tại làm legacy backfill target; version cũ hoặc
   deprecated còn được resolve để đọc Project đã pin.
-- [ ] Invalid key/version và format/path mismatch bị server từ chối.
-- [ ] Create không gửi format dùng server default; client không phải authority.
-- [ ] Đổi ContentType không rewrite format còn compatible.
-- [ ] Đổi CreationPath sang path incompatible phải gửi replacement format rõ ràng;
+- [x] Invalid key/version và format/path mismatch bị server từ chối.
+- [x] Create không gửi format dùng server default; client không phải authority.
+- [x] Đổi ContentType không rewrite format còn compatible.
+- [x] Đổi CreationPath sang path incompatible phải gửi replacement format rõ ràng;
   server không silently rewrite.
-- [ ] Unknown reference vẫn trả raw `(key, version)`, Project page không crash,
+- [x] Unknown reference vẫn trả raw `(key, version)`, Project page không crash,
   không fallback latest và action cần definition bị block có kiểm soát.
-- [ ] Partial ContentFormat ref trả `unsupported` với
+- [x] Partial ContentFormat ref trả `unsupported` với
   `reasonCode=PARTIAL_CONTENT_FORMAT_REF`; version không hợp lệ trả `unsupported`
   với `reasonCode=INVALID_CONTENT_FORMAT_VERSION`.
-- [ ] ContentFormat resolution chỉ dùng `resolved | deprecated | unsupported`;
+- [x] ContentFormat resolution chỉ dùng `resolved | deprecated | unsupported`;
   legacy provenance dùng metadata riêng như `isLegacyProjection`, không overload
   resolution.
-- [ ] Registry không chứa Product/Script/Fact Lock/Voice/Render applicability rule.
-- [ ] Expand M1 dùng nullable pair có whole-pair integrity, không DB default và
+- [x] Registry không chứa Product/Script/Fact Lock/Voice/Render applicability rule.
+- [x] Expand M1 dùng nullable pair có whole-pair integrity, không DB default và
   không index format riêng.
 
 ## 3. Gate B — Applicability Resolver
@@ -200,7 +200,25 @@ M5C evidence PASS: committed guarded runner reran fresh production preflight
 count 18, applied exactly 0018, then confirmed four identity columns NOT NULL,
 `product_id` nullable, migration count 19/latest 0018 and unchanged 16/16
 canonical zero-blocker postflight. No Project data mutation/backfill or provider
-call occurred. Full Gate J remains pending M5D regression/sign-off.
+call occurred.
+
+M5D final regression/sign-off PASS: M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive
+Workflow, M5A, chín golden suites, type-check và full Web tests đều xanh trên
+disposable DB; provider call bằng 0. Gate J và `AC-M5-01–20` DONE. AFF-US-013 và
+AFF-US-016 DONE; AFF-US-017 chỉ UNBLOCKED/NEXT, chưa bắt đầu.
+
+### AC-M5 final matrix
+
+| Criteria | Result | Evidence |
+|---|---|---|
+| AC-M5-01–02 | PASS | Production preflight: legacy all-null = 0, partial = 0. |
+| AC-M5-03–05 | PASS | Identity columns NOT NULL không default; Product nullable; pair/version constraints retained. |
+| AC-M5-06–09 | PASS | M5A/M3B/direct-schema, legacy canonicalization, defensive read và typed/deprecated tests PASS. |
+| AC-M5-10–12 | PASS | Future modes inactive; Resolver/Adaptive độc lập persisted cursor; guards/CAS/idempotency PASS. |
+| AC-M5-13 | PASS | M4 shadow unit/integration parity PASS, zero mutation/provider call. |
+| AC-M5-14–17 | PASS | Fresh production preflight, exact 0018 apply, postflight và compatible rollback-binary evidence PASS. |
+| AC-M5-18–19 | PASS | M5 completion closes AFF-US-013/AFF-US-016; approved adapters retained. |
+| AC-M5-20 | PASS | Không có ClaimManifest schema/runtime/source trong M5; AFF-US-017 chưa bắt đầu. |
 
 ## 12. Regression suite tối thiểu
 

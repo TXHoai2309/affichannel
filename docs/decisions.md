@@ -13,7 +13,7 @@ DEC-025 cho công việc mới.
 
 ## DEC-030 — M5 enforces persisted identity without activating future flows
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation pending
+- Trạng thái: Đã implement và accepted qua M5D
 - Ngày: 2026-08-25
 - Mở rộng: DEC-025, DEC-026, DEC-028, DEC-029
 

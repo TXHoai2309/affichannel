@@ -1,6 +1,6 @@
 # Domain Evolution M5 — Enforcement & Authority Cutover Contract
 
-- Trạng thái: Canonical ở cấp tài liệu; runtime/schema chưa implement
+- Trạng thái: M5 DONE; production enforcement và AC-M5-01–20 accepted
 - Ngày: 2026-08-25
 - Quyết định: DEC-030
 - Dependency: M1 → M2/M3 → M4 → AFF-US-015 → M5 → AFF-US-017
@@ -23,7 +23,7 @@ không đồng bộ hay xóa legacy persisted workflow và không remove M4 shad
 
 | Area | Current file/function | Current behavior | M5 desired behavior | Decision | Migration/rollback risk |
 |---|---|---|---|---|---|
-| Project DB schema | `packages/db/src/schema/project.ts`; migration `0017_lame_zemo.sql` | Four identity columns nullable; type/path and whole-pair/positive-version checks; Product nullable | Four identity columns NOT NULL; preserve checks, nullable Product/FK/index and no DB default | Change | Constraint fails if preflight misses any null; old null-writing binary is unsafe |
+| Project DB schema | `packages/db/src/schema/project.ts`; migrations `0017_lame_zemo.sql` và `0018_natural_speed.sql` | Four identity columns NOT NULL; type/path and whole-pair/positive-version checks; Product nullable | Preserve enforced identity, checks, nullable Product/FK/index and no DB default | Done/retain | Pre-M3B null-writing binary remains unsafe |
 | Project create | `project-service.ts#createProject`; `project-repository.ts#createProjectBundle` | Legacy request omission and explicit baseline request both persist canonical identity | Keep request compatibility and canonical persistence; no null identity write | Keep/harden evidence | Rejecting legacy shape would break clients without improving persisted invariant |
 | Project update | `project-service.ts#updateProject`; `updateProjectBundle` | Classifies request and persisted identity; set/preserve strategy with identity CAS | Preserve exact existing canonical identity when identity is omitted, including known deprecated refs; reject newly assigned deprecated refs; never auto-upgrade | Keep | Removing expected-state CAS permits concurrent identity overwrite |
 | Project read projection | `project-repository.ts#projectIdentityReadModel` | Deterministic all-null + Product projects to baseline with `isLegacyProjection=true` | Retain defensively through rollback/stability window; unreachable on M5 DB | Keep until M6 | Early removal weakens rollback/recovery reads |
@@ -209,7 +209,8 @@ rollback migration only when operationally necessary.
 - M2 scanner/classifier/CAS/report tooling remains maintenance/recovery tooling.
 - Successful implementation acceptance closes AFF-US-013 and AFF-US-016, but does
   not require physical deletion of every compatibility helper.
-- AFF-US-017 cannot start until M5 migration/postflight/golden acceptance is DONE.
+- AFF-US-017 was blocked until M5 migration/postflight/golden acceptance; that
+  dependency is now satisfied, so the story is UNBLOCKED/NEXT but not started.
 
 ## 9. Stable acceptance criteria
 
@@ -234,9 +235,9 @@ rollback migration only when operationally necessary.
 - `AC-M5-19` — successful M5 gate is the completion boundary for AFF-US-016 while approved adapters may remain.
 - `AC-M5-20` — no ClaimManifest/FactLock manifest schema or runtime starts before M5 is accepted.
 
-## 10. Required implementation gates
+## 10. Implementation gates and evidence
 
-Later implementation must cover: clean DB migration; M1→M5 sequence; production-
+Final implementation covered: clean DB migration; M1→M5 sequence; production-
 shaped zero-blocker preflight; legacy and explicit canonical writes; partial/
 invalid/future/deprecated-assignment rejection; synthetic known-deprecated readable
 and identity-preserving update fixtures; legacy-request canonical persistence;
@@ -274,18 +275,28 @@ and migration count 18/latest `1787415718474`, then applied only
 `product_id` nullable, migration count 19/latest `1787628473478`, retained
 constraints/indexes and unchanged 16/16 canonical zero-blocker data. Project
 business-row mutation/backfill and provider calls were zero; M4, Adaptive,
-currentStep and persisted step status were untouched. M5D remains required before
-full M5/AFF-US-013/AFF-US-016 completion.
+currentStep and persisted step status were untouched. At the M5C boundary, M5D
+was still required before full M5/AFF-US-013/AFF-US-016 completion.
+
+M5D final evidence (2026-08-25): M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive
+Workflow, M5A, all nine golden suites, type-check and full Web tests PASS on
+disposable infrastructure. M4/Adaptive reads remained mutation-free and provider
+calls were zero. Together with accepted M5C production evidence, all
+`AC-M5-01–20` PASS. No runtime/schema/migration or production change occurred in
+M5D.
 
 ## 11. Story completion boundary
 
-M5A makes enforcement technically ready for production preflight; it does not
-accept full M5 or authorize production migration.
-Only after `AC-M5-01–20` pass may docs mark:
+M5A made enforcement technically ready; M5B/M5C supplied production preflight,
+apply and postflight evidence; M5D supplied final regression/sign-off. Because
+`AC-M5-01–20` pass, the accepted state is:
 
 ```text
 Domain Evolution M5 DONE
 AFF-US-013 DONE
 AFF-US-016 DONE
-AFF-US-017 READY TO START
+AFF-US-017 UNBLOCKED/NEXT — NOT STARTED
 ```
+
+M4 shadow remains retained; reducing/removing it requires a separate ADR. M6
+compatibility cleanup remains deferred and is not implied by story closure.

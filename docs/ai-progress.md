@@ -1,11 +1,23 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4 shadow
-  runtime đã đạt parity; AFF-US-015 AC-015-01–18 DONE qua Phase 15D. Adaptive
-  Workflow là presentation/navigation authority cho supported Affiliate flow;
-  M4 shadow retained; M5A/M5B accepted; M5C production enforcement PASS; M5D
-  final regression chưa bắt đầu.
+- Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013 và AFF-US-016 DONE;
+  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 UNBLOCKED/NEXT
+  nhưng chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — Domain Evolution M5D final acceptance
+
+Final regression trên disposable PostgreSQL đã PASS cho M1, M2A/M2B/M2C, M3B,
+M4 shadow, Adaptive Workflow, M5A và chín golden integration suites. Type-check,
+toàn bộ Web test (48 files/444 tests) và diff check đều PASS; không gọi provider
+thật. Production evidence đã accepted từ M5C: 16/16 Projects canonical, mọi
+blocker/deprecated count bằng 0, bốn identity columns NOT NULL, `product_id` vẫn
+nullable và migration history ở 19 với latest 0018.
+
+`AC-M5-01–20` đều PASS. Domain Evolution M5, AFF-US-013 và AFF-US-016 được đánh
+dấu DONE. M4 shadow/compatibility adapters tiếp tục retained; cleanup thuộc M6 và
+cần quyết định riêng. AFF-US-017 được UNBLOCKED/NEXT nhưng chưa có schema/runtime
+ClaimManifest nào được bắt đầu trong M5D.
 
 ## 2026-08-25 — Domain Evolution M5C production enforcement
 

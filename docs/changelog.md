@@ -8,6 +8,18 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Domain Evolution M5D final acceptance
+
+- Final disposable regression PASS cho M1, M2A/M2B/M2C, M3B, M4 shadow,
+  Adaptive Workflow, M5A, chín golden suites, type-check và 48/48 Web test files.
+- Accepted M5C production evidence vẫn 16/16 canonical Projects, zero blockers,
+  identity columns NOT NULL, `product_id` nullable và migration 0018 latest.
+- `AC-M5-01–20` PASS; Domain Evolution M5, AFF-US-013 và AFF-US-016 DONE.
+  AFF-US-017 hiện UNBLOCKED/NEXT nhưng chưa bắt đầu; M4 shadow retained và M6
+  cleanup deferred.
+- M5D chỉ thay canonical documentation: không production mutation, provider call,
+  runtime/schema/migration change hoặc deployment.
+
 ### Domain Evolution M5C production enforcement
 
 - Guarded production runner đã fresh-preflight 16/16 canonical Projects với zero

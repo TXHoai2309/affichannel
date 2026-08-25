@@ -20,15 +20,12 @@ pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã 
 7. Analytics.
 8. AI Visual.
 
-Current pointer: US12 baseline frozen/completed; AFF-US-013 M1 và AFF-US-016
-M2A/M2B/M2C/M3A/M3B đã accepted, migration `0017` và legacy reconciliation đã
-hoàn tất. AFF-US-014 M4 Resolver/shadow runtime đã đạt parity gate qua DEC-028.
-AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D: presentation/navigation
-authority cutover hoàn tất cho supported Affiliate flow, M4 shadow vẫn retained.
-Canonical dependency kế tiếp là hoàn tất Domain Evolution bằng M5 enforce/cutover;
-DEC-030 và `domain-evolution-m5-enforcement-contract.md` đã khóa acceptance nhưng
-runtime/schema chưa implement. AFF-US-017 ClaimManifest Foundation chỉ bắt đầu sau
-M5 migration/postflight acceptance.
+Current pointer: US12 baseline frozen/completed. Domain Evolution M1–M5 đã DONE;
+migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều PASS.
+AFF-US-013 và AFF-US-016 đã DONE. AFF-US-014 M4 Resolver/shadow vẫn retained sau
+parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
+dependency kế tiếp là AFF-US-017 ClaimManifest Foundation, hiện UNBLOCKED/NEXT
+nhưng chưa bắt đầu. Organic, Quick Image và Media First vẫn chưa active.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và

@@ -8,9 +8,9 @@ Product/UI Specification v0.8 là **canonical product specification** và đã �
 chấp nhận ở cấp tài liệu qua DEC-025. DEC-026 đã khóa ContentFormat và đóng Phase 0;
 M1/M2/M3 đã hoàn tất cho current Affiliate compatibility baseline. DEC-028 và M4
 runtime shadow đã đạt parity; DEC-029/AFF-US-015 presentation cutover đã DONE.
-DEC-030 khóa M5 persisted identity enforcement nhưng runtime/schema chưa implement.
-Repo chỉ được coi là canonical-activated cho future identities sau các story và
-regression gate tương ứng; M5 tự nó không activate future identities.
+DEC-030/M5 persisted identity enforcement đã DONE qua production migration 0018,
+postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 hiện là
+story kế tiếp nhưng chưa bắt đầu. M5 không activate future identities.
 
 ## Thứ tự đọc
 

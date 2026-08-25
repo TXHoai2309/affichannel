@@ -1,7 +1,7 @@
 # Kiến trúc AffiChannel
 
-- Trạng thái: Affiliate M1/M2/M3, M4 và AFF-US-015 accepted; M5 contract canonical,
-  runtime/schema pending
+- Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
+  future identities vẫn gated
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 
@@ -20,8 +20,8 @@
 
 ### M5 persisted identity enforcement boundary
 
-DEC-030 khóa contract phase cuối của Domain Evolution: bốn Channel-First identity
-columns sẽ thành NOT NULL sau zero-blocker preflight, không DB default/enum/registry
+DEC-030 phase cuối của Domain Evolution đã được enforce: bốn Channel-First identity
+columns là NOT NULL sau zero-blocker preflight, không DB default/enum/registry
 table; `product_id` vẫn nullable. Legacy request shape tiếp tục canonicalize trước
 persistence; defensive read projection, identity CAS, M2 tooling và M4 shadow được
 giữ qua rollback window. M5 không mở Organic/Quick Image/Media First, không thay

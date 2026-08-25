@@ -1,7 +1,7 @@
 # Đặc tả sản phẩm AffiChannel Personal
 
-- Trạng thái: Canonical; Affiliate baseline và Adaptive UI active; M5 enforcement
-  contract locked, future identities vẫn gated
+- Trạng thái: Canonical; Affiliate baseline, Adaptive UI và M5 identity enforcement
+  active; future identities vẫn gated
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Đối tượng đọc: chủ dự án và các agent triển khai
@@ -499,15 +499,16 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **NON-BLOCKER for Domain Evolution** | MVP manual evidence review cho Organic factual knowledge không dựa trên Product Facts. | Trước khi bật factual Organic path tương ứng; Organic claimless/no-product vẫn được triển khai. |
 | **M4 RUNTIME ACCEPTED — DEC-028** | Applicability Resolver derived/non-persisted; completion tách riêng và không mở rộng enum step status. | Shadow matrix A–J đã đạt parity; Resolver không mutate `currentStepKey`, normalized legacy oracle chỉ còn comparison authority trong shadow. |
 | **US15 DONE — DEC-029** | Adaptive Workflow read model, six-state UX, route/deep-link mapping, OPTIONAL opt-in và read aggregation. | Presentation/navigation cutover đã accepted; execution guards vẫn server authority. |
-| **M5 CONTRACT LOCKED — DEC-030** | Persisted Channel-First identity enforcement, compatibility, migration ordering và rollback. | Chưa migration/runtime; không activate Organic/Quick Image/Media First hoặc ClaimManifest. |
+| **M5 DONE — DEC-030** | Persisted Channel-First identity enforcement, compatibility, migration ordering và rollback. | Migration 0018, production postflight và AC-M5-01–20 đã PASS; không activate Organic/Quick Image/Media First hoặc ClaimManifest. |
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
-Kết luận hiện tại: M1/M2/M3, M4 và AFF-US-015 đã accepted cho canonical Affiliate
-baseline. DEC-030 khóa M5 enforcement nhưng chưa tạo migration/runtime; Organic,
-Quick Image, Media First và ClaimManifest vẫn chưa active.
+Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
+baseline. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 ClaimManifest Foundation là
+story kế tiếp nhưng chưa bắt đầu. Organic, Quick Image, Media First và ClaimManifest
+vẫn chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.
