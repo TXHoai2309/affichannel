@@ -1,7 +1,7 @@
 # Kế hoạch Domain Evolution v0.8
 
 - Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; AFF-US-015 DONE;
-  M5A disposable enforcement READY; production preflight/migration chưa chạy
+  M5A accepted; M5B production preflight PASS; production migration chưa chạy
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -270,9 +270,11 @@ DEC-030.
    postflight; bất kỳ legacy/partial/invalid row nào đều STOP, không heuristic fix.
 
 M5A đã implement read-only preflight, migration `0018_natural_speed`, postflight
-và disposable compatibility evidence. Đây là readiness gate cho production
-preflight, không phải production cutover: M5B vẫn phải chạy fresh production
-read-only preflight và được phê duyệt riêng trước mọi migration apply.
+và disposable compatibility evidence. M5B fresh production read-only preflight
+PASS với 16/16 canonical Projects, zero blockers và pre-M5 schema/migration count
+18. Session dùng owner role thay vì dedicated read-only credential nhưng chỉ chạy
+read-only operations. M5C vẫn phải rerun fresh production preflight ngay trước
+apply 0018; M5B evidence không thay thế hoặc authorize M5C gate.
 
 ### M6 — Contract cleanup có điều kiện
 

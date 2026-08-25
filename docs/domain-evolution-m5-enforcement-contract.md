@@ -256,6 +256,16 @@ Repository migrations are forward-only; constraint rollback requires a separatel
 reviewed forward migration. A pre-M3B null-writing binary is not a permitted
 rollback target.
 
+M5B production evidence (2026-08-25): fresh explicit-authority read-only
+preflight found 16 total/16 canonical complete Projects, zero blocker categories,
+zero known deprecated formats and `readyForM5=true`. Schema introspection showed
+all four identity columns plus `product_id` nullable; migration history count was
+18, confirming pre-M5 state and 0018 NOT APPLIED. The connection role was
+`neondb_owner`, not a dedicated read-only credential; operations remained limited
+to SELECT/read-only transactions, with zero production mutation/provider calls.
+M5C MUST rerun a second fresh production preflight immediately before applying
+0018. M5B evidence never authorizes skipping that pre-apply gate.
+
 ## 11. Story completion boundary
 
 M5A makes enforcement technically ready for production preflight; it does not

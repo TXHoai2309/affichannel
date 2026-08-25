@@ -3,9 +3,23 @@
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4 shadow
   runtime đã đạt parity; AFF-US-015 AC-015-01–18 DONE qua Phase 15D. Adaptive
   Workflow là presentation/navigation authority cho supported Affiliate flow;
-  M4 shadow retained; M5A disposable enforcement validation READY; production
-  preflight và production migration chưa chạy.
+  M4 shadow retained; M5A accepted; M5B production read-only preflight PASS;
+  production migration chưa chạy.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — Domain Evolution M5B production read-only preflight
+
+Fresh production preflight trong explicit-authority PowerShell session PASS:
+16/16 Projects có canonical complete identity, mọi blocker category bằng 0,
+deprecated known format bằng 0 và `readyForM5=true`. Read-only introspection xác
+nhận bốn identity columns và `product_id` vẫn nullable; migration history có 18
+rows nên `0018_natural_speed` chưa apply và production vẫn ở pre-M5 state.
+
+Connection dùng role `neondb_owner`, không phải dedicated read-only credential;
+đây là limitation được ghi nhận. Mọi operation M5B chỉ là `SELECT`, `BEGIN
+TRANSACTION READ ONLY` và `ROLLBACK`; production mutation/provider call bằng 0.
+M5C bắt buộc chạy fresh production preflight lần hai ngay trước apply 0018; M5B
+không cho phép bỏ qua gate đó và không đánh dấu full M5 DONE.
 
 ## 2026-08-25 — Domain Evolution M5A enforcement readiness
 

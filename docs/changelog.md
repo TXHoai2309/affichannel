@@ -8,6 +8,17 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Domain Evolution M5B production preflight
+
+- Fresh production read-only preflight PASS: 16/16 Projects canonical complete,
+  mọi M5 blocker bằng 0, deprecated format bằng 0 và `readyForM5=true`.
+- Production vẫn pre-M5: bốn identity columns và `product_id` nullable; migration
+  history count 18; migration 0018 chưa apply.
+- Session dùng `neondb_owner`, không phải dedicated read-only credential, nhưng
+  chỉ thực hiện SELECT/read-only transaction; mutation và provider call bằng 0.
+- M5C phải chạy fresh production preflight lần hai ngay trước apply 0018. M5B
+  không phải migration authorization và full M5 chưa DONE.
+
 ### Domain Evolution M5A enforcement readiness
 
 - Thêm read-only M5 preflight với blocker taxonomy, bounded keyset scan, explicit

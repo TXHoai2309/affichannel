@@ -1,7 +1,7 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 và AFF-US-015 DONE; M5A disposable gate READY;
-  AC-M5 production preflight/cutover chưa chạy
+- Trạng thái: Canonical; M4 và AFF-US-015 DONE; M5A accepted; M5B production
+  read-only preflight PASS; M5C production cutover chưa chạy
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -189,8 +189,11 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 M1→M5 migration, fresh production zero-blocker preflight, postflight, rollback
 rehearsal, M2/M3B/M4/AFF-US-015 và golden regressions. M5A đã PASS các gate
 disposable: clean/dirty migration, schema introspection, binary compatibility,
-M2C/M4/Adaptive và golden regression. Fresh production preflight và production
-migration vẫn NOT RUN, nên full Gate J/M5 chưa PASS.
+M2C/M4/Adaptive và golden regression. M5B fresh production preflight PASS với
+16 canonical complete Projects, zero blockers/deprecated refs, nullable pre-M5
+identity columns, nullable `product_id` và migration count 18. Migration 0018 vẫn
+NOT APPLIED, nên full Gate J/M5 chưa PASS. M5C phải rerun fresh production
+preflight ngay trước apply; owner-role M5B evidence không được dùng để skip gate.
 
 ## 12. Regression suite tối thiểu
 
