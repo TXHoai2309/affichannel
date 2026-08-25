@@ -23,6 +23,7 @@
 		"test:unit:m5-preflight": "pnpm --filter web exec vitest run src/features/project/m5-preflight.test.ts",
 		"test:unit:claim-manifest": "pnpm --filter web exec vitest run src/features/claim-manifest/claim-manifest-domain.test.ts",
 		"test:integration:claim-manifest-persistence": "tsx scripts/test-claim-manifest-persistence.ts",
+		"test:integration:claim-manifest-repository": "tsx scripts/test-claim-manifest-repository.ts",
 		"test:integration:project-channel-first-m5a": "tsx scripts/test-project-channel-first-m5a.ts",
 		"test:integration:project-channel-first-m5c": "tsx scripts/test-project-channel-first-m5c.ts",
 		"test:unit:legacy-affiliate-classifier": "pnpm --filter web exec vitest run src/features/project/legacy-affiliate-compatibility.test.ts",
