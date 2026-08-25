@@ -1,7 +1,7 @@
 # AFF-US-015 — Adaptive Workflow UI Acceptance Contract
 
-- Trạng thái: Canonical ở cấp tài liệu; chưa implement UI/runtime cutover
-- Ngày: 2026-08-24
+- Trạng thái: DONE — AC-015-01–18 accepted; presentation/navigation cutover hoàn tất
+- Ngày: 2026-08-25
 - Liên quan: DEC-025, DEC-026, DEC-028, DEC-029, AFF-US-014/M4
 
 ## 1. Mục tiêu và ranh giới
@@ -385,3 +385,31 @@ single snapshot, zero mutation, no provider, direct routes và unsupported ident
 UI tests cho A–J, bookmarks, loading/error/stale/blocked, focus/keyboard/mobile.
 Golden Affiliate suites và server execution-guard tests không được thay bằng UI
 tests.
+
+## 18. Final acceptance evidence — 2026-08-25
+
+`AFF-US-015` đã hoàn tất qua Phase 15A, 15B1, 15B2, 15C và 15D. Toàn bộ
+`AC-015-01–18` PASS cho supported Affiliate flow hiện tại:
+
+- Resolver, canonical tuple invariant, Adaptive read/service, Web mapper,
+  Stepper/Overview/entry/route-gate tests và Affiliate matrix A–J đạt parity;
+- single-project và fixed-query batch path đạt A–J `10/10`, gồm expired Voice,
+  unsupported, ordering, dependency/stale, Channel Settings và Product Facts;
+- clean disposable DB đạt migration 0017, M1 harness, M3B, M2C, M4 shadow và chín
+  golden integration suites; generic Adaptive reads có mutation, Voice
+  reconciliation và provider call bằng `0`;
+- full Web suite đạt `47/47` files, `437/437` tests; type-check và repository diff
+  validation đạt;
+- manual evidence do user cung cấp đạt cho Overview, Dashboard, Project List và
+  `/content`, `/fact-lock`, `/voice`, `/video`, `/preview`: năm capability visible,
+  progress `4/5`, Render `Sắp có` và Video/Preview dùng cùng Render truth.
+
+Adaptive Workflow hiện là presentation/navigation authority cho supported
+Affiliate flow. Backend services tiếp tục là execution/mutation authority.
+`currentStepKey` và `project_step_status` được giữ cho legacy persistence/explicit
+write compatibility, không phải applicability truth. M4 shadow được giữ sau
+cutover; reduce/remove cần quyết định riêng.
+
+Các giới hạn ngoài scope không chặn story: Render và durable OPTIONAL opt-in chưa
+được implement; Organic, Quick Image, Media First và productless production paths
+chưa active; R2 Voice storage chưa được cấu hình cho production.

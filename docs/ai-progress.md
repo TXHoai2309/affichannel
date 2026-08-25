@@ -1,11 +1,31 @@
 # Tiến trình AI agent
 
-- Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4
-  shadow runtime đã đạt parity; AFF-US-015 Phase 15A accepted và Phase 15B1 đã
-  cut over Project Stepper/Overview; Phase 15B2 đã chuyển Project entry surfaces
-  sang Adaptive Workflow; Phase 15C đã chuyển internal deep-link presentation;
-  15D vẫn pending và full AFF-US-015 chưa DONE.
-- Cập nhật lần cuối: 2026-08-24
+- Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4 shadow
+  runtime đã đạt parity; AFF-US-015 AC-015-01–18 DONE qua Phase 15D. Adaptive
+  Workflow là presentation/navigation authority cho supported Affiliate flow;
+  M4 shadow retained và M5 chưa bắt đầu.
+- Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — AFF-US-015 Phase 15D final acceptance
+
+Đã audit toàn bộ `AC-015-01–18` và các surface Project shell, Stepper, Overview,
+List, Dashboard, post-create, product-detail cùng năm deep-link route. Không còn
+`currentStepKey`, `project_step_status`, hardcoded `/7`, Fact Lock hoặc Voice raw
+derivation làm presentation/navigation authority trong AFF-US-015 scope. Legacy
+fields/services chỉ còn persistence, history và explicit write compatibility.
+
+Resolver/invariant/Adaptive/navigation/route tests PASS; Affiliate A–J đạt
+single/batch/route parity `10/10`; expired Voice, unsupported, dependencies,
+ordering, Channel Settings/Product Facts và fixed-query boundary PASS. Clean
+disposable DB đạt M1, M3B, M2C, M4 và chín golden suites; Adaptive reads giữ
+mutation, reconciliation và provider call bằng `0`. Full Web đạt `47/47` files,
+`437/437` tests; type-check PASS.
+
+External manual evidence do user cung cấp đạt Overview, Dashboard, Project List,
+`/content`, `/fact-lock`, `/voice`, `/video`, `/preview`: năm capability visible,
+progress `4/5`, Render `Sắp có`, Video/Preview cùng truth. AFF-US-015 DONE. M4
+shadow tiếp tục được giữ; dependency canonical kế tiếp là M5 enforce/cutover,
+không bắt đầu trong task này.
 
 ## 2026-08-24 — AFF-US-015 Phase 15C Adaptive deep-link cutover
 

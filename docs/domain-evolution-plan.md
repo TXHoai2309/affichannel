@@ -1,9 +1,9 @@
 # Kế hoạch Domain Evolution v0.8
 
-- Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; Adaptive presentation
-  đã cut over qua Phase 15C, M5 chưa bắt đầu
+- Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; AFF-US-015 Adaptive
+  presentation/navigation DONE qua Phase 15D; M5 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-24
+- Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028
 
 ## 1. Mục tiêu
@@ -223,8 +223,8 @@ Implementation evidence Phase 15B2 — 2026-08-24:
 - Product joins hiện chỉ dành cho Affiliate; `AFFILIATE_PRODUCT_NOT_LINKED` vẫn là
   follow-up của productless activation/hardening và không được active trong 15B2;
 - `currentStepKey`/`project_step_status` vẫn persist nhưng không còn presentation/
-  navigation authority trong 15B2 surfaces; deep-link gates sau đó được chuyển ở
-  15C, 15D vẫn pending và full AFF-US-015 chưa DONE.
+  navigation authority trong AFF-US-015 surfaces; deep-link gates đã chuyển ở 15C
+  và final acceptance được khóa ở 15D.
 
 Implementation evidence Phase 15C — 2026-08-24:
 
@@ -238,8 +238,19 @@ Implementation evidence Phase 15C — 2026-08-24:
 - generic route presentation không gọi Fact Lock gate riêng hoặc Voice
   reconciliation; server execution guards, M4 shadow và persisted progress giữ nguyên;
 - A–J route matrix `10/10`, execution golden, zero mutation/provider/reconciliation,
-  15B1/15B2 và fixed-query regressions PASS. 15D vẫn pending; full AFF-US-015 chưa
-  DONE và M5 chưa bắt đầu.
+  15B1/15B2 và fixed-query regressions PASS.
+
+Implementation evidence Phase 15D — 2026-08-25:
+
+- `AC-015-01–18` PASS; AFF-US-015 DONE cho supported Affiliate flow;
+- full-system A–J, single/batch parity, expired Voice, tuple invariant,
+  NOT_REQUIRED/OPTIONAL mapper, Render/route truth, accessibility semantics và
+  query-budget regressions PASS;
+- clean disposable DB đạt M1/M3B/M2C/M4 và chín golden suites; Adaptive reads giữ
+  mutation/reconciliation/provider call bằng `0`;
+- full Web `47/47` files, `437/437` tests và type-check PASS; external manual
+  evidence đạt Overview, Dashboard, List và năm deep-link routes;
+- M4 shadow vẫn active cho post-cutover diagnostic confidence. M5 chưa bắt đầu.
 
 ### M5 — Enforce và cutover
 

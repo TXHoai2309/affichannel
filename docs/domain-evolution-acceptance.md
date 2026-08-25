@@ -1,9 +1,9 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 shadow AC-014-01–15 đạt, Adaptive presentation đã cut
-  over qua Phase 15C; M5 chưa mở
+- Trạng thái: Canonical; M4 shadow AC-014-01–15 đạt; AFF-US-015 AC-015-01–18 DONE;
+  M5 chưa mở
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-24
+- Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028
 
 ## 1. Nguyên tắc đạt
@@ -134,8 +134,8 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ## 10. Gate I — UX và accessibility
 
-- [x] `AC-015-01–18` đã khóa ở cấp tài liệu tại
-  `docs/aff-us-015-adaptive-workflow-ui.md`; runtime/UI acceptance vẫn chưa chạy.
+- [x] `AC-015-01–18` đã khóa và final acceptance PASS tại
+  `docs/aff-us-015-adaptive-workflow-ui.md`; AFF-US-015 DONE.
 - [x] Phase 15A: derived typed mapper, exact route descriptors, completion/state
   separation, controlled unsupported state và A–J `10/10` đã có deterministic tests.
 - [x] Phase 15A: protected read-only aggregation reuse một request-owned snapshot;
@@ -162,19 +162,25 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 - [x] Shared route gate phân biệt đủ sáu state và completion bằng text/icon; READY
   không bị coi là complete, STALE không bị flatten thành blocked/failed.
 - [ ] Product picker chỉ bắt buộc khi policy yêu cầu và giải thích lý do.
-- [ ] `NOT_REQUIRED` ẩn khỏi primary stepper với visible numbering liên tục; direct
-  URL hiện controlled N/A state. OPTIONAL chỉ active sau durable server opt-in.
+- [x] `NOT_REQUIRED` ẩn khỏi primary stepper với visible numbering liên tục; direct
+  URL hiện controlled N/A state. OPTIONAL chưa được production-activate và vẫn cần
+  durable server opt-in ở future slice.
 - [x] Internal route cutover không làm mất deep link/bảy persisted step routes;
   Product, Content, Fact Lock, Voice, Video và Preview bookmarks vẫn hợp lệ.
 - [x] Video/Preview dùng cùng Render result và hiện `Sắp có` khi reason là
   `RENDER_FEATURE_NOT_IMPLEMENTED`; không expose execution CTA.
-- [ ] Loading, empty, validation, conflict, unauthorized, provider error và success đều có state.
-- [ ] Keyboard/focus/label/contrast, semantic link/button, `aria-current` và mobile
-  no-overflow đạt baseline hiện hữu.
+- [x] Adaptive loading/error, unsupported/invalid, blocked/stale và ready có
+  controlled presentation; không flash legacy readiness hoặc redirect loop.
+- [ ] Ngoài scope AFF-US-015, các future media/provider flow vẫn cần đủ empty,
+  validation, conflict, unauthorized, provider-error và success state khi active.
+- [x] Keyboard/focus/label, semantic link/button, `aria-current`, non-color status
+  và responsive no-overflow đạt automated source/test audit cùng external manual
+  evidence của supported Affiliate flow.
 - [x] Adaptive read reuse một authorized snapshot, không provider/mutation hoặc
   duplicate Project + shadow + adaptive gather waterfall.
-- [ ] Phase 15D: authenticated direct-route/manual, loading/error, accessibility,
-  mobile và final query-budget acceptance; full AFF-US-015 chưa DONE.
+- [x] Phase 15D: direct-route/manual, loading/error controlled presentation,
+  accessibility/mobile và final fixed-query budget accepted; A–J single/batch,
+  M4/M3B/M2C/M1, chín golden suites, full Web và type-check đều PASS.
 
 ## 11. Regression suite tối thiểu
 

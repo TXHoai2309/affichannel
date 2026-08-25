@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-24
+- Cập nhật lần cuối: 2026-08-25
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -23,8 +23,10 @@ pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã 
 Current pointer: US12 baseline frozen/completed; AFF-US-013 M1 và AFF-US-016
 M2A/M2B/M2C/M3A/M3B đã accepted, migration `0017` và legacy reconciliation đã
 hoàn tất. AFF-US-014 M4 Resolver/shadow runtime đã đạt parity gate qua DEC-028.
-AFF-US-015 Adaptive Workflow UI acceptance contract đã khóa qua DEC-029; runtime
-UI/authority cutover chưa triển khai.
+AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D: presentation/navigation
+authority cutover hoàn tất cho supported Affiliate flow, M4 shadow vẫn retained.
+Canonical dependency kế tiếp là hoàn tất Domain Evolution bằng M5 enforce/cutover;
+AFF-US-017 ClaimManifest Foundation chỉ bắt đầu sau gate đó.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
@@ -75,15 +77,16 @@ Ranh giới tránh overlap:
 
 AFF-US-014/M4 dùng contract tại
 `docs/aff-us-014-m4-applicability-resolver-shadow.md`. M4 chỉ compute/compare
-shadow trên golden Affiliate identity; legacy gates vẫn authority, Resolver không
-mutate `currentStepKey`, UI chưa chuyển sang adaptive workflow và current
-Video/Render placeholder phải được biểu diễn
+shadow trên golden Affiliate identity; legacy execution gates vẫn authority,
+Resolver không mutate `currentStepKey`. AFF-US-015 đã chuyển UI sang adaptive
+workflow; current Video/Render placeholder vẫn phải được biểu diễn
 `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready.
 
 AFF-US-015 dùng contract tại `docs/aff-us-015-adaptive-workflow-ui.md`. Contract
 khóa read model, state/completion presentation, route mapping, deep links,
-OPTIONAL opt-in, Affiliate A–J parity và rollout 15A–15D; task tài liệu này chưa
-đổi UI, API hoặc execution authority.
+OPTIONAL opt-in, Affiliate A–J parity và rollout 15A–15D. Story đã DONE cho
+supported Affiliate flow; execution/mutation authority vẫn thuộc backend service,
+M4 shadow vẫn retained và future identity chưa active.
 
 ## 1. Phương pháp triển khai
 

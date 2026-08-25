@@ -8,6 +8,23 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-015 Phase 15D final acceptance
+
+- Hoàn tất acceptance `AC-015-01–18`: Adaptive Workflow là
+  presentation/navigation authority cho supported Affiliate flow; backend services
+  tiếp tục sở hữu execution/mutation authorization.
+- Final audit không còn `currentStepKey`, persisted step status, hardcoded `/7`,
+  Fact Lock hoặc Voice raw derivation làm authority trong AFF-US-015 surfaces.
+- A–J single/batch/route parity đạt `10/10`; expired Voice, tuple invariant,
+  deep-link, Render `Sắp có`, zero mutation/provider/reconciliation và fixed-query
+  regressions đều PASS.
+- Clean disposable DB đạt M1, M3B, M2C, M4 và chín golden suites; full Web đạt
+  `47/47` files, `437/437` tests; type-check PASS. External manual evidence đạt
+  Overview, Dashboard, Project List và năm adaptive deep links.
+- M4 shadow được giữ cho post-cutover diagnostic confidence. Không activate
+  Organic/Quick Image/Media First, không implement Render/OPTIONAL persistence,
+  không bắt đầu M5 hoặc AFF-US-017.
+
 ### AFF-US-015 Phase 15C Adaptive deep-link presentation cutover
 
 - `/content`, `/fact-lock`, `/voice`, `/video` và `/preview` dùng shared Adaptive
