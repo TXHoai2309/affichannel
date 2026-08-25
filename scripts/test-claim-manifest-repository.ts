@@ -673,6 +673,35 @@ try {
 			transactionBound.manifest.fingerprint === transactionManifest.fingerprint,
 		"Transaction-bound repository composition must create through the caller transaction.",
 	);
+	const rollbackFixture = await seedScope(pool, "transaction-rollback");
+	const rollbackManifest = await buildScriptManifest(rollbackFixture);
+	try {
+		await db.transaction(async (transaction) => {
+			await createOrReuseClaimManifestInTransaction(transaction, {
+				workspaceId: rollbackFixture.workspaceId,
+				projectId: rollbackFixture.projectId,
+				builtManifest: rollbackManifest,
+				createdByUserId: rollbackFixture.userId,
+			});
+			throw new Error("FORCED_CALLER_TRANSACTION_ROLLBACK");
+		});
+		throw new Error("Caller transaction rollback must reject.");
+	} catch (error) {
+		assert(
+			error instanceof Error &&
+				error.message === "FORCED_CALLER_TRANSACTION_ROLLBACK",
+			"Transaction-bound repository must propagate the caller rollback.",
+		);
+	}
+	assert(
+		(await rowCount(
+			pool,
+			rollbackFixture.workspaceId,
+			rollbackFixture.projectId,
+			rollbackManifest.fingerprint,
+		)) === 0,
+		"Caller transaction rollback must leave no ClaimManifest row.",
+	);
 
 	console.log("New insert / sequential reuse / creator provenance: PASS");
 	console.log(
@@ -689,7 +718,9 @@ try {
 	console.log(
 		"History lookahead/terminal cursor, both directions, same-timestamp tie-break, microseconds: PASS",
 	);
-	console.log("Standalone + transaction-bound repository composition: PASS");
+	console.log(
+		"Standalone + transaction-bound repository composition/rollback: PASS",
+	);
 } finally {
 	await pool.end();
 }

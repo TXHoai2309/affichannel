@@ -237,11 +237,11 @@ fingerprint và audit timestamp. Client không được cung cấp `isEmpty` ho�
 fingerprint làm source of truth. Lỗi extraction/normalization phải fail closed;
 không được biến thành empty manifest.
 
-Rollout hiện tại: AFF-US-017 acceptance contract đã khóa foundation nhưng schema/
-runtime chưa bắt đầu. Current Scripted adapter target pin explicit ScriptVersion
-draft revision và build deterministic từ structured claims với zero provider call;
-NO_SCRIPT chỉ representable, chưa active. AFF-US-018 mới nối FactLockRun và cutover
-Manifest-first execution.
+Rollout hiện tại: AFF-US-017 Phase 17A–17D đã thêm pure domain, additive migration
+0019, race-safe repository và internal ScriptVersion application service. Current
+Scripted adapter pin explicit draft revision và build deterministic từ structured
+claims với zero provider call; foundation vẫn dormant và NO_SCRIPT chỉ representable,
+chưa active. AFF-US-018 mới nối FactLockRun và cutover Manifest-first execution.
 
 ### Fact Lock run
 
@@ -512,9 +512,9 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
-baseline. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 ClaimManifest Foundation là
-story kế tiếp nhưng chưa bắt đầu. Organic, Quick Image, Media First và ClaimManifest
-vẫn chưa active.
+baseline. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 ClaimManifest Foundation đã
+PASS Phase 17A–17D và đang chờ final acceptance. Organic, Quick Image, Media First
+và Manifest-first Fact Lock vẫn chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

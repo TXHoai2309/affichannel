@@ -163,8 +163,9 @@ Schema đầu tiên chỉ thêm những gì vertical slice hiện tại cần:
 - `script_generation` khi bắt đầu AFF-US-008; `script_version` chỉ thêm ở AFF-US-009.
 - `fact_lock_run`, `fact_lock_claim` và `fact_lock_claim_fact` khi bắt đầu AFF-US-010.
 - Domain Evolution đã thêm/enforce additive identity fields vào `project`.
-  AFF-US-017 kế tiếp sẽ thêm immutable `claim_manifest`; AFF-US-018 sau đó mới
-  mở rộng `fact_lock_run` theo Manifest-first contract.
+  AFF-US-017 đã thêm dormant immutable `claim_manifest`, deterministic builder,
+  repository và internal ScriptVersion service; AFF-US-018 sau đó mới mở rộng
+  `fact_lock_run` theo Manifest-first contract.
 
 Quy tắc chung:
 
@@ -339,7 +340,7 @@ Contract lịch sử của AFF-US-010 được khóa tại
 `docs/aff-us-010-phase-0-contract-hardening.md`; contract mở rộng v0.8 nằm tại
 `docs/claim-manifest-fact-lock-contract.md`. Runtime hiện tại vẫn ScriptVersion-first:
 `fact_lock_run.script_version_id` và revision là NOT NULL; provider snapshot,
-pending/idempotency và stale gate đều pin ScriptVersion revision. AFF-US-017 sẽ
+pending/idempotency và stale gate đều pin ScriptVersion revision. AFF-US-017 đã
 thêm dormant immutable ClaimManifest foundation theo DEC-031 nhưng không đổi flow
 này. AFF-US-018 mới chuyển new Fact Lock writes sang Manifest ID/fingerprint,
 giữ Script provenance nullable và dual-mode read cho historical rows.

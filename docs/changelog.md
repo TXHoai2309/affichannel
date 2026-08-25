@@ -8,6 +8,19 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-017 Phase 17D ScriptVersion application service
+
+- Thêm internal `createClaimManifestFromScriptVersion` orchestration từ
+  authorized WorkspaceActor → scoped/locked Project → exact locked draft
+  ScriptVersion/revision → Phase 17A builder → transaction-bound Phase 17C
+  create/reuse repository.
+- Enforce active `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`, Project Product
+  cùng workspace, current usable claims và typed non-enumerating/revision errors;
+  không nhận claim/hash/fingerprint/Product authority từ caller.
+- Giữ Project và exact ScriptVersion row locks xuyên suốt validate/build/persist;
+  deterministic repeat reuse một Manifest, giữ creator đầu tiên. Không public API,
+  UI, FactLockRun linkage, provider call hoặc production DB/migration change.
+
 ### AFF-US-017 ClaimManifest Foundation contract
 
 - Audit current ScriptGeneration/ScriptVersion/Fact Lock/dependency/Voice

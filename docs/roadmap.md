@@ -24,9 +24,9 @@ Current pointer: US12 baseline frozen/completed. Domain Evolution M1–M5 đã D
 migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều PASS.
 AFF-US-013 và AFF-US-016 đã DONE. AFF-US-014 M4 Resolver/shadow vẫn retained sau
 parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
-dependency kế tiếp là AFF-US-017 ClaimManifest Foundation, hiện UNBLOCKED/NEXT
-với acceptance contract READY nhưng implementation chưa bắt đầu. Organic, Quick
-Image và Media First vẫn chưa active.
+dependency hiện tại là AFF-US-017 ClaimManifest Foundation: Phase 17A–17D PASS,
+đang chờ final acceptance trước AFF-US-018. Organic, Quick Image và Media First
+vẫn chưa active.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và

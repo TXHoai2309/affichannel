@@ -2,7 +2,7 @@ import {
 	type BuiltClaimManifest,
 	buildClaimManifestFromScriptVersion,
 	ClaimManifestError,
-	classifyPersistedProjectIdentity,
+	classifyProjectWriteIdentity,
 } from "@affichannel/core";
 import { db, product, project, scriptVersion } from "@affichannel/db";
 import { and, eq, isNull } from "drizzle-orm";
@@ -86,34 +86,27 @@ function assertServiceInput(
 	}
 }
 
-function activeScriptedAffiliateIdentityResult(record: {
-	productId: string | null;
+function hasActiveScriptedAffiliateIdentity(record: {
 	contentType: string | null;
 	creationPath: string | null;
 	contentFormatKey: string | null;
 	contentFormatVersion: number | null;
-}): "active" | "product_required" | "unsupported" {
-	const classification = classifyPersistedProjectIdentity(record);
-	if (
+}): boolean {
+	const classification = classifyProjectWriteIdentity({
+		contentType: record.contentType,
+		creationPath: record.creationPath,
+		contentFormat: {
+			key: record.contentFormatKey,
+			version: record.contentFormatVersion,
+		},
+	});
+	return (
 		classification.kind === "canonical" &&
 		classification.identity.contentType === "AFFILIATE" &&
 		classification.identity.creationPath === "SCRIPTED" &&
 		classification.identity.contentFormat.key === "SCRIPTED_STANDARD" &&
 		classification.identity.contentFormat.version === 1
-	) {
-		return "active";
-	}
-	if (
-		classification.kind === "rejected" &&
-		classification.reasonCode === "AFFILIATE_PRODUCT_MISSING" &&
-		record.contentType === "AFFILIATE" &&
-		record.creationPath === "SCRIPTED" &&
-		record.contentFormatKey === "SCRIPTED_STANDARD" &&
-		record.contentFormatVersion === 1
-	) {
-		return "product_required";
-	}
-	return "unsupported";
+	);
 }
 
 async function assertProjectReadAccess(
@@ -185,11 +178,7 @@ export async function createClaimManifestFromScriptVersion(
 		if (!projectRecord) {
 			throw new ClaimManifestServiceError("CLAIM_MANIFEST_PROJECT_NOT_FOUND");
 		}
-		const activeIdentity = activeScriptedAffiliateIdentityResult(projectRecord);
-		if (activeIdentity === "product_required") {
-			throw new ClaimManifestServiceError("CLAIM_MANIFEST_PRODUCT_REQUIRED");
-		}
-		if (activeIdentity === "unsupported") {
+		if (!hasActiveScriptedAffiliateIdentity(projectRecord)) {
 			throw new ClaimManifestServiceError(
 				"CLAIM_MANIFEST_CONTENT_FORMAT_UNSUPPORTED",
 			);

@@ -302,6 +302,25 @@ async function manifestCount(pool: Pool, projectId: string): Promise<number> {
 	return result.rows[0]?.count ?? 0;
 }
 
+async function waitForBlockedManifestInsert(pool: Pool): Promise<void> {
+	for (let attempt = 0; attempt < 100; attempt += 1) {
+		const result = await pool.query<{ blocked: boolean }>(
+			`select exists (
+				select 1
+				from pg_stat_activity
+				where datname = current_database()
+					and pid <> pg_backend_pid()
+					and wait_event_type = 'Lock'
+					and wait_event = 'advisory'
+					and query ilike 'insert into %claim_manifest%'
+			) as blocked`,
+		);
+		if (result.rows[0]?.blocked) return;
+		await sleep(10);
+	}
+	throw new Error("Service did not reach the controlled manifest-insert gate.");
+}
+
 const pool = createNodePostgresPool(authority.url);
 try {
 	const identity = await pool.query<{ database: string; schema: string }>(
@@ -642,6 +661,16 @@ try {
 				expectedScriptVersionRevision: 1,
 			}),
 	);
+	const unknownFormat = await seedValidProject(pool, "unknown-format");
+	await pool.query(
+		"update project set content_format_key = 'UNKNOWN_FORMAT' where id = $1",
+		[unknownFormat.projectId],
+	);
+	await expectServiceError(
+		"unknown ContentFormat",
+		"CLAIM_MANIFEST_CONTENT_FORMAT_UNSUPPORTED",
+		() => createClaimManifestFromScriptVersion(serviceInput(unknownFormat)),
+	);
 
 	const noProductWorkspace = await seedWorkspace(pool, "no-product");
 	const noProductProject = await seedProject({
@@ -705,6 +734,24 @@ try {
 				scriptVersionId: productScopeSource,
 				expectedScriptVersionRevision: 1,
 			}),
+	);
+
+	const currentOlderClaims = await seedValidProject(
+		pool,
+		"current-older-claims",
+	);
+	await pool.query("update script_version set revision = 2 where id = $1", [
+		currentOlderClaims.scriptVersionId,
+	]);
+	const currentOlderClaimsResult = await createClaimManifestFromScriptVersion({
+		...serviceInput(currentOlderClaims),
+		expectedScriptVersionRevision: 2,
+	});
+	assert(
+		currentOlderClaimsResult.manifest.source.sourceType === "SCRIPT_VERSION" &&
+			currentOlderClaimsResult.manifest.source.scriptVersionRevision === 2 &&
+			currentOlderClaimsResult.manifest.source.claimsSourceRevision === 1,
+		"Current claims may legitimately originate before the current non-invalidating ScriptVersion revision.",
 	);
 
 	for (const [label, unusableSnapshot] of [
@@ -807,71 +854,102 @@ try {
 		"Repository failure must roll back without a partial second row.",
 	);
 
-	const sourceRace = await seedValidProject(pool, "source-race");
-	const sourceRaceClient = await pool.connect();
-	try {
-		await sourceRaceClient.query("begin");
-		await sourceRaceClient.query(
-			"select id from script_version where id = $1 for update",
-			[sourceRace.scriptVersionId],
-		);
-		const servicePromise = createClaimManifestFromScriptVersion(
-			serviceInput(sourceRace),
-		);
-		await sleep(50);
-		const changedSnapshot = snapshot("source-race-changed");
-		await sourceRaceClient.query(
-			"update script_version set revision = 2, editable_snapshot_json = $1 where id = $2",
-			[JSON.stringify(changedSnapshot), sourceRace.scriptVersionId],
-		);
-		await sourceRaceClient.query("commit");
-		await expectServiceError(
-			"concurrent ScriptVersion mutation",
-			"CLAIM_MANIFEST_SOURCE_REVISION_CONFLICT",
-			() => servicePromise,
-		);
-	} finally {
-		await sourceRaceClient.query("rollback").catch(() => undefined);
-		sourceRaceClient.release();
-	}
-	assert(
-		(await manifestCount(pool, sourceRace.projectId)) === 0,
-		"Detected ScriptVersion race must not persist mixed provenance.",
-	);
-
-	const productRace = await seedValidProject(pool, "product-race");
+	const coherentRace = await seedValidProject(pool, "coherent-race");
 	const replacementProduct = await seedProduct(
 		pool,
-		productRace,
+		coherentRace,
 		"replacement",
 	);
-	const productRaceClient = await pool.connect();
-	let productRaceResult: Awaited<
-		ReturnType<typeof createClaimManifestFromScriptVersion>
-	>;
+	const advisoryLockKey = 170_017;
+	await pool.query(`
+		create function claim_manifest_service_test_gate() returns trigger
+		language plpgsql as $$
+		begin
+			perform pg_advisory_xact_lock(${advisoryLockKey});
+			return new;
+		end
+		$$;
+		create trigger claim_manifest_service_test_gate
+		before insert on claim_manifest
+		for each row execute function claim_manifest_service_test_gate();
+	`);
+	const gateClient = await pool.connect();
+	const mutationClient = await pool.connect();
+	let coherentRaceResult:
+		| Awaited<ReturnType<typeof createClaimManifestFromScriptVersion>>
+		| undefined;
 	try {
-		await productRaceClient.query("begin");
-		await productRaceClient.query(
-			"select id from project where id = $1 for update",
-			[productRace.projectId],
-		);
+		await gateClient.query("select pg_advisory_lock($1)", [advisoryLockKey]);
 		const servicePromise = createClaimManifestFromScriptVersion(
-			serviceInput(productRace),
+			serviceInput(coherentRace),
 		);
-		await sleep(50);
-		await productRaceClient.query(
-			"update project set product_id = $1 where id = $2",
-			[replacementProduct, productRace.projectId],
+		await waitForBlockedManifestInsert(pool);
+
+		await mutationClient.query("begin");
+		await mutationClient.query("set local lock_timeout = '100ms'");
+		let sourceMutationBlocked = false;
+		try {
+			await mutationClient.query(
+				"update script_version set revision = 2 where id = $1",
+				[coherentRace.scriptVersionId],
+			);
+		} catch (error) {
+			sourceMutationBlocked =
+				typeof error === "object" &&
+				error !== null &&
+				"code" in error &&
+				error.code === "55P03";
+		}
+		await mutationClient.query("rollback");
+		assert(
+			sourceMutationBlocked,
+			"Service must hold the exact ScriptVersion row lock through persistence.",
 		);
-		await productRaceClient.query("commit");
-		productRaceResult = await servicePromise;
+
+		await mutationClient.query("begin");
+		await mutationClient.query("set local lock_timeout = '100ms'");
+		let productMutationBlocked = false;
+		try {
+			await mutationClient.query(
+				"update project set product_id = $1 where id = $2",
+				[replacementProduct, coherentRace.projectId],
+			);
+		} catch (error) {
+			productMutationBlocked =
+				typeof error === "object" &&
+				error !== null &&
+				"code" in error &&
+				error.code === "55P03";
+		}
+		await mutationClient.query("rollback");
+		assert(
+			productMutationBlocked,
+			"Service must hold the Project product/identity row lock through persistence.",
+		);
+
+		await gateClient.query("select pg_advisory_unlock($1)", [advisoryLockKey]);
+		coherentRaceResult = await servicePromise;
 	} finally {
-		await productRaceClient.query("rollback").catch(() => undefined);
-		productRaceClient.release();
+		await mutationClient.query("rollback").catch(() => undefined);
+		await gateClient
+			.query("select pg_advisory_unlock($1)", [advisoryLockKey])
+			.catch(() => undefined);
+		mutationClient.release();
+		gateClient.release();
+		await pool.query(
+			"drop trigger if exists claim_manifest_service_test_gate on claim_manifest",
+		);
+		await pool.query(
+			"drop function if exists claim_manifest_service_test_gate()",
+		);
 	}
 	assert(
-		productRaceResult.manifest.productId === replacementProduct,
-		"Project lock must make one call use one coherent current Product value.",
+		coherentRaceResult !== undefined &&
+			coherentRaceResult.manifest.source.sourceType === "SCRIPT_VERSION" &&
+			coherentRaceResult.manifest.source.scriptVersionRevision ===
+				coherentRace.revision &&
+			coherentRaceResult.manifest.productId === coherentRace.productId,
+		"Manifest must pin one coherent locked ScriptVersion revision and Project Product.",
 	);
 
 	console.log("Happy create / exact reuse / creator provenance: PASS");
@@ -880,11 +958,14 @@ try {
 	console.log("Inactive/non-current/archived historical readability: PASS");
 	console.log("Exact source pinning and draft-only usability: PASS");
 	console.log("Workspace / Project / Product scope failures: PASS");
-	console.log("Identity / Product / source usability boundaries: PASS");
+	console.log(
+		"Identity / Product / source usability and claims-currentness boundaries: PASS",
+	);
 	console.log("Claim count boundaries 0 / 64 / 65: PASS / PASS / REFUSED");
 	console.log("Repository failure rollback: PASS");
-	console.log("ScriptVersion revision TOCTOU: detected fail-closed");
-	console.log("Project Product race: coherent current Product pinned");
+	console.log(
+		"ScriptVersion + Project Product TOCTOU: row locks held through atomic persistence",
+	);
 	console.log("Provider calls: 0");
 } finally {
 	await pool.end();

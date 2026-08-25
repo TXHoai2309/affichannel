@@ -13,7 +13,7 @@ DEC-025 cho công việc mới.
 
 ## DEC-031 — ClaimManifest Foundation is immutable, deterministic and dormant before US18
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation chưa bắt đầu
+- Trạng thái: Đã implement Phase 17A–17D; dormant foundation chờ final acceptance
 - Ngày: 2026-08-25
 - Mở rộng: DEC-025, V08-DEC-011, V08-DEC-013
 

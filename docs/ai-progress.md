@@ -1,9 +1,34 @@
 # Tiến trình AI agent
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013 và AFF-US-016 DONE;
-  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 UNBLOCKED/NEXT
-  nhưng chưa bắt đầu.
+  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 Phase 17A–17D PASS,
+  final acceptance pending.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — AFF-US-017 Phase 17D ScriptVersion adapter + application service
+
+Đã thêm internal application service nhận trusted `WorkspaceActor`, explicit
+Project/ScriptVersion ID và expected revision. Service lock scoped Project, enforce
+active Affiliate Scripted/ContentFormat write policy và accessible Project Product,
+sau đó lock exact draft ScriptVersion, validate revision/current structured claims,
+gọi deterministic Phase 17A builder và Phase 17C create/reuse trong cùng transaction.
+Repository có caller-transaction composition nhưng standalone 17C behavior giữ nguyên.
+
+Controlled concurrency test dùng insert gate trên disposable PostgreSQL chứng minh
+Project và exact ScriptVersion row locks vẫn được giữ tới manifest persistence;
+concurrent source revision hoặc Project Product mutation không thể tạo mixed
+provenance. Exact repeat/different creator reuse cùng row và giữ original creator;
+zero/64 claims PASS, 65/stale/invalid/saved/cross-scope/revision mismatch fail closed.
+17A unit 15/15, 17B persistence matrix, 17C repository/service, ScriptVersion,
+Script Generation, ContentFormat classifier, full Web 49 files/459 tests, types và
+targeted Biome PASS. Legacy M3B và M5A harnesses chạy được phần tương ứng nhưng dừng
+ở expected pre-M5/latest-migration count vì repository hiện đã có M5 NOT NULL +
+migration 0019; không sửa historical harness ngoài Phase 17D.
+
+Không public API/UI, FactLockRun/Fact Lock/Voice/provider/AFF-US-018, Organic,
+Quick Image, Media First, schema hoặc migration change. Mọi DB test dùng explicit
+loopback disposable database; production DB/provider calls bằng 0; `apps/web/.data/`
+được giữ nguyên untracked.
 
 ## 2026-08-25 — AFF-US-017 ClaimManifest Foundation contract
 
