@@ -40,9 +40,11 @@ for (const name of [
 const {
 	ClaimManifestRepositoryError,
 	createOrReuseClaimManifest,
+	createOrReuseClaimManifestInTransaction,
 	getClaimManifestById,
 	listClaimManifestsForProject,
 } = await import("../packages/api/src/services/claim-manifest-repository.ts");
+const { db } = await import("@affichannel/db");
 
 const hash = (value: string) =>
 	createHash("sha256").update(value).digest("hex");
@@ -656,6 +658,22 @@ try {
 		expectedIds: [...ascendingIds].reverse(),
 	});
 
+	const transactionFixture = await seedScope(pool, "transaction-bound");
+	const transactionManifest = await buildScriptManifest(transactionFixture);
+	const transactionBound = await db.transaction((transaction) =>
+		createOrReuseClaimManifestInTransaction(transaction, {
+			workspaceId: transactionFixture.workspaceId,
+			projectId: transactionFixture.projectId,
+			builtManifest: transactionManifest,
+			createdByUserId: transactionFixture.userId,
+		}),
+	);
+	assert(
+		transactionBound.created &&
+			transactionBound.manifest.fingerprint === transactionManifest.fingerprint,
+		"Transaction-bound repository composition must create through the caller transaction.",
+	);
+
 	console.log("New insert / sequential reuse / creator provenance: PASS");
 	console.log(
 		"Concurrent equivalent requests=2; rows=1; IDs=same; created flags=true,false; deadlock=NO; unique error exposed=NO",
@@ -671,6 +689,7 @@ try {
 	console.log(
 		"History lookahead/terminal cursor, both directions, same-timestamp tie-break, microseconds: PASS",
 	);
+	console.log("Standalone + transaction-bound repository composition: PASS");
 } finally {
 	await pool.end();
 }

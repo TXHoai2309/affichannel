@@ -20,6 +20,9 @@ import {
 } from "drizzle-orm";
 
 type ClaimManifestRow = typeof claimManifest.$inferSelect;
+export type ClaimManifestRepositoryTransaction = Parameters<
+	Parameters<typeof db.transaction>[0]
+>[0];
 
 export const claimManifestRepositoryErrorCodes = [
 	"CLAIM_MANIFEST_INPUT_INVALID",
@@ -186,7 +189,8 @@ function assertCreateInputScope(
 	}
 }
 
-export async function createOrReuseClaimManifest(
+async function createOrReuseClaimManifestWithTransaction(
+	transaction: ClaimManifestRepositoryTransaction,
 	input: CreateOrReuseClaimManifestInput,
 ): Promise<CreateOrReuseClaimManifestResult> {
 	let manifest: BuiltClaimManifest;
@@ -198,60 +202,73 @@ export async function createOrReuseClaimManifest(
 	assertCreateInputScope(input, manifest);
 	const sourceColumns = sourceColumnsFromManifest(manifest);
 
-	return db.transaction(async (transaction) => {
-		const [inserted] = await transaction
-			.insert(claimManifest)
-			.values({
-				id: randomUUID(),
-				workspaceId: input.workspaceId,
-				projectId: input.projectId,
-				...sourceColumns,
-				sourceSnapshotJson: manifest.source,
-				productId: manifest.productId,
-				schemaVersion: manifest.schemaVersion,
-				builderVersion: manifest.builderVersion,
-				claimsJson: manifest.claims,
-				claimCount: manifest.claimCount,
-				isEmpty: manifest.isEmpty,
-				fingerprint: manifest.fingerprint,
-				createdByUserId: input.createdByUserId,
-			})
-			.onConflictDoNothing({
-				target: [
-					claimManifest.workspaceId,
-					claimManifest.projectId,
-					claimManifest.fingerprint,
-				],
-			})
-			.returning();
+	const [inserted] = await transaction
+		.insert(claimManifest)
+		.values({
+			id: randomUUID(),
+			workspaceId: input.workspaceId,
+			projectId: input.projectId,
+			...sourceColumns,
+			sourceSnapshotJson: manifest.source,
+			productId: manifest.productId,
+			schemaVersion: manifest.schemaVersion,
+			builderVersion: manifest.builderVersion,
+			claimsJson: manifest.claims,
+			claimCount: manifest.claimCount,
+			isEmpty: manifest.isEmpty,
+			fingerprint: manifest.fingerprint,
+			createdByUserId: input.createdByUserId,
+		})
+		.onConflictDoNothing({
+			target: [
+				claimManifest.workspaceId,
+				claimManifest.projectId,
+				claimManifest.fingerprint,
+			],
+		})
+		.returning();
 
-		if (inserted) {
-			return {
-				created: true,
-				manifest: await mapClaimManifestRow(inserted),
-			};
-		}
-
-		const [existing] = await transaction
-			.select()
-			.from(claimManifest)
-			.where(
-				and(
-					eq(claimManifest.workspaceId, input.workspaceId),
-					eq(claimManifest.projectId, input.projectId),
-					eq(claimManifest.fingerprint, manifest.fingerprint),
-				),
-			)
-			.limit(1);
-		if (!existing) throw persistedDataInvalid();
-		if (!hasExactSemanticPayload(existing, manifest)) {
-			throw new ClaimManifestRepositoryError("CLAIM_MANIFEST_CONFLICT");
-		}
+	if (inserted) {
 		return {
-			created: false,
-			manifest: await mapClaimManifestRow(existing),
+			created: true,
+			manifest: await mapClaimManifestRow(inserted),
 		};
-	});
+	}
+
+	const [existing] = await transaction
+		.select()
+		.from(claimManifest)
+		.where(
+			and(
+				eq(claimManifest.workspaceId, input.workspaceId),
+				eq(claimManifest.projectId, input.projectId),
+				eq(claimManifest.fingerprint, manifest.fingerprint),
+			),
+		)
+		.limit(1);
+	if (!existing) throw persistedDataInvalid();
+	if (!hasExactSemanticPayload(existing, manifest)) {
+		throw new ClaimManifestRepositoryError("CLAIM_MANIFEST_CONFLICT");
+	}
+	return {
+		created: false,
+		manifest: await mapClaimManifestRow(existing),
+	};
+}
+
+export function createOrReuseClaimManifestInTransaction(
+	transaction: ClaimManifestRepositoryTransaction,
+	input: CreateOrReuseClaimManifestInput,
+): Promise<CreateOrReuseClaimManifestResult> {
+	return createOrReuseClaimManifestWithTransaction(transaction, input);
+}
+
+export async function createOrReuseClaimManifest(
+	input: CreateOrReuseClaimManifestInput,
+): Promise<CreateOrReuseClaimManifestResult> {
+	return db.transaction((transaction) =>
+		createOrReuseClaimManifestWithTransaction(transaction, input),
+	);
 }
 
 export async function getClaimManifestById(input: {
