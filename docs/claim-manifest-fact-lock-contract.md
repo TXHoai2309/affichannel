@@ -1,15 +1,22 @@
 # Contract ClaimManifest và Fact Lock v0.8
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation pending
+- Trạng thái: Target US17+US18 canonical; US17 acceptance contract READY,
+  implementation chưa bắt đầu; US18 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-24
-- Quyết định liên quan: DEC-025, DEC-028
+- Cập nhật lần cuối: 2026-08-25
+- Quyết định liên quan: DEC-025, DEC-028, DEC-031, V08-DEC-011, V08-DEC-013
 
 ## 1. Mục đích
 
 Fact Lock phải kiểm tra đúng nội dung cuối có thể xuất hiện trong video, không chỉ
-một ScriptVersion. ClaimManifest là immutable server-built inventory nối content
-sources, Product Facts evidence, policy run và downstream gate.
+một ScriptVersion. ClaimManifest là immutable server-built inventory của content
+sources; downstream FactLockRun dùng inventory đó để nối Product Facts evidence,
+policy evaluation và gate.
+
+Contract này mô tả end-state sau AFF-US-018. Exact foundation contract của
+AFF-US-017 nằm tại `docs/aff-us-017-claim-manifest-foundation.md`. Runtime hiện tại
+vẫn ScriptVersion-first; không được đọc target wording dưới đây như capability đã
+active.
 
 ## 2. ClaimManifest canonical
 
@@ -17,31 +24,33 @@ Một Manifest tối thiểu có:
 
 ```text
 id, workspaceId, projectId
-sourceType, sourceVersion
-compositionVersionId?
-claims[]
-isEmpty
-normalizationStatus
-fingerprint
-createdAt
+strict versioned source descriptor
+productId?
+schemaVersion, builderVersion
+ordered claims[]
+claimCount, isEmpty
+sourceContentHash, fingerprint
+createdByUserId, createdAt
 ```
 
-Mỗi claim chứa stable claim key, normalized text/value/unit/time condition,
-source locator, source hash và Product reference nếu có. Source locator phải đủ để
-UI đưa người dùng về đúng Script field, overlay, caption, CTA, voice text, declared
-claim hoặc composition element.
+Mỗi claim MVP chứa deterministic stable-within-source key, exact validated claim
+text, strict source locator và source text hash. Không khóa taxonomy/value/unit/time
+fields khi current repository chưa có authority cho chúng. Product association
+thuộc Manifest level trong one-Product MVP. Source locator phải đủ để UI tương lai
+đưa người dùng về đúng Script field hoặc no-script element.
 
 ## 3. Server build pipeline
 
 1. Authorize actor với Project/workspace.
-2. Resolve đúng output-bearing sources và immutable/versioned identifiers.
-3. Extract candidate claims từ tất cả source types được hỗ trợ.
-4. Normalize bằng deterministic rules trước; provider output chỉ là untrusted input.
-5. Canonical-sort inventory và tính fingerprint server-side.
+2. Resolve đúng explicit output-bearing source revision và identifiers.
+3. Source adapter project validated structured claims theo deterministic rules.
+4. Validate locator/text và canonicalize mà không gọi provider trong AFF-US-017.
+5. Giữ deterministic adapter-defined order và tính fingerprint server-side.
 6. Persist Manifest bất biến cùng source snapshot/provenance.
 
-Client không được gửi `isEmpty`, canonical fingerprint hoặc kết quả normalization
-làm source of truth. Client-supplied preview chỉ là hint và phải được rebuild.
+Client không được gửi `isEmpty`, canonical fingerprint hoặc canonical claims làm
+source of truth. AFF-US-017 chỉ có internal service; future client preview nếu có
+chỉ là hint và phải được server rebuild.
 
 ## 4. Empty và uncertainty
 
@@ -51,17 +60,17 @@ làm source of truth. Client-supplied preview chỉ là hint và phải được
 - extraction và normalization hoàn thành;
 - canonical inventory có zero claim.
 
-Source thiếu, parser lỗi, provider timeout, unsupported schema hoặc độ chắc chắn
-không đủ phải trả `indeterminate`/`blocked`, không được chuyển thành empty để PASS.
-Affiliate claimless vẫn có empty Manifest và một policy run có thể PASS với zero
-claim results sau khi pipeline trên thành công.
+Source thiếu, stale claims, parser lỗi hoặc unsupported schema phải trả typed build
+error và không persist Manifest. Provider timeout/uncertainty là AFF-US-018 Fact
+Lock execution concern, không phải Manifest lifecycle. Affiliate claimless có thể
+có empty Manifest sau build thành công; policy run zero-claim thuộc AFF-US-018.
 
 ## 5. Fingerprint và stale
 
-Fingerprint bao phủ schema version, ordered normalized claim inventory, source
-identifiers/hashes và composition version có ảnh hưởng output. Bất kỳ thay đổi nào
-ở Script, overlay, caption, CTA, voice text, declared claim hoặc composition làm
-Manifest mới có fingerprint mới.
+Fingerprint bao phủ domain/builder version, workspace/Project scope, Product ID,
+ordered canonical claim inventory và complete source identifiers/revision/hashes.
+Bất kỳ semantic source change nào tạo/reuse fingerprint khác. Exact canonical JSON,
+text normalization và claim-key rules nằm trong dedicated AFF-US-017 contract.
 
 FactLockRun cũ không bị mutate. Read model trả effective `STALE` khi run không còn
 khớp Manifest hiện tại hoặc evidence dependency đã đổi/hết hiệu lực.
@@ -124,11 +133,13 @@ provider payload, credentials hoặc signed URL.
 
 ## 11. Compatibility và rollout
 
-1. Thêm schema additive và dual-mode reader.
-2. Build Manifest ở shadow mode cho affiliate Script output và đo parity.
-3. Bật Manifest-first new writes theo feature flag.
-4. Bật non-Script sources và Organic policy sau parity/regression.
-5. Giữ legacy adapter đến khi retention policy riêng được duyệt.
+1. AFF-US-017 thêm pure domain + additive ClaimManifest table, deterministic
+   ScriptVersion adapter và internal create/reuse/read service.
+2. AFF-US-017 không backfill Scripts/runs, không sửa FactLockRun và không đổi flow.
+3. AFF-US-018 thêm dual-mode FactLockRun linkage/reader và shadow/parity evidence.
+4. AFF-US-018 bật Manifest-first new writes theo reviewed cutover gate.
+5. Non-Script source activation thuộc source story tương ứng; giữ legacy adapter
+   đến khi retention policy riêng được duyệt.
 
 Chi tiết migration và rollback tại `docs/domain-evolution-plan.md`; bộ test bắt
 buộc tại `docs/domain-evolution-acceptance.md`.

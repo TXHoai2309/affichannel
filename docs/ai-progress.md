@@ -5,6 +5,19 @@
   nhưng chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-25
 
+## 2026-08-25 — AFF-US-017 ClaimManifest Foundation contract
+
+Repository audit xác nhận current Fact Lock vẫn ScriptVersion-first; FactLockRun
+Script ID/revision NOT NULL, provider extraction, Product Fact dependency và Voice
+gate chưa có Manifest linkage. Đã khóa DEC-031 và dedicated AC-017-01–22 cho
+immutable JSONB Manifest, deterministic ScriptVersion revision adapter, SHA-256
+fingerprint, scoped create/reuse, future NO_SCRIPT representability và Product/
+Product Facts boundary.
+
+AFF-US-017 hiện ACCEPTANCE CONTRACT READY nhưng IMPLEMENTATION NOT STARTED.
+Không schema/migration/runtime/provider/production change; FactLockRun cutover và
+legacy dual-mode reader vẫn thuộc AFF-US-018.
+
 ## 2026-08-25 — Domain Evolution M5D final acceptance
 
 Final regression trên disposable PostgreSQL đã PASS cho M1, M2A/M2B/M2C, M3B,

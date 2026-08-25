@@ -292,6 +292,14 @@ retained; cleanup thuộc M6 và cần quyết định riêng.
 Chỉ cleanup compatibility branch sau ít nhất một release ổn định và có bằng chứng
 không còn row cũ chưa backfill. Drop/rename là migration riêng, cần phê duyệt mới.
 
+### AFF-US-017 — ClaimManifest Foundation sau M5
+
+AFF-US-017 là story kế tiếp, không phải M6 cleanup. Contract source of truth là
+`docs/aff-us-017-claim-manifest-foundation.md` và DEC-031. Rollout là pure domain
+→ additive table → race-safe repository → explicit ScriptVersion revision adapter
+→ regression/handoff. Không sửa FactLockRun, không backfill dữ liệu lịch sử và
+không đổi current Fact Lock execution; Manifest-first cutover thuộc AFF-US-018.
+
 ## 5. Ma trận invariant
 
 | Trường hợp | Product | Script | Fact Lock | Voice | Render |

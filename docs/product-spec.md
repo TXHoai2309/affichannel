@@ -237,6 +237,12 @@ fingerprint và audit timestamp. Client không được cung cấp `isEmpty` ho�
 fingerprint làm source of truth. Lỗi extraction/normalization phải fail closed;
 không được biến thành empty manifest.
 
+Rollout hiện tại: AFF-US-017 acceptance contract đã khóa foundation nhưng schema/
+runtime chưa bắt đầu. Current Scripted adapter target pin explicit ScriptVersion
+draft revision và build deterministic từ structured claims với zero provider call;
+NO_SCRIPT chỉ representable, chưa active. AFF-US-018 mới nối FactLockRun và cutover
+Manifest-first execution.
+
 ### Fact Lock run
 
 Run mới đánh giá đúng một ClaimManifest và lưu Manifest ID/fingerprint bất biến.

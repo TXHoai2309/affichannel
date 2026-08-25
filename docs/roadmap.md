@@ -25,7 +25,8 @@ migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều P
 AFF-US-013 và AFF-US-016 đã DONE. AFF-US-014 M4 Resolver/shadow vẫn retained sau
 parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
 dependency kế tiếp là AFF-US-017 ClaimManifest Foundation, hiện UNBLOCKED/NEXT
-nhưng chưa bắt đầu. Organic, Quick Image và Media First vẫn chưa active.
+với acceptance contract READY nhưng implementation chưa bắt đầu. Organic, Quick
+Image và Media First vẫn chưa active.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
@@ -68,6 +69,10 @@ Ranh giới tránh overlap:
   `AFF-US-015` là adaptive workflow presentation/navigation dùng resolver đó.
 - `AFF-US-017` sở hữu ClaimManifest foundation; `AFF-US-018` chuyển Fact Lock sang
   Manifest-first mà không nhập hai lifecycle thành một.
+- AFF-US-017 contract cụ thể nằm tại
+  `docs/aff-us-017-claim-manifest-foundation.md`: immutable deterministic artifact,
+  ScriptVersion revision pinning, future no-script representability và dormant
+  internal service; không sửa FactLockRun hoặc current execution.
 - Shared composition pipeline là technical enabler của Video Studio/Quick Image,
   không phải ContentFormat hoặc một User Story thay thế.
 - `AFF-US-029` sở hữu provider governance/cost guardrails; `AFF-US-030` sở hữu

@@ -8,6 +8,16 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-017 ClaimManifest Foundation contract
+
+- Audit current ScriptGeneration/ScriptVersion/Fact Lock/dependency/Voice
+  architecture và khóa DEC-031 cùng `AC-017-01–22`.
+- Chọn immutable JSONB artifact, explicit ScriptVersion revision source,
+  deterministic offline builder, scoped SHA-256 fingerprint/idempotency và future
+  NO_SCRIPT domain representability.
+- Tách rõ US17 foundation khỏi US18 FactLockRun linkage/execution cutover; không
+  runtime/schema/migration, provider call, production access hoặc feature activation.
+
 ### Domain Evolution M5D final acceptance
 
 - Final disposable regression PASS cho M1, M2A/M2B/M2C, M3B, M4 shadow,

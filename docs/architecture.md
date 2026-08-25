@@ -162,8 +162,9 @@ Schema đầu tiên chỉ thêm những gì vertical slice hiện tại cần:
 - `project`.
 - `script_generation` khi bắt đầu AFF-US-008; `script_version` chỉ thêm ở AFF-US-009.
 - `fact_lock_run`, `fact_lock_claim` và `fact_lock_claim_fact` khi bắt đầu AFF-US-010.
-- Domain Evolution thêm additive fields vào `project`, tạo immutable
-  `claim_manifest` và mở rộng `fact_lock_run` theo Manifest-first contract.
+- Domain Evolution đã thêm/enforce additive identity fields vào `project`.
+  AFF-US-017 kế tiếp sẽ thêm immutable `claim_manifest`; AFF-US-018 sau đó mới
+  mở rộng `fact_lock_run` theo Manifest-first contract.
 
 Quy tắc chung:
 
@@ -336,27 +337,27 @@ Chi tiết được khóa bởi DEC-015 và `docs/aff-us-008-foundation.md`.
 
 Contract lịch sử của AFF-US-010 được khóa tại
 `docs/aff-us-010-phase-0-contract-hardening.md`; contract mở rộng v0.8 nằm tại
-`docs/claim-manifest-fact-lock-contract.md`. New Fact Lock run đánh giá một
-server-built immutable ClaimManifest và lưu Manifest ID/fingerprint. ScriptVersion
-chỉ là source adapter/provenance nullable. Run lịch sử gắn Script tiếp tục đọc
-được, không bulk rewrite; pending/idempotency của new writes dựa trên Manifest
-fingerprint.
+`docs/claim-manifest-fact-lock-contract.md`. Runtime hiện tại vẫn ScriptVersion-first:
+`fact_lock_run.script_version_id` và revision là NOT NULL; provider snapshot,
+pending/idempotency và stale gate đều pin ScriptVersion revision. AFF-US-017 sẽ
+thêm dormant immutable ClaimManifest foundation theo DEC-031 nhưng không đổi flow
+này. AFF-US-018 mới chuyển new Fact Lock writes sang Manifest ID/fingerprint,
+giữ Script provenance nullable và dual-mode read cho historical rows.
 
-Fact Lock run lưu persisted status (`pending`, `review_required`, `passed`,
-`failed`, `indeterminate`); `stale` là effective read-model state khi Manifest
-fingerprint hoặc Product Fact dependency không còn khớp, không phải trạng thái
-mutate lịch sử. Claim classification (`SUPPORTED`, `NEEDS_REVIEW`, `UNSUPPORTED`,
-`PROHIBITED`) tách khỏi review status và AI không phải authority duy nhất cho
-`PROHIBITED`.
+Target read model sau AFF-US-018 tiếp tục lưu persisted run status (`pending`,
+`review_required`, `passed`, `failed`, `indeterminate`); `stale` là effective
+state khi Manifest fingerprint hoặc Product Fact dependency không còn khớp, không
+phải trạng thái mutate lịch sử. Claim classification (`SUPPORTED`,
+`NEEDS_REVIEW`, `UNSUPPORTED`, `PROHIBITED`) tách khỏi review status và AI không
+phải authority duy nhất cho `PROHIBITED`.
 
-Fact Lock gồm các giai đoạn riêng:
+Target Manifest-first Fact Lock sau AFF-US-018 gồm các giai đoạn riêng:
 
-1. build ClaimManifest phía server từ ScriptVersion, overlay, caption, CTA, voice
-   text, declared claim và composition version;
-2. tách candidate claim từ mọi output-bearing source;
-3. chuẩn hóa tên, giá trị, đơn vị, ngày và điều kiện khuyến mại;
-4. đề xuất Product Facts có khả năng hỗ trợ;
-5. áp dụng deterministic rule nếu có;
+1. resolve explicit immutable/versioned source revision;
+2. deterministic source adapter project structured claims và validate locators;
+3. canonicalize, fingerprint và create/reuse immutable ClaimManifest;
+4. FactLockRun pin exact Manifest, Product Facts snapshot/dependencies và policy;
+5. provider/deterministic rules đánh giá, map evidence và classify claims;
 6. yêu cầu con người xử lý điểm mơ hồ;
 7. lưu evidence link và lý do;
 8. tính trạng thái tổng của run.

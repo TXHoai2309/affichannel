@@ -11,6 +11,30 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-031 — ClaimManifest Foundation is immutable, deterministic and dormant before US18
+
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation chưa bắt đầu
+- Ngày: 2026-08-25
+- Mở rộng: DEC-025, V08-DEC-011, V08-DEC-013
+
+AFF-US-017 thêm immutable ClaimManifest foundation bằng additive table, strict
+versioned source/claims JSONB, deterministic SHA-256 fingerprint và exact
+create-or-reuse semantics scoped theo workspace/Project. Current Scripted adapter
+pin explicit current ScriptVersion draft ID/revision, project validated structured
+claims và không gọi provider. `NO_SCRIPT` chỉ được giữ ở typed domain/schema
+representability; không có route hoặc activation trong US17.
+
+Manifest pin Product nullable ở manifest level nhưng không chứa Product Facts
+snapshot/dependency hoặc Fact Lock verdict. Product Facts vẫn là evaluation input
+của FactLockRun. US17 không sửa `fact_lock_run`, không backfill run cũ và không
+đổi Fact Lock/Voice/Resolver/Adaptive runtime. AFF-US-018 mới atomically thêm
+Manifest linkage, dual-mode legacy reader và Manifest-first new-write cutover.
+
+Historical `DEC-013` vẫn là Product Fact verification/Drawer decision; ClaimManifest
+decision được gọi chính xác là `V08-DEC-013`, không đánh lại số ADR.
+
+Chi tiết tại `docs/aff-us-017-claim-manifest-foundation.md`.
+
 ## DEC-030 — M5 enforces persisted identity without activating future flows
 
 - Trạng thái: Đã implement và accepted qua M5D

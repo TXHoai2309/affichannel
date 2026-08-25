@@ -10,7 +10,8 @@ M1/M2/M3 đã hoàn tất cho current Affiliate compatibility baseline. DEC-028 
 runtime shadow đã đạt parity; DEC-029/AFF-US-015 presentation cutover đã DONE.
 DEC-030/M5 persisted identity enforcement đã DONE qua production migration 0018,
 postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 hiện là
-story kế tiếp nhưng chưa bắt đầu. M5 không activate future identities.
+story kế tiếp với acceptance contract READY nhưng implementation chưa bắt đầu.
+M5 không activate future identities.
 
 ## Thứ tự đọc
 
@@ -20,13 +21,14 @@ story kế tiếp nhưng chưa bắt đầu. M5 không activate future identitie
 4. [Lộ trình triển khai](./roadmap.md)
 5. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
 6. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
-7. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
-8. [AFF-US-014 / M4 Resolver Shadow Contract](./aff-us-014-m4-applicability-resolver-shadow.md)
-9. [AFF-US-015 / Adaptive Workflow UI Contract](./aff-us-015-adaptive-workflow-ui.md)
-10. [Domain Evolution M5 Enforcement Contract](./domain-evolution-m5-enforcement-contract.md)
-11. [Hệ thống thiết kế](./design-system.md)
-12. [Tiến trình AI agent](./ai-progress.md)
-13. [Nhật ký thay đổi](./changelog.md)
+7. [AFF-US-017 / ClaimManifest Foundation Contract](./aff-us-017-claim-manifest-foundation.md)
+8. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
+9. [AFF-US-014 / M4 Resolver Shadow Contract](./aff-us-014-m4-applicability-resolver-shadow.md)
+10. [AFF-US-015 / Adaptive Workflow UI Contract](./aff-us-015-adaptive-workflow-ui.md)
+11. [Domain Evolution M5 Enforcement Contract](./domain-evolution-m5-enforcement-contract.md)
+12. [Hệ thống thiết kế](./design-system.md)
+13. [Tiến trình AI agent](./ai-progress.md)
+14. [Nhật ký thay đổi](./changelog.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 

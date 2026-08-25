@@ -95,13 +95,17 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 ## 6. Gate E — ClaimManifest
 
-- [ ] Manifest được build server-side từ Script, overlay, caption, CTA, voice,
-  declared claims và composition source áp dụng.
+AFF-US-017 exact contract và `AC-017-01–22` nằm tại
+`docs/aff-us-017-claim-manifest-foundation.md`. Gate E hiện READY ở cấp acceptance;
+implementation chưa bắt đầu.
+
+- [ ] Current ScriptVersion adapter build Manifest deterministic từ exact pinned
+  revision/structured claims; future adapters cover output-bearing no-script sources.
 - [ ] Client không thể giả `isEmpty` hoặc fingerprint.
 - [ ] Canonical ordering tạo fingerprint ổn định với input tương đương.
 - [ ] Sửa bất kỳ output-bearing source nào tạo fingerprint mới và run cũ `STALE`.
 - [ ] Empty Manifest chỉ được tạo khi extraction/normalization thành công.
-- [ ] Parser/provider uncertainty fail closed `indeterminate`/`blocked`.
+- [ ] Builder failure không persist empty/failed Manifest; US17 provider calls bằng 0.
 - [ ] Source locator đưa UI về đúng field/element.
 
 ## 7. Gate F — Fact Lock Manifest-first
