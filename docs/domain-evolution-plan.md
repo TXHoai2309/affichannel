@@ -1,10 +1,10 @@
 # Kế hoạch Domain Evolution v0.8
 
-- Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; AFF-US-015 Adaptive
-  presentation/navigation DONE qua Phase 15D; M5 chưa bắt đầu
+- Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; AFF-US-015 DONE;
+  M5 acceptance contract locked, implementation chưa bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
-- Quyết định liên quan: DEC-025, DEC-026, DEC-028
+- Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
 
 ## 1. Mục tiêu
 
@@ -250,15 +250,24 @@ Implementation evidence Phase 15D — 2026-08-25:
   mutation/reconciliation/provider call bằng `0`;
 - full Web `47/47` files, `437/437` tests và type-check PASS; external manual
   evidence đạt Overview, Dashboard, List và năm deep-link routes;
-- M4 shadow vẫn active cho post-cutover diagnostic confidence. M5 chưa bắt đầu.
+- M4 shadow vẫn active cho post-cutover diagnostic confidence. Tại thời điểm
+  Phase 15D acceptance, M5 chưa bắt đầu.
 
 ### M5 — Enforce và cutover
 
-1. Đặt not-null cho field đã backfill khi evidence cho phép; không đặt database
-   default cho ContentFormat vì server default là authority.
-2. Bật `ORGANIC + QUICK_IMAGE` sau khi server invariants và acceptance test đạt.
-3. Bật Manifest-first new writes; legacy rows tiếp tục qua read adapter.
-4. Theo dõi error rate, blocked reason và step transition sau rollout.
+Contract source of truth là `docs/domain-evolution-m5-enforcement-contract.md` và
+DEC-030.
+
+1. Sau fresh zero-blocker preflight, đặt NOT NULL cho bốn Channel-First identity
+   columns; không đặt DB default/enum/registry table.
+2. Giữ `product_id` nullable, legacy request canonicalization, defensive legacy
+   read projection, CAS, M2 tooling và M4 shadow qua rollback window.
+3. Production writable identity vẫn chỉ là current Affiliate baseline. Organic,
+   Quick Image, Media First và Manifest-first thuộc story sau, không được M5 mở.
+4. Không đồng bộ/xóa `currentStepKey` hoặc `project_step_status`; Resolver/Adaptive
+   authority và các execution guard hiện hữu được giữ nguyên.
+5. Rollout theo application-compatible → preflight → explicit migration →
+   postflight; bất kỳ legacy/partial/invalid row nào đều STOP, không heuristic fix.
 
 ### M6 — Contract cleanup có điều kiện
 
@@ -303,10 +312,11 @@ N/A + CTA, BLOCKED hiện typed remediation, STALE hiện prior safe artifact + 
 
 ## 7. Rollback
 
-- Trước cutover: tắt feature flag và quay về read/gate cũ; additive columns ở lại.
-- Sau cutover: ngừng new Organic writes trước, không xóa dữ liệu đã tạo.
-- Manifest-first: tắt new-write path nhưng giữ reader cho cả Manifest/Script mode.
-- Không rollback bằng cách đổi Organic thành Affiliate hoặc gắn Product giả.
+- M5 chỉ rollback về binary M3B-or-newer đã chứng minh luôn ghi canonical identity.
+- Giữ legacy request canonicalization và defensive read projection; không rollback
+  bằng null identity hoặc drop constraint âm thầm.
+- Organic/Manifest-first chưa active trong M5 nên rollback M5 không mutate các
+  identity đó. Mọi constraint rollback là migration riêng có review.
 
 ## 8. Quan sát và bằng chứng bắt buộc
 

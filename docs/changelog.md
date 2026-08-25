@@ -8,6 +8,18 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Domain Evolution M5 enforcement contract
+
+- Thêm DEC-030 và `AC-M5-01–20` cho persisted Channel-First identity enforcement,
+  production preflight, migration ordering, postflight và rollback.
+- Khóa bốn identity columns sẽ thành NOT NULL nhưng giữ `product_id` nullable,
+  không DB default/enum/registry table.
+- Tách legacy request compatibility khỏi persisted legacy state: request cũ vẫn
+  canonicalize, persisted all-null bị cấm; defensive reader/CAS/M2 tooling/M4
+  shadow được giữ qua rollback window.
+- M5 không activate Organic/Quick Image/Media First, không implement ClaimManifest,
+  không đồng bộ legacy workflow và chưa thay runtime/schema trong contract này.
+
 ### AFF-US-015 Phase 15D final acceptance
 
 - Hoàn tất acceptance `AC-015-01–18`: Adaptive Workflow là

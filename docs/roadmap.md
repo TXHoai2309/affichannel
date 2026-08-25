@@ -26,7 +26,9 @@ hoàn tất. AFF-US-014 M4 Resolver/shadow runtime đã đạt parity gate qua D
 AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D: presentation/navigation
 authority cutover hoàn tất cho supported Affiliate flow, M4 shadow vẫn retained.
 Canonical dependency kế tiếp là hoàn tất Domain Evolution bằng M5 enforce/cutover;
-AFF-US-017 ClaimManifest Foundation chỉ bắt đầu sau gate đó.
+DEC-030 và `domain-evolution-m5-enforcement-contract.md` đã khóa acceptance nhưng
+runtime/schema chưa implement. AFF-US-017 ClaimManifest Foundation chỉ bắt đầu sau
+M5 migration/postflight acceptance.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và

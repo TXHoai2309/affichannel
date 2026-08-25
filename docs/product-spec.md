@@ -1,8 +1,9 @@
 # Đặc tả sản phẩm AffiChannel Personal
 
-- Trạng thái: Canonical; Affiliate M1/M2/M3 active, future identities vẫn gated
+- Trạng thái: Canonical; Affiliate baseline và Adaptive UI active; M5 enforcement
+  contract locked, future identities vẫn gated
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-24
+- Cập nhật lần cuối: 2026-08-25
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -496,17 +497,17 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **DONE — DEC-026** | ContentFormat là server-owned versioned registry, persist bằng `content_format_key` + `content_format_version`; initial defaults và legacy backfill đã khóa. | Migration `0017`, M2 reconciliation và M3 compatible read/write đã hoàn tất cho Affiliate baseline. |
 | **NON-BLOCKER for Domain Evolution** | Schema chi tiết của applicability provenance snapshot trên artifact. | Trước khi ClaimManifest/Quick Image ghi artifact mới; resolver runtime và Project backfill không phải chờ. |
 | **NON-BLOCKER for Domain Evolution** | MVP manual evidence review cho Organic factual knowledge không dựa trên Product Facts. | Trước khi bật factual Organic path tương ứng; Organic claimless/no-product vẫn được triển khai. |
-| **M4 RUNTIME ACCEPTED — DEC-028** | Applicability Resolver derived/non-persisted; completion tách riêng và không mở rộng enum step status. | Shadow matrix A–J đã đạt parity; Resolver không mutate `currentStepKey`, legacy behavior vẫn authority. |
-| **US15 CONTRACT LOCKED — DEC-029** | Adaptive Workflow read model, six-state UX, route/deep-link mapping, OPTIONAL opt-in và read aggregation. | Thực hiện 15A–15D; chưa UI/API cutover, không activate future identity. |
+| **M4 RUNTIME ACCEPTED — DEC-028** | Applicability Resolver derived/non-persisted; completion tách riêng và không mở rộng enum step status. | Shadow matrix A–J đã đạt parity; Resolver không mutate `currentStepKey`, normalized legacy oracle chỉ còn comparison authority trong shadow. |
+| **US15 DONE — DEC-029** | Adaptive Workflow read model, six-state UX, route/deep-link mapping, OPTIONAL opt-in và read aggregation. | Presentation/navigation cutover đã accepted; execution guards vẫn server authority. |
+| **M5 CONTRACT LOCKED — DEC-030** | Persisted Channel-First identity enforcement, compatibility, migration ordering và rollback. | Chưa migration/runtime; không activate Organic/Quick Image/Media First hoặc ClaimManifest. |
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
-Kết luận hiện tại: M1/M2/M3 đã hoàn tất cho canonical Affiliate identity; M4
-Resolver shadow runtime đã đạt parity. DEC-029 và
-`docs/aff-us-015-adaptive-workflow-ui.md` khóa acceptance contract cho bước UI
-tiếp theo, nhưng chưa authority cutover, Organic activation hoặc M5.
+Kết luận hiện tại: M1/M2/M3, M4 và AFF-US-015 đã accepted cho canonical Affiliate
+baseline. DEC-030 khóa M5 enforcement nhưng chưa tạo migration/runtime; Organic,
+Quick Image, Media First và ClaimManifest vẫn chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

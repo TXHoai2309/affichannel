@@ -1,10 +1,10 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 shadow AC-014-01–15 đạt; AFF-US-015 AC-015-01–18 DONE;
-  M5 chưa mở
+- Trạng thái: Canonical; M4 và AFF-US-015 DONE; M5 AC-M5-01–20 locked,
+  implementation chưa bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
-- Quyết định liên quan: DEC-025, DEC-026, DEC-028
+- Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
 
 ## 1. Nguyên tắc đạt
 
@@ -16,12 +16,12 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 - [x] DEC-026 khóa ContentFormat representation, registry ownership, versioning
   và backfill/default rule trước migration M1.
-- [ ] Additive migration apply thành công trên snapshot giống production.
-- [ ] Project cũ backfill đúng
+- [x] Additive migration 0017 apply thành công trên disposable production-shaped snapshot.
+- [x] Project cũ backfill đúng
   `AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`, giữ Product/current step/artifact.
-- [ ] Backfill chạy lại không đổi kết quả và có exception report.
-- [ ] Mixed old/new rows đọc được trong deployment window.
-- [ ] Legacy Script-linked FactLockRun vẫn xem được và có effective state đúng.
+- [x] Backfill chạy lại không đổi kết quả và có exception report.
+- [x] Mixed old/new rows đọc được trong deployment window.
+- [x] Legacy Script-linked FactLockRun vẫn xem được và có effective state đúng.
 - [ ] Rollback feature flag không làm mất Organic/Manifest data đã ghi.
 
 ### ContentFormat registry contract
@@ -67,7 +67,7 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   `BLOCKED + RENDER_FEATURE_NOT_IMPLEMENTED` khi upstream ready.
 - [x] `AC-014-15`: zero resolver exception/unmapped case và golden regression xanh
   trước khi mở authority-cutover task.
-- [ ] Affiliate thiếu Product tiếp tục bị từ chối ở application service/protected
+- [x] Affiliate thiếu Product tiếp tục bị từ chối ở application service/protected
   API; DB nullability không phải applicability policy.
 - [x] Runtime states không được persist vào `project_step_status.status`, Project
   column hoặc Resolver snapshot table.
@@ -77,11 +77,11 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 - [x] `nextApplicableStep` bỏ qua đúng step `NOT_REQUIRED` theo canonical order.
 - [x] Step bị bỏ qua không được ghi `completed`.
 - [x] M4 shadow không cập nhật `currentStepKey`; Resolver chỉ derive result.
-- [ ] Trong task cutover riêng sau M4, transition cập nhật `currentStepKey` atomic
-  dưới concurrent request.
+- [ ] Future separately approved persisted-cursor synchronization, nếu cần, phải
+  atomic dưới concurrent request; DEC-030 xác nhận operation này không thuộc M5.
 - [x] Direct Project read/shadow observation không mutate workflow current.
-- [ ] Back/forward/refresh hiển thị đúng viewed step và current workflow state.
-- [ ] Resolver change làm downstream gate lại nhưng không tự rollback current step.
+- [x] Back/forward/refresh hiển thị đúng viewed step và current workflow state.
+- [x] Resolver change làm downstream gate lại nhưng không tự rollback current step.
 
 ## 5. Gate D — Script generation input source modes
 
@@ -182,7 +182,15 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
   accessibility/mobile và final fixed-query budget accepted; A–J single/batch,
   M4/M3B/M2C/M1, chín golden suites, full Web và type-check đều PASS.
 
-## 11. Regression suite tối thiểu
+## 11. Gate J — M5 enforcement and cutover
+
+`AC-M5-01–20` và exact production/request/read matrices nằm tại
+`docs/domain-evolution-m5-enforcement-contract.md`. Gate chỉ PASS sau clean
+M1→M5 migration, fresh production zero-blocker preflight, postflight, rollback
+rehearsal, M2/M3B/M4/AFF-US-015 và golden regressions. Contract audit này không
+đánh dấu bất kỳ AC-M5 nào implemented.
+
+## 12. Regression suite tối thiểu
 
 ```text
 type-check
@@ -199,7 +207,7 @@ Voice optional và conditional Fact Lock E2E
 Không gọi live paid provider trong deterministic CI. Live smoke test, nếu cần,
 phải có budget, credential server-only và evidence riêng.
 
-## 12. Evidence và sign-off
+## 13. Evidence và sign-off
 
 Mỗi gate ghi command, commit/migration hash, môi trường, thời gian, kết quả và link
 artifact. Product owner phê duyệt behavior; engineering phê duyệt migration,

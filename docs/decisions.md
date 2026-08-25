@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-24
+- Cập nhật lần cuối: 2026-08-25
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -11,9 +11,31 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-030 — M5 enforces persisted identity without activating future flows
+
+- Trạng thái: Đã chấp nhận ở cấp tài liệu; implementation pending
+- Ngày: 2026-08-25
+- Mở rộng: DEC-025, DEC-026, DEC-028, DEC-029
+
+M5 đặt `content_type`, `creation_path`, `content_format_key` và
+`content_format_version` thành NOT NULL sau fresh zero-blocker preflight. Không có
+DB default, enum hoặc registry table; `product_id` tiếp tục nullable với FK,
+`ON DELETE RESTRICT` và index hiện hữu.
+
+Legacy request shape tiếp tục được chấp nhận và canonicalize thành
+`AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1` trước persistence; legacy all-null
+persisted state bị cấm. Defensive legacy read projection, identity CAS, M2 tooling
+và M4 shadow được giữ qua rollback window. M5 không activate Organic, Quick Image,
+Media First hoặc ClaimManifest và không đồng bộ/xóa `currentStepKey` hay
+`project_step_status`. Chi tiết và `AC-M5-01–20` tại
+`docs/domain-evolution-m5-enforcement-contract.md`.
+
+DEC-030 thay phần shorthand cũ mô tả M5 gộp Organic/Quick Image/Manifest-first.
+Các capability đó vẫn thuộc story kế tiếp theo roadmap.
+
 ## DEC-029 — Adaptive Workflow UI read authority
 
-- Trạng thái: Đã chấp nhận ở cấp tài liệu; chưa UI/runtime cutover
+- Trạng thái: Runtime/presentation cutover DONE qua AFF-US-015
 - Ngày: 2026-08-24
 - Mở rộng: DEC-025, DEC-028
 

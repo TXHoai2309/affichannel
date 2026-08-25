@@ -7,10 +7,10 @@ với các tài liệu tại đây.
 Product/UI Specification v0.8 là **canonical product specification** và đã được
 chấp nhận ở cấp tài liệu qua DEC-025. DEC-026 đã khóa ContentFormat và đóng Phase 0;
 M1/M2/M3 đã hoàn tất cho current Affiliate compatibility baseline. DEC-028 và M4
-runtime shadow đã đạt parity; DEC-029 khóa AFF-US-015 Adaptive Workflow UI contract
-nhưng chưa có UI/authority cutover. Repo chỉ được coi là canonical-activated cho
-future identities sau các regression gate trong `domain-evolution-acceptance.md`
-và explicit authority cutover.
+runtime shadow đã đạt parity; DEC-029/AFF-US-015 presentation cutover đã DONE.
+DEC-030 khóa M5 persisted identity enforcement nhưng runtime/schema chưa implement.
+Repo chỉ được coi là canonical-activated cho future identities sau các story và
+regression gate tương ứng; M5 tự nó không activate future identities.
 
 ## Thứ tự đọc
 
@@ -23,9 +23,10 @@ và explicit authority cutover.
 7. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
 8. [AFF-US-014 / M4 Resolver Shadow Contract](./aff-us-014-m4-applicability-resolver-shadow.md)
 9. [AFF-US-015 / Adaptive Workflow UI Contract](./aff-us-015-adaptive-workflow-ui.md)
-10. [Hệ thống thiết kế](./design-system.md)
-11. [Tiến trình AI agent](./ai-progress.md)
-12. [Nhật ký thay đổi](./changelog.md)
+10. [Domain Evolution M5 Enforcement Contract](./domain-evolution-m5-enforcement-contract.md)
+11. [Hệ thống thiết kế](./design-system.md)
+12. [Tiến trình AI agent](./ai-progress.md)
+13. [Nhật ký thay đổi](./changelog.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 

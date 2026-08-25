@@ -3,8 +3,26 @@
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4 shadow
   runtime đã đạt parity; AFF-US-015 AC-015-01–18 DONE qua Phase 15D. Adaptive
   Workflow là presentation/navigation authority cho supported Affiliate flow;
-  M4 shadow retained và M5 chưa bắt đầu.
+  M4 shadow retained; M5 acceptance contract locked, implementation chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — Domain Evolution M5 enforcement contract
+
+Repository audit khóa DEC-030 và `AC-M5-01–20`. M5 chỉ enforce bốn persisted
+Channel-First identity columns thành NOT NULL sau fresh zero-blocker preflight;
+`product_id` tiếp tục nullable. Legacy request omission vẫn canonicalize thành
+Affiliate baseline, còn legacy all-null persisted state bị cấm. Defensive read
+projection, identity CAS, M2 tooling và M4 shadow được giữ qua rollback window.
+
+Audit xác nhận current create/update đã persist canonical identity, update dùng
+expected-state CAS, ContentFormat registry/domain kiểm tra assignment và Adaptive
+Workflow không dùng persisted current step làm applicability truth. Owner-provided
+production evidence hiện có: 15 legacy Projects đã canonicalize, 0 candidate và
+0 blocking exception; audit không kết nối hoặc mutate Neon.
+
+M5 contract không tạo migration/source change, không activate Organic/Quick Image/
+Media First, không start ClaimManifest/AFF-US-017, không sync legacy workflow và
+không remove shadow. Dependency sau M5 implementation acceptance mới là AFF-US-017.
 
 ## 2026-08-25 — AFF-US-015 Phase 15D final acceptance
 

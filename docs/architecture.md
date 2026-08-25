@@ -1,8 +1,9 @@
 # Kiến trúc AffiChannel
 
-- Trạng thái: Affiliate M1/M2/M3 implemented; M4 contract canonical, shadow pending
+- Trạng thái: Affiliate M1/M2/M3, M4 và AFF-US-015 accepted; M5 contract canonical,
+  runtime/schema pending
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-24
+- Cập nhật lần cuối: 2026-08-25
 
 ## 1. Mục tiêu kiến trúc
 
@@ -16,6 +17,16 @@
 - Không gắn business logic chặt vào Next.js route handler hoặc UI component.
 
 ## 2. Công nghệ hiện tại
+
+### M5 persisted identity enforcement boundary
+
+DEC-030 khóa contract phase cuối của Domain Evolution: bốn Channel-First identity
+columns sẽ thành NOT NULL sau zero-blocker preflight, không DB default/enum/registry
+table; `product_id` vẫn nullable. Legacy request shape tiếp tục canonicalize trước
+persistence; defensive read projection, identity CAS, M2 tooling và M4 shadow được
+giữ qua rollback window. M5 không mở Organic/Quick Image/Media First, không thay
+execution guards và không biến `currentStepKey` thành applicability authority.
+Chi tiết tại `docs/domain-evolution-m5-enforcement-contract.md`.
 
 | Khu vực | Lựa chọn |
 |---|---|
