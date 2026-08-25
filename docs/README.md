@@ -10,8 +10,9 @@ M1/M2/M3 đã hoàn tất cho current Affiliate compatibility baseline. DEC-028 
 runtime shadow đã đạt parity; DEC-029/AFF-US-015 presentation cutover đã DONE.
 DEC-030/M5 persisted identity enforcement đã DONE qua production migration 0018,
 postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 đã PASS
-Phase 17A–17D và đang chờ final acceptance. ClaimManifest foundation vẫn dormant;
-M5 không activate future identities.
+Phase 17A–17E và DONE. ClaimManifest foundation vẫn dormant; AFF-US-018
+Manifest-First Fact Lock là canonical next story nhưng NOT STARTED. M5 không
+activate future identities.
 
 ## Thứ tự đọc
 

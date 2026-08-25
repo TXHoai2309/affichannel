@@ -1,9 +1,24 @@
 # Tiến trình AI agent
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013 và AFF-US-016 DONE;
-  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 Phase 17A–17D PASS,
-  final acceptance pending.
+  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 Phase 17A–17E PASS
+  và DONE; AFF-US-018 Manifest-First Fact Lock NOT STARTED.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — AFF-US-017 Phase 17E final acceptance
+
+Final acceptance PASS cho cumulative ClaimManifest foundation: 17A deterministic
+domain vectors 15/15, 17B 17-column additive persistence/constraint/FK/cascade,
+17C race-safe create/reuse/scoped history, và 17D exact ScriptVersion application
+create + authorized historical reads. ScriptGeneration, ScriptVersion, legacy
+ScriptVersion-first Fact Lock, Applicability/Adaptive A–J, 9/9 golden suites,
+full Web 49 files/459 tests, types, targeted Biome và diff check đều PASS trên
+explicit loopback disposable PostgreSQL; provider và production DB calls bằng 0.
+
+Migration `0018_natural_speed` và accepted `0019_nappy_war_machine` không đổi;
+không có 0020, backfill, public API/UI, FactLockRun/Voice change hoặc future-mode
+activation. AFF-US-017 DONE; AFF-US-018 là canonical next story nhưng vẫn NOT
+STARTED.
 
 ## 2026-08-25 — AFF-US-017 Phase 17D ScriptVersion adapter + application service
 

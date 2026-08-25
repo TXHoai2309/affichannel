@@ -1,6 +1,6 @@
 # AFF-US-017 — ClaimManifest Foundation
 
-- Trạng thái: PHASE 17A–17D PASS; FINAL ACCEPTANCE PENDING
+- Trạng thái: PHASE 17A–17E PASS; DONE
 - Phiên bản: 1.1
 - Ngày: 2026-08-25
 - Quyết định: DEC-031, DEC-017-A–D; làm rõ V08-DEC-011 và V08-DEC-013
@@ -49,7 +49,7 @@ Thứ tự authority khi wording khác nhau:
 | Script fields become nullable provenance for new mode | Not implemented | AFF-US-018 |
 | Legacy Script-linked rows remain readable | Already implemented as current-only mode; dual-mode not implemented | AFF-US-018 |
 | New pending/idempotency uses Manifest fingerprint | Not implemented | AFF-US-018 |
-| ClaimManifest immutable server-built source | Phase 17A–17D implemented; dormant | AFF-US-017 |
+| ClaimManifest immutable server-built source | Phase 17A–17E DONE; dormant | AFF-US-017 |
 
 No V08-DEC-013 requirement is superseded. AFF-US-017 prepares its dependency but
 must not partially expose Manifest-first Fact Lock behavior.
@@ -672,8 +672,8 @@ FactLockRun migration belongs to AFF-US-017.
 ```text
 AFF-US-017
 CLAIMMANIFEST FOUNDATION
-PHASE 17A–17D PASS
-READY FOR FINAL ACCEPTANCE
+PHASE 17A–17E PASS
+DONE
 
 AFF-US-018
 NOT STARTED

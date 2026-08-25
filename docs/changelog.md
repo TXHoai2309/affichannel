@@ -8,6 +8,15 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-017 ClaimManifest Foundation final acceptance
+
+- Hoàn tất Phase 17E contract/architecture/security/regression audit: 17A–17D,
+  legacy ScriptVersion-first Fact Lock, Applicability/Adaptive A–J, 9/9 golden,
+  full Web, types, targeted Biome và diff check đều PASS.
+- Khóa trạng thái AFF-US-017 DONE với immutable dormant ClaimManifest foundation;
+  không backfill, public API/UI, provider/production call, future-mode activation
+  hoặc FactLockRun linkage. AFF-US-018 vẫn NOT STARTED.
+
 ### AFF-US-017 Phase 17D ScriptVersion application service
 
 - Thêm internal `createClaimManifestFromScriptVersion` orchestration từ
