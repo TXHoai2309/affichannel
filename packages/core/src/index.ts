@@ -1,5 +1,6 @@
 export * from "./adaptive-workflow";
 export * from "./applicability";
+export * from "./claim-manifest";
 export * from "./content-format";
 export * from "./fact-lock";
 export * from "./product/product-errors";
