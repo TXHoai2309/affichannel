@@ -1,9 +1,9 @@
 # AFF-US-017 — ClaimManifest Foundation
 
 - Trạng thái: ACCEPTANCE CONTRACT READY; IMPLEMENTATION NOT STARTED
-- Phiên bản: 1.0
+- Phiên bản: 1.1
 - Ngày: 2026-08-25
-- Quyết định: DEC-031; làm rõ V08-DEC-011 và V08-DEC-013
+- Quyết định: DEC-031, DEC-017-A–D; làm rõ V08-DEC-011 và V08-DEC-013
 - Dependency: Domain Evolution M5 DONE → AFF-US-017 → AFF-US-018
 
 ## 1. Mục tiêu và ranh giới
@@ -217,49 +217,191 @@ locator fails the whole build. US17 does not invent a claim category taxonomy;
 current repository semantics need locator + text only. Product association is
 manifest-level for the one-Product MVP.
 
+### DEC-017-C — Same-locator ordinal
+
 `claimKey` is identity within one Manifest, not a cross-Manifest business ID. It
-is deterministic and DB-ID-independent:
+is deterministic and DB-ID-independent. `sameLocatorOrdinal` is a zero-based
+counter scoped to the canonical locator. The builder validates the complete
+snapshot and claim array first, canonicalizes each structured locator with the
+existing canonical JSON serializer, then walks claims in their original validated
+array order. The first claim for one locator gets ordinal `0`, the second gets
+`1`, and so on. It never sorts by text or hash and never uses one global ordinal.
+
+Two claims are in the same locator group only when their complete structured
+canonical locator representations are byte-identical. SCRIPT_VERSION locators
+keep the existing `ClaimOccurrence` fields (`hookKey`, `segmentKey`, `sceneOrder`,
+or the strict CTA/caption shape); no competing string locator format is created.
+
+The exact key projection is:
 
 ```text
 claimKey = "claim_" + SHA-256(canonical JSON of
-  { sourceType, locator, same-locator ordinal, canonical claim text })
+  {
+    sourceType,
+    locator,
+    sameLocatorOrdinal,
+    claimText: canonicalClaimSourceText(validated claim text)
+  })
 ```
 
 Duplicate keys are invalid. Array order is semantic and preserved from the
 validated source. Future multi-element adapters must define deterministic source
 element order, then claim order; database row order is never used.
 
-## 6. Canonicalization and fingerprint
+## 6. Canonicalization, hashes and fingerprint
 
 Use the existing canonical JSON convention: recursively sorted object keys and
 preserved array order. SHA-256 output is lowercase 64-character hexadecimal.
 
-Text storage preserves validated source spelling/case. Fingerprint text
-canonicalization only:
+### DEC-017-B — Canonical text and source text hash
 
-- converts Unicode to NFKC;
-- converts CRLF/CR to LF;
-- trims outer whitespace;
-- does not lowercase or collapse internal whitespace.
+`canonicalClaimSourceText(text)` performs exactly, in order:
+
+1. Unicode NFKC normalization;
+2. CRLF and CR conversion to LF;
+3. leading/trailing whitespace trim on the whole string.
+
+It preserves case, punctuation and every internal whitespace character. It does
+not trim each line, collapse repeated spaces, apply locale-sensitive casing,
+rewrite meaning or paraphrase text.
+
+`claimText` stores the exact text returned by the validated ScriptVersion claim
+schema; it is not replaced with the hashing representation. For one claim,
+`sourceText` is the exact validated output-bearing text selected by its locator:
+
+- selected `hookVariants[].text` for `hook(hookKey)`;
+- `voiceoverSegments[].text` for `voiceover(segmentKey)`;
+- `scenes[].onScreenText` for `scene(sceneOrder)`;
+- `cta.text` for CTA;
+- `caption` for caption.
+
+A missing/null source text for a referenced claim is an invalid locator/source,
+not an empty string. The exact derivative is:
+
+```text
+sourceTextHash = SHA-256(canonicalClaimSourceText(sourceText))
+```
+
+### DEC-017-A — SCRIPT_VERSION source content hash
+
+For a validated current ScriptVersion snapshot, resolve the selected hook first
+and construct this exact projection using existing ScriptDraft v2 field names:
+
+```ts
+type ClaimManifestSourceContentProjection = {
+  selectedHookKey: string;
+  hookVariants: Array<{ key: string; text: string }>; // exactly the selected hook
+  voiceoverSegments: Array<{ key: string; text: string }>;
+  scenes: Array<{ order: number; onScreenText: string | null }>;
+  cta: { text: string };
+  caption: string;
+  claims: Array<{ text: string; occurrence: ClaimOccurrence }>;
+};
+```
+
+`hookVariants` contains exactly one entry, the variant referenced by
+`selectedHookKey`; unselected variants cannot be valid claim surfaces. Array order
+for voiceover segments, scenes and claims is preserved from the validated
+snapshot. Scene duration, visual direction and voiceover linkage are excluded
+because the current scene claim locator resolves only `onScreenText`.
+
+```text
+sourceContentHash = SHA-256(canonical JSON of
+  ClaimManifestSourceContentProjection)
+```
+
+The projection excludes ScriptVersion/ScriptGeneration/workspace/Project/Product
+IDs, revision, timestamps, creator, `claimsStatus`, `claimsSourceRevision`, DB and
+provider metadata. It also excludes language, hashtags, disclosure and every
+other field that the current deterministic structured-claim builder neither
+projects nor resolves as a claim source surface. Source identity/revision remains
+separate provenance in the Manifest source descriptor.
+
+### DEC-017-D — Builder version
+
+The initial server-owned constant is exactly:
+
+```text
+builderVersion = claim-manifest-builder.v1
+```
+
+Clients cannot send or override it. The version MUST bump whenever the same
+canonical source input could produce different ordered claims, claim keys,
+locator representation, source text/content hashes, Manifest fingerprint or
+empty/non-empty result. This includes changes to extraction/projection, ordering,
+locator or text canonicalization, same-locator ordinal assignment, claim-key,
+source-content-hash or fingerprint projections.
+
+Logging, telemetry, error copy, query optimization, tests and internal refactors
+that preserve byte-equivalent projections do not require a bump. Historical
+Manifests retain the builder version used at creation and are never recomputed or
+migrated solely because another builder version exists.
+
+### Exact Manifest fingerprint projection
 
 Locator containment validation may reuse current Fact Lock comparison semantics
 (NFKC, locale-aware lowercase, whitespace collapse) without changing stored text.
 
-Manifest fingerprint input is exactly:
+The exact fingerprint projection is the following canonical JSON object. For
+SCRIPT_VERSION, `source` is the first branch shown; NO_SCRIPT uses the second.
+`domain` is also the Manifest schema-version domain separator, so schema version
+participates once without a duplicate field.
+
+```ts
+{
+  domain: "claim-manifest.v1",
+  builderVersion,
+  workspaceId,
+  projectId,
+  source:
+    | {
+        sourceType: "SCRIPT_VERSION",
+        scriptVersionId,
+        scriptVersionRevision,
+        claimsSourceRevision,
+        sourceContentHash,
+      }
+    | {
+        sourceType: "NO_SCRIPT",
+        sourceSchemaVersion,
+        sourceRevision,
+        elements,
+        sourceContentHash,
+      },
+  productId: productId ?? null,
+  claims: orderedClaims.map((claim) => ({
+    claimKey: claim.claimKey,
+    claimText: canonicalClaimSourceText(claim.claimText),
+    locator: claim.locator,
+    sourceTextHash: claim.sourceTextHash,
+  })),
+}
+```
 
 ```text
-domain = claim-manifest.v1
-builderVersion
-workspaceId
-projectId
-sourceType + complete source descriptor + sourceContentHash
-productId | null
-ordered [{ claimKey, canonical claimText, locator, sourceTextHash }]
+fingerprint = SHA-256(canonical JSON of the projection above)
 ```
 
 Exclude database ID, `createdAt`, creator ID, UI labels, localized presentation
-copy and logs/metrics. Product Facts IDs/revisions/snapshots are excluded because
-they are evaluation dependencies owned by FactLockRun in AFF-US-018.
+copy, logs/metrics, random values, provider output and moving `latest` resolution.
+Product Facts IDs/revisions/snapshots are excluded because they are evaluation
+dependencies owned by FactLockRun in AFF-US-018.
+
+The deterministic dependency chain is therefore:
+
+```text
+validated source projection → sourceContentHash
+validated claim + canonical locator + zero-based locator ordinal
+  → sourceTextHash + claimKey
+ordered canonical claims + exact source descriptor + scope/Product
+  + schema domain + builderVersion
+  → Manifest fingerprint
+```
+
+Same semantic source and builder version always preserve claim order, claim keys,
+source hashes and Manifest fingerprint. A semantic builder change requires a
+builder-version bump. No deterministic identity input may depend on timestamps,
+random UUIDs, database row order, provider output or a moving latest source.
 
 ## 7. Product boundary
 
@@ -487,6 +629,29 @@ wire current Fact Lock before 17E acceptance.
 - `AC-017-20` — clean migration, concurrency, authorization, negative and no-script/productless fixtures PASS.
 - `AC-017-21` — Fact Lock, M4 shadow, Adaptive A–J, nine golden suites, Web tests, types, Biome and diff check PASS.
 - `AC-017-22` — Organic/Quick Image/Media First/no-script Fact Lock/AFF-US-018 remain inactive and no production backfill/provider call occurs.
+
+Deterministic identity clarification criteria:
+
+- `AC-017-C01` — SCRIPT_VERSION `sourceContentHash` uses only the exact validated
+  selected-hook/voiceover/scene-text/CTA/caption/claims projection in section 6.
+- `AC-017-C02` — `canonicalClaimSourceText` applies NFKC, CRLF/CR-to-LF and
+  whole-string trim in that order while preserving internal whitespace and case.
+- `AC-017-C03` — `sourceTextHash`, `sourceContentHash`, `claimKey` digest and
+  Manifest fingerprint use SHA-256 lowercase 64-character hexadecimal output.
+- `AC-017-C04` — same-locator grouping uses byte-identical canonical JSON of the
+  complete structured locator; no alternate string locator identity exists.
+- `AC-017-C05` — ordinal is zero-based, locator-scoped and assigned from original
+  validated claim-array order before claim-key/fingerprint creation.
+- `AC-017-C06` — initial server-owned builder version is exactly
+  `claim-manifest-builder.v1` and cannot be overridden by a client.
+- `AC-017-C07` — every deterministic semantic change listed in DEC-017-D requires
+  a builder-version bump.
+- `AC-017-C08` — byte-equivalent refactors, logging, telemetry, error copy, query
+  optimization and test-only changes do not require a bump.
+- `AC-017-C09` — historical Manifests retain their creation builder version and
+  are not recomputed solely because a later builder exists.
+- `AC-017-C10` — timestamps, random IDs, DB row order, provider output and moving
+  latest-source lookup never participate in deterministic identity.
 
 ## 17. Required implementation test contract
 
