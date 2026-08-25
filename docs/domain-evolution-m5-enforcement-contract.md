@@ -25,11 +25,11 @@ không đồng bộ hay xóa legacy persisted workflow và không remove M4 shad
 |---|---|---|---|---|---|
 | Project DB schema | `packages/db/src/schema/project.ts`; migration `0017_lame_zemo.sql` | Four identity columns nullable; type/path and whole-pair/positive-version checks; Product nullable | Four identity columns NOT NULL; preserve checks, nullable Product/FK/index and no DB default | Change | Constraint fails if preflight misses any null; old null-writing binary is unsafe |
 | Project create | `project-service.ts#createProject`; `project-repository.ts#createProjectBundle` | Legacy request omission and explicit baseline request both persist canonical identity | Keep request compatibility and canonical persistence; no null identity write | Keep/harden evidence | Rejecting legacy shape would break clients without improving persisted invariant |
-| Project update | `project-service.ts#updateProject`; `updateProjectBundle` | Classifies request and persisted identity; set/preserve strategy with identity CAS | Preserve canonical identity and CAS; legacy omission remains compatible, never clears identity | Keep | Removing expected-state CAS permits concurrent identity overwrite |
+| Project update | `project-service.ts#updateProject`; `updateProjectBundle` | Classifies request and persisted identity; set/preserve strategy with identity CAS | Preserve exact existing canonical identity when identity is omitted, including known deprecated refs; reject newly assigned deprecated refs; never auto-upgrade | Keep | Removing expected-state CAS permits concurrent identity overwrite |
 | Project read projection | `project-repository.ts#projectIdentityReadModel` | Deterministic all-null + Product projects to baseline with `isLegacyProjection=true` | Retain defensively through rollback/stability window; unreachable on M5 DB | Keep until M6 | Early removal weakens rollback/recovery reads |
 | Project list/details | `listProjectItems`, `findProjectDetails` | Affiliate-oriented Product inner join; identity read model shared | No activation/generalization in M5 | Keep | Changing joins would accidentally open productless behavior |
 | Persisted classifier | `legacy-affiliate-compatibility.ts#classifyLegacyProject` | Exact precedence for candidate/canonical/exceptions | Keep for preflight, defensive reads and recovery evidence | Keep | Deletion loses deterministic diagnosis |
-| ContentFormat resolver | `content-format/registry.ts`; `resolver.ts` | Server registry; `(key,version)` identity; assignment/path validation; unsupported reads | Keep registry/domain validation; DB enforces structure, not registry membership | Keep | DB cannot detect unknown/deprecated/path mismatch without unwanted registry table |
+| ContentFormat resolver | `content-format/registry.ts`; `resolver.ts` | Server registry; `(key,version)` identity; `resolved | deprecated | unsupported` read union; assignment/path validation | Active known refs may be assigned; known deprecated refs remain readable but cannot be newly assigned; unknown/invalid refs are unsupported | Keep | DB cannot encode registry lifecycle or path compatibility without an unwanted registry table |
 | M3 write policy | `project-write-contract.ts#classifyProjectWriteIdentity` | Baseline canonical writable; future identities return `CHANNEL_FIRST_IDENTITY_NOT_ACTIVE` | Retain same writable set; legacy request maps to baseline canonical identity | Keep; rename phase-local symbols only if implementation requires | Broadening policy activates future flows unintentionally |
 | M2 tooling | `backfill-legacy-affiliate-projects.ts`; `legacy-affiliate-inventory.ts` | Fail-closed authority, keyset scan, deterministic CAS, reports/checkpoints | Retain as maintenance/recovery and preflight evidence; no heuristic M5 repair | Keep | Removing accepted tooling weakens recovery; rerunning apply without blockers should update zero |
 | Adaptive Workflow | `project-workflow-read-service.ts`; core adaptive mapper; Web mapper | Resolver-derived presentation/navigation authority, read-only | Preserve exactly | Keep | Reverting to persisted cursor regresses AFF-US-015 |
@@ -82,19 +82,24 @@ with `product_id = NULL` without making those writes active in M5.
 | Affiliate/Scripted/Standard v1 + Product | YES | Current canonical baseline |
 | Affiliate identity + missing Product | NO at domain/write level | DB remains structurally nullable; defensive policy required |
 | Organic canonical identity + no Product | Schema-compatible, production write NO | Later activation story |
-| Unknown/deprecated ContentFormat assignment | NO for write | Registry/domain reject; defensive read remains |
+| Known active ContentFormat assignment | YES when current write policy and CreationPath allow | Registry/domain validation |
+| Known deprecated ContentFormat already pinned | YES as persisted/readable state; NO as a new assignment | Report separately; no auto-upgrade |
+| Unknown/unsupported ContentFormat assignment | NO for write | Registry/domain reject; defensive unsupported read remains |
 | Format/path mismatch | NO for write | Domain reject; preflight blocker |
 
 ### Request behavior after M5
 
 | Request | Result |
 |---|---|
-| Legacy shape with no identity fields | Accepted and canonicalized to current Affiliate baseline |
+| Legacy shape with no identity fields on create | Accepted and canonicalized to current Affiliate baseline |
+| Identity omitted on update of a canonical Project | Accepted; preserve exact persisted identity under CAS |
 | Explicit Affiliate baseline identity | Accepted explicitly |
+| Explicit known deprecated ContentFormat | Controlled reject `DEPRECATED_CONTENT_FORMAT`; not a future-identity error |
+| Explicit unknown/unsupported ContentFormat | Controlled typed reject |
 | Organic canonical identity | Controlled reject `CHANNEL_FIRST_IDENTITY_NOT_ACTIVE` |
 | Quick Image or Media First | Controlled reject `CHANNEL_FIRST_IDENTITY_NOT_ACTIVE` |
 | Partial identity/ref | Controlled typed reject |
-| Invalid/unknown/deprecated/mismatched format | Controlled typed reject |
+| Invalid version or format/path mismatch | Controlled typed reject |
 
 Legacy request compatibility is not permission to persist legacy null state.
 
@@ -102,25 +107,50 @@ Legacy request compatibility is not permission to persist legacy null state.
 
 | Persisted row | Result |
 |---|---|
-| Canonical complete | Exact identity, `isLegacyProjection=false` |
+| Canonical complete with known active format | Exact identity, `resolution=resolved`, `isLegacyProjection=false` |
+| Canonical complete with known deprecated format | Readable with exact pinned ref, `resolution=deprecated`; no auto-upgrade |
 | All-null + Product encountered on pre-M5/rollback snapshot | Defensive baseline projection, `isLegacyProjection=true` |
 | All-null without Product | Fail closed as `LEGACY_PROJECT_WITHOUT_PRODUCT` |
-| Partial identity | Unsupported/fail-closed with typed reason |
-| Unknown/invalid ContentFormat | Preserve raw ref, `resolution=unsupported`; no fallback latest |
+| Partial ContentFormat ref | `resolution=unsupported`, `PARTIAL_CONTENT_FORMAT_REF` |
+| Invalid ContentFormat version | `resolution=unsupported`, `INVALID_CONTENT_FORMAT_VERSION` |
+| Unknown complete ContentFormat ref | Preserve raw ref, `resolution=unsupported`; no fallback latest |
 
 ## 6. Invalid-state policy
 
 After M5, DB constraints make null/partial identity, invalid ContentType,
 invalid CreationPath and non-positive/null format version impossible through the
-schema. Domain validation must still defend all of them, plus unknown/deprecated
-format, format/path mismatch and Affiliate missing Product. Direct constraint
+schema. Domain validation must still defend all of them, plus unknown/unsupported
+format, format/path mismatch and Affiliate missing Product. Assignment validation
+must reject a known deprecated ref, but persisted-read classification must not call
+that Project invalid merely because its pinned ref is deprecated. Direct constraint
 errors must not leak to UI.
+
+The ContentFormat resolution union remains exactly:
+
+```text
+resolved | deprecated | unsupported
+```
+
+Never introduce `unresolved`. Registry/domain code—not DB constraints—owns active,
+deprecated and unsupported lifecycle resolution.
 
 API keeps `INVALID_PROJECT_WRITE_IDENTITY` as the public typed envelope. Existing
 reasons remain stable, including `CHANNEL_FIRST_IDENTITY_NOT_ACTIVE` and
 `PROJECT_IDENTITY_CHANGED_DURING_UPDATE`. M5 does not rename the accepted M2
 `CONTENT_FORMAT_CREATION_PATH_MISMATCH` classifier reason or M3 assignment reason
-`CONTENT_FORMAT_PATH_MISMATCH`.
+`CONTENT_FORMAT_PATH_MISMATCH`. `DEPRECATED_CONTENT_FORMAT` remains the specific
+new-assignment rejection and must not be replaced by
+`CHANNEL_FIRST_IDENTITY_NOT_ACTIVE`.
+
+### Preserved update and CAS rule
+
+An unrelated update that omits identity preserves the exact persisted canonical
+identity under the existing expected-state CAS, including a known deprecated
+ContentFormat. Read/archive and other identity-preserving operations remain
+allowed. Any request that explicitly assigns or changes to a deprecated ref is a
+new assignment and is rejected. M5 never rewrites the ref to a newer version and
+never silently upgrades a Project. CAS remains required for both preserve and set
+strategies.
 
 ## 7. Production preflight and rollout
 
@@ -133,16 +163,20 @@ blocking exceptions = 0
 ```
 
 Do not touch production during contract/audit. Immediately before migration, a
-fresh read-only, fail-closed preflight must report total Projects and exact counts
-for complete canonical, all-null, partial, invalid type/path/version, unresolved
-format, Affiliate missing Product and format/path mismatch. Any blocker or
-unclassified row stops deployment; M5 performs no heuristic repair.
+fresh read-only, fail-closed preflight must report total Projects and exact counts.
+Blocking categories are all-null identity, partial identity, invalid ContentType,
+invalid CreationPath, invalid ContentFormat version, unknown/unsupported
+ContentFormat, format/path mismatch, Affiliate missing Product and unclassified
+state. Known deprecated-but-readable refs are reported separately and are not an
+automatic blocker unless a separately approved migration decision says otherwise.
+M5 performs no heuristic repair or format upgrade.
 
 Safe rollout order:
 
 1. validate clean M1→M5 migration and rollback rehearsal on disposable/snapshot DB;
 2. deploy/verify an application binary that canonicalizes legacy request shapes,
-   rejects invalid/future identities and preserves CAS;
+   rejects invalid/future/new-deprecated assignments, permits exact deprecated
+   identity preservation on unrelated updates and preserves CAS;
 3. run production zero-blocker preflight under controlled write conditions;
 4. apply one explicit reviewed migration adding four NOT NULL constraints;
 5. run postflight counts, canonical reads/writes, legacy-request canonicalization,
@@ -187,15 +221,15 @@ rollback migration only when operationally necessary.
 - `AC-M5-06` — no application or direct-schema path can create persisted legacy null identity.
 - `AC-M5-07` — legacy request omission policy is explicit and canonicalizes before persistence.
 - `AC-M5-08` — defensive legacy read projection is retained through the M5 rollback window.
-- `AC-M5-09` — partial/invalid/unsupported/conflicting identity fails closed with typed errors.
+- `AC-M5-09` — partial/invalid/unsupported/conflicting identity fails closed with typed errors; known deprecated persisted refs remain readable while new assignment is rejected.
 - `AC-M5-10` — Organic, Quick Image and Media First remain inactive production writes.
 - `AC-M5-11` — Resolver/Adaptive authority remains independent of persisted current step.
 - `AC-M5-12` — authorization and domain execution guards, CAS and idempotency remain authoritative.
 - `AC-M5-13` — M4 shadow remains active; zero exception/unmapped/mismatch regression passes.
-- `AC-M5-14` — fresh production preflight covers every required count and stops on any blocker.
+- `AC-M5-14` — fresh production preflight covers every required count, reports deprecated refs separately and stops on any actual blocker.
 - `AC-M5-15` — rollout follows application-compatible → preflight → explicit migration → postflight; no startup migration.
 - `AC-M5-16` — rollback to a proven M3B-or-newer binary works without null writes/data rewriting.
-- `AC-M5-17` — postflight reports zero null/partial/invalid rows and proves canonical write/read behavior.
+- `AC-M5-17` — postflight reports zero null/partial/invalid/unsupported blockers, reports deprecated refs separately and proves canonical write/read behavior.
 - `AC-M5-18` — successful M5 gate is the completion boundary for AFF-US-013.
 - `AC-M5-19` — successful M5 gate is the completion boundary for AFF-US-016 while approved adapters may remain.
 - `AC-M5-20` — no ClaimManifest/FactLock manifest schema or runtime starts before M5 is accepted.
@@ -204,7 +238,9 @@ rollback migration only when operationally necessary.
 
 Later implementation must cover: clean DB migration; M1→M5 sequence; production-
 shaped zero-blocker preflight; legacy and explicit canonical writes; partial/
-invalid/future rejection; legacy-request canonical persistence; CAS concurrency;
+invalid/future/deprecated-assignment rejection; synthetic known-deprecated readable
+and identity-preserving update fixtures; legacy-request canonical persistence;
+CAS concurrency;
 M3B regression; M2 scan with zero candidates/exceptions; Adaptive A–J and M4
 shadow; AFF-US-015 presentation; Productless Organic schema fixture proving
 `product_id=NULL` remains representable; postflight and rollback rehearsal. Use
