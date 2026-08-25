@@ -24,10 +24,10 @@ export const project = pgTable(
 		productId: text("product_id").references(() => product.id, {
 			onDelete: "restrict",
 		}),
-		contentType: text("content_type"),
-		creationPath: text("creation_path"),
-		contentFormatKey: text("content_format_key"),
-		contentFormatVersion: integer("content_format_version"),
+		contentType: text("content_type").notNull(),
+		creationPath: text("creation_path").notNull(),
+		contentFormatKey: text("content_format_key").notNull(),
+		contentFormatVersion: integer("content_format_version").notNull(),
 		currentStepKey: text("current_step_key").notNull(),
 		createdByUserId: text("created_by_user_id")
 			.notNull()

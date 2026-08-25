@@ -3,8 +3,21 @@
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4 shadow
   runtime đã đạt parity; AFF-US-015 AC-015-01–18 DONE qua Phase 15D. Adaptive
   Workflow là presentation/navigation authority cho supported Affiliate flow;
-  M4 shadow retained; M5 acceptance contract locked, implementation chưa bắt đầu.
+  M4 shadow retained; M5A disposable enforcement validation READY; production
+  preflight và production migration chưa chạy.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — Domain Evolution M5A enforcement readiness
+
+Đã thêm read-only bounded M5 preflight, migration `0018_natural_speed` đặt NOT
+NULL cho bốn Project identity columns, postflight introspection và disposable
+compatibility harness. Clean 0016→0017→0018, dirty STOP, atomic failure,
+`product_id` nullable, M3B trước/sau migration, M2C, M4 shadow, Adaptive A–J và
+chín golden suites đều PASS trên PostgreSQL loopback riêng.
+
+Production/Neon connection và mutation đều bằng 0; production preflight chưa
+chạy, migration chưa apply production. M5A chỉ READY cho production preflight,
+không đánh dấu full M5/AFF-US-013/AFF-US-016 DONE và không bắt đầu AFF-US-017.
 
 ## 2026-08-25 — Domain Evolution M5 enforcement contract
 

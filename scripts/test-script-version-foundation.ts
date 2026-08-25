@@ -129,6 +129,10 @@ async function createFixtureProject(
 		workspaceId: actor.workspaceId,
 		name: `US009 Phase1 Project ${label}`,
 		productId,
+		contentType: "AFFILIATE",
+		creationPath: "SCRIPTED",
+		contentFormatKey: "SCRIPTED_STANDARD",
+		contentFormatVersion: 1,
 		currentStepKey: "product",
 		createdByUserId: actor.userId,
 	});

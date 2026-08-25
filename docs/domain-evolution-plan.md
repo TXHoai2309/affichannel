@@ -1,7 +1,7 @@
 # Kế hoạch Domain Evolution v0.8
 
 - Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; AFF-US-015 DONE;
-  M5 acceptance contract locked, implementation chưa bắt đầu
+  M5A disposable enforcement READY; production preflight/migration chưa chạy
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -268,6 +268,11 @@ DEC-030.
    authority và các execution guard hiện hữu được giữ nguyên.
 5. Rollout theo application-compatible → preflight → explicit migration →
    postflight; bất kỳ legacy/partial/invalid row nào đều STOP, không heuristic fix.
+
+M5A đã implement read-only preflight, migration `0018_natural_speed`, postflight
+và disposable compatibility evidence. Đây là readiness gate cho production
+preflight, không phải production cutover: M5B vẫn phải chạy fresh production
+read-only preflight và được phê duyệt riêng trước mọi migration apply.
 
 ### M6 — Contract cleanup có điều kiện
 

@@ -140,6 +140,10 @@ try {
 			workspaceId: workspaceAId,
 			name: `${prefix} Project ${index + 1}`,
 			productId: fixture.productId,
+			contentType: "AFFILIATE",
+			creationPath: "SCRIPTED",
+			contentFormatKey: "SCRIPTED_STANDARD",
+			contentFormatVersion: 1,
 			currentStepKey: "product",
 			createdByUserId: userAId,
 		});

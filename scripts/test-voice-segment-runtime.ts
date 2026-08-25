@@ -168,6 +168,10 @@ try {
 		workspaceId: actor.workspaceId,
 		name: "AFF-US-012 Runtime Project",
 		productId: fixture.productId,
+		contentType: "AFFILIATE",
+		creationPath: "SCRIPTED",
+		contentFormatKey: "SCRIPTED_STANDARD",
+		contentFormatVersion: 1,
 		currentStepKey: "voice",
 		createdByUserId: actor.userId,
 	});
@@ -238,10 +242,7 @@ try {
 		);
 	const firstPromise = request("runtime-race-a-1");
 	const secondPromise = request("runtime-race-b-1");
-	const raceResultsPromise = Promise.allSettled([
-		firstPromise,
-		secondPromise,
-	]);
+	const raceResultsPromise = Promise.allSettled([firstPromise, secondPromise]);
 	await bothBeforeInsert;
 	releaseBeforeInsert();
 	await providerStarted;
@@ -268,12 +269,14 @@ try {
 			? "runtime-race-b-1"
 			: "runtime-race-a-1";
 	const raceArtifacts = await db
-		.select({ id: voiceSegmentArtifact.id, idempotencyKey: voiceSegmentArtifact.idempotencyKey })
+		.select({
+			id: voiceSegmentArtifact.id,
+			idempotencyKey: voiceSegmentArtifact.idempotencyKey,
+		})
 		.from(voiceSegmentArtifact)
 		.where(eq(voiceSegmentArtifact.workspaceId, actor.workspaceId));
 	assert(
-		raceArtifacts.length === 1 &&
-			raceArtifacts[0]?.id === first.artifact.id,
+		raceArtifacts.length === 1 && raceArtifacts[0]?.id === first.artifact.id,
 		"Concurrent runtime did not persist exactly one winning artifact.",
 	);
 	assert(

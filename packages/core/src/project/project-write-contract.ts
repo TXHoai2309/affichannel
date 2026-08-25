@@ -251,14 +251,18 @@ export function classifyProjectWriteIdentity(
  */
 export function classifyPersistedProjectIdentity(
 	state: PersistedProjectIdentityState,
+	registry: ContentFormatRegistry = INITIAL_CONTENT_FORMAT_REGISTRY,
 ): PersistedProjectIdentityClassification {
-	const classification = classifyLegacyProject({
-		contentType: state.contentType,
-		creationPath: state.creationPath,
-		contentFormatKey: state.contentFormatKey,
-		contentFormatVersion: state.contentFormatVersion,
-		hasProduct: state.productId !== null,
-	});
+	const classification = classifyLegacyProject(
+		{
+			contentType: state.contentType,
+			creationPath: state.creationPath,
+			contentFormatKey: state.contentFormatKey,
+			contentFormatVersion: state.contentFormatVersion,
+			hasProduct: state.productId !== null,
+		},
+		registry,
+	);
 
 	if (classification.kind === "candidate") {
 		return {

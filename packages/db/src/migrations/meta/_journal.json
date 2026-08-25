@@ -127,6 +127,13 @@
       "when": 1787415718474,
       "tag": "0017_lame_zemo",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1787628473478,
+      "tag": "0018_natural_speed",
+      "breakpoints": true
     }
   ]
 }

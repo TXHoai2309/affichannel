@@ -247,9 +247,19 @@ shadow; AFF-US-015 presentation; Productless Organic schema fixture proving
 only explicit disposable/test DB authority until separately approved production
 preflight/apply. No live paid provider is required.
 
+M5A implementation evidence (2026-08-25): migration `0018_natural_speed`, bounded
+read-only preflight, dirty STOP/atomic failure, postflight introspection,
+productless schema fixture and pre/post-M5 binary regressions PASS on the isolated
+loopback PostgreSQL database `affichannel_m5a_validation`. Production/Neon
+preflight is NOT RUN and the migration is NOT APPLIED outside disposable testing.
+Repository migrations are forward-only; constraint rollback requires a separately
+reviewed forward migration. A pre-M3B null-writing binary is not a permitted
+rollback target.
+
 ## 11. Story completion boundary
 
-This document makes M5 implementation-ready; it does not implement or accept M5.
+M5A makes enforcement technically ready for production preflight; it does not
+accept full M5 or authorize production migration.
 Only after `AC-M5-01–20` pass may docs mark:
 
 ```text

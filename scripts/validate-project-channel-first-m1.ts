@@ -20,6 +20,7 @@ const TEST_DATABASE_CONFIRM_ENV = "AFFICHANNEL_M1_TEST_DATABASE_CONFIRM";
 const TEST_DATABASE_CONFIRM_VALUE = "DISPOSABLE_DB_CONFIRMED";
 const MIGRATIONS_FOLDER = resolve(process.cwd(), "packages/db/src/migrations");
 const M1_LAST_MIGRATION_INDEX = 16;
+const M1_MIGRATION_INDEX = 17;
 const GOLDEN_SUITES = [
 	["project-auth", "scripts/test-project-authorization.ts"],
 	["dashboard", "scripts/test-dashboard-overview.ts"],
@@ -97,17 +98,17 @@ function requireTestDatabase(): ValidatedTestDatabase {
 	return { url, host: parsedUrl.host };
 }
 
-async function createPreM1MigrationFolder(): Promise<string> {
+async function createM1MigrationFolderThrough(
+	lastIndex: number,
+): Promise<string> {
 	const journalPath = join(MIGRATIONS_FOLDER, "meta", "_journal.json");
 	const journal = JSON.parse(
 		await readFile(journalPath, "utf8"),
 	) as MigrationJournal;
-	const entries = journal.entries.filter(
-		(entry) => entry.idx <= M1_LAST_MIGRATION_INDEX,
-	);
-	if (entries.length !== M1_LAST_MIGRATION_INDEX + 1) {
+	const entries = journal.entries.filter((entry) => entry.idx <= lastIndex);
+	if (entries.length !== lastIndex + 1) {
 		throw new Error(
-			`Expected migrations 0000 through 0016, found ${entries.length} entries.`,
+			`Expected migrations 0000 through ${String(lastIndex).padStart(4, "0")}, found ${entries.length} entries.`,
 		);
 	}
 
@@ -186,20 +187,27 @@ async function applyM1Migrations(target: ValidatedTestDatabase): Promise<void> {
 	const pool = createNodePostgresPool(target.url);
 	const database = drizzle(pool);
 	let beforeM1Folder: string | undefined;
+	let throughM1Folder: string | undefined;
 	try {
 		await printDatabaseIdentity(database, target.host);
-		beforeM1Folder = await createPreM1MigrationFolder();
+		beforeM1Folder = await createM1MigrationFolderThrough(
+			M1_LAST_MIGRATION_INDEX,
+		);
 		await migrate(database, { migrationsFolder: beforeM1Folder });
 		await assertMigrationCount(database, 17, "Migration state 0016");
 		console.log("Migration state 0016: PASS");
 
-		await migrate(database, { migrationsFolder: MIGRATIONS_FOLDER });
+		throughM1Folder = await createM1MigrationFolderThrough(M1_MIGRATION_INDEX);
+		await migrate(database, { migrationsFolder: throughM1Folder });
 		await assertMigrationCount(database, 18, "Migration 0017 apply");
 		console.log("Migration 0017 apply: PASS");
 	} finally {
 		await pool.end();
 		if (beforeM1Folder) {
 			await rm(beforeM1Folder, { recursive: true, force: true });
+		}
+		if (throughM1Folder) {
+			await rm(throughM1Folder, { recursive: true, force: true });
 		}
 	}
 }
@@ -253,7 +261,9 @@ function resolvePnpmInvocation(args: string[]): PnpmInvocation {
 	if (process.platform === "win32") {
 		const safeArgument = /^[A-Za-z0-9_./:@-]+$/;
 		if (args.some((argument) => !safeArgument.test(argument))) {
-			throw new Error("REFUSED: unsafe argument passed to Windows pnpm runner.");
+			throw new Error(
+				"REFUSED: unsafe argument passed to Windows pnpm runner.",
+			);
 		}
 		return {
 			command: process.env.ComSpec ?? "cmd.exe",
@@ -272,10 +282,7 @@ function resolvePnpmInvocation(args: string[]): PnpmInvocation {
 function redactChildOutput(output: string, testDatabaseUrl: string): string {
 	return output
 		.replaceAll(testDatabaseUrl, "[REDACTED_M1_TEST_DATABASE_URL]")
-		.replace(
-			/postgres(?:ql)?:\/\/[^\s'"`]+/giu,
-			"[REDACTED_POSTGRES_URL]",
-		);
+		.replace(/postgres(?:ql)?:\/\/[^\s'"`]+/giu, "[REDACTED_POSTGRES_URL]");
 }
 
 function runPnpmChild(

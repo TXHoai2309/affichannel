@@ -187,6 +187,10 @@ async function insertFixture(fixture: Fixture, label: string) {
 		workspaceId: fixture.actor.workspaceId,
 		name: `AFF-US-011 Project ${label}`,
 		productId: fixture.productId,
+		contentType: "AFFILIATE",
+		creationPath: "SCRIPTED",
+		contentFormatKey: "SCRIPTED_STANDARD",
+		contentFormatVersion: 1,
 		currentStepKey: "voice",
 		createdByUserId: fixture.actor.userId,
 	});

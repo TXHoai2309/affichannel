@@ -260,6 +260,10 @@ async function insertFixture(fixture: typeof fixtureA, suffix: string) {
 		workspaceId: workspaceAId,
 		name: `${prefix} Project ${suffix}`,
 		productId: fixture.productId,
+		contentType: "AFFILIATE",
+		creationPath: "SCRIPTED",
+		contentFormatKey: "SCRIPTED_STANDARD",
+		contentFormatVersion: 1,
 		currentStepKey: "fact-lock",
 		createdByUserId: userAId,
 	});

@@ -118,6 +118,10 @@ try {
 		workspaceId: actor.workspaceId,
 		name: "AFF-US-012 Foundation Project",
 		productId: fixture.productId,
+		contentType: "AFFILIATE",
+		creationPath: "SCRIPTED",
+		contentFormatKey: "SCRIPTED_STANDARD",
+		contentFormatVersion: 1,
 		currentStepKey: "voice",
 		createdByUserId: actor.userId,
 	});

@@ -8,6 +8,17 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Domain Evolution M5A enforcement readiness
+
+- Thêm read-only M5 preflight với blocker taxonomy, bounded keyset scan, explicit
+  fail-closed database authority và sanitized JSON evidence.
+- Thêm migration `0018_natural_speed` đặt NOT NULL cho bốn Channel-First identity
+  columns; không backfill/default và vẫn giữ `product_id` nullable.
+- Thêm disposable clean/dirty migration, postflight introspection, M3B binary,
+  productless schema và regression fixtures tương thích schema M5.
+- M5A READY cho production preflight; Neon preflight/migration chưa chạy và full
+  M5 chưa được đánh dấu DONE.
+
 ### Domain Evolution M5 enforcement contract
 
 - Thêm DEC-030 và `AC-M5-01–20` cho persisted Channel-First identity enforcement,
