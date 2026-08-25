@@ -8,8 +8,12 @@ import { db, product, project, scriptVersion } from "@affichannel/db";
 import { and, eq, isNull } from "drizzle-orm";
 
 import {
+	type ClaimManifestHistoryCursor,
+	type ClaimManifestHistoryPage,
 	type CreateOrReuseClaimManifestResult,
 	createOrReuseClaimManifestInTransaction,
+	getClaimManifestById as getClaimManifestByIdFromRepository,
+	listClaimManifestsForProject as listClaimManifestsForProjectFromRepository,
 } from "./claim-manifest-repository";
 import type { WorkspaceActor } from "./workspace";
 
@@ -43,6 +47,20 @@ export type CreateClaimManifestFromScriptVersionInput = Readonly<{
 	projectId: string;
 	scriptVersionId: string;
 	expectedScriptVersionRevision: number;
+}>;
+
+export type GetClaimManifestInput = Readonly<{
+	actor: WorkspaceActor;
+	projectId: string;
+	claimManifestId: string;
+}>;
+
+export type ListClaimManifestsForProjectInput = Readonly<{
+	actor: WorkspaceActor;
+	projectId: string;
+	direction: "newest_first" | "oldest_first";
+	limit: number;
+	cursor?: ClaimManifestHistoryCursor;
 }>;
 
 function assertServiceInput(
@@ -96,6 +114,47 @@ function activeScriptedAffiliateIdentityResult(record: {
 		return "product_required";
 	}
 	return "unsupported";
+}
+
+async function assertProjectReadAccess(
+	actor: WorkspaceActor,
+	projectId: string,
+): Promise<void> {
+	const [accessibleProject] = await db
+		.select({ id: project.id })
+		.from(project)
+		.where(
+			and(
+				eq(project.id, projectId),
+				eq(project.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1);
+	if (!accessibleProject) {
+		throw new ClaimManifestServiceError("CLAIM_MANIFEST_PROJECT_NOT_FOUND");
+	}
+}
+
+export async function getClaimManifest(input: GetClaimManifestInput) {
+	await assertProjectReadAccess(input.actor, input.projectId);
+	return getClaimManifestByIdFromRepository({
+		workspaceId: input.actor.workspaceId,
+		projectId: input.projectId,
+		claimManifestId: input.claimManifestId,
+	});
+}
+
+export async function listClaimManifestsForProject(
+	input: ListClaimManifestsForProjectInput,
+): Promise<ClaimManifestHistoryPage> {
+	await assertProjectReadAccess(input.actor, input.projectId);
+	return listClaimManifestsForProjectFromRepository({
+		workspaceId: input.actor.workspaceId,
+		projectId: input.projectId,
+		direction: input.direction,
+		limit: input.limit,
+		cursor: input.cursor,
+	});
 }
 
 export async function createClaimManifestFromScriptVersion(

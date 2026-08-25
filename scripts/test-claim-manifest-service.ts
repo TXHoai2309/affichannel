@@ -28,8 +28,12 @@ for (const name of [
 ])
 	Reflect.deleteProperty(process.env, name);
 
-const { ClaimManifestServiceError, createClaimManifestFromScriptVersion } =
-	await import("../packages/api/src/services/claim-manifest-service.ts");
+const {
+	ClaimManifestServiceError,
+	createClaimManifestFromScriptVersion,
+	getClaimManifest,
+	listClaimManifestsForProject,
+} = await import("../packages/api/src/services/claim-manifest-service.ts");
 const { ClaimManifestRepositoryError } = await import(
 	"../packages/api/src/services/claim-manifest-repository.ts"
 );
@@ -341,6 +345,178 @@ try {
 			otherActor.manifest.id === first.manifest.id &&
 			otherActor.manifest.createdByUserId === happy.userId,
 		"Authorized reuse must preserve first-creation provenance.",
+	);
+	const authorizedGet = await getClaimManifest({
+		actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+		projectId: happy.projectId,
+		claimManifestId: first.manifest.id,
+	});
+	assert(
+		authorizedGet?.id === first.manifest.id,
+		"Authorized application get must return the scoped Manifest.",
+	);
+
+	const replacementHappyProduct = await seedProduct(
+		pool,
+		happy,
+		"happy-replacement",
+	);
+	const secondSnapshot = snapshot("happy-second");
+	await pool.query("update project set product_id = $1 where id = $2", [
+		replacementHappyProduct,
+		happy.projectId,
+	]);
+	await pool.query(
+		"update script_version set revision = 2, editable_snapshot_json = $1 where id = $2",
+		[JSON.stringify(secondSnapshot), happy.scriptVersionId],
+	);
+	const second = await createClaimManifestFromScriptVersion({
+		...serviceInput(happy),
+		expectedScriptVersionRevision: 2,
+	});
+	const thirdSnapshot = snapshot("happy-third");
+	await pool.query(
+		"update script_version set revision = 3, editable_snapshot_json = $1 where id = $2",
+		[JSON.stringify(thirdSnapshot), happy.scriptVersionId],
+	);
+	const third = await createClaimManifestFromScriptVersion({
+		...serviceInput(happy),
+		expectedScriptVersionRevision: 3,
+	});
+	assert(
+		second.created && third.created,
+		"Distinct exact source revisions must create history rows.",
+	);
+
+	const sameWorkspaceReadProject = await seedProject({
+		pool,
+		workspace: happy,
+		label: "read-other-project",
+		productId: replacementHappyProduct,
+	});
+	const sameWorkspaceReadSource = await seedScriptVersion({
+		pool,
+		workspace: happy,
+		projectId: sameWorkspaceReadProject,
+		label: "read-other-project",
+		snapshot: snapshot("read-other-project"),
+	});
+	const sameWorkspaceOtherManifest = await createClaimManifestFromScriptVersion(
+		{
+			actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+			projectId: sameWorkspaceReadProject,
+			scriptVersionId: sameWorkspaceReadSource,
+			expectedScriptVersionRevision: 1,
+		},
+	);
+	const foreignReadProject = await seedValidProject(pool, "read-foreign");
+	const foreignManifest = await createClaimManifestFromScriptVersion(
+		serviceInput(foreignReadProject),
+	);
+
+	await expectServiceError(
+		"read Project in another workspace",
+		"CLAIM_MANIFEST_PROJECT_NOT_FOUND",
+		() =>
+			getClaimManifest({
+				actor: {
+					workspaceId: foreignReadProject.workspaceId,
+					userId: foreignReadProject.userId,
+				},
+				projectId: happy.projectId,
+				claimManifestId: first.manifest.id,
+			}),
+	);
+	assert(
+		(await getClaimManifest({
+			actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+			projectId: sameWorkspaceReadProject,
+			claimManifestId: first.manifest.id,
+		})) === null,
+		"Wrong-Project Manifest read must be a non-enumerating null.",
+	);
+	assert(
+		(await getClaimManifest({
+			actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+			projectId: happy.projectId,
+			claimManifestId: `missing-${randomUUID()}`,
+		})) === null,
+		"Missing Manifest read must use the same nullable semantics.",
+	);
+
+	const expectedHappyManifestIds = new Set([
+		first.manifest.id,
+		second.manifest.id,
+		third.manifest.id,
+	]);
+	const authorizedList = await listClaimManifestsForProject({
+		actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+		projectId: happy.projectId,
+		direction: "oldest_first",
+		limit: 10,
+	});
+	assert(
+		authorizedList.items.length === 3 &&
+			authorizedList.items.every((item) =>
+				expectedHappyManifestIds.has(item.id),
+			) &&
+			!authorizedList.items.some(
+				(item) =>
+					item.id === sameWorkspaceOtherManifest.manifest.id ||
+					item.id === foreignManifest.manifest.id,
+			),
+		"Authorized list must contain only the requested Project history.",
+	);
+
+	const pagedIds: string[] = [];
+	let cursor: { createdAt: string; id: string } | undefined;
+	for (let pageNumber = 0; pageNumber < 3; pageNumber += 1) {
+		const page = await listClaimManifestsForProject({
+			actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+			projectId: happy.projectId,
+			direction: "oldest_first",
+			limit: 1,
+			cursor,
+		});
+		assert(
+			page.items.length === 1,
+			"Application history page must honor limit.",
+		);
+		const item = page.items[0];
+		assert(item, "Application history page must contain one item.");
+		pagedIds.push(item.id);
+		const morePagesRemain = pageNumber < 2;
+		assert(
+			(page.nextCursor !== null) === morePagesRemain,
+			"Application history terminal cursor semantics must match repository semantics.",
+		);
+		cursor = page.nextCursor ?? undefined;
+	}
+	assert(
+		new Set(pagedIds).size === 3 &&
+			pagedIds.every((id) => expectedHappyManifestIds.has(id)),
+		"Application pagination must not duplicate or skip Project history.",
+	);
+
+	await pool.query(
+		"update project set product_id = null, content_type = 'ORGANIC', archived_at = now() where id = $1",
+		[happy.projectId],
+	);
+	const historicalGet = await getClaimManifest({
+		actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+		projectId: happy.projectId,
+		claimManifestId: first.manifest.id,
+	});
+	const historicalList = await listClaimManifestsForProject({
+		actor: { workspaceId: happy.workspaceId, userId: happy.userId },
+		projectId: happy.projectId,
+		direction: "newest_first",
+		limit: 10,
+	});
+	assert(
+		historicalGet?.id === first.manifest.id &&
+			historicalList.items.length === 3,
+		"Historical reads must ignore current write eligibility, Product, source revision, and archive state.",
 	);
 
 	const revisionMismatch = await seedValidProject(pool, "revision");
@@ -699,6 +875,9 @@ try {
 	);
 
 	console.log("Happy create / exact reuse / creator provenance: PASS");
+	console.log("Authorized get/list and non-enumerating read scope: PASS");
+	console.log("Application history pagination: PASS");
+	console.log("Inactive/non-current/archived historical readability: PASS");
 	console.log("Exact source pinning and draft-only usability: PASS");
 	console.log("Workspace / Project / Product scope failures: PASS");
 	console.log("Identity / Product / source usability boundaries: PASS");
