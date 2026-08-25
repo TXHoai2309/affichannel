@@ -1,7 +1,7 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
-- Trạng thái: Canonical; M4 và AFF-US-015 DONE; M5A accepted; M5B production
-  read-only preflight PASS; M5C production cutover chưa chạy
+- Trạng thái: Canonical; M4 và AFF-US-015 DONE; M5A/M5B accepted; M5C production
+  enforcement PASS; M5D final acceptance pending
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -194,6 +194,13 @@ M2C/M4/Adaptive và golden regression. M5B fresh production preflight PASS với
 identity columns, nullable `product_id` và migration count 18. Migration 0018 vẫn
 NOT APPLIED, nên full Gate J/M5 chưa PASS. M5C phải rerun fresh production
 preflight ngay trước apply; owner-role M5B evidence không được dùng để skip gate.
+
+M5C evidence PASS: committed guarded runner reran fresh production preflight
+(16/16 canonical, zero blockers), confirmed pre-schema nullable and migration
+count 18, applied exactly 0018, then confirmed four identity columns NOT NULL,
+`product_id` nullable, migration count 19/latest 0018 and unchanged 16/16
+canonical zero-blocker postflight. No Project data mutation/backfill or provider
+call occurred. Full Gate J remains pending M5D regression/sign-off.
 
 ## 12. Regression suite tối thiểu
 

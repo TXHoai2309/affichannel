@@ -266,6 +266,17 @@ to SELECT/read-only transactions, with zero production mutation/provider calls.
 M5C MUST rerun a second fresh production preflight immediately before applying
 0018. M5B evidence never authorizes skipping that pre-apply gate.
 
+M5C production evidence (2026-08-25): guarded runner at committed HEAD
+`2a58092` reran fresh preflight (16 total/16 canonical complete, all blockers and
+deprecated count zero, ready), verified pre-M5 nullable identity/Product columns
+and migration count 18/latest `1787415718474`, then applied only
+`0018_natural_speed`. Postflight verified all four identity columns NOT NULL,
+`product_id` nullable, migration count 19/latest `1787628473478`, retained
+constraints/indexes and unchanged 16/16 canonical zero-blocker data. Project
+business-row mutation/backfill and provider calls were zero; M4, Adaptive,
+currentStep and persisted step status were untouched. M5D remains required before
+full M5/AFF-US-013/AFF-US-016 completion.
+
 ## 11. Story completion boundary
 
 M5A makes enforcement technically ready for production preflight; it does not

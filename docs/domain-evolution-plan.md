@@ -1,7 +1,7 @@
 # Kế hoạch Domain Evolution v0.8
 
 - Trạng thái: M1/M2/M3 hoàn tất; M4 shadow runtime đạt parity; AFF-US-015 DONE;
-  M5A accepted; M5B production preflight PASS; production migration chưa chạy
+  M5A/M5B accepted; M5C production enforcement PASS; M5D pending
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -275,6 +275,13 @@ PASS với 16/16 canonical Projects, zero blockers và pre-M5 schema/migration c
 18. Session dùng owner role thay vì dedicated read-only credential nhưng chỉ chạy
 read-only operations. M5C vẫn phải rerun fresh production preflight ngay trước
 apply 0018; M5B evidence không thay thế hoặc authorize M5C gate.
+
+M5C guarded runner đã rerun fresh preflight và apply duy nhất
+`0018_natural_speed`: identity columns hiện NOT NULL, `product_id` vẫn nullable,
+migration count 18→19 và postflight 16/16 canonical/zero blockers. Không backfill,
+Project data mutation, provider call hay workflow authority change. M5D còn phải
+hoàn tất final regression/acceptance trước khi đánh dấu full M5 và các historical
+story completion boundaries.
 
 ### M6 — Contract cleanup có điều kiện
 

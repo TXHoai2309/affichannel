@@ -3,9 +3,24 @@
 - Trạng thái: AFF-US-013 M1 và AFF-US-016 M2/M3 accepted; AFF-US-014 M4 shadow
   runtime đã đạt parity; AFF-US-015 AC-015-01–18 DONE qua Phase 15D. Adaptive
   Workflow là presentation/navigation authority cho supported Affiliate flow;
-  M4 shadow retained; M5A accepted; M5B production read-only preflight PASS;
-  production migration chưa chạy.
+  M4 shadow retained; M5A/M5B accepted; M5C production enforcement PASS; M5D
+  final regression chưa bắt đầu.
 - Cập nhật lần cuối: 2026-08-25
+
+## 2026-08-25 — Domain Evolution M5C production enforcement
+
+Guarded runner từ committed HEAD `2a58092` đã chạy fresh production preflight
+PASS với 16/16 canonical Projects và zero blockers, xác nhận pre-M5 schema cùng
+migration count 18, rồi apply duy nhất `0018_natural_speed`. Postflight xác nhận
+bốn identity columns NOT NULL, `product_id` vẫn nullable, migration count 19 với
+latest timestamp `1787628473478`, và data preflight vẫn 16/16 canonical/zero
+blockers/ready.
+
+Migration chỉ thực hiện bốn reviewed ALTER NOT NULL và Drizzle history
+bookkeeping; Project business-row mutation/backfill, provider call và deployment
+bằng 0. M4/Adaptive/currentStep/project_step_status không thay đổi. M5C PASS chỉ
+đưa rollout tới M5D; chưa đánh dấu M5, AFF-US-013 hoặc AFF-US-016 DONE và chưa bắt
+đầu AFF-US-017.
 
 ## 2026-08-25 — Domain Evolution M5B production read-only preflight
 

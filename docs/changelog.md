@@ -8,6 +8,17 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### Domain Evolution M5C production enforcement
+
+- Guarded production runner đã fresh-preflight 16/16 canonical Projects với zero
+  blockers rồi apply duy nhất `0018_natural_speed` từ committed/pushed TXH HEAD.
+- Bốn Channel-First identity columns chuyển nullable YES→NO; `product_id` tiếp
+  tục nullable; migration history chuyển 18→19 với exact 0018 timestamp.
+- Postflight vẫn 16/16 canonical, zero blockers và ready; không Project data
+  mutation/backfill, provider call, M4/Adaptive/currentStep change hoặc deploy.
+- M5C PASS và sẵn sàng M5D; full M5/AFF-US-013/AFF-US-016 chưa DONE,
+  AFF-US-017 chưa bắt đầu.
+
 ### Domain Evolution M5B production preflight
 
 - Fresh production read-only preflight PASS: 16/16 Projects canonical complete,
