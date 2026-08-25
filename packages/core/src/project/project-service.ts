@@ -1,3 +1,5 @@
+import type { ContentFormatRegistry } from "../content-format/registry";
+import type { LegacyProjectExceptionReason } from "./legacy-affiliate-compatibility";
 import {
 	type PersistedProjectStepStatus,
 	PROJECT_STEP_KEYS,
@@ -12,9 +14,9 @@ import {
 	classifyProjectWriteIdentity,
 	type PersistedProjectIdentityState,
 	type ProjectWriteIdentity,
+	type ProjectWriteIdentityClassification,
 	type ProjectWriteIdentityRejectionReason,
 } from "./project-write-contract";
-import type { LegacyProjectExceptionReason } from "./legacy-affiliate-compatibility";
 
 export type ProjectActor = {
 	workspaceId: string;
@@ -105,6 +107,63 @@ export type ProjectIdentityUpdate =
 			requireExpectedProductLinkage: boolean;
 	  };
 
+export type ProjectIdentityUpdateResolution =
+	| { success: true; identityUpdate: ProjectIdentityUpdate }
+	| {
+			success: false;
+			reasonCode:
+				| LegacyProjectExceptionReason
+				| ProjectWriteIdentityRejectionReason;
+	  };
+
+/** Pure update planner with a registry seam for persisted deprecated fixtures. */
+export function resolveProjectIdentityUpdate(
+	requestClassification: ProjectWriteIdentityClassification,
+	persistedIdentity: PersistedProjectIdentityState,
+	registry?: ContentFormatRegistry,
+): ProjectIdentityUpdateResolution {
+	if (requestClassification.kind === "rejected") {
+		return {
+			success: false,
+			reasonCode: requestClassification.reasonCode,
+		};
+	}
+	const persistedClassification = classifyPersistedProjectIdentity(
+		persistedIdentity,
+		registry,
+	);
+	if (persistedClassification.kind === "rejected") {
+		return {
+			success: false,
+			reasonCode: persistedClassification.reasonCode,
+		};
+	}
+
+	return {
+		success: true,
+		identityUpdate:
+			requestClassification.kind === "canonical"
+				? {
+						strategy: "set",
+						expectedIdentity: persistedIdentity,
+						desiredIdentity: requestClassification.identity,
+						requireExpectedProductLinkage:
+							persistedClassification.kind === "legacy",
+					}
+				: persistedClassification.kind === "legacy"
+					? {
+							strategy: "set",
+							expectedIdentity: persistedIdentity,
+							desiredIdentity: persistedClassification.effectiveIdentity,
+							requireExpectedProductLinkage: true,
+						}
+					: {
+							strategy: "preserve",
+							expectedIdentity: persistedIdentity,
+						},
+	};
+}
+
 export async function createProject<TProject>(
 	repository: ProjectRepository<TProject>,
 	actor: ProjectActor,
@@ -177,39 +236,19 @@ export async function updateProject<TProject>(
 		throw new ProjectServiceError("PROJECT_NOT_FOUND");
 	}
 
-	const persistedClassification = classifyPersistedProjectIdentity(
+	const identityResolution = resolveProjectIdentityUpdate(
+		classification,
 		persistedIdentity,
 	);
-	if (persistedClassification.kind === "rejected") {
+	if (!identityResolution.success) {
 		throw new ProjectServiceError("INVALID_PROJECT_WRITE_IDENTITY", {
-			reasonCode: persistedClassification.reasonCode,
+			reasonCode: identityResolution.reasonCode,
 		});
 	}
-
-	const identityUpdate: ProjectIdentityUpdate =
-		classification.kind === "canonical"
-			? {
-					strategy: "set",
-					expectedIdentity: persistedIdentity,
-					desiredIdentity: classification.identity,
-					requireExpectedProductLinkage:
-						persistedClassification.kind === "legacy",
-				  }
-			: persistedClassification.kind === "legacy"
-				? {
-						strategy: "set",
-						expectedIdentity: persistedIdentity,
-						desiredIdentity: persistedClassification.effectiveIdentity,
-						requireExpectedProductLinkage: true,
-				  }
-				: {
-						strategy: "preserve",
-						expectedIdentity: persistedIdentity,
-				  };
 
 	return repository.updateProjectBundle({
 		actor,
 		input,
-		identityUpdate,
+		identityUpdate: identityResolution.identityUpdate,
 	});
 }

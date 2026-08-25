@@ -5,6 +5,7 @@ import {
 	resolveContentFormatRef,
 	runM5Preflight,
 } from "@affichannel/core";
+import { resolveProjectIdentityUpdate } from "@affichannel/core/project/project-service";
 import { describe, expect, it } from "vitest";
 import { requireM5PreflightDatabaseAuthority } from "../../../../../scripts/m5-preflight-database-authority";
 import { requireM5TestDatabaseAuthority } from "../../../../../scripts/m5-test-database-authority";
@@ -110,6 +111,18 @@ describe("Domain Evolution M5 preflight", () => {
 		).toMatchObject({
 			resolution: "deprecated",
 			ref: { key: "SCRIPTED_LEGACY", version: 1 },
+		});
+		const update = resolveProjectIdentityUpdate(
+			classifyProjectWriteIdentity({}, registry),
+			persisted,
+			registry,
+		);
+		expect(update).toEqual({
+			success: true,
+			identityUpdate: {
+				strategy: "preserve",
+				expectedIdentity: persisted,
+			},
 		});
 	});
 
