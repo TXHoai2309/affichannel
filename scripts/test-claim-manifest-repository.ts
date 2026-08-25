@@ -327,6 +327,51 @@ async function rowCount(
 	return result.rows[0]?.count ?? 0;
 }
 
+async function assertHistoryDirection(input: {
+	workspaceId: string;
+	projectId: string;
+	direction: "newest_first" | "oldest_first";
+	expectedIds: string[];
+}): Promise<void> {
+	const seen: string[] = [];
+	let cursor: { createdAt: string; id: string } | undefined;
+	for (const [index, expectedId] of input.expectedIds.entries()) {
+		const page = await listClaimManifestsForProject({
+			workspaceId: input.workspaceId,
+			projectId: input.projectId,
+			direction: input.direction,
+			limit: 1,
+			cursor,
+		});
+		assert(page.items.length === 1, "History page must respect limit=1.");
+		assert(
+			page.items[0]?.id === expectedId,
+			`${input.direction} history order or composite tie-break mismatch.`,
+		);
+		seen.push(expectedId);
+		const moreResultsRemain = index < input.expectedIds.length - 1;
+		assert(
+			(page.nextCursor !== null) === moreResultsRemain,
+			`${input.direction} terminal cursor semantics mismatch.`,
+		);
+		if (page.nextCursor) {
+			assert(
+				page.nextCursor.createdAt.includes(".123456"),
+				"History cursor must preserve exact PostgreSQL microseconds.",
+			);
+			cursor = page.nextCursor;
+		}
+	}
+	assert(
+		new Set(seen).size === input.expectedIds.length,
+		`${input.direction} history must not duplicate rows.`,
+	);
+	assert(
+		canonicalizeJson(seen) === canonicalizeJson(input.expectedIds),
+		`${input.direction} history must not skip rows.`,
+	);
+}
+
 const pool = createNodePostgresPool(authority.url);
 try {
 	const identity = await pool.query<{ database: string; schema: string }>(
@@ -433,6 +478,16 @@ try {
 		)) === 1,
 		"Concurrent reuse must create one DB row.",
 	);
+	const thirdSnapshot = structuredClone(fixtureA.snapshot);
+	thirdSnapshot.caption = "Third history semantic input.";
+	const thirdManifest = await buildScriptManifest(fixtureA, thirdSnapshot);
+	const third = await createOrReuseClaimManifest({
+		workspaceId: fixtureA.workspaceId,
+		projectId: fixtureA.projectId,
+		builtManifest: thirdManifest,
+		createdByUserId: fixtureA.userId,
+	});
+	assert(third.created, "Third history Manifest must be created.");
 
 	const readA = await getClaimManifestById({
 		workspaceId: fixtureA.workspaceId,
@@ -484,6 +539,18 @@ try {
 			empty.manifest.source.sourceType === "NO_SCRIPT",
 		"NO_SCRIPT productless empty Manifest must create and reuse exactly.",
 	);
+	for (const direction of ["oldest_first", "newest_first"] as const) {
+		const singlePage = await listClaimManifestsForProject({
+			workspaceId: fixtureB.workspaceId,
+			projectId: fixtureB.otherProjectId,
+			direction,
+			limit: 5,
+		});
+		assert(
+			singlePage.items.length === 1 && singlePage.nextCursor === null,
+			`${direction} single-row history must have terminal null cursor.`,
+		);
+	}
 
 	const collisionFixture = await seedScope(pool, "collision");
 	const collisionManifest = await buildScriptManifest(collisionFixture);
@@ -562,29 +629,32 @@ try {
 			}),
 	);
 
-	const oldest = await listClaimManifestsForProject({
+	const raceResult = raceResults[0];
+	assert(raceResult, "Concurrent race must return a Manifest result.");
+	const historyIds = [
+		first.manifest.id,
+		raceResult.manifest.id,
+		third.manifest.id,
+	];
+	await pool.query(
+		"update claim_manifest set created_at = '2026-08-25 12:34:56.123456+00'::timestamptz where id = any($1::text[])",
+		[historyIds],
+	);
+	const ascendingIds = [...historyIds].sort((left, right) =>
+		left.localeCompare(right),
+	);
+	await assertHistoryDirection({
 		workspaceId: fixtureA.workspaceId,
 		projectId: fixtureA.projectId,
 		direction: "oldest_first",
-		limit: 1,
+		expectedIds: ascendingIds,
 	});
-	assert(
-		oldest.items.length === 1 && oldest.nextCursor !== null,
-		"Explicit bounded history must return first page.",
-	);
-	const oldestItem = oldest.items[0];
-	assert(oldestItem, "Oldest history page must contain one item.");
-	const next = await listClaimManifestsForProject({
+	await assertHistoryDirection({
 		workspaceId: fixtureA.workspaceId,
 		projectId: fixtureA.projectId,
-		direction: "oldest_first",
-		limit: 2,
-		cursor: oldest.nextCursor,
+		direction: "newest_first",
+		expectedIds: [...ascendingIds].reverse(),
 	});
-	assert(
-		next.items.length === 1 && next.items[0]?.id !== oldestItem.id,
-		"Composite cursor must return the next stable page without OFFSET.",
-	);
 
 	console.log("New insert / sequential reuse / creator provenance: PASS");
 	console.log(
@@ -598,7 +668,9 @@ try {
 		"Same-fingerprint non-equivalent collision: CLAIM_MANIFEST_CONFLICT; existing row unchanged",
 	);
 	console.log("Corrupted persisted row: CLAIM_MANIFEST_PERSISTED_DATA_INVALID");
-	console.log("Bounded composite-cursor history: PASS");
+	console.log(
+		"History lookahead/terminal cursor, both directions, same-timestamp tie-break, microseconds: PASS",
+	);
 } finally {
 	await pool.end();
 }

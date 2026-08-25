@@ -331,11 +331,16 @@ export async function listClaimManifestsForProject(
 			newer ? asc(claimManifest.createdAt) : desc(claimManifest.createdAt),
 			newer ? asc(claimManifest.id) : desc(claimManifest.id),
 		)
-		.limit(input.limit);
-	const items = await Promise.all(rows.map(mapClaimManifestRow));
-	const last = rows.at(-1);
+		.limit(input.limit + 1);
+	const hasNextPage = rows.length > input.limit;
+	const pageRows = rows.slice(0, input.limit);
+	const items = await Promise.all(pageRows.map(mapClaimManifestRow));
+	const last = pageRows.at(-1);
 	return {
 		items,
-		nextCursor: last ? { createdAt: last.cursorCreatedAt, id: last.id } : null,
+		nextCursor:
+			hasNextPage && last
+				? { createdAt: last.cursorCreatedAt, id: last.id }
+				: null,
 	};
 }
