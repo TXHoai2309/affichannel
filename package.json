@@ -25,6 +25,7 @@
 		"test:unit:fact-lock-manifest": "pnpm --filter web exec vitest run src/features/fact-lock/fact-lock-manifest-domain.test.ts",
 		"test:integration:manifest-fact-lock-persistence": "tsx scripts/test-manifest-fact-lock-persistence.ts",
 		"test:integration:manifest-fact-lock-service": "tsx scripts/test-manifest-fact-lock-service.ts",
+		"test:integration:manifest-fact-lock-runtime": "tsx scripts/test-manifest-fact-lock-runtime.ts",
 		"test:integration:claim-manifest-persistence": "tsx scripts/test-claim-manifest-persistence.ts",
 		"test:integration:claim-manifest-repository": "tsx scripts/test-claim-manifest-repository.ts",
 		"test:integration:claim-manifest-service": "tsx scripts/test-claim-manifest-service.ts",

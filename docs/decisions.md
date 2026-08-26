@@ -11,6 +11,28 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-033 — Manifest provider prompt boundary cho AFF-US-018 Phase 18D
+
+- Trạng thái: Đã chấp nhận, khóa trước implementation Phase 18D
+- Ngày: 2026-08-26
+- Mở rộng: DEC-031, DEC-032 và `docs/claim-manifest-fact-lock-contract.md`
+
+`MANIFEST_V1` non-empty cần provider semantics riêng vì ClaimManifest là claim inventory
+authority, khác với legacy ScriptVersion extraction và deterministic zero-claim path.
+
+### Quyết định
+
+- Prompt version server-owned là `fact-lock-manifest-prompt.v1`, distinct với
+  `fact-lock-prompt.v3` và `fact-lock-zero-claim.v1`; output schema vẫn
+  `fact-lock-output.v1`, input version vẫn `fact-lock.manifest.v1`.
+- Prompt chỉ nhận ordered Manifest claims, exact Product Facts snapshot và policy/output
+  instructions. Provider không được extract, thêm, bớt hoặc rewrite claim identity.
+- `promptHash` hash exact deterministic Manifest provider payload; không chứa timestamp,
+  run ID, provider request ID hoặc random value. Provider mismatch là `indeterminate`,
+  không automatic paid retry.
+- Phase 18D không thay đổi zero-claim 18C, legacy Fact Lock, public router/read model,
+  schema hoặc migration.
+
 ## DEC-032 — Deterministic zero-claim persistence cho AFF-US-018 Phase 18C
 
 - Trạng thái: Đã chấp nhận, khóa trước khi hoàn tất implementation Phase 18C

@@ -223,6 +223,23 @@ Same workspace + idempotency key + zero-claim request hash trả cùng run đã 
 khác semantic request hash trả `FACT_LOCK_IDEMPOTENCY_CONFLICT`. Concurrent identical
 requests phải tạo đúng một run, không lộ unique DB error.
 
+### 9.2. Non-empty Manifest provider execution
+
+Manifest-first provider execution cho `claims.length > 0` dùng prompt version server-owned
+`fact-lock-manifest-prompt.v1`, tách biệt với legacy `fact-lock-prompt.v3` và zero-claim
+`fact-lock-zero-claim.v1`. Provider chỉ nhận ordered `ClaimManifest.claims`, exact
+Product Facts snapshot và policy/output instructions; không gửi Script snapshot như claim
+inventory. `promptHash` là SHA-256 của exact deterministic rendered Manifest provider
+payload, không chứa timestamp, run ID, provider request ID hoặc giá trị ngẫu nhiên.
+
+Execution phải persist pending `MANIFEST_V1` run cùng immutable input/dependency snapshot,
+claim execution atomically trước provider call, gọi provider ngoài transaction và
+finalize bằng CAS. Strict result validation dùng exact Manifest claim-key bijection rồi
+reorder theo Manifest; Manifest giữ claim key, text, locator và source identity. Provider
+mismatch kết thúc `indeterminate` với `FACT_LOCK_PROVIDER_RESULT_MISMATCH` và không tự
+retry paid request. Chi tiết runtime thuộc AFF-US-018 Phase 18D; public read/router
+cutover vẫn thuộc phase sau.
+
 ## 10. API/read model
 
 Read model tối thiểu trả:
