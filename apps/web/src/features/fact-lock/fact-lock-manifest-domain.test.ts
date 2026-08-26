@@ -1,4 +1,5 @@
 import {
+	buildManifestFactLockInputSnapshot,
 	buildManifestFactLockVerificationInput,
 	buildManifestZeroClaimOutcome,
 	claimManifestFingerprint,
@@ -444,5 +445,93 @@ describe("AFF-US-018 Phase 18A pure Manifest Fact Lock", () => {
 				eligibility,
 			}),
 		).toThrow();
+	});
+
+	it("binds zero-claim snapshot semantics to Manifest claim state", () => {
+		const zeroManifest = manifest({
+			claims: [],
+			claimCount: 0,
+			isEmpty: true,
+		});
+		const zeroSnapshot = buildManifestFactLockInputSnapshot({
+			manifest: zeroManifest,
+			productFacts: [],
+			policy: null,
+			outputRules: null,
+		});
+		const nonZeroSnapshot = buildManifestFactLockInputSnapshot({
+			manifest: manifest(),
+			productFacts: facts(),
+			productFactsFingerprint: "a".repeat(64),
+			policy: null,
+			outputRules: null,
+		});
+		expect(zeroSnapshot.zeroClaim).toEqual({
+			status: "passed",
+			providerRequired: false,
+			dependenciesRequired: false,
+		});
+		expect(nonZeroSnapshot.zeroClaim).toBeNull();
+	});
+
+	it("rejects Product Fact and Manifest claim-state contradictions", () => {
+		const zeroManifest = manifest({
+			claims: [],
+			claimCount: 0,
+			isEmpty: true,
+		});
+		const validNonZero = {
+			manifest: manifest(),
+			productFacts: facts(),
+			productFactsFingerprint: "a".repeat(64),
+			policy: null,
+			outputRules: null,
+		};
+		const cases = [
+			{
+				name: "zero Manifest with Product Facts",
+				input: {
+					...validNonZero,
+					manifest: zeroManifest,
+					productFacts: facts(),
+				},
+			},
+			{
+				name: "zero Manifest with Product Facts fingerprint",
+				input: {
+					...validNonZero,
+					manifest: zeroManifest,
+					productFacts: [],
+				},
+			},
+			{
+				name: "non-zero Manifest with empty Product Facts",
+				input: { ...validNonZero, productFacts: [] },
+			},
+			{
+				name: "non-zero Manifest without Product Facts fingerprint",
+				input: { ...validNonZero, productFactsFingerprint: undefined },
+			},
+			{
+				name: "claimCount zero and isEmpty false",
+				input: {
+					...validNonZero,
+					manifest: manifest({ claimCount: 0, isEmpty: false }),
+				},
+			},
+			{
+				name: "positive claimCount and isEmpty true",
+				input: {
+					...validNonZero,
+					manifest: manifest({ claimCount: 2, isEmpty: true }),
+				},
+			},
+		] as const;
+		for (const testCase of cases) {
+			expect(
+				() => buildManifestFactLockInputSnapshot(testCase.input),
+				testCase.name,
+			).toThrow();
+		}
 	});
 });

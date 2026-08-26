@@ -35,7 +35,10 @@ export type ManifestFactLockInputSnapshot = Readonly<{
 }>;
 
 export function buildManifestFactLockInputSnapshot(input: {
-	manifest: Pick<ClaimManifest, "id" | "fingerprint" | "source">;
+	manifest: Pick<
+		ClaimManifest,
+		"id" | "fingerprint" | "source" | "claimCount" | "isEmpty"
+	>;
 	productFacts: readonly ManifestProductFactSnapshot[];
 	productFactsFingerprint?: string;
 	policy: FactLockPolicySnapshot | null;
@@ -44,16 +47,30 @@ export function buildManifestFactLockInputSnapshot(input: {
 	if (input.manifest.source.sourceType !== "SCRIPT_VERSION") {
 		throw new Error("Manifest Fact Lock requires a ScriptVersion source.");
 	}
-	if (
-		input.productFacts.length === 0 &&
-		input.productFactsFingerprint !== undefined
-	) {
-		throw new Error(
-			"Zero-claim input cannot contain a Product Facts fingerprint.",
-		);
+	const isZeroClaim =
+		input.manifest.claimCount === 0 && input.manifest.isEmpty === true;
+	const isNonZeroClaim =
+		input.manifest.claimCount > 0 && input.manifest.isEmpty === false;
+	if (!isZeroClaim && !isNonZeroClaim) {
+		throw new Error("Manifest claimCount/isEmpty state is inconsistent.");
 	}
-	if (input.productFacts.length > 0 && !input.productFactsFingerprint) {
-		throw new Error("Non-empty input requires a Product Facts fingerprint.");
+	if (isZeroClaim) {
+		if (input.productFacts.length > 0) {
+			throw new Error("Zero-claim input cannot contain Product Facts.");
+		}
+		if (input.productFactsFingerprint !== undefined) {
+			throw new Error(
+				"Zero-claim input cannot contain a Product Facts fingerprint.",
+			);
+		}
+	}
+	if (isNonZeroClaim) {
+		if (input.productFacts.length === 0) {
+			throw new Error("Non-zero input requires Product Facts.");
+		}
+		if (!input.productFactsFingerprint) {
+			throw new Error("Non-empty input requires a Product Facts fingerprint.");
+		}
 	}
 	return Object.freeze({
 		inputMode: FACT_LOCK_MANIFEST_INPUT_MODE,
@@ -82,14 +99,13 @@ export function buildManifestFactLockInputSnapshot(input: {
 		outputRules: input.outputRules
 			? Object.freeze({ ...input.outputRules })
 			: null,
-		zeroClaim:
-			input.productFacts.length === 0
-				? Object.freeze({
-						status: "passed" as const,
-						providerRequired: false as const,
-						dependenciesRequired: false as const,
-					})
-				: null,
+		zeroClaim: isZeroClaim
+			? Object.freeze({
+					status: "passed" as const,
+					providerRequired: false as const,
+					dependenciesRequired: false as const,
+				})
+			: null,
 	});
 }
 
