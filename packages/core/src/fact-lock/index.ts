@@ -1,6 +1,7 @@
 export * from "./errors";
 export * from "./gate";
 export * from "./manifest-contract";
+export * from "./manifest-input-snapshot";
 export * from "./manifest-request-hash";
 export * from "./manifest-result-validation";
 export * from "./policy";

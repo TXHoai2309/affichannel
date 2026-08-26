@@ -19,6 +19,8 @@ import {
 import type {
 	FactLockEffectiveStatus,
 	FactLockInputSnapshot,
+	FactLockPolicySnapshot,
+	FactLockProductFactSnapshot,
 	FactLockReadModel,
 	FactLockRunStatus,
 	FactLockStoredClaim,
@@ -185,8 +187,117 @@ function dbFactEvaluation(
 	);
 }
 
+type FactLockTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+export async function loadFactLockProductFactsInTransaction(
+	transaction: FactLockTransaction,
+	actor: WorkspaceActor,
+	productId: string,
+): Promise<FactLockProductFactSnapshot[]> {
+	const facts = await transaction
+		.select()
+		.from(productFact)
+		.where(
+			and(
+				eq(productFact.workspaceId, actor.workspaceId),
+				eq(productFact.productId, productId),
+			),
+		)
+		.orderBy(productFact.id)
+		.for("update", { of: productFact });
+	const today = resolveBusinessToday();
+	return facts.flatMap((fact) => {
+		const evaluated = dbFactEvaluation(fact, today);
+		if (evaluated.usability === "blocked") return [];
+		return [
+			{
+				id: fact.id,
+				revision: fact.revision,
+				content: fact.content,
+				type: fact.type as ProductFactType,
+				status: "verified" as const,
+				assessment: {
+					...evaluated.assessment,
+					verification: "verified" as const,
+				},
+				generationUsability: evaluated.usability,
+				source: {
+					type: fact.sourceType,
+					label: fact.sourceLabel,
+					url: fact.sourceUrl,
+					confirmedAt: fact.confirmedAt,
+					expiresAt: fact.expiresAt,
+				},
+			} satisfies FactLockProductFactSnapshot,
+		];
+	});
+}
+
+export async function loadFactLockPolicyInTransaction(
+	transaction: FactLockTransaction,
+	actor: WorkspaceActor,
+): Promise<{
+	policy: FactLockPolicySnapshot;
+	outputRules: FactLockInputSnapshot["outputRules"];
+}> {
+	const [settings] = await transaction
+		.select()
+		.from(channelSettings)
+		.where(eq(channelSettings.workspaceId, actor.workspaceId))
+		.limit(1);
+	const parsedSettings = channelSettingsSchema.safeParse(
+		settings
+			? {
+					niche: settings.niche,
+					targetAudience: settings.targetAudience,
+					tone: settings.tone,
+					contentPillar: settings.contentPillar,
+					defaultCta: settings.defaultCta,
+					affiliateDisclosure: settings.affiliateDisclosure,
+					avoidWords: settings.avoidWords,
+				}
+			: undefined,
+	);
+	if (!parsedSettings.success)
+		throw new FactLockError(
+			"FACT_LOCK_SCRIPT_NOT_READY",
+			"Channel Settings chưa hoàn chỉnh.",
+		);
+
+	const [rules] = await transaction
+		.select()
+		.from(outputRules)
+		.where(eq(outputRules.workspaceId, actor.workspaceId))
+		.limit(1);
+	const parsedRules = outputRulesSchema.safeParse(
+		rules
+			? {
+					language: rules.language,
+					aspectRatio: rules.aspectRatio,
+					subtitleSafeArea: rules.subtitleSafeArea,
+					claimLimit: rules.claimLimit,
+					requireFinalCta: rules.requireFinalCta,
+				}
+			: defaultOutputRules,
+	);
+	if (!parsedRules.success)
+		throw new FactLockError(
+			"FACT_LOCK_SCRIPT_NOT_READY",
+			"Output Rules không hợp lệ.",
+		);
+
+	return {
+		policy: {
+			avoidWords: parsedSettings.data.avoidWords,
+			affiliateDisclosure: parsedSettings.data.affiliateDisclosure,
+			language: parsedRules.data.language,
+		},
+		outputRules: parsedRules.data,
+	};
+}
+
 async function buildSnapshotInTransaction(
-	transaction: Parameters<Parameters<typeof db.transaction>[0]>[0],
+	transaction: FactLockTransaction,
 	actor: WorkspaceActor,
 	input: { projectId: string },
 ) {
@@ -235,91 +346,19 @@ async function buildSnapshotInTransaction(
 			"Script chưa sẵn sàng cho Fact Lock.",
 		);
 
-	const facts = await transaction
-		.select()
-		.from(productFact)
-		.where(
-			and(
-				eq(productFact.workspaceId, actor.workspaceId),
-				eq(productFact.productId, projectRecord.productId),
-			),
-		)
-		.orderBy(productFact.id)
-		.for("update", { of: productFact });
-	const today = resolveBusinessToday();
-	const productFacts = facts.flatMap((fact) => {
-		const evaluated = dbFactEvaluation(fact, today);
-		if (evaluated.usability === "blocked") return [];
-		return [
-			{
-				id: fact.id,
-				revision: fact.revision,
-				content: fact.content,
-				type: fact.type as ProductFactType,
-				status: "verified" as const,
-				assessment: evaluated.assessment,
-				generationUsability: evaluated.usability,
-				source: {
-					type: fact.sourceType,
-					label: fact.sourceLabel,
-					url: fact.sourceUrl,
-					confirmedAt: fact.confirmedAt,
-					expiresAt: fact.expiresAt,
-				},
-			},
-		];
-	});
+	const productFacts = await loadFactLockProductFactsInTransaction(
+		transaction,
+		actor,
+		projectRecord.productId,
+	);
 	if (productFacts.length === 0)
 		throw new FactLockError(
 			"FACT_LOCK_NO_USABLE_FACTS",
 			"Không có Product Fact đủ điều kiện cho Fact Lock.",
 		);
 
-	const [settings] = await transaction
-		.select()
-		.from(channelSettings)
-		.where(eq(channelSettings.workspaceId, actor.workspaceId))
-		.limit(1);
-	const parsedSettings = channelSettingsSchema.safeParse(
-		settings
-			? {
-					niche: settings.niche,
-					targetAudience: settings.targetAudience,
-					tone: settings.tone,
-					contentPillar: settings.contentPillar,
-					defaultCta: settings.defaultCta,
-					affiliateDisclosure: settings.affiliateDisclosure,
-					avoidWords: settings.avoidWords,
-				}
-			: undefined,
-	);
-	if (!parsedSettings.success)
-		throw new FactLockError(
-			"FACT_LOCK_SCRIPT_NOT_READY",
-			"Channel Settings chưa hoàn chỉnh.",
-		);
-
-	const [rules] = await transaction
-		.select()
-		.from(outputRules)
-		.where(eq(outputRules.workspaceId, actor.workspaceId))
-		.limit(1);
-	const parsedRules = outputRulesSchema.safeParse(
-		rules
-			? {
-					language: rules.language,
-					aspectRatio: rules.aspectRatio,
-					subtitleSafeArea: rules.subtitleSafeArea,
-					claimLimit: rules.claimLimit,
-					requireFinalCta: rules.requireFinalCta,
-				}
-			: defaultOutputRules,
-	);
-	if (!parsedRules.success)
-		throw new FactLockError(
-			"FACT_LOCK_SCRIPT_NOT_READY",
-			"Output Rules không hợp lệ.",
-		);
+	const { policy, outputRules: parsedOutputRules } =
+		await loadFactLockPolicyInTransaction(transaction, actor);
 
 	const snapshot: FactLockInputSnapshot = {
 		snapshotVersion: FACT_LOCK_SNAPSHOT_VERSION,
@@ -329,12 +368,8 @@ async function buildSnapshotInTransaction(
 			snapshot: parsedScript.data,
 		},
 		productFacts,
-		policy: {
-			avoidWords: parsedSettings.data.avoidWords,
-			affiliateDisclosure: parsedSettings.data.affiliateDisclosure,
-			language: parsedRules.data.language,
-		},
-		outputRules: parsedRules.data,
+		policy,
+		outputRules: parsedOutputRules,
 	};
 	const prompt = renderFactLockPrompt(snapshot);
 	return {
@@ -453,6 +488,7 @@ export async function prepareFactLockRun(
 						eq(factLockRun.scriptVersionId, built.scriptRecord.id),
 						eq(factLockRun.sourceScriptRevision, built.scriptRecord.revision),
 						eq(factLockRun.status, "pending"),
+						isNull(factLockRun.inputMode),
 					),
 				)
 				.limit(1);
@@ -515,6 +551,26 @@ export async function recordFactLockEstimate(
 	runId: string,
 	estimate: TextProviderEstimate,
 ) {
+	const [current] = await db
+		.select()
+		.from(factLockRun)
+		.where(
+			and(
+				eq(factLockRun.workspaceId, actor.workspaceId),
+				eq(factLockRun.id, runId),
+			),
+		)
+		.limit(1);
+	if (!current)
+		throw new FactLockError(
+			"FACT_LOCK_NOT_FOUND",
+			"Fact Lock run không tồn tại.",
+		);
+	if (!isLegacyFactLockRun(current))
+		throw new FactLockError(
+			"FACT_LOCK_SCRIPT_NOT_READY",
+			"Fact Lock run chưa thuộc legacy ScriptVersion flow.",
+		);
 	const [row] = await db
 		.update(factLockRun)
 		.set({
@@ -527,6 +583,7 @@ export async function recordFactLockEstimate(
 				eq(factLockRun.workspaceId, actor.workspaceId),
 				eq(factLockRun.id, runId),
 				eq(factLockRun.status, "pending"),
+				isNull(factLockRun.inputMode),
 			),
 		)
 		.returning();
@@ -699,6 +756,7 @@ async function claimFactLockExecution(
 					eq(factLockRun.workspaceId, actor.workspaceId),
 					eq(factLockRun.id, runId),
 					eq(factLockRun.status, "pending"),
+					isNull(factLockRun.inputMode),
 					isNull(factLockRun.executionClaimedAt),
 				),
 			)
@@ -719,6 +777,11 @@ async function claimFactLockExecution(
 			throw new FactLockError(
 				"FACT_LOCK_NOT_FOUND",
 				"Fact Lock run không tồn tại.",
+			);
+		if (!isLegacyFactLockRun(current))
+			throw new FactLockError(
+				"FACT_LOCK_SCRIPT_NOT_READY",
+				"Fact Lock run chưa thuộc legacy ScriptVersion flow.",
 			);
 		const stale =
 			current.status === "pending" &&
@@ -754,6 +817,11 @@ export async function finalizeFactLockRun(
 			throw new FactLockError(
 				"FACT_LOCK_NOT_FOUND",
 				"Fact Lock run không tồn tại.",
+			);
+		if (!isLegacyFactLockRun(run))
+			throw new FactLockError(
+				"FACT_LOCK_SCRIPT_NOT_READY",
+				"Fact Lock run chưa thuộc legacy ScriptVersion flow.",
 			);
 		if (run.status !== "pending")
 			return {
@@ -1089,8 +1157,6 @@ export async function getFactLockState(
 	};
 }
 
-type FactLockTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
-
 type FactLockResolutionInput = {
 	projectId: string;
 	factLockRunId: string;
@@ -1143,6 +1209,11 @@ async function lockResolutionRun(
 		throw new FactLockError(
 			"FACT_LOCK_NOT_FOUND",
 			"Fact Lock run không tồn tại trong project.",
+		);
+	if (!isLegacyFactLockRun(run))
+		throw new FactLockError(
+			"FACT_LOCK_SCRIPT_NOT_READY",
+			"Fact Lock run chưa thuộc legacy ScriptVersion flow.",
 		);
 	return run;
 }

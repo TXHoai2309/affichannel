@@ -276,7 +276,20 @@ export async function getClaimManifestById(input: {
 	projectId: string;
 	claimManifestId: string;
 }): Promise<ClaimManifest | null> {
-	const [row] = await db
+	return db.transaction((transaction) =>
+		getClaimManifestByIdInTransaction(transaction, input),
+	);
+}
+
+export async function getClaimManifestByIdInTransaction(
+	transaction: ClaimManifestRepositoryTransaction,
+	input: {
+		workspaceId: string;
+		projectId: string;
+		claimManifestId: string;
+	},
+): Promise<ClaimManifest | null> {
+	const [row] = await transaction
 		.select()
 		.from(claimManifest)
 		.where(

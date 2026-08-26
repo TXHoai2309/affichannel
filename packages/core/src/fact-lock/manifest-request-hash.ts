@@ -6,9 +6,31 @@ import {
 	factFreshnessStatuses,
 } from "../product-fact/freshness";
 import { productFactTypes } from "../product-fact/types";
+import {
+	FACT_LOCK_OUTPUT_SCHEMA_VERSION,
+	FACT_LOCK_ZERO_CLAIM_PROMPT_VERSION,
+} from "./types";
 
 export const FACT_LOCK_MANIFEST_INPUT_VERSION =
 	"fact-lock.manifest.v1" as const;
+
+export const FACT_LOCK_ZERO_CLAIM_POLICY = {
+	kind: "fact-lock-zero-claim",
+	inputVersion: FACT_LOCK_MANIFEST_INPUT_VERSION,
+	promptVersion: FACT_LOCK_ZERO_CLAIM_PROMPT_VERSION,
+	outputSchemaVersion: FACT_LOCK_OUTPUT_SCHEMA_VERSION,
+	providerRequired: false,
+	dependenciesRequired: false,
+	outcomeStatus: "passed",
+} as const;
+
+export function factLockZeroClaimPolicyProjection() {
+	return { ...FACT_LOCK_ZERO_CLAIM_POLICY };
+}
+
+export function computeFactLockZeroClaimPolicyHash(): Promise<string> {
+	return sha256Hex(factLockZeroClaimPolicyProjection());
+}
 
 export const sha256HashSchema = z.string().regex(/^[a-f0-9]{64}$/);
 
