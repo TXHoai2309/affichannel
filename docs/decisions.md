@@ -11,6 +11,49 @@ Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ l
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
 
+## DEC-032 — Deterministic zero-claim persistence cho AFF-US-018 Phase 18C
+
+- Trạng thái: Đã chấp nhận, khóa trước khi hoàn tất implementation Phase 18C
+- Ngày: 2026-08-26
+- Mở rộng: DEC-031, DEC-025 và Manifest-first Fact Lock contract
+
+### Bối cảnh
+
+Manifest-first Fact Lock cần xử lý một ClaimManifest executable không có claim.
+Nhánh này không cần Product Facts, provider prompt hay external execution, nhưng
+`fact_lock_run` vẫn có các cột NOT NULL mang metadata lịch sử của provider-backed
+run. Không được ghi placeholder provider metadata hoặc tạo pending row giả chỉ để
+đáp ứng schema hiện tại.
+
+### Quyết định
+
+- Zero-claim dùng execution path nội bộ deterministic với server-owned metadata:
+  `provider=internal`, `model=deterministic-zero-claim`,
+  `promptVersion=fact-lock-zero-claim.v1` và
+  `outputSchemaVersion=fact-lock-output.v1`.
+- `fact_lock_run.prompt_hash` không đổi tên và với zero-claim lưu SHA-256 của
+  canonical decision policy `{ kind, inputVersion, promptVersion,
+  outputSchemaVersion, providerRequired, dependenciesRequired, outcomeStatus }`.
+  Policy hash không chứa identity, Product Facts, actor, timestamp hay idempotency.
+- Zero-claim persist trực tiếp terminal `passed` sau khi validation currentness,
+  scope và integrity hoàn tất. `providerRequestId`, token/cost fields,
+  `executionClaimedAt` và các usage metadata giữ `NULL`; `finishedAt` do server ghi.
+- Zero-claim không resolve provider config, không load/fingerprint Product Facts,
+  không tạo claim/dependency và không gọi provider. `fact-lock-output.v1` được giữ
+  vì result domain vẫn là Fact Lock result với `claims=[]`.
+- Không sửa schema, không đổi migration 0020, không tạo migration 0021 và không
+  dùng metadata zero-claim cho non-empty provider-backed Manifest run. Non-empty
+  persistence/runtime vẫn thuộc boundary 18D.
+
+### Hệ quả
+
+Phase 18C phải kiểm thử policy hash bằng frozen vector, persisted zero-claim row,
+zero provider/dependency/claim side effects, exact idempotency và concurrent same-key
+reuse. Legacy ScriptVersion-first behavior và 18A frozen vectors không thay đổi.
+
+Chi tiết shape, field nullability và no-provider semantics nằm tại
+`docs/claim-manifest-fact-lock-contract.md`, mục 9.1.
+
 ## DEC-031 — ClaimManifest Foundation is immutable, deterministic and dormant before US18
 
 - Trạng thái: Đã implement và accepted Phase 17A–17E; dormant foundation chờ

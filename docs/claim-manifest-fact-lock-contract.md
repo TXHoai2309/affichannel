@@ -1,10 +1,11 @@
 # Contract ClaimManifest và Fact Lock v0.8
 
-- Trạng thái: Target US17+US18 canonical; AFF-US-017 DONE; AFF-US-018 contract
-  clarification locked, runtime chưa bắt đầu
+- Trạng thái: Target US17+US18 canonical; AFF-US-017 DONE; AFF-US-018 Phase 18C
+  zero-claim execution contract locked
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-25
-- Quyết định liên quan: DEC-025, DEC-028, DEC-031, V08-DEC-011, V08-DEC-013
+- Cập nhật lần cuối: 2026-08-26
+- Quyết định liên quan: DEC-025, DEC-028, DEC-031, DEC-032, V08-DEC-011,
+  V08-DEC-013
 
 ## 1. Mục đích
 
@@ -171,6 +172,57 @@ là client/retry identity, không phải pending semantic key.
 interpretation của policy, claim/result mapping, verdict, fact eligibility hoặc input
 projection; không bump vì logging, telemetry hoặc refactor giữ nguyên semantics.
 
+### 9.1. Deterministic zero-claim persistence
+
+Executable `MANIFEST_V1` với `claims.length=0` dùng execution path nội bộ,
+deterministic và không gọi provider. Sau khi authorization, currentness, Product và
+Manifest integrity đã pass, path này persist một `FactLockRun` terminal `passed` với:
+
+```text
+provider              = internal
+model                 = deterministic-zero-claim
+promptVersion         = fact-lock-zero-claim.v1
+outputSchemaVersion   = fact-lock-output.v1
+inputMode             = MANIFEST_V1
+providerRequestId     = NULL
+inputTokens           = NULL
+outputTokens          = NULL
+estimatedCostMicros   = NULL
+actualCostMicros      = NULL
+currency              = NULL
+executionClaimedAt    = NULL
+```
+
+Các metadata trên là server-owned constants, không đọc từ TextProvider config và
+không nhận từ caller. `fact_lock_run.prompt_hash` giữ tên lịch sử của execution
+provider-backed nhưng với zero-claim lưu SHA-256 lowercase của canonical decision
+policy sau, không phải rendered provider prompt:
+
+```json
+{
+  "kind": "fact-lock-zero-claim",
+  "inputVersion": "fact-lock.manifest.v1",
+  "promptVersion": "fact-lock-zero-claim.v1",
+  "outputSchemaVersion": "fact-lock-output.v1",
+  "providerRequired": false,
+  "dependenciesRequired": false,
+  "outcomeStatus": "passed"
+}
+```
+
+Policy hash không chứa Manifest ID/fingerprint, Project/workspace, actor,
+timestamp, Product Facts hoặc idempotency key. Không đổi tên cột, không thêm cột và
+không tạo migration mới.
+
+Zero-claim không resolve provider config, không load hoặc fingerprint Product Facts,
+không tạo `fact_lock_claim`, không tạo `fact_lock_claim_fact`, không đăng ký
+dependency và không claim external execution. `finishedAt` được ghi bởi server;
+mọi billing/provider usage field giữ `NULL`.
+
+Same workspace + idempotency key + zero-claim request hash trả cùng run đã persist;
+khác semantic request hash trả `FACT_LOCK_IDEMPOTENCY_CONFLICT`. Concurrent identical
+requests phải tạo đúng một run, không lộ unique DB error.
+
 ## 10. API/read model
 
 Read model tối thiểu trả:
@@ -212,9 +264,9 @@ Provider không được thêm, bớt, đổi `claimKey`, `claimText` hoặc loc
 result mismatch kết thúc run `indeterminate` với
 `FACT_LOCK_PROVIDER_RESULT_MISMATCH`, không tự paid retry.
 
-Executable zero-claim Manifest tạo run `passed`, không tạo `fact_lock_claim`, không
-tạo Product Fact dependency và không gọi provider. Invalid/uncertain source không
-được chuyển thành zero-claim.
+Executable zero-claim Manifest tạo run `passed` theo deterministic internal contract
+ở mục 9.1, không tạo `fact_lock_claim`, không tạo Product Fact dependency và không
+gọi provider. Invalid/uncertain source không được chuyển thành zero-claim.
 
 ## 11. Compatibility và rollout
 
