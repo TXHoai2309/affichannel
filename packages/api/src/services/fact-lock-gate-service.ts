@@ -20,6 +20,19 @@ import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import type { WorkspaceActor } from "./workspace";
 
 type GateRunRow = typeof factLockRun.$inferSelect;
+type LegacyGateRunRow = GateRunRow & {
+	inputMode: null;
+	scriptVersionId: string;
+	sourceScriptRevision: number;
+};
+
+function isLegacyGateRun(run: GateRunRow): run is LegacyGateRunRow {
+	return (
+		run.inputMode === null &&
+		run.scriptVersionId !== null &&
+		run.sourceScriptRevision !== null
+	);
+}
 
 function dependenciesAreCurrent(
 	run: GateRunRow,
@@ -68,7 +81,7 @@ export function buildFactLockGateEvaluationInput(input: {
 
 	return {
 		currentScriptVersion: input.currentScriptVersion,
-		runs: input.runs.map((run) => ({
+		runs: input.runs.filter(isLegacyGateRun).map((run) => ({
 			id: run.id,
 			scriptVersionId: run.scriptVersionId,
 			sourceScriptRevision: run.sourceScriptRevision,

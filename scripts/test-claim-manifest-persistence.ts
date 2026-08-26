@@ -790,8 +790,8 @@ try {
 
 	await migrate(drizzle(pool), { migrationsFolder: migrationsRoot });
 	assert(
-		(await migrationCount(pool)) === 20,
-		"Post-0019 migration count must be 20.",
+		(await migrationCount(pool)) === 21,
+		"Post-0020 migration count must be 21.",
 	);
 	const afterTables = await publicTables(pool);
 	assert(

@@ -14,6 +14,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
+import { claimManifest } from "./claim-manifest";
 import { project } from "./project";
 import { scriptVersion } from "./script-version";
 import { workspace } from "./workspace";
@@ -28,10 +29,17 @@ export const factLockRun = pgTable(
 		projectId: text("project_id")
 			.notNull()
 			.references(() => project.id, { onDelete: "restrict" }),
-		scriptVersionId: text("script_version_id")
-			.notNull()
-			.references(() => scriptVersion.id, { onDelete: "restrict" }),
-		sourceScriptRevision: integer("source_script_revision").notNull(),
+		scriptVersionId: text("script_version_id").references(
+			() => scriptVersion.id,
+			{ onDelete: "restrict" },
+		),
+		sourceScriptRevision: integer("source_script_revision"),
+		inputMode: text("input_mode"),
+		claimManifestId: text("claim_manifest_id").references(
+			() => claimManifest.id,
+			{ onDelete: "restrict" },
+		),
+		claimManifestFingerprint: text("claim_manifest_fingerprint"),
 		idempotencyKey: text("idempotency_key").notNull(),
 		requestHash: text("request_hash").notNull(),
 		inputSnapshotJson: jsonb("input_snapshot_json").notNull(),
@@ -68,7 +76,38 @@ export const factLockRun = pgTable(
 		),
 		check(
 			"fact_lock_run_source_revision_check",
-			sql`${table.sourceScriptRevision} > 0`,
+			sql`${table.sourceScriptRevision} is null or ${table.sourceScriptRevision} > 0`,
+		),
+		check(
+			"fact_lock_run_script_provenance_pair_check",
+			sql`(${table.scriptVersionId} is null and ${table.sourceScriptRevision} is null) or (${table.scriptVersionId} is not null and ${table.sourceScriptRevision} is not null and ${table.sourceScriptRevision} > 0)`,
+		),
+		check(
+			"fact_lock_run_input_mode_check",
+			sql`${table.inputMode} is null or ${table.inputMode} = 'MANIFEST_V1'`,
+		),
+		check(
+			"fact_lock_run_mode_shape_check",
+			sql`(
+				(${table.inputMode} is null
+					and ${table.claimManifestId} is null
+					and ${table.claimManifestFingerprint} is null
+					and ${table.scriptVersionId} is not null
+					and ${table.sourceScriptRevision} is not null
+					and ${table.sourceScriptRevision} > 0)
+				or
+				(${table.inputMode} is not null
+					and ${table.inputMode} = 'MANIFEST_V1'
+					and ${table.claimManifestId} is not null
+					and ${table.claimManifestFingerprint} is not null
+					and ${table.claimManifestFingerprint} ~ '^[a-f0-9]{64}$'
+					and ((${table.scriptVersionId} is null and ${table.sourceScriptRevision} is null)
+						or (${table.scriptVersionId} is not null and ${table.sourceScriptRevision} is not null and ${table.sourceScriptRevision} > 0)))
+			)`,
+		),
+		check(
+			"fact_lock_run_manifest_fingerprint_check",
+			sql`${table.claimManifestFingerprint} is null or ${table.claimManifestFingerprint} ~ '^[a-f0-9]{64}$'`,
 		),
 		check(
 			"fact_lock_run_idempotency_length_check",
@@ -105,7 +144,12 @@ export const factLockRun = pgTable(
 				table.scriptVersionId,
 				table.sourceScriptRevision,
 			)
-			.where(sql`${table.status} = 'pending'`),
+			.where(sql`${table.status} = 'pending' and ${table.inputMode} is null`),
+		uniqueIndex("fact_lock_run_manifest_pending_scope_unique")
+			.on(table.workspaceId, table.projectId, table.requestHash)
+			.where(
+				sql`${table.status} = 'pending' and ${table.inputMode} = 'MANIFEST_V1'`,
+			),
 		index("fact_lock_run_project_latest_idx").on(
 			table.workspaceId,
 			table.projectId,
@@ -116,6 +160,10 @@ export const factLockRun = pgTable(
 			table.workspaceId,
 			table.scriptVersionId,
 			table.sourceScriptRevision,
+		),
+		index("fact_lock_run_claim_manifest_idx").on(
+			table.workspaceId,
+			table.claimManifestId,
 		),
 		index("fact_lock_run_status_idx").on(
 			table.workspaceId,

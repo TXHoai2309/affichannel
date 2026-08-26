@@ -98,7 +98,28 @@ export type FactLockRunArtifact = {
 
 export type PreparedFactLockRun = FactLockRunArtifact;
 
+type LegacyFactLockRunRow = typeof factLockRun.$inferSelect & {
+	inputMode: null;
+	scriptVersionId: string;
+	sourceScriptRevision: number;
+};
+
+function isLegacyFactLockRun(
+	row: typeof factLockRun.$inferSelect,
+): row is LegacyFactLockRunRow {
+	return (
+		row.inputMode === null &&
+		row.scriptVersionId !== null &&
+		row.sourceScriptRevision !== null
+	);
+}
+
 function toArtifact(row: typeof factLockRun.$inferSelect): FactLockRunArtifact {
+	if (!isLegacyFactLockRun(row))
+		throw new FactLockError(
+			"FACT_LOCK_SCRIPT_NOT_READY",
+			"Fact Lock run chưa thuộc legacy ScriptVersion flow.",
+		);
 	return {
 		id: row.id,
 		workspaceId: row.workspaceId,
@@ -838,7 +859,8 @@ export async function finalizeFactLockRun(
 			});
 		if (
 			acceptedOutput &&
-			(status === "passed" || status === "review_required")
+			(status === "passed" || status === "review_required") &&
+			isLegacyFactLockRun(run)
 		) {
 			const [currentScript] = await transaction
 				.select()
@@ -993,24 +1015,25 @@ export async function getFactLockState(
 			),
 		)
 		.orderBy(desc(factLockRun.createdAt), desc(factLockRun.id));
-	if (!currentScript && runs.length === 0)
+	const legacyRuns = runs.filter(isLegacyFactLockRun);
+	if (!currentScript && legacyRuns.length === 0)
 		throw new FactLockError(
 			"FACT_LOCK_NOT_FOUND",
 			"Project không tồn tại trong workspace.",
 		);
 	const claimsByRun = new Map<string, FactLockStoredClaim[]>();
-	for (const run of runs) {
+	for (const run of legacyRuns) {
 		const claims = await db.transaction((transaction) =>
 			loadClaims(transaction, actor, run.id),
 		);
 		claimsByRun.set(run.id, claims);
 	}
 	const decorated = [] as Array<{
-		run: typeof factLockRun.$inferSelect;
+		run: LegacyFactLockRunRow;
 		effectiveStatus: FactLockEffectiveStatus;
 		claims: FactLockStoredClaim[];
 	}>;
-	for (const run of runs) {
+	for (const run of legacyRuns) {
 		const current = currentScript?.revision ?? null;
 		const effectiveStatus = deriveFactLockEffectiveStatus(
 			run.status as FactLockRunStatus,
