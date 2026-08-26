@@ -1,7 +1,7 @@
 # Contract ClaimManifest và Fact Lock v0.8
 
-- Trạng thái: Target US17+US18 canonical; US17 acceptance contract READY,
-  implementation chưa bắt đầu; US18 chưa bắt đầu
+- Trạng thái: Target US17+US18 canonical; AFF-US-017 DONE; AFF-US-018 contract
+  clarification locked, runtime chưa bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-028, DEC-031, V08-DEC-011, V08-DEC-013
@@ -73,17 +73,34 @@ Bất kỳ semantic source change nào tạo/reuse fingerprint khác. Exact cano
 text normalization và claim-key rules nằm trong dedicated AFF-US-017 contract.
 
 FactLockRun cũ không bị mutate. Read model trả effective `STALE` khi run không còn
-khớp Manifest hiện tại hoặc evidence dependency đã đổi/hết hiệu lực.
+khớp Manifest hiện tại, Manifest không còn executable/current, Product mismatch,
+Product Facts đã đổi/bị invalidate hoặc fingerprint không hợp lệ. Đây là trạng thái
+derived; không mutate Manifest để đánh dấu stale.
+
+Historical Manifest vẫn immutable/readable nhưng không được dùng cho FactLockRun
+mới nếu không còn executable. AFF-US-018 current activation chỉ nhận explicit
+Manifest có `sourceType=SCRIPT_VERSION`, Project identity hiện tại
+`AFFILIATE + SCRIPTED + SCRIPTED_STANDARD v1`, cùng workspace/Project, Product ID
+match, draft ScriptVersion đúng revision, fingerprint hợp lệ và source/content
+integrity hợp lệ.
+Không resolve `latest Manifest` làm authority.
 
 ## 6. FactLockRun persistence modes
 
-| Mode | `claimManifestId` | `claimManifestFingerprint` | Script provenance |
-|---|---|---|---|
-| Legacy read | Nullable | Nullable | Có theo schema lịch sử |
-| New write | Required | Required | Nullable, nếu Manifest có Script source |
+| Mode | `inputMode` | `claimManifestId` | `claimManifestFingerprint` | Script provenance |
+|---|---|---|---|---|
+| Legacy read | `NULL` | `NULL` | `NULL` | Có theo schema lịch sử |
+| New write | `MANIFEST_V1` | Required | Required, server-derived | Nullable trong schema; current activation phải populated |
 
-New pending uniqueness/idempotency dùng workspace/project + Manifest fingerprint +
-policy/input version. Script revision không còn là khóa canonical cho new writes.
+`MANIFEST_V1` yêu cầu Manifest ID/fingerprint được server resolve và kiểm tra cùng
+nhau. `inputMode` là persisted discriminator; không suy luận mode chỉ từ nullable FK.
+Legacy rows không backfill.
+
+New pending uniqueness dùng partial index chính xác trên
+`(workspace_id, project_id, request_hash) WHERE status='pending' AND
+input_mode='MANIFEST_V1'`. Legacy pending uniqueness giữ index riêng trên
+`(workspace_id, project_id, script_version_id, source_script_revision) WHERE
+status='pending' AND input_mode IS NULL`. Hai mode có thể coexist.
 Reader phải hỗ trợ hai mode; không backfill bằng cách tạo Manifest giả cho run cũ.
 
 ## 7. Applicability policy
@@ -118,6 +135,42 @@ unsupported claim, review requirements đã được xử lý và evidence depen
 - Stale pending lease kết thúc `indeterminate`; không tự retry paid provider.
 - Cùng idempotency key + cùng intent trả cùng result; cùng key + khác intent bị conflict.
 
+Với `MANIFEST_V1`, server-owned input version là `fact-lock.manifest.v1` và
+`productFactsFingerprint` là SHA-256 lowercase của canonical JSON exact Product Fact
+snapshot theo thứ tự deterministic. Request identity là:
+
+Projection chính xác của mỗi Product Fact trong snapshot, theo đúng thứ tự field
+canonical JSON, là `id`, `revision`, `content`, `type`, `status`, `assessment`,
+`generationUsability`, rồi `source` với các field con theo thứ tự `type`, `label`,
+`url`, `confirmedAt`, `expiresAt`. Các Product Facts được chọn theo policy hiện
+hành, loại các fact bị blocked, và được sắp xếp `id` tăng dần trước khi projection;
+không đưa DB metadata không phục vụ verification vào fingerprint.
+
+```text
+requestHash = SHA-256(canonicalJson({
+  inputVersion: "fact-lock.manifest.v1",
+  claimManifestFingerprint,
+  productFactsFingerprint,
+}))
+```
+
+Zero-claim executable Manifest không cần Product Fact fingerprint và dùng:
+
+```text
+SHA-256(canonicalJson({
+  inputVersion: "fact-lock.manifest.v1",
+  claimManifestFingerprint,
+  zeroClaims: true,
+}))
+```
+
+Same Manifest + changed Product Facts tạo request hash khác. `idempotencyKey` vẫn
+là client/retry identity, không phải pending semantic key.
+
+`inputVersion` là server-owned exact constant. Chỉ bump version khi thay đổi semantic
+interpretation của policy, claim/result mapping, verdict, fact eligibility hoặc input
+projection; không bump vì logging, telemetry hoặc refactor giữ nguyên semantics.
+
 ## 10. API/read model
 
 Read model tối thiểu trả:
@@ -131,6 +184,38 @@ Read model tối thiểu trả:
 UI không tự suy ra PASS/empty/stale. API error phải typed, sanitized và không lộ
 provider payload, credentials hoặc signed URL.
 
+Error contract tối thiểu và hành động/retryability:
+
+| Error | Retryability / user action | Sanitized API convention |
+|---|---|---|
+| `FACT_LOCK_MANIFEST_REQUIRED` | Không retry cùng request thiếu Manifest; cung cấp selection hợp lệ | `BAD_REQUEST` |
+| `CLAIM_MANIFEST_NOT_FOUND` | Không retry nếu selection/scope chưa được sửa; chọn Manifest hợp lệ | `NOT_FOUND`, không enumerate cross-scope |
+| `CLAIM_MANIFEST_NOT_EXECUTABLE` | Không retry cùng Manifest; refresh source và tạo Manifest mới | `CONFLICT` |
+| `CLAIM_MANIFEST_FINGERPRINT_MISMATCH` | Không retry tự động; fail closed và xử lý integrity/data issue | sanitized error, không lộ fingerprint nội bộ |
+| `FACT_LOCK_PROVIDER_RESULT_MISMATCH` | Không auto paid retry; explicit retry theo idempotency/retry rules | run `indeterminate`, sanitized error |
+
+Cross-workspace hoặc không được phép truy cập Manifest phải map non-enumerating về
+`CLAIM_MANIFEST_NOT_FOUND`. Các mapping HTTP chỉ dùng convention hiện hành và
+không làm lộ provider payload, credential hoặc nội bộ database.
+
+Legacy `inputMode=NULL` dùng ScriptVersion-first projection. `MANIFEST_V1` dùng
+Manifest-aware projection; không tự động mutate ScriptVersion. New run chỉ cho phép
+status-only manual approval nếu không sửa Manifest hoặc ScriptVersion. Edit/delete/
+apply-suggestion của legacy vẫn giữ behavior cũ; cùng thao tác trên Manifest-first
+run bị từ chối và phải tạo Manifest mới từ source đã sửa.
+
+Provider của `MANIFEST_V1` chỉ nhận ordered Manifest claims và exact Product Fact
+snapshot; không tự extract inventory khác từ Script. Với N claims, output phải có
+đúng N verdicts và exact bijection theo `claimKey`; server reject missing/unknown/
+duplicate/extra claim, malformed verdict hoặc invalid Fact, rồi reorder theo Manifest.
+Provider không được thêm, bớt, đổi `claimKey`, `claimText` hoặc locator. Provider
+result mismatch kết thúc run `indeterminate` với
+`FACT_LOCK_PROVIDER_RESULT_MISMATCH`, không tự paid retry.
+
+Executable zero-claim Manifest tạo run `passed`, không tạo `fact_lock_claim`, không
+tạo Product Fact dependency và không gọi provider. Invalid/uncertain source không
+được chuyển thành zero-claim.
+
 ## 11. Compatibility và rollout
 
 1. AFF-US-017 thêm pure domain + additive ClaimManifest table, deterministic
@@ -141,5 +226,28 @@ provider payload, credentials hoặc signed URL.
 5. Non-Script source activation thuộc source story tương ứng; giữ legacy adapter
    đến khi retention policy riêng được duyệt.
 
+AFF-US-018 không activate `NO_SCRIPT`, `ORGANIC`, `QUICK_IMAGE` hoặc `MEDIA_FIRST`.
+Current `MANIFEST_V1` runtime chỉ nhận `SCRIPT_VERSION` Manifest; nullable Script
+columns chỉ là schema representation cho future sources. Voice tiếp tục phụ thuộc
+FactLockGate và không mở no-script Voice path trong US18.
+
 Chi tiết migration và rollback tại `docs/domain-evolution-plan.md`; bộ test bắt
 buộc tại `docs/domain-evolution-acceptance.md`.
+
+## 12. AFF-US-018 migration clarification
+
+Migration 0020 conceptual contract, chưa được tạo trong clarification phase:
+
+- add nullable `input_mode` text, không dùng DB enum;
+- add nullable `claim_manifest_id` FK `ON DELETE RESTRICT`;
+- add nullable `claim_manifest_fingerprint`;
+- relax `script_version_id` và `source_script_revision` về nullable;
+- enforce pair invariant: cả hai NULL hoặc cả hai populated với revision dương;
+- legacy row shape: `input_mode=NULL` và Manifest fields NULL;
+- Manifest row shape: `input_mode='MANIFEST_V1'`, Manifest fields populated và
+  fingerprint lowercase SHA-256;
+- giữ lịch sử, không backfill, không rewrite `FactLockClaim`, không drop Script FK;
+- thay pending uniqueness bằng hai mode-specific partial indexes.
+
+Current application `MANIFEST_V1` writes vẫn phải populate Script provenance từ
+Manifest source descriptor. DB nullability không activate `NO_SCRIPT`.

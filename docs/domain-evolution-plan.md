@@ -1,7 +1,8 @@
 # Kế hoạch Domain Evolution v0.8
 
-- Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016 DONE; M4 shadow
-  retained; AFF-US-017 UNBLOCKED/NEXT nhưng chưa bắt đầu
+- Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016/AFF-US-017 DONE;
+  M4 shadow retained; AFF-US-018 contract clarification locked nhưng runtime chưa
+  bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -283,9 +284,9 @@ Project data mutation, provider call hay workflow authority change.
 
 M5D final regression đã PASS M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive Workflow,
 M5A, chín golden suites, type-check và full Web tests. `AC-M5-01–20` đều PASS;
-Domain Evolution M5, AFF-US-013 và AFF-US-016 DONE. AFF-US-017 được
-UNBLOCKED/NEXT nhưng chưa bắt đầu. M4 shadow/approved compatibility adapters vẫn
-retained; cleanup thuộc M6 và cần quyết định riêng.
+Domain Evolution M5, AFF-US-013, AFF-US-016 và AFF-US-017 DONE. AFF-US-018 đã khóa
+clarification contract nhưng runtime chưa bắt đầu. M4 shadow/approved compatibility
+adapters vẫn retained; cleanup thuộc M6 và cần quyết định riêng.
 
 ### M6 — Contract cleanup có điều kiện
 
@@ -294,11 +295,30 @@ không còn row cũ chưa backfill. Drop/rename là migration riêng, cần phê
 
 ### AFF-US-017 — ClaimManifest Foundation sau M5
 
-AFF-US-017 là story kế tiếp, không phải M6 cleanup. Contract source of truth là
+AFF-US-017 là story đã hoàn tất, không phải M6 cleanup. Contract source of truth là
 `docs/aff-us-017-claim-manifest-foundation.md` và DEC-031. Rollout là pure domain
 → additive table → race-safe repository → explicit ScriptVersion revision adapter
 → regression/handoff. Không sửa FactLockRun, không backfill dữ liệu lịch sử và
 không đổi current Fact Lock execution; Manifest-first cutover thuộc AFF-US-018.
+
+### AFF-US-018 — Manifest-first Fact Lock clarification lock
+
+AFF-US-018 new writes dùng `inputMode=MANIFEST_V1` và explicit executable
+`SCRIPT_VERSION` ClaimManifest. Historical rows giữ `inputMode=NULL`, Script-linked
+read behavior và không backfill. Manifest linkage gồm ID/fingerprint server-derived,
+FK `ON DELETE RESTRICT`; Script provenance nullable ở schema nhưng current activation
+vẫn populate từ Manifest source.
+
+Manifest mode request identity dùng `inputVersion="fact-lock.manifest.v1"`,
+Manifest fingerprint và deterministic Product Facts snapshot fingerprint. Pending
+uniqueness dùng mode-specific partial indexes: legacy theo ScriptVersion/revision,
+Manifest mode theo request hash. Provider phải trả exact claim-key bijection và server
+reorder theo Manifest; mismatch thành `indeterminate`. Executable zero-claim Manifest
+PASS không provider/dependency. Manifest-first resolution không mutate Manifest hoặc
+ScriptVersion; chỉ status-only manual approval được phép.
+
+`NO_SCRIPT`, Organic, Quick Image và Media First không được activate trong US18.
+Migration 0020 chỉ là conceptual additive contract; chưa được tạo hoặc apply.
 
 ## 5. Ma trận invariant
 

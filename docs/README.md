@@ -11,8 +11,8 @@ runtime shadow đã đạt parity; DEC-029/AFF-US-015 presentation cutover đã 
 DEC-030/M5 persisted identity enforcement đã DONE qua production migration 0018,
 postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 đã PASS
 Phase 17A–17E và DONE. ClaimManifest foundation vẫn dormant; AFF-US-018
-Manifest-First Fact Lock là canonical next story nhưng NOT STARTED. M5 không
-activate future identities.
+Manifest-First Fact Lock là canonical next runtime story, contract clarification
+đã locked nhưng runtime NOT STARTED. M5 không activate future identities.
 
 ## Thứ tự đọc
 

@@ -2,8 +2,12 @@
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013 và AFF-US-016 DONE;
   AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 Phase 17A–17E PASS
-  và DONE; AFF-US-018 Manifest-First Fact Lock NOT STARTED.
+  và DONE; AFF-US-018 contract clarification locked, runtime NOT STARTED.
 - Cập nhật lần cuối: 2026-08-25
+
+Current canonical status: AFF-US-017 DONE. AFF-US-018 Manifest-First Fact Lock đã
+khóa contract clarification nhưng runtime chưa bắt đầu. Không có migration 0020,
+provider call, production DB access hoặc runtime change trong clarification patch.
 
 ## 2026-08-25 — AFF-US-017 Phase 17E final acceptance
 
@@ -45,7 +49,7 @@ Quick Image, Media First, schema hoặc migration change. Mọi DB test dùng ex
 loopback disposable database; production DB/provider calls bằng 0; `apps/web/.data/`
 được giữ nguyên untracked.
 
-## 2026-08-25 — AFF-US-017 ClaimManifest Foundation contract
+## 2026-08-25 — Historical AFF-US-017 ClaimManifest Foundation contract audit
 
 Repository audit xác nhận current Fact Lock vẫn ScriptVersion-first; FactLockRun
 Script ID/revision NOT NULL, provider extraction, Product Fact dependency và Voice
@@ -54,9 +58,10 @@ immutable JSONB Manifest, deterministic ScriptVersion revision adapter, SHA-256
 fingerprint, scoped create/reuse, future NO_SCRIPT representability và Product/
 Product Facts boundary.
 
-AFF-US-017 hiện ACCEPTANCE CONTRACT READY nhưng IMPLEMENTATION NOT STARTED.
-Không schema/migration/runtime/provider/production change; FactLockRun cutover và
-legacy dual-mode reader vẫn thuộc AFF-US-018.
+Tại thời điểm audit contract này, AFF-US-017 mới ở boundary acceptance và chưa
+implementation. Entry này là historical evidence; current status được ghi ở đầu
+tài liệu và tại entry Phase 17E. FactLockRun cutover và legacy dual-mode reader
+tiếp tục thuộc AFF-US-018.
 
 ## 2026-08-25 — Domain Evolution M5D final acceptance
 

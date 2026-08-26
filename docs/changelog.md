@@ -8,14 +8,26 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-018 Manifest-first Fact Lock contract clarification
+
+- Khóa `inputMode=NULL` legacy và `inputMode=MANIFEST_V1` new mode, explicit
+  executable `SCRIPT_VERSION` Manifest, Manifest FK `ON DELETE RESTRICT`, nullable
+  Script provenance và không backfill historical rows.
+- Khóa Product Facts fingerprint, Manifest-mode request hash, mode-specific pending
+  uniqueness, exact provider claim-key bijection, zero-claim PASS và Manifest-first
+  resolution không mutate source.
+- Đây là documentation-only clarification; chưa có runtime, schema, migration 0020,
+  provider call hoặc production DB access.
+
 ### AFF-US-017 ClaimManifest Foundation final acceptance
 
-- Hoàn tất Phase 17E contract/architecture/security/regression audit: 17A–17D,
+- Hoàn tất Phase 17E contract/architecture/security/regression audit: 17A–17E,
   legacy ScriptVersion-first Fact Lock, Applicability/Adaptive A–J, 9/9 golden,
   full Web, types, targeted Biome và diff check đều PASS.
 - Khóa trạng thái AFF-US-017 DONE với immutable dormant ClaimManifest foundation;
   không backfill, public API/UI, provider/production call, future-mode activation
-  hoặc FactLockRun linkage. AFF-US-018 vẫn NOT STARTED.
+  hoặc FactLockRun linkage. AFF-US-018 contract clarification đã được khóa ở entry
+  trên; runtime vẫn NOT STARTED.
 
 ### AFF-US-017 Phase 17D ScriptVersion application service
 

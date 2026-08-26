@@ -1,5 +1,9 @@
 # AFF-US-010 — Phase 0 Contract Hardening
 
+> Legacy ScriptVersion-first contract. Các quy tắc request hash/pending tại tài liệu
+> này tiếp tục áp dụng cho `inputMode=NULL` historical FactLockRun; new
+> `MANIFEST_V1` semantics thuộc AFF-US-018 contract clarification.
+
 Ngày: 2026-08-17  
 Trạng thái: Phase 0 accepted / ready for Phase 1
 

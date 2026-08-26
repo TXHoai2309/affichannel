@@ -1,7 +1,8 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
 - Trạng thái: Canonical; M4/AFF-US-015 retained/accepted; Domain Evolution M5,
-  AFF-US-013 và AFF-US-016 DONE; AFF-US-017 UNBLOCKED/NEXT nhưng chưa bắt đầu
+  AFF-US-013, AFF-US-016 và AFF-US-017 DONE; AFF-US-018 contract clarification
+  locked nhưng runtime chưa bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -96,25 +97,39 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 ## 6. Gate E — ClaimManifest
 
 AFF-US-017 exact contract và `AC-017-01–22` nằm tại
-`docs/aff-us-017-claim-manifest-foundation.md`. Gate E hiện READY ở cấp acceptance;
-implementation chưa bắt đầu.
+`docs/aff-us-017-claim-manifest-foundation.md`. Gate E PASS qua Phase 17A–17E;
+ClaimManifest foundation đã hoàn tất và hiện dormant cho đến khi AFF-US-018 runtime.
 
-- [ ] Current ScriptVersion adapter build Manifest deterministic từ exact pinned
-  revision/structured claims; future adapters cover output-bearing no-script sources.
-- [ ] Client không thể giả `isEmpty` hoặc fingerprint.
-- [ ] Canonical ordering tạo fingerprint ổn định với input tương đương.
-- [ ] Sửa bất kỳ output-bearing source nào tạo fingerprint mới và run cũ `STALE`.
-- [ ] Empty Manifest chỉ được tạo khi extraction/normalization thành công.
-- [ ] Builder failure không persist empty/failed Manifest; US17 provider calls bằng 0.
-- [ ] Source locator đưa UI về đúng field/element.
+- [x] Current ScriptVersion adapter build Manifest deterministic từ exact pinned
+  revision/structured claims.
+- [x] Client không thể giả `isEmpty` hoặc fingerprint.
+- [x] Canonical ordering tạo fingerprint ổn định với input tương đương.
+- [x] Sửa bất kỳ output-bearing source nào tạo fingerprint mới và run cũ `STALE`.
+- [x] Empty Manifest chỉ được tạo khi extraction/normalization thành công.
+- [x] Builder failure không persist empty/failed Manifest; US17 provider calls bằng 0.
+- [x] Source locator đưa UI về đúng field/element.
+
+Future adapters cho output-bearing no-script sources vẫn thuộc story tương ứng và
+không được activate trong AFF-US-017/AFF-US-018 clarification.
 
 ## 7. Gate F — Fact Lock Manifest-first
 
-- [ ] New FactLockRun luôn có Manifest ID/fingerprint.
-- [ ] Script provenance nullable và đúng khi Manifest có Script source.
-- [ ] Pending/idempotency new writes dùng Manifest fingerprint, không chỉ script revision.
-- [ ] Affiliate empty Manifest vẫn chạy policy check và có thể PASS zero claims.
-- [ ] Organic Product claim cần current PASS và evidence còn hiệu lực.
+- [ ] New `MANIFEST_V1` FactLockRun có server-derived Manifest ID/fingerprint và
+  chỉ chạy explicit executable `SCRIPT_VERSION` Manifest.
+- [ ] `inputMode=NULL` là legacy read; `inputMode=MANIFEST_V1` là new mode; không
+  backfill hoặc suy luận mode từ nullable FK.
+- [ ] Script provenance nullable ở schema nhưng current US18 runtime vẫn populated
+  từ Manifest source descriptor.
+- [ ] `productFactsFingerprint` và `requestHash` dùng canonical exact snapshot;
+  changed Product Facts tạo semantic request khác.
+- [ ] Legacy và Manifest pending uniqueness dùng hai partial indexes riêng.
+- [ ] Provider output exact-bijection theo Manifest `claimKey`; server reorder theo
+  Manifest và reject missing/extra/duplicate/unknown claim.
+- [ ] Provider mismatch thành `indeterminate/FACT_LOCK_PROVIDER_RESULT_MISMATCH`;
+  không tự retry paid provider.
+- [ ] Executable zero-claim Manifest PASS, zero claim rows/dependencies/provider calls.
+- [ ] Manifest-first resolution không mutate Manifest/ScriptVersion; chỉ status-only
+  manual approval được phép nếu không đổi source.
 - [ ] Legacy/new run cùng tồn tại, list/read không nhập nhằng source mode.
 - [ ] Concurrent finalize dùng CAS và không che một PASS còn applicable.
 
@@ -208,8 +223,9 @@ call occurred.
 
 M5D final regression/sign-off PASS: M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive
 Workflow, M5A, chín golden suites, type-check và full Web tests đều xanh trên
-disposable DB; provider call bằng 0. Gate J và `AC-M5-01–20` DONE. AFF-US-013 và
-AFF-US-016 DONE; AFF-US-017 chỉ UNBLOCKED/NEXT, chưa bắt đầu.
+disposable DB; provider call bằng 0. Gate J và `AC-M5-01–20` DONE. AFF-US-013,
+AFF-US-016 và AFF-US-017 DONE; AFF-US-018 contract clarification locked, runtime
+chưa bắt đầu.
 
 ### AC-M5 final matrix
 
@@ -222,7 +238,7 @@ AFF-US-016 DONE; AFF-US-017 chỉ UNBLOCKED/NEXT, chưa bắt đầu.
 | AC-M5-13 | PASS | M4 shadow unit/integration parity PASS, zero mutation/provider call. |
 | AC-M5-14–17 | PASS | Fresh production preflight, exact 0018 apply, postflight và compatible rollback-binary evidence PASS. |
 | AC-M5-18–19 | PASS | M5 completion closes AFF-US-013/AFF-US-016; approved adapters retained. |
-| AC-M5-20 | PASS | Không có ClaimManifest schema/runtime/source trong M5; AFF-US-017 chưa bắt đầu. |
+| AC-M5-20 | PASS | M5 không có ClaimManifest schema/runtime/source; AFF-US-017 được triển khai sau M5 và hiện đã DONE. |
 
 ## 12. Regression suite tối thiểu
 

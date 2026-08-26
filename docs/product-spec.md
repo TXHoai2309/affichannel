@@ -237,7 +237,7 @@ fingerprint và audit timestamp. Client không được cung cấp `isEmpty` ho�
 fingerprint làm source of truth. Lỗi extraction/normalization phải fail closed;
 không được biến thành empty manifest.
 
-Rollout hiện tại: AFF-US-017 Phase 17A–17D đã thêm pure domain, additive migration
+Rollout hiện tại: AFF-US-017 Phase 17A–17E đã thêm pure domain, additive migration
 0019, race-safe repository và internal ScriptVersion application service. Current
 Scripted adapter pin explicit draft revision và build deterministic từ structured
 claims với zero provider call; foundation vẫn dormant và NO_SCRIPT chỉ representable,
@@ -486,8 +486,10 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
   TTS/render; Organic no-claim không bị Fact Lock chặn.
 - ClaimManifest empty chỉ PASS sau server normalization thành công; client không
   thể ép `isEmpty` hoặc fingerprint và uncertainty phải fail closed.
-- FactLockRun new write persist Manifest ID/fingerprint; no-script run không cần
-  ScriptVersion và legacy Script-linked rows vẫn đọc được.
+- FactLockRun new write dùng `inputMode=MANIFEST_V1`, persist server-derived Manifest
+  ID/fingerprint và hiện chỉ nhận executable `SCRIPT_VERSION` Manifest. Nullable
+  Script provenance là schema compatibility cho future sources; AFF-US-018 không
+  activate no-script run. Legacy Script-linked rows vẫn đọc được.
 - Organic no-claim có thể opt-in Voice/TTS khi Fact Lock là `NOT_REQUIRED`; khi
   Fact Lock là mandatory/applicable, Voice/TTS vẫn fail closed đến khi PASS.
 - Quick Image render tạo immutable MP4 variation; retry idempotent không làm mất
@@ -512,9 +514,9 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
-baseline. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 ClaimManifest Foundation đã
-PASS Phase 17A–17D và đang chờ final acceptance. Organic, Quick Image, Media First
-và Manifest-first Fact Lock vẫn chưa active.
+baseline. AFF-US-013/AFF-US-016/AFF-US-017 đã DONE qua Phase 17A–17E. AFF-US-018
+đã khóa contract clarification nhưng Manifest-first Fact Lock runtime chưa active;
+Organic, Quick Image và Media First cũng chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

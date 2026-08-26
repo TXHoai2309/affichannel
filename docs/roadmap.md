@@ -25,7 +25,8 @@ migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều P
 AFF-US-013 và AFF-US-016 đã DONE. AFF-US-014 M4 Resolver/shadow vẫn retained sau
 parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
 dependency AFF-US-017 ClaimManifest Foundation đã PASS Phase 17A–17E và DONE.
-Canonical next story là AFF-US-018 Manifest-First Fact Lock nhưng vẫn NOT STARTED.
+Canonical next runtime story là AFF-US-018 Manifest-First Fact Lock; contract
+clarification đã locked nhưng runtime vẫn NOT STARTED.
 Organic, Quick Image và Media First vẫn chưa active.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
@@ -69,6 +70,10 @@ Ranh giới tránh overlap:
   `AFF-US-015` là adaptive workflow presentation/navigation dùng resolver đó.
 - `AFF-US-017` sở hữu ClaimManifest foundation; `AFF-US-018` chuyển Fact Lock sang
   Manifest-first mà không nhập hai lifecycle thành một.
+- AFF-US-018 new writes dùng `inputMode=MANIFEST_V1`, explicit executable
+  `SCRIPT_VERSION` Manifest, exact Product Facts snapshot fingerprint và provider
+  result bijection theo Manifest `claimKey`; legacy `inputMode=NULL` rows tiếp tục
+  readable. No-script/Organic/Quick Image/Media First không được activate trong US18.
 - AFF-US-017 contract cụ thể nằm tại
   `docs/aff-us-017-claim-manifest-foundation.md`: immutable deterministic artifact,
   ScriptVersion revision pinning, future no-script representability và dormant

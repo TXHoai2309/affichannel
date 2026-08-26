@@ -343,7 +343,11 @@ Contract lịch sử của AFF-US-010 được khóa tại
 pending/idempotency và stale gate đều pin ScriptVersion revision. AFF-US-017 đã
 thêm dormant immutable ClaimManifest foundation theo DEC-031 nhưng không đổi flow
 này. AFF-US-018 mới chuyển new Fact Lock writes sang Manifest ID/fingerprint,
-giữ Script provenance nullable và dual-mode read cho historical rows.
+persist `inputMode=MANIFEST_V1`, giữ Script provenance nullable ở schema nhưng vẫn
+populated cho current `SCRIPT_VERSION` activation, và dual-mode read cho historical
+rows. Pending Manifest mode dùng server request hash từ Manifest fingerprint,
+Product Facts fingerprint và input version; không dùng Script revision làm primary
+identity.
 
 Target read model sau AFF-US-018 tiếp tục lưu persisted run status (`pending`,
 `review_required`, `passed`, `failed`, `indeterminate`); `stale` là effective

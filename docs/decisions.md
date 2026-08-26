@@ -13,7 +13,8 @@ DEC-025 cho công việc mới.
 
 ## DEC-031 — ClaimManifest Foundation is immutable, deterministic and dormant before US18
 
-- Trạng thái: Đã implement Phase 17A–17D; dormant foundation chờ final acceptance
+- Trạng thái: Đã implement và accepted Phase 17A–17E; dormant foundation chờ
+  runtime AFF-US-018
 - Ngày: 2026-08-25
 - Mở rộng: DEC-025, V08-DEC-011, V08-DEC-013
 
@@ -400,7 +401,7 @@ không thay thế hoặc đánh lại số ADR hiện hữu trong file này.
 | `V08-DEC-010` | Applicability/readiness states là runtime-derived DTO; không thêm `NOT_REQUIRED`, `OPTIONAL`, `REQUIRED`, `READY`, `STALE` vào `project_step_status.status`. |
 | `V08-DEC-011` | Server-built immutable ClaimManifest là nguồn claim canonical cho Fact Lock; ScriptVersion chỉ là một source adapter. |
 | `V08-DEC-012` | Script generation hỗ trợ server-selected input source mode `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; đây không thay persisted operation mode `full | repair`. Output ScriptDraft/versioning hiện tại giữ nguyên. |
-| `V08-DEC-013` | FactLockRun new writes lưu ClaimManifest ID/fingerprint; Script fields là optional provenance. Legacy Script-linked rows tiếp tục đọc được; pending/idempotency của new writes dựa trên Manifest fingerprint. |
+| `V08-DEC-013` | FactLockRun new writes dùng `inputMode=MANIFEST_V1`, lưu server-derived ClaimManifest ID/fingerprint; current US18 runtime chỉ nhận executable `SCRIPT_VERSION` Manifest và vẫn populate Script provenance. Legacy `inputMode=NULL` rows tiếp tục đọc được; request/pending identity dùng Manifest fingerprint + exact Product Facts fingerprint + server input version. |
 
 Resolver là derived policy dùng chung cho UI, API readiness và worker preflight.
 Nó tính `nextApplicableStep` nhưng không mutate `currentStepKey`. Khi authority

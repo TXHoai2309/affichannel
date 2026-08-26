@@ -210,7 +210,8 @@ rollback migration only when operationally necessary.
 - Successful implementation acceptance closes AFF-US-013 and AFF-US-016, but does
   not require physical deletion of every compatibility helper.
 - AFF-US-017 was blocked until M5 migration/postflight/golden acceptance; that
-  dependency is now satisfied, so the story is UNBLOCKED/NEXT but not started.
+  dependency was later satisfied and Phase 17A–17E is now DONE. AFF-US-018
+  contract clarification is locked, but its runtime is not started.
 
 ## 9. Stable acceptance criteria
 
@@ -295,7 +296,8 @@ apply and postflight evidence; M5D supplied final regression/sign-off. Because
 Domain Evolution M5 DONE
 AFF-US-013 DONE
 AFF-US-016 DONE
-AFF-US-017 UNBLOCKED/NEXT — NOT STARTED
+AFF-US-017 DONE
+AFF-US-018 CONTRACT LOCKED — RUNTIME NOT STARTED
 ```
 
 M4 shadow remains retained; reducing/removing it requires a separate ADR. M6
