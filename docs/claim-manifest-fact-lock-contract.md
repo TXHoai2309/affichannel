@@ -1,7 +1,7 @@
 # Contract ClaimManifest và Fact Lock v0.8
 
-- Trạng thái: Target US17+US18 canonical; AFF-US-017 DONE; AFF-US-018 Phase 18C
-  zero-claim execution contract locked
+- Trạng thái: Canonical US17+US18; AFF-US-017 DONE; AFF-US-018 Phase 18A–18F
+  PASS và DONE; AFF-US-019 chưa bắt đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-26
 - Quyết định liên quan: DEC-025, DEC-028, DEC-031, DEC-032, V08-DEC-011,
@@ -14,10 +14,10 @@ một ScriptVersion. ClaimManifest là immutable server-built inventory của co
 sources; downstream FactLockRun dùng inventory đó để nối Product Facts evidence,
 policy evaluation và gate.
 
-Contract này mô tả end-state sau AFF-US-018. Exact foundation contract của
-AFF-US-017 nằm tại `docs/aff-us-017-claim-manifest-foundation.md`. Runtime hiện tại
-vẫn ScriptVersion-first; không được đọc target wording dưới đây như capability đã
-active.
+Contract này mô tả trạng thái đã triển khai sau AFF-US-018. Exact foundation
+contract của AFF-US-017 nằm tại `docs/aff-us-017-claim-manifest-foundation.md`.
+Fact Lock new writes hiện Manifest-first qua public prepare/run boundary; legacy
+`inputMode=NULL` vẫn được đọc tương thích nhưng không còn là public new-write path.
 
 ## 2. ClaimManifest canonical
 
@@ -237,8 +237,8 @@ claim execution atomically trước provider call, gọi provider ngoài transac
 finalize bằng CAS. Strict result validation dùng exact Manifest claim-key bijection rồi
 reorder theo Manifest; Manifest giữ claim key, text, locator và source identity. Provider
 mismatch kết thúc `indeterminate` với `FACT_LOCK_PROVIDER_RESULT_MISMATCH` và không tự
-retry paid request. Chi tiết runtime thuộc AFF-US-018 Phase 18D; public read/router
-cutover vẫn thuộc phase sau.
+retry paid request. Runtime thuộc AFF-US-018 Phase 18D; public read/router cutover
+đã được hoàn tất và accepted trong Phase 18F.
 
 ## 10. API/read model
 
@@ -291,7 +291,8 @@ gọi provider. Invalid/uncertain source không được chuyển thành zero-cl
    ScriptVersion adapter và internal create/reuse/read service.
 2. AFF-US-017 không backfill Scripts/runs, không sửa FactLockRun và không đổi flow.
 3. AFF-US-018 thêm dual-mode FactLockRun linkage/reader và shadow/parity evidence.
-4. AFF-US-018 bật Manifest-first new writes theo reviewed cutover gate.
+4. AFF-US-018 bật Manifest-first new writes theo reviewed cutover gate; Phase 18F
+   hoàn tất public preparation, explicit run, review approval và UI cutover.
 5. Non-Script source activation thuộc source story tương ứng; giữ legacy adapter
    đến khi retention policy riêng được duyệt.
 
@@ -305,7 +306,8 @@ buộc tại `docs/domain-evolution-acceptance.md`.
 
 ## 12. AFF-US-018 migration clarification
 
-Migration 0020 conceptual contract, chưa được tạo trong clarification phase:
+Migration `0020_chilly_harry_osborn` là additive migration đã được tạo và apply
+trong Phase 18B; nội dung migration không thay đổi trong Phase 18F:
 
 - add nullable `input_mode` text, không dùng DB enum;
 - add nullable `claim_manifest_id` FK `ON DELETE RESTRICT`;
@@ -320,3 +322,7 @@ Migration 0020 conceptual contract, chưa được tạo trong clarification pha
 
 Current application `MANIFEST_V1` writes vẫn phải populate Script provenance từ
 Manifest source descriptor. DB nullability không activate `NO_SCRIPT`.
+
+AFF-US-019 chưa bắt đầu. Trước khi bắt đầu phải chạy full Affiliate Scripted flow
+checkpoint: Project → Product / Product Facts → Script Generation → ScriptVersion
+→ ClaimManifest → Manifest-first Fact Lock → FactLockGate → Voice.

@@ -10,9 +10,10 @@ M1/M2/M3 đã hoàn tất cho current Affiliate compatibility baseline. DEC-028 
 runtime shadow đã đạt parity; DEC-029/AFF-US-015 presentation cutover đã DONE.
 DEC-030/M5 persisted identity enforcement đã DONE qua production migration 0018,
 postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 đã PASS
-Phase 17A–17E và DONE. ClaimManifest foundation vẫn dormant; AFF-US-018
-Manifest-First Fact Lock là canonical next runtime story, contract clarification
-đã locked nhưng runtime NOT STARTED. M5 không activate future identities.
+Phase 17A–17E và DONE. AFF-US-018 Phase 18A–18F đã PASS và DONE: Fact Lock new
+writes là Manifest-first, còn legacy `inputMode=NULL` chỉ được đọc tương thích.
+AFF-US-019 chưa bắt đầu; full Affiliate Scripted flow checkpoint là bắt buộc
+trước khi bắt đầu story đó. M5 không activate future identities.
 
 ## Thứ tự đọc
 

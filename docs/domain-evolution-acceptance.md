@@ -1,10 +1,9 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
 - Trạng thái: Canonical; M4/AFF-US-015 retained/accepted; Domain Evolution M5,
-  AFF-US-013, AFF-US-016 và AFF-US-017 DONE; AFF-US-018 contract clarification
-  locked nhưng runtime chưa bắt đầu
+  AFF-US-013, AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-25
+- Cập nhật lần cuối: 2026-08-27
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
 
 ## 1. Nguyên tắc đạt
@@ -98,7 +97,8 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
 AFF-US-017 exact contract và `AC-017-01–22` nằm tại
 `docs/aff-us-017-claim-manifest-foundation.md`. Gate E PASS qua Phase 17A–17E;
-ClaimManifest foundation đã hoàn tất và hiện dormant cho đến khi AFF-US-018 runtime.
+ClaimManifest foundation đã hoàn tất và đang được dùng bởi public Manifest-first
+Fact Lock của AFF-US-018.
 
 - [x] Current ScriptVersion adapter build Manifest deterministic từ exact pinned
   revision/structured claims.
@@ -114,24 +114,29 @@ không được activate trong AFF-US-017/AFF-US-018 clarification.
 
 ## 7. Gate F — Fact Lock Manifest-first
 
-- [ ] New `MANIFEST_V1` FactLockRun có server-derived Manifest ID/fingerprint và
+- [x] New `MANIFEST_V1` FactLockRun có server-derived Manifest ID/fingerprint và
   chỉ chạy explicit executable `SCRIPT_VERSION` Manifest.
-- [ ] `inputMode=NULL` là legacy read; `inputMode=MANIFEST_V1` là new mode; không
+- [x] `inputMode=NULL` là legacy read; `inputMode=MANIFEST_V1` là new mode; không
   backfill hoặc suy luận mode từ nullable FK.
-- [ ] Script provenance nullable ở schema nhưng current US18 runtime vẫn populated
+- [x] Script provenance nullable ở schema nhưng current US18 runtime vẫn populated
   từ Manifest source descriptor.
-- [ ] `productFactsFingerprint` và `requestHash` dùng canonical exact snapshot;
+- [x] `productFactsFingerprint` và `requestHash` dùng canonical exact snapshot;
   changed Product Facts tạo semantic request khác.
-- [ ] Legacy và Manifest pending uniqueness dùng hai partial indexes riêng.
-- [ ] Provider output exact-bijection theo Manifest `claimKey`; server reorder theo
+- [x] Legacy và Manifest pending uniqueness dùng hai partial indexes riêng.
+- [x] Provider output exact-bijection theo Manifest `claimKey`; server reorder theo
   Manifest và reject missing/extra/duplicate/unknown claim.
-- [ ] Provider mismatch thành `indeterminate/FACT_LOCK_PROVIDER_RESULT_MISMATCH`;
+- [x] Provider mismatch thành `indeterminate/FACT_LOCK_PROVIDER_RESULT_MISMATCH`;
   không tự retry paid provider.
-- [ ] Executable zero-claim Manifest PASS, zero claim rows/dependencies/provider calls.
-- [ ] Manifest-first resolution không mutate Manifest/ScriptVersion; chỉ status-only
+- [x] Executable zero-claim Manifest PASS, zero claim rows/dependencies/provider calls.
+- [x] Manifest-first resolution không mutate Manifest/ScriptVersion; chỉ status-only
   manual approval được phép nếu không đổi source.
-- [ ] Legacy/new run cùng tồn tại, list/read không nhập nhằng source mode.
-- [ ] Concurrent finalize dùng CAS và không che một PASS còn applicable.
+- [x] Legacy/new run cùng tồn tại, list/read không nhập nhằng source mode.
+- [x] Concurrent finalize dùng CAS và không che một PASS còn applicable.
+
+Gate F PASS qua Phase 18A–18F. Public new writes dùng `prepareManifest` rồi
+explicit `claimManifestId`; legacy `inputMode=NULL` chỉ còn read compatibility.
+AFF-US-019 chưa bắt đầu. Full Affiliate Scripted flow checkpoint là bắt buộc
+trước khi bắt đầu story đó.
 
 ## 8. Gate G — Voice, render và Quick Image
 
@@ -210,9 +215,9 @@ rehearsal, M2/M3B/M4/AFF-US-015 và golden regressions. M5A đã PASS các gate
 disposable: clean/dirty migration, schema introspection, binary compatibility,
 M2C/M4/Adaptive và golden regression. M5B fresh production preflight PASS với
 16 canonical complete Projects, zero blockers/deprecated refs, nullable pre-M5
-identity columns, nullable `product_id` và migration count 18. Migration 0018 vẫn
-NOT APPLIED, nên full Gate J/M5 chưa PASS. M5C phải rerun fresh production
-preflight ngay trước apply; owner-role M5B evidence không được dùng để skip gate.
+identity columns, nullable `product_id` và migration count 18. Đây là evidence tại
+thời điểm M5B, trước khi M5C được thực hiện; owner-role M5B evidence không được
+dùng để skip M5C fresh preflight.
 
 M5C evidence PASS: committed guarded runner reran fresh production preflight
 (16/16 canonical, zero blockers), confirmed pre-schema nullable and migration
@@ -224,8 +229,14 @@ call occurred.
 M5D final regression/sign-off PASS: M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive
 Workflow, M5A, chín golden suites, type-check và full Web tests đều xanh trên
 disposable DB; provider call bằng 0. Gate J và `AC-M5-01–20` DONE. AFF-US-013,
-AFF-US-016 và AFF-US-017 DONE; AFF-US-018 contract clarification locked, runtime
-chưa bắt đầu.
+AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 chưa bắt đầu.
+
+AFF-US-018 Phase 18F public cutover PASS: Manifest preparation, explicit public
+Manifest run, zero-claim path, dual-mode read/gate, status-only review approval,
+source-mutation guards, Voice downstream compatibility và public error mapping
+đều có evidence trên current schema. Migration 0020 không đổi; không có 0021,
+backfill, production DB touch hoặc live provider call. Full Affiliate Scripted
+flow checkpoint phải PASS trước AFF-US-019.
 
 ### AC-M5 final matrix
 

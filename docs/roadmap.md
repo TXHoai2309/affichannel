@@ -25,8 +25,10 @@ migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều P
 AFF-US-013 và AFF-US-016 đã DONE. AFF-US-014 M4 Resolver/shadow vẫn retained sau
 parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
 dependency AFF-US-017 ClaimManifest Foundation đã PASS Phase 17A–17E và DONE.
-Canonical next runtime story là AFF-US-018 Manifest-First Fact Lock; contract
-clarification đã locked nhưng runtime vẫn NOT STARTED.
+AFF-US-018 Manifest-First Fact Lock đã hoàn tất Phase 18A–18F và DONE; new writes
+dùng Manifest-first, legacy `inputMode=NULL` chỉ còn read compatibility. Canonical
+next story là AFF-US-019, hiện NOT STARTED. Full Affiliate Scripted flow checkpoint
+phải PASS trước khi bắt đầu AFF-US-019.
 Organic, Quick Image và Media First vẫn chưa active.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt

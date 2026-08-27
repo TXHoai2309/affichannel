@@ -1,8 +1,8 @@
 # Kế hoạch Domain Evolution v0.8
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016/AFF-US-017 DONE;
-  M4 shadow retained; AFF-US-018 contract clarification locked nhưng runtime chưa
-  bắt đầu
+  M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 chưa bắt
+  đầu
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-08-25
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
@@ -284,8 +284,9 @@ Project data mutation, provider call hay workflow authority change.
 
 M5D final regression đã PASS M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive Workflow,
 M5A, chín golden suites, type-check và full Web tests. `AC-M5-01–20` đều PASS;
-Domain Evolution M5, AFF-US-013, AFF-US-016 và AFF-US-017 DONE. AFF-US-018 đã khóa
-clarification contract nhưng runtime chưa bắt đầu. M4 shadow/approved compatibility
+Domain Evolution M5, AFF-US-013, AFF-US-016 và AFF-US-017 DONE. AFF-US-018
+Phase 18A–18F đã PASS và DONE: new Fact Lock writes Manifest-first, legacy
+`inputMode=NULL` chỉ còn read compatibility. M4 shadow/approved compatibility
 adapters vẫn retained; cleanup thuộc M6 và cần quyết định riêng.
 
 ### M6 — Contract cleanup có điều kiện
@@ -301,7 +302,7 @@ AFF-US-017 là story đã hoàn tất, không phải M6 cleanup. Contract source
 → regression/handoff. Không sửa FactLockRun, không backfill dữ liệu lịch sử và
 không đổi current Fact Lock execution; Manifest-first cutover thuộc AFF-US-018.
 
-### AFF-US-018 — Manifest-first Fact Lock clarification lock
+### AFF-US-018 — Manifest-first Fact Lock (Phase 18A–18F)
 
 AFF-US-018 new writes dùng `inputMode=MANIFEST_V1` và explicit executable
 `SCRIPT_VERSION` ClaimManifest. Historical rows giữ `inputMode=NULL`, Script-linked
@@ -318,7 +319,10 @@ PASS không provider/dependency. Manifest-first resolution không mutate Manifes
 ScriptVersion; chỉ status-only manual approval được phép.
 
 `NO_SCRIPT`, Organic, Quick Image và Media First không được activate trong US18.
-Migration 0020 chỉ là conceptual additive contract; chưa được tạo hoặc apply.
+Migration `0020_chilly_harry_osborn` là additive migration đã được chấp nhận và
+giữ nguyên; Phase 18F không tạo migration mới hoặc thay đổi schema. AFF-US-019
+chưa bắt đầu. Trước AFF-US-019 phải chạy full Affiliate Scripted flow checkpoint
+từ Project tới Voice.
 
 ## 5. Ma trận invariant
 

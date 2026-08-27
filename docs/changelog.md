@@ -8,6 +8,19 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-018 Phase 18F public Manifest-first cutover
+
+- Hoàn tất public `factLock.prepareManifest` và cutover `factLock.run` sang
+  explicit server-derived `claimManifestId`, persist `inputMode=MANIFEST_V1`;
+  public path không còn tạo run legacy `inputMode=NULL`.
+- Fact Lock Review tạo/reuse Manifest khi người dùng Run, hiển thị claims từ
+  Manifest, hỗ trợ status-only approval current/reviewable và chặn source mutation
+  trong Manifest mode; legacy read/action compatibility được giữ nguyên.
+- Public disposable integration chứng minh non-empty/zero-claim, stale và
+  cross-scope guards, dual-mode read/gate, Voice downstream compatibility và
+  không có live provider/production DB call. AFF-US-018 DONE; AFF-US-019 chưa bắt
+  đầu. Checkpoint full Affiliate Scripted flow là bắt buộc trước AFF-US-019.
+
 ### AFF-US-018 Manifest-first Fact Lock contract clarification
 
 - Khóa `inputMode=NULL` legacy và `inputMode=MANIFEST_V1` new mode, explicit

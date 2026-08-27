@@ -1,13 +1,39 @@
 # Tiến trình AI agent
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013 và AFF-US-016 DONE;
-  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 Phase 17A–17E PASS
-  và DONE; AFF-US-018 contract clarification locked, runtime NOT STARTED.
-- Cập nhật lần cuối: 2026-08-25
+  AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 DONE;
+  AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
+  legacy `inputMode=NULL` chỉ còn read compatibility.
+- Cập nhật lần cuối: 2026-08-27
 
-Current canonical status: AFF-US-017 DONE. AFF-US-018 Manifest-First Fact Lock đã
-khóa contract clarification nhưng runtime chưa bắt đầu. Không có migration 0020,
-provider call, production DB access hoặc runtime change trong clarification patch.
+Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
+trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
+`inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
+0020 giữ nguyên; không có migration 0021. AFF-US-019 chưa bắt đầu.
+
+Trước khi bắt đầu AFF-US-019 phải thực hiện checkpoint đầy đủ Affiliate Scripted:
+Project → Product / Product Facts → Script Generation → ScriptVersion →
+ClaimManifest → Manifest-first Fact Lock → FactLockGate → Voice.
+
+## 2026-08-27 — AFF-US-018 Phase 18F public cutover final acceptance
+
+AFF-US-018 Phase 18F PASS: protected `factLock.prepareManifest` yêu cầu exact
+current ScriptVersion/revision và trả server-owned Manifest identity; public
+`factLock.run` yêu cầu explicit Manifest ID và chỉ tạo `MANIFEST_V1`. Public
+integration chứng minh non-empty/zero-claim, reuse, cross-scope non-enumeration,
+stale rejection trước provider, Manifest projection/gate, status-only manual
+approval và source-mutation rejection. Legacy rows vẫn đọc được và không có
+public new legacy write.
+
+UI Fact Lock Review tạo/reuse Manifest ngay khi người dùng bấm Run, hiển thị
+Manifest-authoritative claims, cho phép approval current/reviewable và ẩn/khóa
+source mutation ở Manifest mode. Deterministic test provider được dùng; live
+provider và production DB calls bằng 0.
+
+18A–18E, ClaimManifest 17A–17E, legacy Fact Lock, Voice, Applicability/Adaptive,
+9/9 current-schema golden suites, type-check, Biome và full Web tests đều PASS.
+AFF-US-019 chưa bắt đầu; không có schema/migration change, backfill hoặc
+future-mode activation.
 
 ## 2026-08-25 — AFF-US-017 Phase 17E final acceptance
 

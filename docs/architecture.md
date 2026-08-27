@@ -338,16 +338,15 @@ Chi tiết được khóa bởi DEC-015 và `docs/aff-us-008-foundation.md`.
 
 Contract lịch sử của AFF-US-010 được khóa tại
 `docs/aff-us-010-phase-0-contract-hardening.md`; contract mở rộng v0.8 nằm tại
-`docs/claim-manifest-fact-lock-contract.md`. Runtime hiện tại vẫn ScriptVersion-first:
-`fact_lock_run.script_version_id` và revision là NOT NULL; provider snapshot,
-pending/idempotency và stale gate đều pin ScriptVersion revision. AFF-US-017 đã
-thêm dormant immutable ClaimManifest foundation theo DEC-031 nhưng không đổi flow
-này. AFF-US-018 mới chuyển new Fact Lock writes sang Manifest ID/fingerprint,
-persist `inputMode=MANIFEST_V1`, giữ Script provenance nullable ở schema nhưng vẫn
-populated cho current `SCRIPT_VERSION` activation, và dual-mode read cho historical
-rows. Pending Manifest mode dùng server request hash từ Manifest fingerprint,
-Product Facts fingerprint và input version; không dùng Script revision làm primary
-identity.
+`docs/claim-manifest-fact-lock-contract.md`. Runtime hiện tại hỗ trợ dual-mode:
+legacy `inputMode=NULL` là read compatibility, còn new Fact Lock writes dùng
+Manifest ID/fingerprint với `inputMode=MANIFEST_V1`. Script provenance vẫn được
+populate cho current `SCRIPT_VERSION` Manifest activation; historical rows được
+đọc tương thích. AFF-US-017 cung cấp immutable ClaimManifest foundation và
+AFF-US-018 Phase 18F đã hoàn tất public prepare/run, Manifest-aware read/gate và
+status-only review approval. Pending Manifest mode dùng server request hash từ
+Manifest fingerprint, Product Facts fingerprint và input version; không dùng
+Script revision làm primary identity.
 
 Target read model sau AFF-US-018 tiếp tục lưu persisted run status (`pending`,
 `review_required`, `passed`, `failed`, `indeterminate`); `stale` là effective
@@ -356,7 +355,7 @@ phải trạng thái mutate lịch sử. Claim classification (`SUPPORTED`,
 `NEEDS_REVIEW`, `UNSUPPORTED`, `PROHIBITED`) tách khỏi review status và AI không
 phải authority duy nhất cho `PROHIBITED`.
 
-Target Manifest-first Fact Lock sau AFF-US-018 gồm các giai đoạn riêng:
+Manifest-first Fact Lock sau AFF-US-018 gồm các giai đoạn riêng:
 
 1. resolve explicit immutable/versioned source revision;
 2. deterministic source adapter project structured claims và validate locators;

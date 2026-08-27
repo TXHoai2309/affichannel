@@ -211,7 +211,7 @@ rollback migration only when operationally necessary.
   not require physical deletion of every compatibility helper.
 - AFF-US-017 was blocked until M5 migration/postflight/golden acceptance; that
   dependency was later satisfied and Phase 17A–17E is now DONE. AFF-US-018
-  contract clarification is locked, but its runtime is not started.
+  Phase 18A–18F is now PASS and DONE; AFF-US-019 has not started.
 
 ## 9. Stable acceptance criteria
 
@@ -297,8 +297,10 @@ Domain Evolution M5 DONE
 AFF-US-013 DONE
 AFF-US-016 DONE
 AFF-US-017 DONE
-AFF-US-018 CONTRACT LOCKED — RUNTIME NOT STARTED
+AFF-US-018 DONE
 ```
 
 M4 shadow remains retained; reducing/removing it requires a separate ADR. M6
 compatibility cleanup remains deferred and is not implied by story closure.
+AFF-US-019 has not started; the full Affiliate Scripted flow checkpoint must pass
+before that story begins.

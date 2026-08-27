@@ -240,8 +240,9 @@ không được biến thành empty manifest.
 Rollout hiện tại: AFF-US-017 Phase 17A–17E đã thêm pure domain, additive migration
 0019, race-safe repository và internal ScriptVersion application service. Current
 Scripted adapter pin explicit draft revision và build deterministic từ structured
-claims với zero provider call; foundation vẫn dormant và NO_SCRIPT chỉ representable,
-chưa active. AFF-US-018 mới nối FactLockRun và cutover Manifest-first execution.
+claims với zero provider call; NO_SCRIPT chỉ representable và chưa active.
+AFF-US-018 đã nối FactLockRun và cutover Manifest-first execution
+cho current Affiliate Scripted flow.
 
 ### Fact Lock run
 
@@ -514,9 +515,9 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
-baseline. AFF-US-013/AFF-US-016/AFF-US-017 đã DONE qua Phase 17A–17E. AFF-US-018
-đã khóa contract clarification nhưng Manifest-first Fact Lock runtime chưa active;
-Organic, Quick Image và Media First cũng chưa active.
+baseline. AFF-US-013/AFF-US-016/AFF-US-017/AFF-US-018 đã DONE qua các phase đã
+chấp nhận; Fact Lock new writes hiện Manifest-first và legacy rows vẫn đọc được.
+AFF-US-019 chưa bắt đầu; Organic, Quick Image và Media First cũng chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.
