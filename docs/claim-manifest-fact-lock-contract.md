@@ -3,9 +3,9 @@
 - Trạng thái: Canonical US17+US18; AFF-US-017 DONE; AFF-US-018 Phase 18A–18F
   PASS và DONE; AFF-US-019 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-26
-- Quyết định liên quan: DEC-025, DEC-028, DEC-031, DEC-032, V08-DEC-011,
-  V08-DEC-013
+- Cập nhật lần cuối: 2026-08-27
+- Quyết định liên quan: DEC-025, DEC-028, DEC-031, DEC-032, DEC-033, DEC-034,
+  V08-DEC-011, V08-DEC-013
 
 ## 1. Mục đích
 
@@ -18,6 +18,11 @@ Contract này mô tả trạng thái đã triển khai sau AFF-US-018. Exact fou
 contract của AFF-US-017 nằm tại `docs/aff-us-017-claim-manifest-foundation.md`.
 Fact Lock new writes hiện Manifest-first qua public prepare/run boundary; legacy
 `inputMode=NULL` vẫn được đọc tương thích nhưng không còn là public new-write path.
+
+Post-US18 hardening có một boundary riêng cho Script Claim Refresh. Đây là paid
+extraction operation của ScriptVersion, không phải ClaimManifest builder và không
+phải Fact Lock execution. Contract persistence của nó được khóa tại DEC-034;
+implementation sẽ đi theo CR-A/CR-B/CR-C và chưa thuộc AFF-US-019.
 
 ## 2. ClaimManifest canonical
 
@@ -44,10 +49,13 @@ thuộc Manifest level trong one-Product MVP. Source locator phải đủ để 
 
 1. Authorize actor với Project/workspace.
 2. Resolve đúng explicit output-bearing source revision và identifiers.
-3. Source adapter project validated structured claims theo deterministic rules.
-4. Validate locator/text và canonicalize mà không gọi provider trong AFF-US-017.
-5. Giữ deterministic adapter-defined order và tính fingerprint server-side.
-6. Persist Manifest bất biến cùng source snapshot/provenance.
+3. Nếu ScriptVersion claims đang `stale`, một Claim Refresh riêng phải hoàn tất
+   và CAS-apply candidate inventory cho exact current ScriptVersion trước khi build.
+   ClaimManifest builder không tự gọi provider hoặc tự refresh claims.
+4. Source adapter project validated structured claims theo deterministic rules.
+5. Validate locator/text và canonicalize mà không gọi provider trong AFF-US-017.
+6. Giữ deterministic adapter-defined order và tính fingerprint server-side.
+7. Persist Manifest bất biến cùng source snapshot/provenance.
 
 Client không được gửi `isEmpty`, canonical fingerprint hoặc canonical claims làm
 source of truth. AFF-US-017 chỉ có internal service; future client preview nếu có
@@ -62,9 +70,12 @@ chỉ là hint và phải được server rebuild.
 - canonical inventory có zero claim.
 
 Source thiếu, stale claims, parser lỗi hoặc unsupported schema phải trả typed build
-error và không persist Manifest. Provider timeout/uncertainty là AFF-US-018 Fact
-Lock execution concern, không phải Manifest lifecycle. Affiliate claimless có thể
-có empty Manifest sau build thành công; policy run zero-claim thuộc AFF-US-018.
+error và không persist Manifest. Stale claims phải đi qua explicit durable Claim
+Refresh trước, không được dùng old inventory hoặc để Fact Lock tự extract. Provider
+timeout/uncertainty của Claim Refresh thuộc execution artifact riêng theo DEC-034;
+provider timeout/uncertainty của Manifest Fact Lock vẫn là AFF-US-018 Fact Lock
+execution concern. Affiliate claimless có thể có empty Manifest sau build thành công;
+policy run zero-claim thuộc AFF-US-018.
 
 ## 5. Fingerprint và stale
 
@@ -281,6 +292,16 @@ Provider không được thêm, bớt, đổi `claimKey`, `claimText` hoặc loc
 result mismatch kết thúc run `indeterminate` với
 `FACT_LOCK_PROVIDER_RESULT_MISMATCH`, không tự paid retry.
 
+Fact Lock không phải Claim Refresh fallback. Claim Refresh nhận source projection
+chỉ gồm selected hook text, ordered voiceover segments, ordered scene on-screen
+text, CTA và caption — đúng các locator mà `ClaimOccurrence` hiện hỗ trợ — rồi trả
+candidate `{text, occurrence}` không có `claimKey`. Product Facts không tham gia
+semantic input/hash của Claim Refresh; Fact Lock mới là nơi kiểm tra support.
+`script-claim-refresh.v1`, `script-claim-refresh-prompt.v1` và
+`script-claim-refresh-output.v1` là các version server-owned riêng. Refresh thành
+công tạo ScriptVersion revision `R+1`, set `claimsSourceRevision=R+1`, rồi mới cho
+phép build Manifest từ current claims.
+
 Executable zero-claim Manifest tạo run `passed` theo deterministic internal contract
 ở mục 9.1, không tạo `fact_lock_claim`, không tạo Product Fact dependency và không
 gọi provider. Invalid/uncertain source không được chuyển thành zero-claim.
@@ -295,6 +316,8 @@ gọi provider. Invalid/uncertain source không được chuyển thành zero-cl
    hoàn tất public preparation, explicit run, review approval và UI cutover.
 5. Non-Script source activation thuộc source story tương ứng; giữ legacy adapter
    đến khi retention policy riêng được duyệt.
+6. Post-US18 Claim Refresh hardening tách durable execution artifact khỏi
+   FactLockRun/ScriptGeneration; AFF-US-019 vẫn chưa bắt đầu.
 
 AFF-US-018 không activate `NO_SCRIPT`, `ORGANIC`, `QUICK_IMAGE` hoặc `MEDIA_FIRST`.
 Current `MANIFEST_V1` runtime chỉ nhận `SCRIPT_VERSION` Manifest; nullable Script
@@ -322,6 +345,11 @@ trong Phase 18B; nội dung migration không thay đổi trong Phase 18F:
 
 Current application `MANIFEST_V1` writes vẫn phải populate Script provenance từ
 Manifest source descriptor. DB nullability không activate `NO_SCRIPT`.
+
+Migration `0021` chưa được tạo. Khi được phê duyệt, migration đó chỉ sở hữu
+`script_claim_refresh_run` với pending semantic uniqueness, workspace idempotency
+uniqueness và FK retention policy theo DEC-034; không backfill, không sửa
+ClaimManifest/FactLockRun và không thay đổi migration `0020`.
 
 AFF-US-019 chưa bắt đầu. Trước khi bắt đầu phải chạy full Affiliate Scripted flow
 checkpoint: Project → Product / Product Facts → Script Generation → ScriptVersion

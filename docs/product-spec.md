@@ -227,6 +227,9 @@ Script generation không phải nội dung đã được người dùng chọn/c
 
 Phiên bản bất biến đã lưu của hook, voiceover segment, chỉ dẫn scene, on-screen
 text, CTA, caption, hashtag, disclosure và các claim đã tách.
+Current Script Studio phải hiển thị `ScriptVersion.editableSnapshot` là nội dung
+hiện tại khi draft tồn tại; `ScriptGeneration` chỉ là nguồn/provenance lịch sử,
+không được trình bày như bản script hiện hành.
 
 ### Claim Manifest
 
@@ -243,6 +246,13 @@ Scripted adapter pin explicit draft revision và build deterministic từ struct
 claims với zero provider call; NO_SCRIPT chỉ representable và chưa active.
 AFF-US-018 đã nối FactLockRun và cutover Manifest-first execution
 cho current Affiliate Scripted flow.
+
+Sau claim-bearing edit, claims của current ScriptVersion là `stale` và không thể
+được dùng để build ClaimManifest. Explicit Script Claim Refresh là paid extraction
+boundary riêng: chỉ inventory exact Script content, không verify Product Facts,
+không sửa text và không tạo Manifest. ClaimManifest chỉ được build sau khi refresh
+đã CAS-apply claims mới thành `current`; contract persistence của refresh nằm tại
+DEC-034 và chưa implement.
 
 ### Fact Lock run
 

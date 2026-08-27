@@ -4,7 +4,7 @@
   M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 chưa bắt
   đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-25
+- Cập nhật lần cuối: 2026-08-27
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
 
 ## 1. Mục tiêu
@@ -323,6 +323,31 @@ Migration `0020_chilly_harry_osborn` là additive migration đã được chấp
 giữ nguyên; Phase 18F không tạo migration mới hoặc thay đổi schema. AFF-US-019
 chưa bắt đầu. Trước AFF-US-019 phải chạy full Affiliate Scripted flow checkpoint
 từ Project tới Voice.
+
+### POST AFF-US-018 — Script Claim Refresh hardening
+
+Đây là contract/design checkpoint sau khi AFF-US-018 đã DONE, không mở lại
+AFF-US-018 và không bắt đầu AFF-US-019. Claim Refresh là paid extraction operation
+riêng của ScriptVersion: sau claim-bearing edit, claims chuyển `stale`; explicit
+refresh tạo candidate `{text, occurrence}` từ exact current Script content; chỉ sau
+CAS thành công và claims trở thành `current` mới được build ClaimManifest. Fact Lock
+không extract lại claims và Product Facts không thuộc semantic input/hash của Claim
+Refresh.
+
+Execution phải có artifact bền vững riêng `script_claim_refresh_run` trong migration
+tương lai `0021` — không dùng `FactLockRun` hoặc `ScriptGeneration`. Contract đã khóa
+tại DEC-034: source projection/hash deterministic (selected hook, ordered voiceover,
+scene on-screen text, CTA, caption), request hash server-owned, workspace-scoped
+idempotency, pending semantic uniqueness, durable single-winner execution claim,
+provider ngoài transaction và T3 CAS. Status là `pending | completed | failed |
+indeterminate`; provider-result mismatch là `failed`, uncertainty là
+`indeterminate` và không automatic paid retry.
+
+Với source revision `R`, refresh thành công tạo ScriptVersion revision `R+1`,
+`claimsSourceRevision=R+1`, còn run giữ `sourceScriptRevision=R` và
+`resultScriptRevision=R+1`. Phasing implementation: CR-A persistence/repository,
+CR-B provider/runtime/CAS, CR-C public editor action + current ScriptVersion
+read-model + workflow refresh. Chưa tạo migration `0021` trong checkpoint này.
 
 ## 5. Ma trận invariant
 

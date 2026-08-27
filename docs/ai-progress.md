@@ -9,11 +9,30 @@
 Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
-0020 giữ nguyên; không có migration 0021. AFF-US-019 chưa bắt đầu.
+0020 giữ nguyên; migration 0021 cho post-US18 Claim Refresh hiện chưa được tạo.
+AFF-US-019 chưa bắt đầu.
 
 Trước khi bắt đầu AFF-US-019 phải thực hiện checkpoint đầy đủ Affiliate Scripted:
 Project → Product / Product Facts → Script Generation → ScriptVersion →
 ClaimManifest → Manifest-first Fact Lock → FactLockGate → Voice.
+
+## 2026-08-27 — POST AFF-US-018 Script Claim Refresh persistence contract lock
+
+Đã hoàn tất contract/design-only hardening theo DEC-034. Audit xác nhận
+ScriptGeneration hiện dùng Product Facts để tạo/giới hạn candidate claims ban đầu,
+nhưng Claim Refresh không dùng Product Facts làm semantic input hoặc authority;
+refresh chỉ inventory exact claim-bearing Script content. Source projection mới
+không bao gồm existing claims/claims metadata và được hash bằng canonical JSON →
+lowercase SHA-256.
+
+Claim Refresh sẽ sở hữu execution artifact riêng `script_claim_refresh_run`, không
+dùng `FactLockRun` hoặc `ScriptGeneration`. Contract đã khóa server-owned input,
+prompt/output versions, requestHash, workspace idempotency, pending semantic
+uniqueness, durable single-winner execution claim, provider uncertainty và
+ScriptVersion CAS. Với source revision `R`, refresh thành công tạo revision `R+1`
+và `claimsSourceRevision=R+1`; ClaimManifest chỉ build sau khi claims current.
+Implementation được tách CR-A/CR-B/CR-C; migration `0021` chưa tạo, không có runtime,
+schema, provider hoặc database change. AFF-US-019 vẫn NOT STARTED.
 
 ## 2026-08-27 — AFF-US-018 Phase 18F public cutover final acceptance
 

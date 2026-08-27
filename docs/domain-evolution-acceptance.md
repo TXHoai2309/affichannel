@@ -12,6 +12,23 @@ Một phase chỉ đạt khi test domain, persistence, protected API và authent
 đều có evidence; không dùng UI-only validation làm bằng chứng invariant. Golden
 affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 
+### Post-US18 hardening checkpoint — Script Claim Refresh
+
+DEC-034 đã khóa contract/design cho Claim Refresh sau AFF-US-018 DONE. Đây không
+phải một lần mở lại US18 và không đánh dấu AFF-US-019 bắt đầu. Claim Refresh sẽ có
+execution artifact riêng `script_claim_refresh_run` ở migration tương lai `0021`,
+với durable idempotency, pending semantic uniqueness, single-winner execution
+claim, provider ngoài transaction và ScriptVersion CAS. Product Facts không thuộc
+refresh input/hash; Fact Lock vẫn là bước verify claims với Product Facts.
+
+Revision semantics đã khóa: source `R` → successful refresh tạo ScriptVersion
+revision `R+1`, `claimsSourceRevision=R+1`, run ghi `sourceScriptRevision=R` và
+`resultScriptRevision=R+1`. Provider output chỉ gồm `{text, occurrence}`; mismatch
+là `failed`, provider uncertainty là `indeterminate`, không automatic paid retry.
+Implementation sẽ được acceptance riêng theo CR-A (persistence/repository), CR-B
+(provider/runtime/CAS) và CR-C (public editor/read-model/workflow regression).
+Checkpoint này chỉ cập nhật contract, không tạo schema/migration hoặc gọi provider.
+
 ## 2. Gate A — Migration và compatibility
 
 - [x] DEC-026 khóa ContentFormat representation, registry ownership, versioning

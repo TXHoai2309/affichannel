@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-25
+- Cập nhật lần cuối: 2026-08-27
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -10,6 +10,98 @@ DEC-025 là canonical direction hiện tại cho Channel-first v0.8. Các ADR c�
 Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ làm lịch sử;
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
+
+## DEC-034 — Durable Script Claim Refresh boundary sau AFF-US-018
+
+- Trạng thái: Đã chấp nhận ở mức contract/design; chưa implement
+- Ngày: 2026-08-27
+- Mở rộng: DEC-021, DEC-031, DEC-033 và `docs/claim-manifest-fact-lock-contract.md`
+
+### Bối cảnh
+
+Sau khi người dùng sửa claim-bearing ScriptVersion, candidate claims cũ phải trở
+thành `stale`. ClaimManifest chỉ được build từ claims hiện tại; Fact Lock không
+được trở thành nơi tự extract lại inventory. Vì Claim Refresh là paid provider
+operation, process-local single-flight không đủ an toàn cho retry, timeout và
+nhiều application instance.
+
+### Quyết định
+
+- Claim Refresh sở hữu execution artifact riêng trong migration tương lai `0021`,
+  dự kiến là `script_claim_refresh_run`. Không tái sử dụng `FactLockRun` hoặc
+  `ScriptGeneration` làm persistence owner.
+- Claim Refresh chỉ nhận exact current Script content. Product Facts hiện được
+  dùng bởi ScriptGeneration để tạo/giới hạn candidate claims ban đầu, nhưng audit
+  xác nhận đó không phải lý do để đưa Product Facts vào semantic input của Claim
+  Refresh. Fact Lock mới là bước đối chiếu claims với Product Facts.
+- Source projection gồm selected hook text, ordered voiceover segments, ordered
+  scene on-screen text, CTA và caption — tức toàn bộ các nguồn mà
+  `ClaimOccurrence` hiện cho phép trỏ tới. Projection loại existing claims,
+  claims metadata, timestamps, unrelated IDs, provider metadata và revision
+  metadata. Hash là lowercase SHA-256 của canonical JSON; không dùng lại
+  ClaimManifest source hash vì Manifest projection bao gồm inventory claims.
+- Semantic input version là `script-claim-refresh.v1`; provider metadata không làm
+  thay đổi semantic version. Prompt/output lần lượt là
+  `script-claim-refresh-prompt.v1` và `script-claim-refresh-output.v1`.
+- `requestHash = SHA256(canonicalJson({ inputVersion, scriptVersionId,
+  sourceScriptRevision, sourceContentHash }))`. Hash không chứa idempotency key,
+  actor, timestamp, provider/model, provider request ID hoặc run ID.
+- Trong một workspace, cùng `idempotencyKey` phải có cùng `requestHash`; khác hash
+  trả `SCRIPT_CLAIM_REFRESH_IDEMPOTENCY_CONFLICT`. Pending run dùng unique semantic
+  scope `(workspace_id, project_id, request_hash)` để các idempotency key khác nhau
+  vẫn chỉ có một paid execution. `UNIQUE(workspace_id, idempotency_key)` giữ
+  client retry identity. Pending/completed cùng semantic request được reuse; một
+  retry explicit sau `failed` hoặc `indeterminate` phải tạo run mới với key mới,
+  không retry mù trên run cũ.
+- Status tối thiểu là `pending | completed | failed | indeterminate`.
+  `completed` chỉ có nghĩa provider output đã validate và CAS-apply thành công.
+  Deterministic provider-result mismatch là `failed`; timeout/408/5xx có khả năng
+  provider đã nhận request là `indeterminate`, không automatic paid retry.
+- Execution claim là durable single-winner: atomic conditional update chỉ claim
+  run `pending` chưa có `execution_claimed_at`; chỉ winner được gọi provider.
+  T1 authorize/lock/read/build và persist pending rồi commit; T2 claim rồi commit;
+  provider chạy ngoài transaction; T3 reload exact ScriptVersion, validate output,
+  CAS-apply claims và finalize run atomically.
+- Provider chỉ trả `{ text, occurrence }`; không trả `claimKey`, không sửa Script
+  content và không verify Product Facts. Unknown/invalid occurrence, duplicate,
+  quá giới hạn hoặc schema mismatch không được apply một phần và dùng typed error
+  `SCRIPT_CLAIM_REFRESH_PROVIDER_RESULT_MISMATCH`.
+- Với source revision `R`, refresh thành công là một mutation metadata của
+  ScriptVersion và tạo revision `R+1`; snapshot có `claimsStatus=current`,
+  `claimsSourceRevision=R+1`, run ghi `sourceScriptRevision=R` và
+  `resultScriptRevision=R+1`. Đây là exception có phạm vi cho explicit paid Claim
+  Refresh và supersede riêng rule “metadata refresh không tăng revision” của
+  DEC-021; legacy Fact Lock behavior và lịch sử DEC-021 không bị rewrite.
+- T3 bắt buộc match ScriptVersion ID, source revision và source content hash. Nếu
+  Script thay đổi trong lúc provider chạy, không apply claims cũ, không overwrite
+  content và không tự retry; run kết thúc bằng non-current outcome đã khóa.
+  `claimsStatus=current` chỉ được no-op khi strict snapshot validation thành công,
+  `claimsSourceRevision` khớp revision hiện tại và mọi occurrence còn trỏ đúng
+  source projection hiện tại.
+
+### Persistence direction và phasing
+
+`script_claim_refresh_run` dự kiến giữ các nhóm cột:
+
+```text
+id, workspace_id, project_id, script_version_id, source_script_revision,
+idempotency_key, request_hash, input_snapshot_json, input_hash, source_content_hash,
+prompt_hash, provider, model, prompt_version, output_schema_version, status,
+provider_request_id, input_tokens, output_tokens, estimated_cost_micros,
+actual_cost_micros, currency, error_code, error_message, execution_claimed_at,
+created_by_user_id, created_at, finished_at, result_script_revision
+```
+
+Telemetry phải follow provider primitives hiện hữu và chỉ lưu giá trị sanitized.
+FK dự kiến: Workspace CASCADE;
+Project, ScriptVersion và User RESTRICT để không làm mất paid provenance khi xóa
+content/history. Index gồm workspace/project, workspace idempotency unique và
+pending semantic partial unique. Chi tiết cột cuối cùng phải follow audit các
+provider primitives trước khi tạo migration.
+
+Implementation được tách thành CR-A (migration + repository), CR-B (provider/runtime
+và CAS apply) và CR-C (public editor action, current ScriptVersion read model,
+workflow refresh và regression). DEC-034 không tạo migration hoặc runtime.
 
 ## DEC-033 — Manifest provider prompt boundary cho AFF-US-018 Phase 18D
 

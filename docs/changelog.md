@@ -8,6 +8,18 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### POST AFF-US-018 — Script Claim Refresh persistence contract
+
+- Khóa contract/design cho flow Script edit → `claimsStatus=stale` → explicit
+  durable Claim Refresh → current claims → ClaimManifest → Manifest-first Fact Lock.
+- Claim Refresh chỉ inventory exact claim-bearing Script content; Product Facts vẫn
+  là authority của Fact Lock và không tham gia semantic input/hash của refresh.
+- Chọn execution artifact riêng `script_claim_refresh_run`, durable idempotency,
+  pending semantic uniqueness, single-winner execution claim, provider uncertainty
+  và ScriptVersion CAS. Revision semantics là source `R` → result `R+1`.
+- Chưa implement runtime/UI, chưa tạo migration `0021`, chưa gọi provider hoặc
+  database. Đây là hardening sau AFF-US-018; AFF-US-019 vẫn chưa bắt đầu.
+
 ### AFF-US-018 Phase 18F public Manifest-first cutover
 
 - Hoàn tất public `factLock.prepareManifest` và cutover `factLock.run` sang

@@ -366,6 +366,16 @@ Manifest-first Fact Lock sau AFF-US-018 gồm các giai đoạn riêng:
 7. lưu evidence link và lý do;
 8. tính trạng thái tổng của run.
 
+Sau AFF-US-018, Script Claim Refresh là boundary riêng cho candidate inventory
+khi người dùng sửa ScriptVersion. Refresh không phải Fact Lock và không phải
+ClaimManifest builder: nó đọc projection exact của selected hook, ordered
+voiceover, scene on-screen text, CTA và caption, trả `{text, occurrence}`, rồi
+chỉ sau khi durable execution/CAS thành công mới cho phép build ClaimManifest.
+Product Facts không thuộc semantic input/hash của refresh; Fact Lock mới đối chiếu
+claims với Product Facts. Contract persistence là DEC-034 với execution artifact
+riêng `script_claim_refresh_run`, dự kiến migration `0021`; hiện chưa có runtime
+hoặc migration implementation.
+
 Client không được đặt `isEmpty` hoặc fingerprint. Empty manifest chỉ hợp lệ sau
 normalization thành công và inventory thực sự rỗng; lỗi hoặc uncertainty phải fail
 closed thành `indeterminate`/`blocked`. Affiliate luôn cần policy check trước

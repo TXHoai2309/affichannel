@@ -31,6 +31,11 @@ next story là AFF-US-019, hiện NOT STARTED. Full Affiliate Scripted flow chec
 phải PASS trước khi bắt đầu AFF-US-019.
 Organic, Quick Image và Media First vẫn chưa active.
 
+Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
+Script Claim Refresh phải được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.
+Checkpoint này không phải AFF-US-019, không thay đổi trạng thái DONE của AFF-US-018
+và hiện mới chỉ khóa contract/design; migration `0021` chưa được tạo.
+
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
 `docs/domain-evolution-acceptance.md`.
