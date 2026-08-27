@@ -66,19 +66,43 @@ function manifestFailure(message: string): never {
 	throw new FactLockError("CLAIM_MANIFEST_FINGERPRINT_MISMATCH", message);
 }
 
-function parseLegacySnapshot(row: FactLockRunRow): ParsedFactLockInputSnapshot {
+/**
+ * Legacy rows remain readable only when their persisted snapshot and the
+ * database provenance still satisfy the exact legacy contract. A malformed
+ * historical row is not normalized or repaired here; callers can represent
+ * it as a blocked/degraded read entry without allowing it to satisfy the gate.
+ */
+export function tryParseLegacyFactLockSnapshot(
+	row: FactLockRunRow,
+): ParsedFactLockInputSnapshot | null {
 	const parsed = factLockInputSnapshotSchema.safeParse(row.inputSnapshotJson);
-	if (!parsed.success) readFailure("Fact Lock legacy snapshot không hợp lệ.");
+	if (!parsed.success) return null;
 	if (
 		row.scriptVersionId === null ||
 		row.sourceScriptRevision === null ||
 		parsed.data.scriptVersion.id !== row.scriptVersionId ||
 		parsed.data.scriptVersion.revision !== row.sourceScriptRevision
 	) {
-		readFailure("Fact Lock legacy ScriptVersion provenance không hợp lệ.");
+		return null;
 	}
 	return parsed.data;
 }
+
+type ParsedLegacyReadRun = {
+	run: FactLockRunRow;
+	mode: "LEGACY";
+	snapshot: ParsedFactLockInputSnapshot | null;
+	manifest: undefined;
+};
+
+type ParsedManifestReadRun = {
+	run: FactLockRunRow;
+	mode: "MANIFEST_V1";
+	snapshot: ParsedManifestFactLockInputSnapshot;
+	manifest: ClaimManifest | undefined;
+};
+
+type ParsedReadRun = ParsedLegacyReadRun | ParsedManifestReadRun;
 
 function parseManifestSnapshot(
 	row: FactLockRunRow,
@@ -345,14 +369,12 @@ export async function loadFactLockReadContext(
 		)
 		.orderBy(desc(factLockRun.createdAt), desc(factLockRun.id));
 
-	const parsedRuns = runs.map((run) => {
+	const parsedRuns: ParsedReadRun[] = runs.map((run) => {
 		if (run.inputMode === null) {
-			if (run.scriptVersionId === null || run.sourceScriptRevision === null)
-				readFailure("Legacy Fact Lock mode provenance không hợp lệ.");
 			return {
 				run,
 				mode: "LEGACY" as const,
-				snapshot: parseLegacySnapshot(run),
+				snapshot: tryParseLegacyFactLockSnapshot(run),
 				manifest: undefined,
 			};
 		}
@@ -410,8 +432,8 @@ export async function loadFactLockReadContext(
 
 	const allFactIds = [
 		...new Set(
-			parsedRuns.flatMap((parsed) =>
-				parsed.snapshot.productFacts.map((fact) => fact.id),
+			parsedRuns.flatMap(
+				(parsed) => parsed.snapshot?.productFacts.map((fact) => fact.id) ?? [],
 			),
 		),
 	];
@@ -432,7 +454,37 @@ export async function loadFactLockReadContext(
 	const contextRuns: ReadContextRun[] = [];
 	for (const parsed of parsedRuns) {
 		const manifest = parsed.manifest;
-		const claims = await readClaims(actor, parsed.run, manifest);
+		// An invalid historical snapshot is already unusable for gating. Avoid
+		// depending on its claim projection so one corrupted run cannot abort the
+		// surrounding project/list or dashboard read.
+		const claims =
+			parsed.snapshot === null
+				? []
+				: await readClaims(actor, parsed.run, manifest);
+		if (parsed.snapshot === null) {
+			contextRuns.push({
+				id: parsed.run.id,
+				inputMode: "LEGACY",
+				status: parsed.run.status as FactLockRunStatus,
+				effectiveStatus: deriveFactLockEffectiveStatus(
+					parsed.run.status as FactLockRunStatus,
+					parsed.run.sourceScriptRevision ?? 0,
+					currentScriptVersion?.revision ?? null,
+					false,
+				),
+				createdAt: parsed.run.createdAt,
+				finishedAt: parsed.run.finishedAt,
+				errorCode: parsed.run.errorCode,
+				scriptVersionId: parsed.run.scriptVersionId,
+				sourceScriptRevision: parsed.run.sourceScriptRevision,
+				claimManifest: null,
+				facts: [],
+				claims,
+				dependenciesCurrent: false,
+				sourceCurrent: false,
+			});
+			continue;
+		}
 		if (parsed.mode === "MANIFEST_V1" && manifest)
 			assertManifestClaimShape(parsed.run, manifest, claims);
 		const sourceCurrent = manifest

@@ -5,7 +5,6 @@ import {
 	type FactLockGateEvaluationInput,
 	type FactLockGateResult,
 	type FactLockProductFactSnapshot,
-	factLockInputSnapshotSchema,
 	manifestFactLockInputSnapshotSchema,
 	type ParsedFactLockInputSnapshot,
 	type ParsedManifestFactLockInputSnapshot,
@@ -16,6 +15,7 @@ import type { factDependency, factLockRun, productFact } from "@affichannel/db";
 import {
 	loadFactLockReadContext,
 	toFactLockReadModel,
+	tryParseLegacyFactLockSnapshot,
 } from "./fact-lock-read-service";
 import type { WorkspaceActor } from "./workspace";
 
@@ -81,18 +81,17 @@ function factsAreCurrent(
 
 function parseRun(row: GateRunRow) {
 	if (row.inputMode === null) {
-		const parsed = factLockInputSnapshotSchema.safeParse(row.inputSnapshotJson);
-		if (
-			!parsed.success ||
-			row.scriptVersionId === null ||
-			row.sourceScriptRevision === null ||
-			parsed.data.scriptVersion.id !== row.scriptVersionId ||
-			parsed.data.scriptVersion.revision !== row.sourceScriptRevision
-		)
-			invalidRead("Legacy Fact Lock snapshot không hợp lệ.");
+		const snapshot = tryParseLegacyFactLockSnapshot(row);
+		if (!snapshot) {
+			return {
+				mode: "LEGACY" as const,
+				snapshot: null,
+				manifest: undefined,
+			};
+		}
 		return {
 			mode: "LEGACY" as const,
-			snapshot: parsed.data as ParsedFactLockInputSnapshot,
+			snapshot,
 			manifest: undefined,
 		};
 	}
@@ -137,6 +136,18 @@ function buildInput(
 		currentScriptVersion: input.currentScriptVersion,
 		runs: input.runs.map((row) => {
 			const parsed = parseRun(row);
+			if (parsed.snapshot === null) {
+				return {
+					id: row.id,
+					inputMode: "LEGACY" as const,
+					scriptVersionId: row.scriptVersionId,
+					sourceScriptRevision: row.sourceScriptRevision,
+					sourceCurrent: false,
+					status: row.status as FactLockRunStatus,
+					dependenciesCurrent: false,
+					createdAt: row.createdAt,
+				};
+			}
 			let manifest = parsed.manifest;
 			if (parsed.mode === "MANIFEST_V1") {
 				manifest = manifestsById.get(row.claimManifestId as string);
