@@ -132,6 +132,7 @@ describe("Project entry batch query boundary", () => {
 			scriptGenerations: [],
 			scriptVersions: [],
 			factLockRuns: [],
+			claimManifests: [],
 			dependencies: [],
 			productFacts: [],
 			channelSettings: null,

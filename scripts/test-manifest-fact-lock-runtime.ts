@@ -24,6 +24,15 @@ const { createClaimManifestFromScriptVersion } = await import(
 const { executeManifestFactLock, finalizeManifestFactLockRun } = await import(
 	"../packages/api/src/services/fact-lock-manifest-service.ts"
 );
+const { getFactLockState } = await import(
+	"../packages/api/src/services/fact-lock-service.ts"
+);
+const { FactLockGate } = await import(
+	"../packages/api/src/services/fact-lock-gate-service.ts"
+);
+const { FactLockError } = await import(
+	"../packages/core/src/fact-lock/errors.ts"
+);
 const { renderManifestFactLockPrompt } = await import(
 	"../packages/api/src/services/fact-lock-manifest-prompt.ts"
 );
@@ -56,6 +65,20 @@ const hash = (value: string) =>
 
 function assert(value: unknown, message: string): asserts value {
 	if (!value) throw new Error(message);
+}
+
+async function expectCode(action: () => Promise<unknown>, code: string) {
+	await action().then(
+		() => {
+			throw new Error(`Expected ${code}.`);
+		},
+		(error) => {
+			assert(
+				error instanceof FactLockError && error.code === code,
+				`Expected ${code}, received ${error?.code ?? error}.`,
+			);
+		},
+	);
 }
 
 async function resetDatabase(pool: Pool) {
@@ -340,6 +363,30 @@ function validResult(manifest: ClaimManifest, factIds: string[]) {
 	};
 }
 
+function legacyReadSnapshot(projectFixture: ProjectFixture) {
+	return {
+		snapshotVersion: "fact-lock-input.v1",
+		scriptVersion: {
+			id: projectFixture.scriptVersionId,
+			revision: 1,
+			snapshot: projectFixture.snapshot,
+		},
+		productFacts: [],
+		policy: {
+			avoidWords: [],
+			affiliateDisclosure: "Nội dung có liên kết affiliate.",
+			language: "vi-VN",
+		},
+		outputRules: {
+			language: "vi-VN",
+			aspectRatio: "9:16",
+			subtitleSafeArea: "standard",
+			claimLimit: null,
+			requireFinalCta: true,
+		},
+	};
+}
+
 function providerResult(content: unknown): ProviderResult {
 	return {
 		content,
@@ -539,6 +586,165 @@ async function main() {
 				happy.claims[0]?.claimKey === happyManifest.claims[0]?.claimKey &&
 				happy.claims[1]?.claimKey === happyManifest.claims[1]?.claimKey,
 			"Exactly one provider call and Manifest-order claims are required.",
+		);
+		const readState = await getFactLockState(workspace, happyProject.projectId);
+		assert(
+			readState.latestRequest?.inputMode === "MANIFEST_V1" &&
+				readState.latestRequest.claimManifest?.id === happyManifest.id &&
+				readState.latestRequest.claimManifest?.fingerprint ===
+					happyManifest.fingerprint &&
+				readState.latestRequest.claims
+					.map((claim) => claim.claimKey)
+					.join(",") ===
+					happyManifest.claims.map((claim) => claim.claimKey).join(",") &&
+				readState.latestRequest.claims.every(
+					(claim, index) =>
+						claim.claimText === happyManifest.claims[index]?.claimText &&
+						JSON.stringify(claim.occurrence) ===
+							JSON.stringify(happyManifest.claims[index]?.locator.occurrence),
+				),
+			"Manifest read must expose explicit mode, scoped identity and Manifest-order authority.",
+		);
+		const gate = await FactLockGate.evaluate(workspace, happyProject.projectId);
+		assert(
+			gate.allowed &&
+				gate.reason === "FACT_LOCK_PASSED" &&
+				gate.factLockRunId === happy.id,
+			"Current Manifest PASS must be allowed by the downstream gate.",
+		);
+		await pool.query(
+			`insert into fact_lock_run (
+					id, workspace_id, project_id, script_version_id, source_script_revision,
+					idempotency_key, request_hash, input_snapshot_json, input_hash, prompt_hash,
+					provider, model, prompt_version, output_schema_version, status,
+					created_by_user_id, created_at, finished_at
+				) values ($1, $2, $3, $4, 1, $5, $6, $7, $8, $9,
+					'deterministic', 'legacy-read-fixture', 'fixture', 'fact-lock-output.v1',
+					'passed', $10, now() + interval '1 minute', now() + interval '1 minute')`,
+			[
+				`us18d-legacy-read-${suffix()}`,
+				workspace.workspaceId,
+				happyProject.projectId,
+				happyProject.scriptVersionId,
+				`us18d-legacy-read-key-${suffix()}`,
+				"a".repeat(64),
+				JSON.stringify(legacyReadSnapshot(happyProject)),
+				"b".repeat(64),
+				"c".repeat(64),
+				workspace.userId,
+			],
+		);
+		const mixedState = await getFactLockState(
+			workspace,
+			happyProject.projectId,
+		);
+		assert(
+			mixedState.latestRequest?.inputMode === "LEGACY" &&
+				mixedState.latestRequest.claimManifest === null &&
+				mixedState.latestApplicableRun?.inputMode === "LEGACY",
+			"Latest request and applicable read must order mixed legacy/Manifest history together.",
+		);
+		await pool.query(
+			"delete from fact_lock_run where idempotency_key like 'us18d-legacy-read-key-%'",
+		);
+		await pool.query(
+			"update product_fact set revision = 2 where product_id = $1",
+			[productId],
+		);
+		const staleFactsState = await getFactLockState(
+			workspace,
+			happyProject.projectId,
+		);
+		const staleFactsGate = await FactLockGate.evaluate(
+			workspace,
+			happyProject.projectId,
+		);
+		assert(
+			staleFactsState.latestRequest?.effectiveStatus === "stale" &&
+				staleFactsState.latestApplicableRun === null &&
+				staleFactsGate.reason === "FACT_LOCK_STALE_FACTS",
+			"Current Manifest run must become stale when a Product Fact revision changes.",
+		);
+		await pool.query(
+			"update product_fact set revision = 1 where product_id = $1",
+			[productId],
+		);
+		await pool.query("update script_version set revision = 2 where id = $1", [
+			happyProject.scriptVersionId,
+		]);
+		const staleScriptState = await getFactLockState(
+			workspace,
+			happyProject.projectId,
+		);
+		const staleScriptGate = await FactLockGate.evaluate(
+			workspace,
+			happyProject.projectId,
+		);
+		assert(
+			staleScriptState.latestRequest?.effectiveStatus === "stale" &&
+				staleScriptState.latestApplicableRun === null &&
+				staleScriptGate.reason === "FACT_LOCK_STALE_SCRIPT",
+			"Historical Manifest run must remain readable but stale after ScriptVersion revision changes.",
+		);
+		await pool.query("update script_version set revision = 1 where id = $1", [
+			happyProject.scriptVersionId,
+		]);
+		const replacementProductId = await seedProduct(pool, workspace);
+		await pool.query("update project set product_id = $1 where id = $2", [
+			replacementProductId,
+			happyProject.projectId,
+		]);
+		const staleProductState = await getFactLockState(
+			workspace,
+			happyProject.projectId,
+		);
+		const staleProductGate = await FactLockGate.evaluate(
+			workspace,
+			happyProject.projectId,
+		);
+		assert(
+			staleProductState.latestRequest?.effectiveStatus === "stale" &&
+				staleProductState.latestApplicableRun === null &&
+				!staleProductGate.allowed,
+			"Historical Manifest run must remain readable but stale after Project Product changes.",
+		);
+		await pool.query("update project set product_id = $1 where id = $2", [
+			productId,
+			happyProject.projectId,
+		]);
+		await pool.query(
+			"update project set content_type = 'ORGANIC' where id = $1",
+			[happyProject.projectId],
+		);
+		const inactiveIdentityState = await getFactLockState(
+			workspace,
+			happyProject.projectId,
+		);
+		const inactiveIdentityGate = await FactLockGate.evaluate(
+			workspace,
+			happyProject.projectId,
+		);
+		assert(
+			inactiveIdentityState.latestRequest?.effectiveStatus === "stale" &&
+				inactiveIdentityState.latestApplicableRun === null &&
+				inactiveIdentityGate.reason === "FACT_LOCK_STALE_SCRIPT",
+			"Historical Manifest run must remain readable but stale after Project identity becomes inactive.",
+		);
+		await pool.query(
+			"update project set content_type = 'AFFILIATE' where id = $1",
+			[happyProject.projectId],
+		);
+		await pool.query(
+			"update fact_lock_run set claim_manifest_fingerprint = $1 where id = $2",
+			["a".repeat(64), happy.id],
+		);
+		await expectCode(
+			() => getFactLockState(workspace, happyProject.projectId),
+			"CLAIM_MANIFEST_FINGERPRINT_MISMATCH",
+		);
+		await pool.query(
+			"update fact_lock_run set claim_manifest_fingerprint = $1 where id = $2",
+			[happyManifest.fingerprint, happy.id],
 		);
 		const request = calls.requests[0] as {
 			model: string;
@@ -1027,10 +1233,29 @@ async function main() {
 				)) === 0,
 			"Zero-claim must retain the deterministic no-provider path.",
 		);
+		const zeroReadState = await getFactLockState(
+			workspace,
+			zeroProject.projectId,
+		);
+		const zeroGate = await FactLockGate.evaluate(
+			workspace,
+			zeroProject.projectId,
+		);
+		assert(
+			zeroReadState.latestRequest?.inputMode === "MANIFEST_V1" &&
+				zeroReadState.latestRequest.claimManifest?.id === zeroManifest.id &&
+				zeroReadState.latestRequest.facts.length === 0 &&
+				zeroReadState.latestRequest.claims.length === 0 &&
+				zeroGate.allowed &&
+				zeroGate.reason === "FACT_LOCK_PASSED",
+			"Current zero-claim Manifest must be readable and pass the downstream gate.",
+		);
 		console.log("Zero-claim no-provider regression: PASS");
 
 		console.log("Provider calls are fake/offline; live provider calls: 0");
-		console.log("AFF-US-018 Phase 18D runtime checks: PASS");
+		console.log(
+			"AFF-US-018 Phase 18D runtime + Phase 18E read/gate checks: PASS",
+		);
 	} finally {
 		await pool.end();
 	}

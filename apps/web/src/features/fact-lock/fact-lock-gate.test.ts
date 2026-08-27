@@ -53,15 +53,24 @@ function run(
 	status: "pending" | "review_required" | "passed" | "failed" | "indeterminate",
 	overrides: Partial<FactLockGateEvaluationInput["runs"][number]> = {},
 ) {
-	return {
+	const base: FactLockGateEvaluationInput["runs"][number] = {
 		id: `run-${status}`,
+		inputMode: "LEGACY",
 		scriptVersionId: "script-1",
 		sourceScriptRevision: 4,
+		sourceCurrent: true,
 		status,
 		dependenciesCurrent: true,
 		createdAt: "2026-08-18T00:00:00.000Z",
-		...overrides,
 	};
+	return { ...base, ...overrides };
+}
+
+function manifestRun(
+	status: "pending" | "review_required" | "passed" | "failed" | "indeterminate",
+	overrides: Partial<FactLockGateEvaluationInput["runs"][number]> = {},
+) {
+	return run(status, { inputMode: "MANIFEST_V1", ...overrides });
 }
 
 describe("FactLockGate", () => {
@@ -236,5 +245,54 @@ describe("FactLockGate", () => {
 				}),
 			).reason,
 		).toBe("FACT_LOCK_STALE_SCRIPT");
+	});
+
+	it("applies the same pure gate contract to Manifest runs", () => {
+		for (const [status, reason] of [
+			["pending", "FACT_LOCK_PENDING"],
+			["review_required", "FACT_LOCK_REVIEW_REQUIRED"],
+			["failed", "FACT_LOCK_FAILED"],
+			["indeterminate", "FACT_LOCK_INDETERMINATE"],
+		] as const) {
+			expect(
+				evaluateFactLockGate(input({ runs: [manifestRun(status)] })).reason,
+			).toBe(reason);
+		}
+		expect(
+			evaluateFactLockGate(input({ runs: [manifestRun("passed")] })),
+		).toMatchObject({ allowed: true, reason: "FACT_LOCK_PASSED" });
+	});
+
+	it("blocks a Manifest result when source or facts are stale", () => {
+		expect(
+			evaluateFactLockGate(
+				input({ runs: [manifestRun("passed", { sourceCurrent: false })] }),
+			),
+		).toMatchObject({ reason: "FACT_LOCK_STALE_SCRIPT", allowed: false });
+		expect(
+			evaluateFactLockGate(
+				input({
+					runs: [manifestRun("passed", { dependenciesCurrent: false })],
+				}),
+			),
+		).toMatchObject({ reason: "FACT_LOCK_STALE_FACTS", allowed: false });
+	});
+
+	it("keeps mixed legacy and Manifest history deterministic", () => {
+		const legacy = run("passed", {
+			id: "legacy-current",
+			createdAt: "2026-08-18T00:01:00.000Z",
+		});
+		const manifest = manifestRun("passed", {
+			id: "manifest-current",
+			createdAt: "2026-08-18T00:02:00.000Z",
+		});
+		expect(
+			evaluateFactLockGate(input({ runs: [legacy, manifest] })),
+		).toMatchObject({
+			allowed: true,
+			reason: "FACT_LOCK_PASSED",
+			factLockRunId: manifest.id,
+		});
 	});
 });

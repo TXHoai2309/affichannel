@@ -16,6 +16,9 @@ export const factLockRunStatuses = [
 ] as const;
 export type FactLockRunStatus = (typeof factLockRunStatuses)[number];
 
+export const factLockInputModes = ["LEGACY", "MANIFEST_V1"] as const;
+export type FactLockReadInputMode = (typeof factLockInputModes)[number];
+
 export const factLockEffectiveStatuses = [
 	...factLockRunStatuses,
 	"stale",
@@ -124,6 +127,30 @@ export type FactLockStoredClaim = Omit<
 	}>;
 };
 
+export type FactLockClaimManifestReadSummary = {
+	id: string;
+	fingerprint: string;
+	productId: string | null;
+	sourceType: "SCRIPT_VERSION" | "NO_SCRIPT";
+	sourceScriptVersionId: string | null;
+	sourceScriptRevision: number | null;
+};
+
+export type FactLockReadRun = {
+	id: string;
+	inputMode: FactLockReadInputMode;
+	status: FactLockRunStatus;
+	effectiveStatus: FactLockEffectiveStatus;
+	createdAt: Date;
+	finishedAt: Date | null;
+	errorCode: string | null;
+	scriptVersionId: string | null;
+	sourceScriptRevision: number | null;
+	claimManifest: FactLockClaimManifestReadSummary | null;
+	facts: FactLockProductFactSnapshot[];
+	claims: FactLockStoredClaim[];
+};
+
 export type FactLockReadModel = {
 	currentScriptVersion: {
 		id: string;
@@ -131,17 +158,7 @@ export type FactLockReadModel = {
 		claimsSourceRevision: number;
 		claimsStatus: "current" | "stale";
 	} | null;
-	latestRequest: {
-		id: string;
-		status: FactLockRunStatus;
-		effectiveStatus: FactLockEffectiveStatus;
-		sourceScriptRevision: number;
-		createdAt: Date;
-		finishedAt: Date | null;
-		errorCode: string | null;
-		facts: FactLockProductFactSnapshot[];
-		claims: FactLockStoredClaim[];
-	} | null;
-	latestApplicableRun: FactLockReadModel["latestRequest"];
+	latestRequest: FactLockReadRun | null;
+	latestApplicableRun: FactLockReadRun | null;
 	effectiveStatus: FactLockEffectiveStatus | null;
 };

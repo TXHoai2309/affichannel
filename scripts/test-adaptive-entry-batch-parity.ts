@@ -20,7 +20,7 @@ const {
 	voiceSegmentArtifact,
 	workspace,
 } = await import("@affichannel/db");
-const { and, eq, inArray } = await import("drizzle-orm");
+const { and, eq, inArray, sql } = await import("drizzle-orm");
 const { SCRIPT_OUTPUT_SCHEMA_VERSION, mapProjectWorkflowEntrySummary } =
 	await import("@affichannel/core");
 const { env } = await import("@affichannel/env/server");
@@ -333,7 +333,49 @@ async function insertFactLockRun(input: {
 		sourceScriptRevision: input.sourceScriptRevision,
 		idempotencyKey: `entry-parity-${input.id}`,
 		requestHash: input.status === "passed" ? "1".repeat(64) : "2".repeat(64),
-		inputSnapshotJson: { productFacts: [{ id: factId, revision: 1 }] },
+		inputSnapshotJson: {
+			snapshotVersion: "fact-lock-input.v1",
+			scriptVersion: {
+				id: scriptVersionId,
+				revision: input.sourceScriptRevision,
+				snapshot: snapshotWithSegments(input.sourceScriptRevision),
+			},
+			productFacts: [
+				{
+					id: factId,
+					revision: 1,
+					content: "Parity fixture product fact.",
+					type: "feature",
+					status: "verified",
+					assessment: {
+						verification: "verified",
+						evidence: "complete",
+						freshness: "not_applicable",
+						freshnessReason: "not_applicable",
+					},
+					generationUsability: "allowed",
+					source: {
+						type: "official",
+						label: "Parity fixture",
+						url: null,
+						confirmedAt: "2026-08-24",
+						expiresAt: null,
+					},
+				},
+			],
+			policy: {
+				avoidWords: [],
+				affiliateDisclosure: "Nội dung có liên kết affiliate.",
+				language: "vi-VN",
+			},
+			outputRules: {
+				language: "vi-VN",
+				aspectRatio: "9:16",
+				subtitleSafeArea: "standard",
+				claimLimit: null,
+				requireFinalCta: true,
+			},
+		},
 		inputHash: input.status === "passed" ? "3".repeat(64) : "4".repeat(64),
 		promptHash: input.status === "passed" ? "5".repeat(64) : "6".repeat(64),
 		provider: "deterministic",
@@ -645,7 +687,52 @@ try {
 		.where(eq(scriptVersion.id, scriptVersionId));
 	await db
 		.update(factLockRun)
-		.set({ sourceScriptRevision: 2 })
+		.set({
+			sourceScriptRevision: 2,
+			inputSnapshotJson: {
+				snapshotVersion: "fact-lock-input.v1",
+				scriptVersion: {
+					id: scriptVersionId,
+					revision: 2,
+					snapshot: snapshotWithSegments(2, ["intro"]),
+				},
+				productFacts: [
+					{
+						id: factId,
+						revision: 1,
+						content: "Parity fixture product fact.",
+						type: "feature",
+						status: "verified",
+						assessment: {
+							verification: "verified",
+							evidence: "complete",
+							freshness: "not_applicable",
+							freshnessReason: "not_applicable",
+						},
+						generationUsability: "allowed",
+						source: {
+							type: "official",
+							label: "Parity fixture",
+							url: null,
+							confirmedAt: "2026-08-24",
+							expiresAt: null,
+						},
+					},
+				],
+				policy: {
+					avoidWords: [],
+					affiliateDisclosure: "Nội dung có liên kết affiliate.",
+					language: "vi-VN",
+				},
+				outputRules: {
+					language: "vi-VN",
+					aspectRatio: "9:16",
+					subtitleSafeArea: "standard",
+					claimLimit: null,
+					requireFinalCta: true,
+				},
+			},
+		})
 		.where(eq(factLockRun.id, passedRunId));
 	await insertVoiceArtifact({
 		id: `entry-parity-pending-${fixture}`,
@@ -690,7 +777,10 @@ try {
 
 	await db
 		.update(factLockRun)
-		.set({ sourceScriptRevision: 3 })
+		.set({
+			sourceScriptRevision: 3,
+			inputSnapshotJson: sql`jsonb_set(${factLockRun.inputSnapshotJson}, '{scriptVersion,revision}', '3'::jsonb)`,
+		})
 		.where(eq(factLockRun.id, passedRunId));
 	await db
 		.update(productFact)

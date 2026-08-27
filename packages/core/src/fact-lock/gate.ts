@@ -3,7 +3,7 @@ import {
 	validateScriptVersionForFactLock,
 	validateScriptVersionForFactLockRun,
 } from "../script-version/validation";
-import type { FactLockRunStatus } from "./types";
+import type { FactLockReadInputMode, FactLockRunStatus } from "./types";
 
 export const factLockGateReasons = [
 	"NO_SCRIPT_VERSION",
@@ -22,8 +22,10 @@ export type FactLockGateReason = (typeof factLockGateReasons)[number];
 
 export type FactLockGateRunInput = {
 	id: string;
-	scriptVersionId: string;
-	sourceScriptRevision: number;
+	inputMode: FactLockReadInputMode;
+	scriptVersionId: string | null;
+	sourceScriptRevision: number | null;
+	sourceCurrent: boolean;
 	status: FactLockRunStatus;
 	dependenciesCurrent: boolean;
 	createdAt: Date | string;
@@ -89,10 +91,11 @@ export function evaluateFactLockGate(
 	if (runs.length === 0) return result("FACT_LOCK_NOT_RUN", input);
 
 	const current = input.currentScriptVersion;
-	const currentScriptRuns = runs.filter(
-		(run) =>
-			run.scriptVersionId === current.id &&
-			run.sourceScriptRevision === current.revision,
+	const currentScriptRuns = runs.filter((run) =>
+		run.inputMode === "LEGACY" || run.inputMode === "MANIFEST_V1"
+			? run.scriptVersionId === current.id &&
+				run.sourceScriptRevision === current.revision
+			: false,
 	);
 	const currentResultRuns = currentScriptRuns.filter(
 		(run) => run.status === "passed" || run.status === "review_required",
@@ -108,6 +111,8 @@ export function evaluateFactLockGate(
 	// historical script result is considered. A historical run cannot make a
 	// valid current result stale by itself.
 	const latestCurrentResultRun = currentResultRuns[0];
+	if (latestCurrentResultRun && !latestCurrentResultRun.sourceCurrent)
+		return result("FACT_LOCK_STALE_SCRIPT", input, latestCurrentResultRun);
 	if (latestCurrentResultRun && !latestCurrentResultRun.dependenciesCurrent)
 		return result("FACT_LOCK_STALE_FACTS", input, latestCurrentResultRun);
 
@@ -116,12 +121,14 @@ export function evaluateFactLockGate(
 	if (preRunValidation.success) {
 		if (
 			latestCurrentResultRun?.status === "passed" &&
+			latestCurrentResultRun.sourceCurrent &&
 			latestCurrentResultRun.dependenciesCurrent
 		)
 			return result("FACT_LOCK_PASSED", input, latestCurrentResultRun);
 
 		if (
 			latestCurrentResultRun?.status === "review_required" &&
+			latestCurrentResultRun.sourceCurrent &&
 			latestCurrentResultRun.dependenciesCurrent
 		)
 			return result("FACT_LOCK_REVIEW_REQUIRED", input, latestCurrentResultRun);

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import {
 	channelSettingsSchema,
 	defaultOutputRules,
-	deriveFactLockEffectiveStatus,
 	deriveFactLockRunStatus,
 	evaluateFactGenerationUsability,
 	FACT_LOCK_OUTPUT_SCHEMA_VERSION,
@@ -17,7 +16,6 @@ import {
 	validateScriptVersionForFactLockRun,
 } from "@affichannel/core";
 import type {
-	FactLockEffectiveStatus,
 	FactLockInputSnapshot,
 	FactLockPolicySnapshot,
 	FactLockProductFactSnapshot,
@@ -44,7 +42,7 @@ import {
 	project,
 	scriptVersion,
 } from "@affichannel/db";
-import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type {
 	TextProvider,
 	TextProviderEstimate,
@@ -56,6 +54,10 @@ import {
 	registerFactDependenciesInTransaction,
 } from "./fact-dependency-repository";
 import { renderFactLockPrompt } from "./fact-lock-prompt";
+import {
+	loadFactLockReadContext,
+	toFactLockReadModel,
+} from "./fact-lock-read-service";
 import { sha256Hex } from "./script-generation-hashing";
 import { resolveServerGenerationConfig } from "./script-generation-service";
 import { reconcileVoiceStepBestEffort } from "./voice-step-workflow-service";
@@ -1043,118 +1045,13 @@ export async function runPreparedFactLock(
 	return runClaimedFactLock(actor, claim.run, provider, finalize);
 }
 
-async function dependencyStateForRun(
-	actor: WorkspaceActor,
-	run: typeof factLockRun.$inferSelect,
-) {
-	return db.transaction((transaction) =>
-		dependenciesAreCurrent(transaction, actor, run),
-	);
-}
-
 export async function getFactLockState(
 	actor: WorkspaceActor,
 	projectId: string,
 ): Promise<FactLockReadModel> {
-	const [currentScript] = await db
-		.select({
-			id: scriptVersion.id,
-			revision: scriptVersion.revision,
-			editableSnapshotJson: scriptVersion.editableSnapshotJson,
-		})
-		.from(scriptVersion)
-		.innerJoin(project, eq(project.id, scriptVersion.projectId))
-		.where(
-			and(
-				eq(scriptVersion.workspaceId, actor.workspaceId),
-				eq(scriptVersion.projectId, projectId),
-				eq(project.workspaceId, actor.workspaceId),
-				eq(scriptVersion.status, "draft"),
-			),
-		)
-		.limit(1);
-	const runs = await db
-		.select()
-		.from(factLockRun)
-		.where(
-			and(
-				eq(factLockRun.workspaceId, actor.workspaceId),
-				eq(factLockRun.projectId, projectId),
-			),
-		)
-		.orderBy(desc(factLockRun.createdAt), desc(factLockRun.id));
-	const legacyRuns = runs.filter(isLegacyFactLockRun);
-	if (!currentScript && legacyRuns.length === 0)
-		throw new FactLockError(
-			"FACT_LOCK_NOT_FOUND",
-			"Project không tồn tại trong workspace.",
-		);
-	const claimsByRun = new Map<string, FactLockStoredClaim[]>();
-	for (const run of legacyRuns) {
-		const claims = await db.transaction((transaction) =>
-			loadClaims(transaction, actor, run.id),
-		);
-		claimsByRun.set(run.id, claims);
-	}
-	const decorated = [] as Array<{
-		run: LegacyFactLockRunRow;
-		effectiveStatus: FactLockEffectiveStatus;
-		claims: FactLockStoredClaim[];
-	}>;
-	for (const run of legacyRuns) {
-		const current = currentScript?.revision ?? null;
-		const effectiveStatus = deriveFactLockEffectiveStatus(
-			run.status as FactLockRunStatus,
-			run.sourceScriptRevision,
-			current,
-			await dependencyStateForRun(actor, run),
-		);
-		decorated.push({
-			run,
-			effectiveStatus,
-			claims: claimsByRun.get(run.id) ?? [],
-		});
-	}
-	const mapRun = (item: (typeof decorated)[number] | undefined) =>
-		item
-			? {
-					id: item.run.id,
-					status: item.run.status as FactLockRunStatus,
-					effectiveStatus: item.effectiveStatus,
-					sourceScriptRevision: item.run.sourceScriptRevision,
-					createdAt: item.run.createdAt,
-					finishedAt: item.run.finishedAt,
-					errorCode: item.run.errorCode,
-					facts: (item.run.inputSnapshotJson as FactLockInputSnapshot)
-						.productFacts,
-					claims: item.claims,
-				}
-			: null;
-	const latestRequest = mapRun(decorated[0]);
-	const latestApplicableRun = mapRun(
-		decorated.find(
-			(item) =>
-				item.effectiveStatus === "passed" ||
-				item.effectiveStatus === "review_required",
-		),
+	return toFactLockReadModel(
+		await loadFactLockReadContext(actor, projectId, { includeArchived: true }),
 	);
-	return {
-		currentScriptVersion: currentScript
-			? {
-					id: currentScript.id,
-					revision: currentScript.revision,
-					claimsSourceRevision: (
-						currentScript.editableSnapshotJson as ScriptVersionEditableSnapshot
-					).claimsSourceRevision,
-					claimsStatus: (
-						currentScript.editableSnapshotJson as ScriptVersionEditableSnapshot
-					).claimsStatus,
-				}
-			: null,
-		latestRequest,
-		latestApplicableRun,
-		effectiveStatus: latestRequest?.effectiveStatus ?? null,
-	};
 }
 
 type FactLockResolutionInput = {

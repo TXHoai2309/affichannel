@@ -1,4 +1,5 @@
 import {
+	type ClaimManifest,
 	channelSettingsSchema,
 	classifyLegacyProject,
 	evaluateFactGenerationUsability,
@@ -31,7 +32,7 @@ import {
 } from "@affichannel/db";
 import { env } from "@affichannel/env/server";
 import { and, desc, eq, inArray, isNull } from "drizzle-orm";
-
+import { getClaimManifestByIdInTransaction } from "./claim-manifest-repository";
 import { buildFactLockGateEvaluationInput } from "./fact-lock-gate-service";
 import type { ProjectWorkflowSubject } from "./project-repository";
 import type { ProjectWorkflowSnapshot } from "./project-workflow-read-service";
@@ -53,6 +54,7 @@ export type ProjectWorkflowEntryBatchRows = {
 	scriptGenerations: ScriptGenerationRow[];
 	scriptVersions: ScriptVersionRow[];
 	factLockRuns: FactLockRunRow[];
+	claimManifests: ClaimManifest[];
 	dependencies: FactDependencyRow[];
 	productFacts: ProductFactRow[];
 	channelSettings: typeof channelSettings.$inferSelect | null;
@@ -187,6 +189,9 @@ export function buildProjectWorkflowEntrySnapshots(
 		(row) => row.projectId,
 	);
 	const runsByProject = groupBy(rows.factLockRuns, (row) => row.projectId);
+	const manifestsById = new Map(
+		rows.claimManifests.map((manifest) => [manifest.id, manifest]),
+	);
 	const factsByProduct = groupBy(rows.productFacts, (row) => row.productId);
 	const dependenciesByTarget = groupBy(
 		rows.dependencies,
@@ -234,8 +239,26 @@ export function buildProjectWorkflowEntrySnapshots(
 			const gate = evaluateFactLockGate(
 				buildFactLockGateEvaluationInput({
 					productId: subject.productId,
+					project: {
+						id: subject.id,
+						workspaceId: actor.workspaceId,
+						productId: subject.productId,
+						contentType: subject.contentType,
+						creationPath: subject.creationPath,
+						contentFormatKey: subject.contentFormatKey,
+						contentFormatVersion: subject.contentFormatVersion,
+						archivedAt: null,
+					},
 					currentScriptVersion: currentGateVersion,
 					runs,
+					claimManifests: runs.flatMap((run) =>
+						run.claimManifestId
+							? [manifestsById.get(run.claimManifestId)].filter(
+									(manifest): manifest is ClaimManifest =>
+										manifest !== undefined,
+								)
+							: [],
+					),
 					dependencies: runs.flatMap(
 						(run) => dependenciesByTarget.get(`fact_lock:${run.id}`) ?? [],
 					),
@@ -341,6 +364,7 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 					scriptGenerations: [],
 					scriptVersions: [],
 					factLockRuns: [],
+					claimManifests: [],
 					dependencies: [],
 					productFacts: [],
 					channelSettings: null,
@@ -469,6 +493,30 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 						desc(voiceSegmentArtifact.id),
 					),
 			]);
+			const manifestIds = [
+				...new Set(
+					factLockRuns.flatMap((row) =>
+						row.claimManifestId ? [row.claimManifestId] : [],
+					),
+				),
+			];
+			const claimManifests = await Promise.all(
+				manifestIds.map(async (claimManifestId) => {
+					const manifest = await db.transaction((transaction) =>
+						getClaimManifestByIdInTransaction(transaction, {
+							workspaceId: actor.workspaceId,
+							projectId:
+								factLockRuns.find(
+									(row) => row.claimManifestId === claimManifestId,
+								)?.projectId ?? "",
+							claimManifestId,
+						}),
+					);
+					if (!manifest)
+						throw new Error("ClaimManifest not found in workflow batch.");
+					return manifest;
+				}),
+			);
 			const dependentIds = [
 				...scriptGenerations
 					.filter(
@@ -496,6 +544,7 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 				scriptGenerations,
 				scriptVersions,
 				factLockRuns,
+				claimManifests,
 				dependencies,
 				productFacts,
 				channelSettings: settingsRows[0] ?? null,

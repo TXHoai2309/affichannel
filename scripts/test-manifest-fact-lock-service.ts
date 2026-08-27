@@ -1026,13 +1026,14 @@ async function main() {
 			"Concurrent zero-claim requests must create one row.",
 		);
 
-		const legacyStateBefore = await getFactLockState(
+		const manifestStateBefore = await getFactLockState(
 			workspace,
 			primary.projectId,
 		);
 		assert(
-			legacyStateBefore.latestRequest === null,
-			"Legacy read state must ignore MANIFEST_V1 rows.",
+			manifestStateBefore.latestRequest?.inputMode === "MANIFEST_V1" &&
+				manifestStateBefore.latestRequest.status === "pending",
+			"Dual-mode read state must include the persisted MANIFEST_V1 row.",
 		);
 		const legacyConfig = {
 			provider: "deterministic",
@@ -1156,7 +1157,9 @@ async function main() {
 			"Manifest row remains unchanged by legacy estimate/finalize/resolution: PASS",
 		);
 		console.log("Provider calls: 0");
-		console.log("AFF-US-018 Phase 18C service preparation checks: PASS");
+		console.log(
+			"AFF-US-018 Phase 18C service + Phase 18E dual-mode read checks: PASS",
+		);
 	} finally {
 		await pool.end();
 	}

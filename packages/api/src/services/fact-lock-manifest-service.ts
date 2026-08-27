@@ -38,7 +38,7 @@ import {
 	project,
 	scriptVersion,
 } from "@affichannel/db";
-import { and, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import type {
 	TextProvider,
 	TextProviderResult,
@@ -52,6 +52,7 @@ import {
 	detachFactDependenciesInTransaction,
 	registerFactDependenciesInTransaction,
 } from "./fact-dependency-repository";
+import { loadFactLockClaimsInTransaction } from "./fact-lock-claim-read-repository";
 import { renderManifestFactLockPrompt } from "./fact-lock-manifest-prompt";
 import {
 	loadFactLockPolicyInTransaction,
@@ -843,74 +844,6 @@ async function persistNonEmptyManifestFactLock(
 	});
 }
 
-async function loadManifestClaimsInTransaction(
-	transaction: FactLockTransaction,
-	actor: WorkspaceActor,
-	runId: string,
-	manifest: ClaimManifestRecord,
-): Promise<FactLockStoredClaim[]> {
-	const rows = await transaction
-		.select()
-		.from(factLockClaim)
-		.where(
-			and(
-				eq(factLockClaim.workspaceId, actor.workspaceId),
-				eq(factLockClaim.runId, runId),
-			),
-		);
-	if (rows.length === 0) return [];
-	const mappings = await transaction
-		.select()
-		.from(factLockClaimFact)
-		.where(
-			inArray(
-				factLockClaimFact.claimId,
-				rows.map((row) => row.id),
-			),
-		);
-	const mappingsByClaim = new Map<
-		string,
-		FactLockStoredClaim["factMappings"]
-	>();
-	for (const mapping of mappings) {
-		const current = mappingsByClaim.get(mapping.claimId) ?? [];
-		current.push({
-			factId: mapping.factId,
-			factRevision: mapping.factRevision,
-			relation:
-				mapping.relation as FactLockStoredClaim["factMappings"][number]["relation"],
-		});
-		mappingsByClaim.set(mapping.claimId, current);
-	}
-	const byKey = new Map(rows.map((row) => [row.claimKey, row]));
-	return manifest.claims.flatMap((manifestClaim) => {
-		const row = byKey.get(manifestClaim.claimKey);
-		if (!row) return [];
-		return [
-			{
-				id: row.id,
-				claimKey: manifestClaim.claimKey,
-				claimText: manifestClaim.claimText,
-				occurrence:
-					manifestClaim.locator.sourceType === "SCRIPT_VERSION"
-						? manifestClaim.locator.occurrence
-						: (row.occurrenceJson as FactLockStoredClaim["occurrence"]),
-				classificationStatus:
-					row.classificationStatus as FactLockStoredClaim["classificationStatus"],
-				reason: row.reason,
-				confidence: row.confidence,
-				suggestionText: row.suggestionText,
-				factMappings: mappingsByClaim.get(row.id) ?? [],
-				reviewStatus: row.reviewStatus as FactLockStoredClaim["reviewStatus"],
-				checkedAt: row.checkedAt,
-				reviewedByUserId: row.reviewedByUserId,
-				reviewedAt: row.reviewedAt,
-				reviewNote: row.reviewNote,
-			},
-		];
-	});
-}
-
 function persistedManifestInputFailure(): never {
 	throw new FactLockError(
 		"CLAIM_MANIFEST_FINGERPRINT_MISMATCH",
@@ -1026,7 +959,7 @@ async function getManifestFactLockRunResult(
 		}
 		return {
 			...toManifestFactLockRunArtifact(row),
-			claims: await loadManifestClaimsInTransaction(
+			claims: await loadFactLockClaimsInTransaction(
 				transaction,
 				actor,
 				row.id,
@@ -1093,7 +1026,7 @@ async function claimManifestFactLockExecution(
 		return {
 			owner: false as const,
 			run: toManifestFactLockRunArtifact(current),
-			claims: await loadManifestClaimsInTransaction(
+			claims: await loadFactLockClaimsInTransaction(
 				transaction,
 				actor,
 				current.id,
@@ -1192,7 +1125,7 @@ export async function finalizeManifestFactLockRun(
 		if (run.status !== "pending") {
 			return {
 				...toManifestFactLockRunArtifact(run),
-				claims: await loadManifestClaimsInTransaction(
+				claims: await loadFactLockClaimsInTransaction(
 					transaction,
 					actor,
 					run.id,
@@ -1342,7 +1275,7 @@ export async function finalizeManifestFactLockRun(
 			throw new Error("Could not reload Manifest Fact Lock run.");
 		return {
 			...toManifestFactLockRunArtifact(final),
-			claims: await loadManifestClaimsInTransaction(
+			claims: await loadFactLockClaimsInTransaction(
 				transaction,
 				actor,
 				run.id,

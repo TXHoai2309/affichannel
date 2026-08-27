@@ -5,6 +5,7 @@ export * from "./manifest-input-snapshot";
 export * from "./manifest-request-hash";
 export * from "./manifest-result-validation";
 export * from "./policy";
+export * from "./read-validation";
 export * from "./resolution";
 export * from "./schema";
 export * from "./types";
