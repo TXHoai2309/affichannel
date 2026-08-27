@@ -64,6 +64,19 @@ describe("Fact Lock Review state", () => {
 		});
 	});
 
+	it("allows only status approval for a current Manifest run", () => {
+		const review = claim("NEEDS_REVIEW");
+		expect(getFactLockActionState(review, false, "MANIFEST_V1")).toEqual({
+			canApprove: true,
+			canEdit: false,
+			canDelete: false,
+			canApplySuggestion: false,
+		});
+		expect(getFactLockActionState(review, true, "MANIFEST_V1").canApprove).toBe(
+			false,
+		);
+	});
+
 	it("formats occurrence for a human-readable review list", () => {
 		expect(
 			getFactLockOccurrenceLabel({ section: "scene", sceneOrder: 2 }),

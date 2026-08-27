@@ -53,6 +53,10 @@ import {
 	detachFactDependenciesInTransaction,
 	registerFactDependenciesInTransaction,
 } from "./fact-dependency-repository";
+import {
+	isManifestFactLockResolution,
+	manualApproveManifestFactLockClaim,
+} from "./fact-lock-manifest-approval-service";
 import { renderFactLockPrompt } from "./fact-lock-prompt";
 import {
 	loadFactLockReadContext,
@@ -1199,6 +1203,8 @@ export async function manualApproveFactLockClaim(
 	actor: WorkspaceActor,
 	input: FactLockResolutionInput & { reviewNote?: string | null },
 ) {
+	if (await isManifestFactLockResolution(actor, input))
+		return manualApproveManifestFactLockClaim(actor, input);
 	await db.transaction(async (transaction) => {
 		await lockResolutionProject(transaction, actor, input.projectId);
 		const run = await lockResolutionRun(transaction, actor, input);

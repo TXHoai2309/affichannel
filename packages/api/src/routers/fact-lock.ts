@@ -4,21 +4,31 @@ import { ORPCError } from "@orpc/server";
 import { z } from "zod";
 import { protectedProcedure } from "../index";
 import { resolveTextProvider } from "../providers/text/text-provider-registry";
-import { FactLockGate } from "../services/fact-lock-gate-service";
 import {
-	executeFactLockRun,
+	ClaimManifestServiceError,
+	createClaimManifestFromScriptVersion,
+} from "../services/claim-manifest-service";
+import { FactLockGate } from "../services/fact-lock-gate-service";
+import { executeManifestFactLock } from "../services/fact-lock-manifest-service";
+import {
 	getFactLockState,
 	manualApproveFactLockClaim,
 	mutateFactLockClaimSourceAndRefresh,
-	prepareFactLockRun,
-	resolveServerFactLockConfig,
 } from "../services/fact-lock-service";
 import { requireWorkspaceActor } from "../services/workspace";
 
 const idSchema = z.string().trim().min(1).max(120);
+const prepareManifestInput = z
+	.object({
+		projectId: idSchema,
+		scriptVersionId: idSchema,
+		expectedScriptVersionRevision: z.number().int().positive(),
+	})
+	.strict();
 const runInput = z
 	.object({
 		projectId: idSchema,
+		claimManifestId: idSchema,
 		idempotencyKey: z.string().trim().min(8).max(200),
 	})
 	.strict();
@@ -39,6 +49,26 @@ const editInput = resolutionInput.extend({
 });
 
 function toFactLockOrpcError(error: unknown): never {
+	if (error instanceof ClaimManifestServiceError) {
+		if (
+			error.code === "CLAIM_MANIFEST_PROJECT_NOT_FOUND" ||
+			error.code === "CLAIM_MANIFEST_SOURCE_NOT_FOUND" ||
+			error.code === "CLAIM_MANIFEST_SOURCE_SCOPE_MISMATCH"
+		)
+			throw new ORPCError("NOT_FOUND", {
+				message: "CLAIM_MANIFEST_NOT_FOUND",
+				data: { code: "CLAIM_MANIFEST_NOT_FOUND" },
+			});
+		if (error.code === "CLAIM_MANIFEST_SOURCE_REVISION_CONFLICT")
+			throw new ORPCError("CONFLICT", {
+				message: error.code,
+				data: { code: error.code },
+			});
+		throw new ORPCError("CONFLICT", {
+			message: error.code,
+			data: { code: error.code },
+		});
+	}
 	if (!(error instanceof FactLockError)) throw error;
 	if (error.code === "FACT_LOCK_NOT_FOUND")
 		throw new ORPCError("NOT_FOUND", {
@@ -61,6 +91,26 @@ function toFactLockOrpcError(error: unknown): never {
 			message: error.code,
 			data: { code: error.code, ...error.metadata },
 		});
+	if (error.code === "FACT_LOCK_MANIFEST_REQUIRED")
+		throw new ORPCError("BAD_REQUEST", {
+			message: error.code,
+			data: { code: error.code, ...error.metadata },
+		});
+	if (error.code === "CLAIM_MANIFEST_NOT_FOUND")
+		throw new ORPCError("NOT_FOUND", {
+			message: error.code,
+			data: { code: error.code },
+		});
+	if (error.code === "CLAIM_MANIFEST_NOT_EXECUTABLE")
+		throw new ORPCError("CONFLICT", {
+			message: error.code,
+			data: { code: error.code },
+		});
+	if (error.code === "CLAIM_MANIFEST_FINGERPRINT_MISMATCH")
+		throw new ORPCError("BAD_REQUEST", {
+			message: "CLAIM_MANIFEST_FINGERPRINT_MISMATCH",
+			data: { code: "CLAIM_MANIFEST_FINGERPRINT_MISMATCH" },
+		});
 	if (
 		error.code === "FACT_LOCK_CLAIM_NOT_FOUND" ||
 		error.code === "FACT_LOCK_SCRIPT_VERSION_NOT_FOUND"
@@ -75,17 +125,58 @@ function toFactLockOrpcError(error: unknown): never {
 	});
 }
 
+function toFactLockSourceMutationOrpcError(error: unknown): never {
+	if (
+		error instanceof FactLockError &&
+		error.code === "FACT_LOCK_SCRIPT_NOT_READY"
+	)
+		throw new ORPCError("CONFLICT", {
+			message: "CLAIM_MANIFEST_NOT_EXECUTABLE",
+			data: { code: "CLAIM_MANIFEST_NOT_EXECUTABLE" },
+		});
+	return toFactLockOrpcError(error);
+}
+
 export const factLockRouter = {
+	prepareManifest: protectedProcedure
+		.input(prepareManifestInput)
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			try {
+				const result = await createClaimManifestFromScriptVersion({
+					actor,
+					...input,
+				});
+				const { manifest } = result;
+				return {
+					claimManifestId: manifest.id,
+					fingerprint: manifest.fingerprint,
+					source: {
+						sourceType: manifest.source.sourceType,
+						scriptVersionId:
+							manifest.source.sourceType === "SCRIPT_VERSION"
+								? manifest.source.scriptVersionId
+								: null,
+						scriptVersionRevision:
+							manifest.source.sourceType === "SCRIPT_VERSION"
+								? manifest.source.scriptVersionRevision
+								: null,
+					},
+					claimCount: manifest.claimCount,
+					isEmpty: manifest.isEmpty,
+					created: result.created,
+					reused: !result.created,
+				};
+			} catch (error) {
+				return toFactLockOrpcError(error);
+			}
+		}),
 	run: protectedProcedure
 		.input(runInput)
 		.handler(async ({ context, input }) => {
 			const actor = await requireWorkspaceActor(context.session.user.id);
-			let run: Awaited<ReturnType<typeof prepareFactLockRun>> | null = null;
 			try {
-				const config = await resolveServerFactLockConfig(actor);
-				run = await prepareFactLockRun(actor, input, config);
-				if (run.status !== "pending") return run;
-				return await executeFactLockRun(actor, run, () => {
+				return await executeManifestFactLock(actor, input, (config) => {
 					if (config.provider === "apikeyfun" && !env.APIKEY_FUN_API_KEY) {
 						throw new FactLockError(
 							"FACT_LOCK_PROVIDER_NOT_CONFIGURED",
@@ -94,7 +185,6 @@ export const factLockRouter = {
 					}
 					const provider = resolveTextProvider(config.provider, null, {
 						allowDeterministic: env.NODE_ENV !== "production",
-						factLockSnapshot: run?.inputSnapshot,
 					});
 					if (!provider) {
 						throw new FactLockError(
@@ -148,7 +238,7 @@ export const factLockRouter = {
 					newText: input.newText,
 				});
 			} catch (error) {
-				return toFactLockOrpcError(error);
+				return toFactLockSourceMutationOrpcError(error);
 			}
 		}),
 	deleteClaimSource: protectedProcedure
@@ -160,7 +250,7 @@ export const factLockRouter = {
 					action: "delete",
 				});
 			} catch (error) {
-				return toFactLockOrpcError(error);
+				return toFactLockSourceMutationOrpcError(error);
 			}
 		}),
 	applySuggestion: protectedProcedure
@@ -173,7 +263,7 @@ export const factLockRouter = {
 					newText: "",
 				});
 			} catch (error) {
-				return toFactLockOrpcError(error);
+				return toFactLockSourceMutationOrpcError(error);
 			}
 		}),
 };

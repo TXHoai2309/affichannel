@@ -72,8 +72,20 @@ export function getFactLockReviewRun(model: FactLockReadModel) {
 export function getFactLockActionState(
 	claim: FactLockStoredClaim,
 	stale: boolean,
+	inputMode: "LEGACY" | "MANIFEST_V1" = "LEGACY",
 ) {
 	const canResolve = Boolean(claim.id) && !stale;
+	if (inputMode === "MANIFEST_V1") {
+		return {
+			canApprove:
+				canResolve &&
+				claim.classificationStatus === "NEEDS_REVIEW" &&
+				claim.reviewStatus === "UNRESOLVED",
+			canEdit: false,
+			canDelete: false,
+			canApplySuggestion: false,
+		};
+	}
 	return {
 		canApprove:
 			canResolve &&
@@ -125,6 +137,18 @@ const FACT_LOCK_ERROR_MESSAGES: Record<string, string> = {
 	FACT_LOCK_ALREADY_PENDING: "Một Fact Lock đang được xử lý cho script này.",
 	FACT_LOCK_INDETERMINATE:
 		"Kết quả Fact Lock chưa xác định. Hệ thống không tự động gửi lại.",
+	CLAIM_MANIFEST_NOT_FOUND:
+		"Không tìm thấy ClaimManifest trong project. Hãy tải lại và chạy lại Fact Lock.",
+	CLAIM_MANIFEST_NOT_EXECUTABLE:
+		"ClaimManifest không còn khớp với Script hiện tại. Hãy tải lại, sửa Script nếu cần và chạy lại Fact Lock.",
+	CLAIM_MANIFEST_SOURCE_REVISION_CONFLICT:
+		"Script đã thay đổi trước khi tạo ClaimManifest. Hãy tải lại rồi chạy lại Fact Lock.",
+	CLAIM_MANIFEST_FINGERPRINT_MISMATCH:
+		"ClaimManifest không còn hợp lệ. Hãy tải lại và tạo lại Fact Lock.",
+	FACT_LOCK_MANIFEST_REQUIRED:
+		"Fact Lock yêu cầu ClaimManifest hiện hành. Hãy tải lại rồi chạy lại.",
+	FACT_LOCK_IDEMPOTENCY_CONFLICT:
+		"Yêu cầu Fact Lock bị trùng với một intent khác. Hãy thử lại.",
 };
 
 export function getFactLockErrorMessage(error: unknown) {

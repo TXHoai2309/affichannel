@@ -176,6 +176,9 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 			},
 		}),
 	);
+	const prepareManifestMutation = useMutation(
+		orpc.factLock.prepareManifest.mutationOptions(),
+	);
 	const runMutation = useMutation(orpc.factLock.run.mutationOptions());
 	const approveMutation = useMutation(
 		orpc.factLock.manualApprove.mutationOptions(),
@@ -205,6 +208,7 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 	);
 	const resolutionLocked = stale || model?.latestRequest?.status === "pending";
 	const isMutating =
+		prepareManifestMutation.isPending ||
 		approveMutation.isPending ||
 		editMutation.isPending ||
 		deleteMutation.isPending ||
@@ -217,8 +221,20 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 	async function runFactLock() {
 		setActionError(null);
 		try {
+			const refreshed = await stateQuery.refetch();
+			const currentModel = refreshed.data as FactLockReadModel | undefined;
+			const currentScriptVersion = currentModel?.currentScriptVersion;
+			if (!currentScriptVersion) {
+				throw new Error("FACT_LOCK_SCRIPT_NOT_READY");
+			}
+			const manifest = await prepareManifestMutation.mutateAsync({
+				projectId,
+				scriptVersionId: currentScriptVersion.id,
+				expectedScriptVersionRevision: currentScriptVersion.revision,
+			});
 			await runMutation.mutateAsync({
 				projectId,
+				claimManifestId: manifest.claimManifestId,
 				idempotencyKey: getRunIdempotencyKey(),
 			});
 			await refresh();
@@ -227,6 +243,12 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 			});
 		} catch (error) {
 			setActionError(getFactLockErrorCode(error) ?? "FACT_LOCK_ERROR");
+			const code = getFactLockErrorCode(error);
+			if (
+				code === "CLAIM_MANIFEST_SOURCE_REVISION_CONFLICT" ||
+				code === "CLAIM_MANIFEST_NOT_EXECUTABLE"
+			)
+				await refresh();
 			toast.error(getFactLockErrorMessage(error));
 		}
 	}
@@ -346,6 +368,7 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 					{!hasNoRun && (
 						<Button
 							disabled={
+								prepareManifestMutation.isPending ||
 								runMutation.isPending ||
 								model.latestRequest?.status === "pending"
 							}
@@ -437,7 +460,9 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 							</p>
 						</div>
 						<Button
-							disabled={runMutation.isPending}
+							disabled={
+								prepareManifestMutation.isPending || runMutation.isPending
+							}
 							onClick={() => void runFactLock()}
 						>
 							<LockKeyhole aria-hidden="true" />
@@ -558,6 +583,7 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 						claim={selectedClaim}
 						isMutating={isMutating}
 						locked={resolutionLocked}
+						inputMode={reviewRun?.inputMode ?? "LEGACY"}
 						onApprove={() => selectedClaim && void approveClaim(selectedClaim)}
 						onApplySuggestion={() =>
 							selectedClaim && setSuggestionClaim(selectedClaim)
@@ -722,6 +748,7 @@ function SummaryCard({
 function ClaimReviewPanel({
 	claim,
 	locked,
+	inputMode,
 	isMutating,
 	onApprove,
 	onEdit,
@@ -730,6 +757,7 @@ function ClaimReviewPanel({
 }: {
 	claim: FactLockStoredClaim | null;
 	locked: boolean;
+	inputMode: "LEGACY" | "MANIFEST_V1";
 	isMutating: boolean;
 	onApprove: () => void;
 	onEdit: () => void;
@@ -744,7 +772,7 @@ function ClaimReviewPanel({
 				</CardContent>
 			</Card>
 		);
-	const actions = getFactLockActionState(claim, locked);
+	const actions = getFactLockActionState(claim, locked, inputMode);
 	return (
 		<Card className="min-w-0">
 			<CardHeader className="border-b">
@@ -779,6 +807,12 @@ function ClaimReviewPanel({
 						<p className="mt-1 text-sm">{claim.suggestionText}</p>
 					</div>
 				)}
+				{inputMode === "MANIFEST_V1" && (
+					<p className="flex items-center gap-2 text-muted-foreground text-xs">
+						<ShieldAlert className="size-4" aria-hidden="true" />
+						Claim thuộc Manifest bất biến. Hãy sửa Script và chạy Fact Lock lại.
+					</p>
+				)}
 				<div className="flex flex-wrap gap-2">
 					{actions.canApprove && (
 						<Button disabled={isMutating} onClick={onApprove}>
@@ -811,7 +845,7 @@ function ClaimReviewPanel({
 						</Button>
 					)}
 				</div>
-				{locked && (
+				{locked && inputMode !== "MANIFEST_V1" && (
 					<p className="flex items-center gap-2 text-muted-foreground text-xs">
 						<ShieldAlert className="size-4" aria-hidden="true" />
 						Thao tác xử lý đang khoá vì review chưa còn là nguồn hiện hành.

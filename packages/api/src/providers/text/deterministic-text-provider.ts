@@ -120,6 +120,40 @@ function deterministicFactLockClaims(snapshot: FactLockInputSnapshot) {
 	return claims;
 }
 
+function deterministicManifestFactLockClaims(request: TextProviderRequest) {
+	const userMessage = request.messages.find(
+		(message) => message.role === "user",
+	);
+	if (!userMessage) return null;
+	try {
+		const payload = JSON.parse(userMessage.content) as {
+			claims?: Array<{ claimKey?: unknown }>;
+			productFacts?: Array<{ id?: unknown }>;
+		};
+		if (!Array.isArray(payload.claims) || !Array.isArray(payload.productFacts))
+			return null;
+		const factId = payload.productFacts.find(
+			(fact) => typeof fact.id === "string" && fact.id.trim(),
+		)?.id;
+		return payload.claims.flatMap((claim) => {
+			if (typeof claim.claimKey !== "string" || !claim.claimKey.trim())
+				return [];
+			return [
+				{
+					claimKey: claim.claimKey,
+					classificationStatus: "SUPPORTED",
+					reason: "Claim được đối chiếu với Product Fact trong snapshot.",
+					confidence: 1,
+					suggestionText: null,
+					factMappings: factId ? [{ factId, relation: "supports" }] : [],
+				},
+			];
+		});
+	} catch {
+		return null;
+	}
+}
+
 function createDraft(snapshot: ScriptGenerationInputSnapshot) {
 	const firstFact = snapshot.facts[0]?.content ?? "thông tin đã được xác thực";
 	const draft = {
@@ -249,11 +283,31 @@ export class DeterministicTextProvider implements TextProvider {
 			const snapshot =
 				this.factLockSnapshot ??
 				(request.factLockSnapshot as FactLockInputSnapshot | undefined);
-			if (!snapshot)
+			if (!snapshot) {
+				const manifestClaims = deterministicManifestFactLockClaims(request);
+				if (manifestClaims) {
+					const output = {
+						schemaVersion: "fact-lock-output.v1",
+						claims: manifestClaims,
+					};
+					return {
+						content: output,
+						providerRequestId: `det-fact-lock-${request.idempotencyKey}`,
+						inputTokens: request.messages.reduce(
+							(total, message) => total + message.content.length,
+							0,
+						),
+						outputTokens: JSON.stringify(output).length,
+						estimatedCostMicros: BigInt(0),
+						actualCostMicros: BigInt(0),
+						currency: "VND",
+					};
+				}
 				throw new TextProviderError(
 					"AI_PROVIDER_ERROR",
 					"Fact Lock snapshot is missing.",
 				);
+			}
 			const claims = deterministicFactLockClaims(snapshot);
 			const output = {
 				schemaVersion: "fact-lock-output.v1",

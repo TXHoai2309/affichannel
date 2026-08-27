@@ -26,6 +26,7 @@
 		"test:integration:manifest-fact-lock-persistence": "tsx scripts/test-manifest-fact-lock-persistence.ts",
 		"test:integration:manifest-fact-lock-service": "tsx scripts/test-manifest-fact-lock-service.ts",
 		"test:integration:manifest-fact-lock-runtime": "tsx scripts/test-manifest-fact-lock-runtime.ts",
+		"test:integration:manifest-fact-lock-public-cutover": "tsx scripts/test-manifest-fact-lock-public-cutover.ts",
 		"test:integration:claim-manifest-persistence": "tsx scripts/test-claim-manifest-persistence.ts",
 		"test:integration:claim-manifest-repository": "tsx scripts/test-claim-manifest-repository.ts",
 		"test:integration:claim-manifest-service": "tsx scripts/test-claim-manifest-service.ts",
