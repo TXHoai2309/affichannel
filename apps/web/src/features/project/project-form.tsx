@@ -9,13 +9,12 @@ import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
 import { Textarea } from "@affichannel/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import type { Route } from "next";
 import { useRouter } from "next/navigation";
 import { type FormEvent, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
 
-import { getPostCreateProjectHref } from "../project-navigation/project-entry-presentation";
+import { navigateAfterProjectCreate } from "../project-navigation/project-entry-presentation";
 import { ProductSelector } from "./product-selector";
 import { getProjectErrorMessage } from "./project-errors";
 
@@ -122,8 +121,7 @@ export function ProjectForm() {
 
 		createProject.mutate(parsed.data, {
 			onSuccess: (project) => {
-				router.push(getPostCreateProjectHref(project) as Route);
-				router.refresh();
+				navigateAfterProjectCreate(router, project);
 			},
 			onError: (error) => {
 				setErrors({

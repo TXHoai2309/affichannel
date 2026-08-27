@@ -3,13 +3,19 @@ import {
 	type ProjectWorkflowEntryBatchRepository,
 	type ProjectWorkflowEntryBatchRows,
 } from "@affichannel/api/services/project-workflow-entry-service";
-import type { ProjectWorkflowEntrySummary } from "@affichannel/core";
+import {
+	mapAdaptiveWorkflowReadModel,
+	mapProjectWorkflowEntrySummary,
+	type ProjectWorkflowEntrySummary,
+	resolveProjectApplicability,
+} from "@affichannel/core";
 import { describe, expect, it, vi } from "vitest";
 
 import {
 	getPostCreateProjectHref,
 	getProductRelatedProjectHref,
 	getProjectEntryPresentation,
+	navigateAfterProjectCreate,
 } from "./project-entry-presentation";
 
 function entry(
@@ -29,6 +35,46 @@ function entry(
 		canContinue: true,
 		...patch,
 	};
+}
+
+function readyAffiliateScriptedEntry(projectId: string) {
+	const applicability = resolveProjectApplicability({
+		projectIdentity: {
+			contentType: "AFFILIATE",
+			creationPath: "SCRIPTED",
+			contentFormatKey: "SCRIPTED_STANDARD",
+			contentFormatVersion: 1,
+			hasProduct: true,
+		},
+		product: { accessible: true },
+		script: {
+			generationStatus: "NONE",
+			usableGenerationPresent: false,
+			sourceDependencyCurrent: true,
+			currentVersionPresent: false,
+			currentVersionFactLockReady: false,
+			channelSettingsComplete: true,
+			productFactsUsable: true,
+		},
+		factLock: { gateReason: "NO_SCRIPT_VERSION" },
+		voice: {
+			configPresent: false,
+			previewPresent: false,
+			totalSegments: 0,
+			attemptedSegments: 0,
+			usableSegments: 0,
+			pendingSegments: 0,
+			failedSegments: 0,
+			indeterminateSegments: 0,
+			staleSegments: 0,
+		},
+		render: { featureImplemented: false, inputsStale: false },
+	});
+
+	return mapProjectWorkflowEntrySummary(
+		projectId,
+		mapAdaptiveWorkflowReadModel(applicability),
+	);
 }
 
 describe("Project entry navigation", () => {
@@ -113,6 +159,25 @@ describe("Project entry navigation", () => {
 		expect(getPostCreateProjectHref(project)).toBe(
 			"/projects/new-affiliate-project/content",
 		);
+	});
+
+	it("pushes once for one ready-product create without refreshing", async () => {
+		const project = {
+			id: "ready-affiliate-project",
+			workflowEntry: readyAffiliateScriptedEntry("ready-affiliate-project"),
+		};
+		const router = { push: vi.fn(), refresh: vi.fn() };
+		const createProject = vi.fn(async () => project);
+
+		const created = await createProject();
+		navigateAfterProjectCreate(router, created);
+
+		expect(createProject).toHaveBeenCalledTimes(1);
+		expect(router.push).toHaveBeenCalledTimes(1);
+		expect(router.push).toHaveBeenCalledWith(
+			"/projects/ready-affiliate-project/content",
+		);
+		expect(router.refresh).not.toHaveBeenCalled();
 	});
 });
 

@@ -1,13 +1,17 @@
 import { randomUUID } from "node:crypto";
+import type { ProjectWorkflowEntrySummary } from "@affichannel/core";
 import {
 	contentBrief,
 	db,
 	product,
+	productFact,
 	project,
 	projectStepStatus,
 } from "@affichannel/db";
 import { expect, type Page, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
+
+import { getPostCreateProjectHref } from "../../src/features/project-navigation/project-entry-presentation";
 
 const fixedAccountEmail = process.env.E2E_AUTH_EMAIL;
 const fixedAccountPassword = process.env.E2E_AUTH_PASSWORD;
@@ -28,6 +32,8 @@ test.describe("AFF-US-004 project creation", () => {
 		const productName = `E2E product ${suffix}`;
 		let projectId: string | undefined;
 		let productId: string | undefined;
+		let factId: string | undefined;
+		let createProjectRequests = 0;
 
 		try {
 			await signIn(page);
@@ -35,21 +41,47 @@ test.describe("AFF-US-004 project creation", () => {
 
 			await page.getByRole("button", { name: "Tạo sản phẩm" }).click();
 			await page.getByLabel("Tên sản phẩm mới").fill(productName);
+			const createProductResponsePromise = page.waitForResponse((response) =>
+				response.url().includes("/api/rpc/product/createMinimal"),
+			);
 			await page.getByRole("button", { name: "Tạo", exact: true }).click();
+			const createProductResponse = await createProductResponsePromise;
+			expect(createProductResponse.ok()).toBeTruthy();
 
-			await page.getByLabel("Tên dự án").fill(projectName);
-			await page.getByLabel("Mục tiêu").fill("Kiểm tra luồng tạo project");
-			await page
-				.getByLabel("Góc tiếp cận")
-				.fill("Kiểm tra persistence của content brief");
-			await page.getByRole("button", { name: "Tạo dự án" }).click();
+			const [createdProduct] = await db
+				.select({
+					id: product.id,
+					workspaceId: product.workspaceId,
+					createdByUserId: product.createdByUserId,
+				})
+				.from(product)
+				.where(eq(product.name, productName))
+				.limit(1);
+			expect(createdProduct).toBeTruthy();
+			productId = createdProduct?.id;
+			factId = randomUUID();
+			await db.insert(productFact).values({
+				id: factId,
+				workspaceId: createdProduct?.workspaceId as string,
+				productId: createdProduct?.id as string,
+				content: "E2E verified product fact for adaptive create routing.",
+				type: "specification",
+				status: "verified",
+				sourceType: "official",
+				sourceLabel: "E2E fixture",
+				confirmedAt: "2026-08-27",
+				createdByUserId: createdProduct?.createdByUserId as string,
+				updatedByUserId: createdProduct?.createdByUserId as string,
+			});
 
-			await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\/product$/i);
-			projectId = page
-				.url()
-				.match(/\/projects\/([0-9a-f-]{36})\/product$/i)?.[1];
-			expect(projectId).toBeTruthy();
-
+			page.on("request", (request) => {
+				if (
+					request.method() === "POST" &&
+					request.url().includes("/api/rpc/project/create")
+				) {
+					createProjectRequests += 1;
+				}
+			});
 			await page.route("**/api/rpc/scriptGeneration/getState", (route) =>
 				route.fulfill({
 					status: 200,
@@ -57,7 +89,10 @@ test.describe("AFF-US-004 project creation", () => {
 					body: JSON.stringify({
 						json: {
 							context: {
-								project: { id: projectId, name: projectName },
+								project: {
+									id: projectId ?? "created-project",
+									name: projectName,
+								},
 								contentBrief: {
 									platform: "tiktok",
 									goal: "Kiểm tra luồng tạo project",
@@ -66,7 +101,7 @@ test.describe("AFF-US-004 project creation", () => {
 									description: null,
 								},
 								product: {
-									id: "e2e-product",
+									id: productId,
 									name: productName,
 									category: null,
 								},
@@ -85,7 +120,29 @@ test.describe("AFF-US-004 project creation", () => {
 									promptVersion: "test-prompt",
 									outputSchemaVersion: "test-output",
 								},
-								facts: [],
+								facts: [
+									{
+										id: factId,
+										revision: 1,
+										content:
+											"E2E verified product fact for adaptive create routing.",
+										type: "specification",
+										assessment: {
+											verification: "verified",
+											evidence: "complete",
+											freshness: "not_applicable",
+											freshnessReason: "not_applicable",
+										},
+										generationUsability: "allowed",
+										source: {
+											type: "official",
+											label: "E2E fixture",
+											url: null,
+											confirmedAt: "2026-08-27",
+											expiresAt: null,
+										},
+									},
+								],
 							},
 							latestRequest: null,
 							latestUsableArtifact: null,
@@ -94,20 +151,50 @@ test.describe("AFF-US-004 project creation", () => {
 					}),
 				}),
 			);
-			await page.goto(`/projects/${projectId}/content`);
+
+			await page.getByLabel("Tên dự án").fill(projectName);
+			await page.getByLabel("Mục tiêu").fill("Kiểm tra luồng tạo project");
+			await page
+				.getByLabel("Góc tiếp cận")
+				.fill("Kiểm tra persistence của content brief");
+			const createResponsePromise = page.waitForResponse((response) =>
+				response.url().includes("/api/rpc/project/create"),
+			);
+			await page.getByRole("button", { name: "Tạo dự án" }).click();
+			const createResponse = await createResponsePromise;
+			expect(createResponse.ok()).toBeTruthy();
+			const createdProject = (
+				(await createResponse.json()) as {
+					json: {
+						id: string;
+						workflowEntry: ProjectWorkflowEntrySummary;
+					};
+				}
+			).json;
+			projectId = createdProject.id;
+			const expectedPostCreateHref = getPostCreateProjectHref(createdProject);
+			expect(createdProject.workflowEntry.nextRouteKey).toBe("content");
+			await expect(page).toHaveURL(expectedPostCreateHref);
+			expect(createProjectRequests).toBe(1);
 			await expect(
 				page.getByRole("heading", { name: "Script Studio" }),
 			).toBeVisible();
 			await expect(
-				page
-					.getByText("Chưa có Product Facts đủ điều kiện để tạo kịch bản.")
-					.first(),
+				page.getByText(
+					"E2E verified product fact for adaptive create routing.",
+					{ exact: true },
+				),
 			).toBeVisible();
 			await expect(
 				page.getByRole("button", { name: "Tạo kịch bản" }).first(),
 			).toBeDisabled();
 			await page.goto(`/projects/${projectId}/product`);
 
+			const persistedProjects = await db
+				.select({ id: project.id })
+				.from(project)
+				.where(eq(project.name, projectName));
+			expect(persistedProjects).toHaveLength(1);
 			const [persistedProject] = await db
 				.select({
 					id: project.id,
@@ -143,7 +230,7 @@ test.describe("AFF-US-004 project creation", () => {
 			).toBeVisible();
 			await expect(overview.getByText("TikTok", { exact: true })).toBeVisible();
 			await expect(
-				overview.getByRole("definition").filter({ hasText: /^Sản phẩm$/ }),
+				overview.getByText("Sản phẩm", { exact: true }),
 			).toBeVisible();
 			await expect(
 				overview.getByText("Kiểm tra luồng tạo project"),
@@ -168,7 +255,7 @@ test.describe("AFF-US-004 project creation", () => {
 				page
 					.getByRole("navigation", { name: "Các bước project" })
 					.getByRole("link", { name: "Sản phẩm" }),
-			).toContainText("Đang làm");
+			).toContainText("Hoàn thành");
 
 			await page.goto("/projects");
 			await expect(page.getByText(projectName)).toBeVisible();
@@ -178,15 +265,14 @@ test.describe("AFF-US-004 project creation", () => {
 				page.getByRole("heading", { name: "Tổng quan nhanh" }),
 			).toBeVisible();
 			await page.getByRole("link", { name: `Mở dự án ${projectName}` }).click();
-			await expect(page).toHaveURL(
-				new RegExp(`/projects/${projectId}/product$`),
-			);
+			await expect(page).toHaveURL(new RegExp(`/projects/${projectId}$`));
 			await expect(
 				page.getByRole("navigation", { name: "Các bước project" }),
 			).toBeVisible();
 		} finally {
-			if (projectId) {
-				await db.delete(project).where(eq(project.id, projectId));
+			await db.delete(project).where(eq(project.name, projectName));
+			if (factId) {
+				await db.delete(productFact).where(eq(productFact.id, factId));
 			}
 
 			const [createdProduct] = await db

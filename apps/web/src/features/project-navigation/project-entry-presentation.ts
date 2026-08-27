@@ -1,4 +1,5 @@
 import type { ProjectWorkflowEntrySummary } from "@affichannel/core";
+import type { Route } from "next";
 
 import {
 	ADAPTIVE_CAPABILITY_LABELS,
@@ -51,4 +52,14 @@ export function getPostCreateProjectHref(project: {
 }) {
 	return getProjectEntryPresentation(project.id, project.workflowEntry)
 		.continueHref;
+}
+
+export function navigateAfterProjectCreate(
+	router: { push: (href: Route) => void | Promise<void> },
+	project: {
+		id: string;
+		workflowEntry: ProjectWorkflowEntrySummary;
+	},
+) {
+	void router.push(getPostCreateProjectHref(project) as Route);
 }
