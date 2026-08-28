@@ -682,6 +682,7 @@ async function main(): Promise<void> {
 			`Disposable identity: host=${authority.host}; database=local; schema=public`,
 		);
 		const through0019 = await migrationFolderThrough(19);
+		const through0020 = await migrationFolderThrough(20);
 		await resetDatabase(pool);
 		await migrate(drizzle(pool), { migrationsFolder: through0019 });
 		assert(
@@ -705,7 +706,7 @@ async function main(): Promise<void> {
 			[fixtures.legacyClaimId],
 		);
 
-		await migrate(drizzle(pool), { migrationsFolder: migrationsRoot });
+		await migrate(drizzle(pool), { migrationsFolder: through0020 });
 		assert(
 			(await migrationCount(pool)) === 21,
 			"Expected migration count 21 after 0020.",
