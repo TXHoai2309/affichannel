@@ -10,7 +10,7 @@ import {
 	type ProjectWorkflowEntrySummary,
 	resolveBusinessToday,
 	resolveProjectApplicability,
-	validateScriptVersionForFactLockRun,
+	validateScriptVersionForFactLock,
 } from "@affichannel/core";
 import type {
 	ProductFactSourceType,
@@ -297,9 +297,8 @@ export function buildProjectWorkflowEntrySnapshots(
 						).every((dependency) => dependency.invalidatedAt === null),
 					currentVersionPresent: currentVersion !== undefined,
 					currentVersionFactLockReady: currentVersion
-						? validateScriptVersionForFactLockRun(
-								currentVersion.editableSnapshot,
-							).success
+						? validateScriptVersionForFactLock(currentVersion.editableSnapshot)
+								.success
 						: false,
 					channelSettingsComplete: settingsComplete,
 					productFactsUsable: productFactsUsable(productFacts, today),

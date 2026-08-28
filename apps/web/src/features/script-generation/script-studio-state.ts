@@ -216,12 +216,114 @@ export function getPersistedScriptGenerationErrorMessage(
 	});
 }
 
-export function createIdempotencyKey(prefix: "generate" | "repair") {
+export function createIdempotencyKey(
+	prefix: "generate" | "repair" | "claim-refresh",
+) {
 	const randomPart =
 		typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
 			? crypto.randomUUID()
 			: `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 	return `script-studio-${prefix}-${randomPart}`;
+}
+
+function readErrorCode(error: unknown) {
+	if (!error || typeof error !== "object") return undefined;
+	const record = error as Record<string, unknown>;
+	const data = record.data;
+	if (data && typeof data === "object") {
+		const code = (data as Record<string, unknown>).code;
+		if (typeof code === "string") return code;
+	}
+	return typeof record.message === "string" && record.message.length < 160
+		? record.message
+		: undefined;
+}
+
+const SCRIPT_CLAIM_REFRESH_ERROR_MESSAGES: Record<string, string> = {
+	SCRIPT_CLAIM_REFRESH_NOT_FOUND:
+		"Không tìm thấy bản nháp Claims trong project hiện tại.",
+	SCRIPT_CLAIM_REFRESH_SOURCE_REVISION_CONFLICT:
+		"Script đã thay đổi. Hãy tải bản mới nhất rồi thử lại.",
+	SCRIPT_CLAIM_REFRESH_SOURCE_CHANGED:
+		"Script đã thay đổi trong lúc cập nhật Claims. Hãy tải bản mới nhất và thử lại.",
+	SCRIPT_CLAIM_REFRESH_IDEMPOTENCY_CONFLICT:
+		"Yêu cầu cập nhật Claims này đã được dùng cho một thao tác khác.",
+	SCRIPT_CLAIM_REFRESH_PROVIDER_RESULT_MISMATCH:
+		"AI trả về danh sách Claims không hợp lệ. Không có thay đổi nào được áp dụng.",
+	SCRIPT_CLAIM_REFRESH_PROVIDER_FAILED:
+		"Không thể cập nhật Claims. Nội dung Script chưa bị thay đổi.",
+	SCRIPT_CLAIM_REFRESH_PROVIDER_INDETERMINATE:
+		"Không xác định được kết quả cập nhật Claims. Hệ thống không tự chạy lại để tránh phát sinh thêm chi phí.",
+	SCRIPT_CLAIM_REFRESH_EXECUTION_CLAIM_STALE_UNCERTAIN:
+		"Không xác định được kết quả cập nhật Claims. Hệ thống không tự chạy lại để tránh phát sinh thêm chi phí.",
+	SCRIPT_CLAIM_REFRESH_INPUT_INVALID:
+		"Bản nháp hiện tại chưa đủ điều kiện để cập nhật Claims.",
+	SCRIPT_CLAIM_REFRESH_NOT_ELIGIBLE:
+		"Project hiện tại chưa hỗ trợ cập nhật Claims.",
+	SCRIPT_CLAIM_REFRESH_SOURCE_NOT_USABLE:
+		"Bản nháp hiện tại chưa đủ điều kiện để cập nhật Claims.",
+	SCRIPT_CLAIM_REFRESH_CLAIMS_STATE_INVALID:
+		"Trạng thái Claims hiện tại chưa thể cập nhật.",
+};
+
+export function getScriptClaimRefreshErrorCode(error: unknown) {
+	return readErrorCode(error);
+}
+
+export function getScriptClaimRefreshErrorMessage(error: unknown) {
+	const code = readErrorCode(error);
+	return (
+		(code && SCRIPT_CLAIM_REFRESH_ERROR_MESSAGES[code]) ??
+		"Không thể cập nhật Claims. Hãy kiểm tra bản nháp và thử lại bằng một yêu cầu mới."
+	);
+}
+
+export function getCurrentScriptPrimarySnapshot(
+	scriptVersion: ScriptVersionReadModel,
+) {
+	return scriptVersion.editableSnapshot;
+}
+
+export function getScriptClaimRefreshResultMessage(result: {
+	kind: "not_required" | "completed" | "pending" | "failed" | "indeterminate";
+	errorCode?: string;
+}) {
+	if (result.kind === "not_required") return "Claims hiện đã được cập nhật.";
+	if (result.kind === "completed")
+		return "Đã cập nhật Claims cho bản nháp hiện tại.";
+	if (result.kind === "pending")
+		return "Claims đang được cập nhật ở một yêu cầu khác.";
+	return (
+		(result.errorCode &&
+			SCRIPT_CLAIM_REFRESH_ERROR_MESSAGES[result.errorCode]) ??
+		(result.kind === "indeterminate"
+			? SCRIPT_CLAIM_REFRESH_ERROR_MESSAGES.SCRIPT_CLAIM_REFRESH_PROVIDER_INDETERMINATE
+			: SCRIPT_CLAIM_REFRESH_ERROR_MESSAGES.SCRIPT_CLAIM_REFRESH_PROVIDER_FAILED)
+	);
+}
+
+export type ClaimRefreshAutosaveState = Readonly<{
+	status: "saved" | "dirty" | "saving" | "error" | "conflict";
+	dirty: boolean;
+	baseRevision: number;
+}>;
+
+export async function runClaimRefreshAfterAutosaveFlush<T>(
+	flush: () => Promise<ClaimRefreshAutosaveState>,
+	run: (revision: number) => Promise<T>,
+) {
+	const flushed = await flush();
+	if (flushed.status !== "saved" || flushed.dirty) {
+		return {
+			kind: "blocked" as const,
+			status: flushed.status,
+			dirty: flushed.dirty,
+		};
+	}
+	return {
+		kind: "started" as const,
+		result: await run(flushed.baseRevision),
+	};
 }
 
 export function formatEstimatedCost(

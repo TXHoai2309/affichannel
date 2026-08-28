@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -65,6 +66,8 @@ import {
 	getEstimateViewState,
 	getLatestUsableArtifact,
 	getPersistedScriptGenerationErrorMessage,
+	getScriptClaimRefreshErrorMessage,
+	getScriptClaimRefreshResultMessage,
 	getScriptGenerationErrorMessage,
 	getScriptStudioCtaState,
 	getStudioStatus,
@@ -77,6 +80,7 @@ import {
 	SCRIPT_SECTION_LABELS,
 	SCRIPT_STATUS_LABELS,
 } from "./script-studio-state";
+import ScriptVersionCurrentView from "./script-version-current-view";
 
 const FACT_FRESHNESS_LABELS: Record<string, string> = {
 	fresh: "Mới xác nhận",
@@ -1030,7 +1034,11 @@ function ErrorPanel({ onRetry }: { onRetry: () => void }) {
 }
 
 export default function ScriptStudio({ projectId }: { projectId: string }) {
+	const router = useRouter();
 	const [actionError, setActionError] = useState<string | null>(null);
+	const [claimRefreshNotice, setClaimRefreshNotice] = useState<string | null>(
+		null,
+	);
 	const [editorOpen, setEditorOpen] = useState(false);
 	const [historyOpenedFromReadOnly, setHistoryOpenedFromReadOnly] =
 		useState(false);
@@ -1090,6 +1098,9 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	);
 	const autosaveMutation = useMutation(
 		orpc.scriptVersion.autosave.mutationOptions(),
+	);
+	const claimRefreshMutation = useMutation(
+		orpc.scriptVersion.refreshClaims.mutationOptions(),
 	);
 
 	if (stateQuery.isPending || scriptVersionQuery.isPending)
@@ -1162,6 +1173,33 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		}
 	}
 
+	async function refreshClaimsFromStudio() {
+		if (
+			!currentDraft ||
+			currentDraft.editableSnapshot.claimsStatus === "current" ||
+			claimRefreshMutation.isPending
+		)
+			return;
+		setClaimRefreshNotice(null);
+		try {
+			const result = await claimRefreshMutation.mutateAsync({
+				projectId,
+				scriptVersionId: currentDraft.id,
+				expectedScriptVersionRevision: currentDraft.revision,
+				idempotencyKey: createIdempotencyKey("claim-refresh"),
+			});
+			setClaimRefreshNotice(getScriptClaimRefreshResultMessage(result));
+			if (result.kind === "completed" || result.kind === "not_required") {
+				await scriptVersionQuery.refetch();
+				setClaimRefreshNotice(null);
+				toast.success(getScriptClaimRefreshResultMessage(result));
+				router.refresh();
+			}
+		} catch (error) {
+			setClaimRefreshNotice(getScriptClaimRefreshErrorMessage(error));
+		}
+	}
+
 	async function initializeEditor() {
 		if (currentDraft) {
 			setHistoryOpenedFromReadOnly(false);
@@ -1223,6 +1261,10 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 					latestUsableArtifact,
 				)}
 				onReloadLatest={reloadCurrentDraft}
+				onClaimRefreshComplete={async () => {
+					await scriptVersionQuery.refetch();
+					router.refresh();
+				}}
 				onVersionSaved={finishVersionSave}
 				initialHistoryOpen={historyOpenedFromReadOnly}
 				onHistoryClosed={
@@ -1259,8 +1301,8 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 							<p>Bản dùng được: {formatDate(latestUsableArtifact.createdAt)}</p>
 							{latestSavedVersion?.versionNumber ? (
 								<p className="mt-0.5">
-									Phiên bản hiện tại: #{latestSavedVersion.versionNumber} · Đã lưu{" "}
-									{formatDate(latestSavedVersion.savedAt)}
+									Phiên bản hiện tại: #{latestSavedVersion.versionNumber} · Đã
+									lưu {formatDate(latestSavedVersion.savedAt)}
 								</p>
 							) : null}
 						</div>
@@ -1328,52 +1370,68 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 				</div>
 
 				<section aria-labelledby="script-output-title" className="space-y-4">
-					<div className="flex items-center justify-between gap-3">
-						<div>
-							<h3 className="font-semibold text-lg" id="script-output-title">
-								Generated Script
-							</h3>
-							<p className="text-muted-foreground text-sm">
-								Output bất biến của ScriptGeneration.
-							</p>
-						</div>
-						{model.dependencyState?.state === "invalidated" ? (
-							<Badge variant="warning">
-								<TriangleAlert aria-hidden="true" className="size-3" /> Product
-								Facts đã thay đổi
-							</Badge>
-						) : null}
-					</div>
-					{latestUsableArtifact ? (
+					{currentDraft ? (
+						<ScriptVersionCurrentView
+							onRefreshClaims={() => void refreshClaimsFromStudio()}
+							refreshNotice={claimRefreshNotice}
+							refreshPending={claimRefreshMutation.isPending}
+							scriptVersion={currentDraft}
+						/>
+					) : (
 						<>
-							{isLatestUsableArtifactInvalidated(model) ? (
-								<InvalidatedArtifactNotice
-									canGenerate={canGenerate}
-									isPartial={latestUsableArtifact.status === "partial"}
-									onGenerate={() => void generateScript()}
-								/>
-							) : null}
-							{latestUsableArtifact.status === "partial" ? (
-								<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 text-sm">
-									<p className="font-medium">Kịch bản hoàn thành một phần.</p>
-									<p className="mt-1 text-xs">
-										Các phần hợp lệ vẫn được giữ nguyên. Chỉ phần có cảnh báo
-										mới cần tạo lại.
+							<div className="flex items-center justify-between gap-3">
+								<div>
+									<h3
+										className="font-semibold text-lg"
+										id="script-output-title"
+									>
+										Generated Script
+									</h3>
+									<p className="text-muted-foreground text-sm">
+										Output bất biến của ScriptGeneration.
 									</p>
 								</div>
-							) : null}
-							<ScriptOutput
-								artifact={latestUsableArtifact}
-								canRepair={(section) => canRepairSection(model, section)}
-								onRepair={(section) => void repairSection(section)}
-								repairPending={repairMutation.isPending}
-							/>
+								{model.dependencyState?.state === "invalidated" ? (
+									<Badge variant="warning">
+										<TriangleAlert aria-hidden="true" className="size-3" />{" "}
+										Product Facts đã thay đổi
+									</Badge>
+								) : null}
+							</div>
+							{latestUsableArtifact ? (
+								<>
+									{isLatestUsableArtifactInvalidated(model) ? (
+										<InvalidatedArtifactNotice
+											canGenerate={canGenerate}
+											isPartial={latestUsableArtifact.status === "partial"}
+											onGenerate={() => void generateScript()}
+										/>
+									) : null}
+									{latestUsableArtifact.status === "partial" ? (
+										<div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 text-sm">
+											<p className="font-medium">
+												Kịch bản hoàn thành một phần.
+											</p>
+											<p className="mt-1 text-xs">
+												Các phần hợp lệ vẫn được giữ nguyên. Chỉ phần có cảnh
+												báo mới cần tạo lại.
+											</p>
+										</div>
+									) : null}
+									<ScriptOutput
+										artifact={latestUsableArtifact}
+										canRepair={(section) => canRepairSection(model, section)}
+										onRepair={(section) => void repairSection(section)}
+										repairPending={repairMutation.isPending}
+									/>
+								</>
+							) : (
+								<EmptyOutput
+									disabled={!canGenerate}
+									onGenerate={() => void generateScript()}
+								/>
+							)}
 						</>
-					) : (
-						<EmptyOutput
-							disabled={!canGenerate}
-							onGenerate={() => void generateScript()}
-						/>
 					)}
 				</section>
 			</div>

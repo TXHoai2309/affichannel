@@ -270,6 +270,148 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 		}
 	});
 
+	test("refreshes stale claims explicitly and returns to the current ScriptVersion view", async ({
+		page,
+	}) => {
+		const fixture = await createProject(page);
+		const oldOutput = {
+			...createOutput("OLD SCENE"),
+			hookVariants: [
+				{ key: "hook-1", text: "OLD HOOK" },
+				{ key: "hook-2", text: "OLD HOOK TWO" },
+				{ key: "hook-3", text: "OLD HOOK THREE" },
+			],
+			voiceoverSegments: [{ key: "segment-1", text: "OLD VOICE" }],
+		};
+		const artifact = createArtifact(
+			fixture,
+			"generation-claim-refresh",
+			"completed",
+			oldOutput,
+		);
+		let draft: ScriptVersionFixture = {
+			...createScriptVersion(fixture, artifact),
+			editableSnapshot: {
+				...createScriptVersion(fixture, artifact).editableSnapshot,
+				hookVariants: [
+					{ key: "hook-1", text: "NEW HOOK" },
+					{ key: "hook-2", text: "NEW HOOK TWO" },
+					{ key: "hook-3", text: "NEW HOOK THREE" },
+				],
+				voiceoverSegments: [{ key: "segment-1", text: "NEW VOICE" }],
+			},
+		};
+		let refreshPayload: Record<string, unknown> | undefined;
+
+		try {
+			await mockState(page, () =>
+				createReadModel(fixture, artifact, artifact, "current"),
+			);
+			await mockEstimate(page);
+			await page.route(
+				"**/api/rpc/scriptVersion/listHistory",
+				async (route) => {
+					await fulfillJson(route, []);
+				},
+			);
+			await page.route("**/api/rpc/scriptVersion/getCurrent", async (route) => {
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/initialize", async (route) => {
+				await fulfillJson(route, draft);
+			});
+			await page.route("**/api/rpc/scriptVersion/autosave", async (route) => {
+				const payload = route.request().postDataJSON().json as {
+					editableSnapshot: ScriptVersionFixture["editableSnapshot"];
+				};
+				draft = {
+					...draft,
+					revision: draft.revision + 1,
+					editableSnapshot: {
+						...payload.editableSnapshot,
+						claimsStatus: "stale",
+					},
+				};
+				await fulfillJson(route, draft);
+			});
+			await page.route(
+				"**/api/rpc/scriptVersion/refreshClaims",
+				async (route) => {
+					refreshPayload = route.request().postDataJSON().json;
+					draft = {
+						...draft,
+						revision: draft.revision + 1,
+						editableSnapshot: {
+							...draft.editableSnapshot,
+							claims: [
+								{
+									text: "Claim mới từ bản Script hiện tại.",
+									occurrence: {
+										section: "voiceover",
+										segmentKey: "segment-1",
+									},
+								},
+							],
+							claimsSourceRevision: draft.revision,
+							claimsStatus: "current",
+						},
+					};
+					await fulfillJson(route, {
+						kind: "completed",
+						runId: "claim-refresh-run",
+						status: "completed",
+						resultScriptRevision: draft.revision,
+						scriptVersion: draft,
+					});
+				},
+			);
+			await page.route(
+				"**/api/rpc/scriptVersion/saveVersion",
+				async (route) => {
+					await fulfillJson(route, {
+						...draft,
+						status: "saved",
+						versionNumber: 1,
+						savedAt: "2026-08-17T00:01:00.000Z",
+					});
+				},
+			);
+
+			await page.goto(`/projects/${fixture.projectId}/content`);
+			await page.getByRole("button", { name: "Chỉnh sửa" }).click();
+			await expect(
+				page.getByRole("heading", { name: "Script Editor" }),
+			).toBeVisible();
+			await page.getByLabel("Voiceover đoạn 1").fill("NEW VOICE EDITED");
+			await expect(page.getByText("Đã lưu").first()).toBeVisible({
+				timeout: 5_000,
+			});
+			await expect(page.getByTestId("refresh-claims-button")).toBeVisible();
+			await page.getByTestId("refresh-claims-button").click();
+			await expect(page.getByText("Claims hiện tại")).toBeVisible();
+			expect(refreshPayload).toMatchObject({
+				projectId: fixture.projectId,
+				scriptVersionId: draft.id,
+				expectedScriptVersionRevision: 2,
+			});
+			expect(refreshPayload).not.toHaveProperty("claims");
+			await expect(
+				page.getByText("Claim mới từ bản Script hiện tại.", { exact: true }),
+			).toBeVisible();
+
+			await page.getByRole("button", { name: "Lưu phiên bản" }).click();
+			await expect(page.getByTestId("current-script-view")).toBeVisible();
+			await expect(page.getByText("NEW HOOK", { exact: true })).toBeVisible();
+			await expect(
+				page.getByText("NEW VOICE EDITED", { exact: true }),
+			).toBeVisible();
+			await expect(page.getByText("OLD HOOK", { exact: true })).toHaveCount(0);
+			await expect(page.getByText("OLD VOICE", { exact: true })).toHaveCount(0);
+		} finally {
+			await deleteProjectFixture(fixture);
+		}
+	});
+
 	test("saves immutable history, previews a version, and restores it with confirmation", async ({
 		page,
 	}) => {
@@ -497,7 +639,9 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 				"Nội dung phải còn nguyên khi lưu phiên bản lỗi.",
 			);
 			await expect(
-				page.getByText("Không thể lưu bản nháp. Hãy thử lại hoặc tải bản mới nhất."),
+				page.getByText(
+					"Không thể lưu bản nháp. Hãy thử lại hoặc tải bản mới nhất.",
+				),
 			).toBeVisible();
 		} finally {
 			await deleteProjectFixture(fixture);

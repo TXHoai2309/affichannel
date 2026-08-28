@@ -1,9 +1,14 @@
 import type { ProjectWorkflowSubject } from "@affichannel/api/services/project-repository";
 import {
+	buildProjectWorkflowEntrySnapshots,
+	type ProjectWorkflowEntryBatchRows,
+} from "@affichannel/api/services/project-workflow-entry-service";
+import {
 	createProjectWorkflowRequestReader,
 	gatherProjectWorkflowSnapshot,
 	type ProjectWorkflowReadDependencies,
 } from "@affichannel/api/services/project-workflow-read-service";
+import type { ScriptVersionEditableSnapshot } from "@affichannel/core";
 import { describe, expect, it, vi } from "vitest";
 
 const actor = { workspaceId: "workspace-15a", userId: "user-15a" };
@@ -21,6 +26,36 @@ function subject(
 		productAccessible: true,
 		...overrides,
 	};
+}
+
+function scriptSnapshot(claimsStatus: "current" | "stale") {
+	return {
+		schemaVersion: "script-draft.v2",
+		language: "vi-VN",
+		hookVariants: [
+			{ key: "hook-1", text: "Hook" },
+			{ key: "hook-2", text: "Hook 2" },
+			{ key: "hook-3", text: "Hook 3" },
+		],
+		selectedHookKey: "hook-1",
+		voiceoverSegments: [{ key: "voice-1", text: "Voiceover" }],
+		scenes: [
+			{
+				order: 1,
+				durationSeconds: 5,
+				visualDirection: "Visual",
+				onScreenText: "Text",
+				voiceoverSegmentKeys: ["voice-1"],
+			},
+		],
+		cta: { text: "CTA" },
+		caption: "Caption",
+		hashtags: [],
+		disclosure: "Disclosure",
+		claims: [],
+		claimsSourceRevision: 1,
+		claimsStatus,
+	} satisfies ScriptVersionEditableSnapshot;
 }
 
 function readDependencies(
@@ -161,5 +196,67 @@ describe("AFF-US-015 request-owned workflow aggregation", () => {
 		expect(dependencies.readCurrentScriptVersion).not.toHaveBeenCalled();
 		expect(dependencies.evaluateFactLock).not.toHaveBeenCalled();
 		expect(dependencies.readVoice).not.toHaveBeenCalled();
+	});
+
+	it.each(["stale", "current"] as const)(
+		"uses claims-%s as the strict current Script readiness state",
+		async (claimsStatus) => {
+			const dependencies = readDependencies({
+				readCurrentScriptVersion: vi.fn(
+					async () =>
+						({
+							editableSnapshot: scriptSnapshot(claimsStatus),
+						}) as never,
+				),
+			});
+			const result = await gatherProjectWorkflowSnapshot(
+				actor,
+				subject(),
+				dependencies,
+			);
+
+			expect(result.applicabilityInput.script.currentVersionFactLockReady).toBe(
+				claimsStatus === "current",
+			);
+		},
+	);
+
+	it("applies strict claims-current readiness to the batched entry path", () => {
+		const now = new Date("2026-01-01T00:00:00.000Z");
+		const row = {
+			id: "draft-1",
+			workspaceId: actor.workspaceId,
+			projectId: subject().id,
+			sourceGenerationId: "generation-1",
+			status: "draft",
+			versionNumber: null,
+			editableSnapshotJson: scriptSnapshot("stale"),
+			revision: 1,
+			restoredFromVersionId: null,
+			createdByUserId: actor.userId,
+			createdAt: now,
+			updatedAt: now,
+			savedAt: null,
+		} as never;
+		const rows: ProjectWorkflowEntryBatchRows = {
+			subjects: [subject()],
+			scriptGenerations: [],
+			scriptVersions: [row],
+			factLockRuns: [],
+			claimManifests: [],
+			dependencies: [],
+			productFacts: [],
+			channelSettings: null,
+			voiceConfigs: [],
+			voiceArtifacts: [],
+		};
+
+		const [result] = buildProjectWorkflowEntrySnapshots(actor, rows, {
+			now,
+			pendingLeaseMs: 60_000,
+		});
+		expect(result?.applicabilityInput.script.currentVersionFactLockReady).toBe(
+			false,
+		);
 	});
 });

@@ -5,7 +5,7 @@ import {
 	type ProjectApplicabilityInput,
 	type ProjectApplicabilityResult,
 	resolveProjectApplicability,
-	validateScriptVersionForFactLockRun,
+	validateScriptVersionForFactLock,
 } from "@affichannel/core";
 
 import { FactLockGate } from "./fact-lock-gate-service";
@@ -147,7 +147,7 @@ export async function gatherProjectApplicabilityInput(
 				scriptReadModel.dependencyState?.state !== "invalidated",
 			currentVersionPresent: currentScriptVersion !== undefined,
 			currentVersionFactLockReady: currentScriptVersion
-				? validateScriptVersionForFactLockRun(
+				? validateScriptVersionForFactLock(
 						currentScriptVersion.editableSnapshot,
 					).success
 				: false,

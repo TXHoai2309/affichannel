@@ -4,14 +4,16 @@ import type {
 	ScriptGenerationReadModel,
 } from "@affichannel/core/script-generation/types";
 import type { ScriptVersionReadModel } from "@affichannel/core/script-version/types";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
 	canRepairSection,
 	formatEstimatedCost,
+	getCurrentScriptPrimarySnapshot,
 	getEstimateViewState,
 	getLatestUsableArtifact,
 	getPersistedScriptGenerationErrorMessage,
+	getScriptClaimRefreshResultMessage,
 	getScriptGenerationErrorMessage,
 	getScriptStudioCtaState,
 	getStudioStatus,
@@ -19,6 +21,7 @@ import {
 	hasUsableFacts,
 	isGenerationContextReady,
 	isLatestUsableArtifactInvalidated,
+	runClaimRefreshAfterAutosaveFlush,
 } from "./script-studio-state";
 
 const context: ScriptGenerationContext = {
@@ -159,9 +162,9 @@ describe("Script Studio state", () => {
 				generationPending: true,
 			}),
 		).toEqual({
-				editLabel: "Chỉnh sửa",
-				generationLabel: "Đang tạo lại kịch bản...",
-			});
+			editLabel: "Chỉnh sửa",
+			generationLabel: "Đang tạo lại kịch bản...",
+		});
 	});
 
 	it("keeps the latest usable artifact visible when a newer request is pending", () => {
@@ -198,6 +201,49 @@ describe("Script Studio state", () => {
 			hasNewerScriptGeneration(draft, makeArtifact({ id: "generation-a" })),
 		).toBe(false);
 		expect(hasNewerScriptGeneration(null, newer)).toBe(false);
+	});
+
+	it("uses the current ScriptVersion snapshot as the Studio primary source", () => {
+		const current = {
+			id: "draft-current",
+			editableSnapshot: {
+				hookVariants: [{ key: "hook", text: "NEW HOOK" }],
+				voiceoverSegments: [{ key: "voice", text: "NEW VOICE" }],
+			},
+		} as ScriptVersionReadModel;
+
+		expect(getCurrentScriptPrimarySnapshot(current)).toBe(
+			current.editableSnapshot,
+		);
+		expect(getCurrentScriptPrimarySnapshot(current).hookVariants[0]?.text).toBe(
+			"NEW HOOK",
+		);
+		expect(
+			getCurrentScriptPrimarySnapshot(current).voiceoverSegments[0]?.text,
+		).toBe("NEW VOICE");
+	});
+
+	it("never starts Claim Refresh when autosave flush is not saved", async () => {
+		const run = vi.fn(async () => "provider-called");
+		const result = await runClaimRefreshAfterAutosaveFlush(
+			async () => ({ status: "conflict", dirty: true, baseRevision: 7 }),
+			run,
+		);
+
+		expect(result).toMatchObject({ kind: "blocked", status: "conflict" });
+		expect(run).not.toHaveBeenCalled();
+	});
+
+	it("keeps refresh messaging safe for pending and indeterminate outcomes", () => {
+		expect(getScriptClaimRefreshResultMessage({ kind: "pending" })).toBe(
+			"Claims đang được cập nhật ở một yêu cầu khác.",
+		);
+		expect(
+			getScriptClaimRefreshResultMessage({
+				kind: "indeterminate",
+				errorCode: "SCRIPT_CLAIM_REFRESH_PROVIDER_INDETERMINATE",
+			}),
+		).toContain("không tự chạy lại");
 	});
 
 	it.each(["failed", "indeterminate"] as const)(

@@ -63,6 +63,12 @@ import {
 	useScriptAutosave,
 } from "./script-editor-autosave";
 import { selectScriptHook } from "./script-editor-state";
+import {
+	createIdempotencyKey,
+	getScriptClaimRefreshErrorMessage,
+	getScriptClaimRefreshResultMessage,
+	runClaimRefreshAfterAutosaveFlush,
+} from "./script-studio-state";
 
 type ScriptEditorProps = {
 	draft: ScriptVersionReadModel;
@@ -71,6 +77,9 @@ type ScriptEditorProps = {
 	onReloadLatest: () => Promise<ScriptVersionReadModel | null>;
 	save: (request: ScriptAutosaveRequest) => Promise<ScriptAutosaveResult>;
 	onVersionSaved: () => Promise<void>;
+	onClaimRefreshComplete?: (
+		scriptVersion: ScriptVersionReadModel,
+	) => Promise<void>;
 	initialHistoryOpen?: boolean;
 	onHistoryClosed?: () => void;
 };
@@ -161,8 +170,14 @@ function SaveIndicator({
 
 function ClaimsPanel({
 	snapshot,
+	onRefreshClaims,
+	refreshPending,
+	refreshNotice,
 }: {
 	snapshot: ScriptVersionEditableSnapshot;
+	onRefreshClaims: () => void;
+	refreshPending: boolean;
+	refreshNotice: string | null;
 }) {
 	const current = snapshot.claimsStatus === "current";
 	return (
@@ -186,10 +201,29 @@ function ClaimsPanel({
 							: "Claims cần cập nhật trước Fact Lock"}
 					</p>
 					{current ? null : (
-						<p className="mt-1 text-xs">
-							Nội dung script đã thay đổi. Danh sách claim hiện tại cần được cập
-							nhật trước bước Fact Lock.
-						</p>
+						<div className="mt-1 space-y-2">
+							<p className="text-xs">
+								Nội dung script đã thay đổi. Danh sách claim hiện tại cần được
+								cập nhật trước bước Fact Lock.
+							</p>
+							<Button
+								data-testid="refresh-claims-button"
+								disabled={refreshPending}
+								onClick={onRefreshClaims}
+								size="sm"
+								type="button"
+							>
+								{refreshPending ? (
+									<RefreshCw aria-hidden="true" className="animate-spin" />
+								) : null}
+								{refreshPending ? "Đang cập nhật..." : "Cập nhật Claims"}
+							</Button>
+							{refreshNotice ? (
+								<p className="font-medium text-xs" role="status">
+									{refreshNotice}
+								</p>
+							) : null}
+						</div>
 					)}
 				</div>
 			</div>
@@ -456,6 +490,7 @@ export default function ScriptEditor({
 	onReloadLatest,
 	save,
 	onVersionSaved,
+	onClaimRefreshComplete,
 	initialHistoryOpen = false,
 	onHistoryClosed,
 }: ScriptEditorProps) {
@@ -492,6 +527,12 @@ export default function ScriptEditor({
 	);
 	const restoreMutation = useMutation(
 		orpc.scriptVersion.restore.mutationOptions(),
+	);
+	const claimRefreshMutation = useMutation(
+		orpc.scriptVersion.refreshClaims.mutationOptions(),
+	);
+	const [claimRefreshNotice, setClaimRefreshNotice] = useState<string | null>(
+		null,
 	);
 	const readiness = validateScriptVersionForFactLock(state.snapshot).success;
 	const sourceLabel =
@@ -589,6 +630,49 @@ export default function ScriptEditor({
 			await onVersionSaved();
 		} catch (error) {
 			toast.error(getScriptVersionErrorMessage(error));
+		}
+	}
+
+	async function refreshClaims() {
+		if (
+			claimRefreshMutation.isPending ||
+			state.snapshot.claimsStatus === "current"
+		)
+			return;
+		setClaimRefreshNotice(null);
+		try {
+			const prepared = await runClaimRefreshAfterAutosaveFlush(
+				autosave.flush,
+				(revision) =>
+					claimRefreshMutation.mutateAsync({
+						projectId: draft.projectId,
+						scriptVersionId: draft.id,
+						expectedScriptVersionRevision: revision,
+						idempotencyKey: createIdempotencyKey("claim-refresh"),
+					}),
+			);
+			if (prepared.kind === "blocked") {
+				setClaimRefreshNotice(
+					prepared.status === "conflict"
+						? "Có xung đột khi lưu. Hãy tải bản mới nhất trước khi cập nhật Claims."
+						: "Chưa thể cập nhật Claims vì bản nháp chưa được autosave thành công.",
+				);
+				return;
+			}
+			const result = prepared.result;
+			if (result.kind === "completed" || result.kind === "not_required") {
+				autosave.resetFromServer(
+					result.scriptVersion.editableSnapshot,
+					result.scriptVersion.revision,
+				);
+				setClaimRefreshNotice(null);
+				toast.success(getScriptClaimRefreshResultMessage(result));
+				await onClaimRefreshComplete?.(result.scriptVersion);
+				return;
+			}
+			setClaimRefreshNotice(getScriptClaimRefreshResultMessage(result));
+		} catch (error) {
+			setClaimRefreshNotice(getScriptClaimRefreshErrorMessage(error));
 		}
 	}
 
@@ -757,7 +841,9 @@ export default function ScriptEditor({
 								const selected = state.snapshot.selectedHookKey === hook.key;
 								const selectHook = () => {
 									if (selected) return;
-									updateSnapshot((current) => selectScriptHook(current, hook.key));
+									updateSnapshot((current) =>
+										selectScriptHook(current, hook.key),
+									);
 								};
 								return (
 									<fieldset
@@ -1050,7 +1136,12 @@ export default function ScriptEditor({
 							</div>
 						</dl>
 					</EditorCard>
-					<ClaimsPanel snapshot={state.snapshot} />
+					<ClaimsPanel
+						onRefreshClaims={() => void refreshClaims()}
+						refreshNotice={claimRefreshNotice}
+						refreshPending={claimRefreshMutation.isPending}
+						snapshot={state.snapshot}
+					/>
 				</aside>
 			</div>
 

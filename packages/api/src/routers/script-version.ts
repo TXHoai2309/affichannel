@@ -4,6 +4,12 @@ import { z } from "zod";
 
 import { protectedProcedure } from "../index";
 import {
+	scriptClaimRefreshInputSchema,
+	toPublicScriptClaimRefreshResult,
+	toScriptClaimRefreshPublicError,
+} from "../services/script-claim-refresh-public";
+import { executeScriptClaimRefresh } from "../services/script-claim-refresh-service";
+import {
 	autosaveScriptVersion,
 	getCurrentScriptVersion,
 	getSavedScriptVersion,
@@ -140,6 +146,17 @@ export const scriptVersionRouter = {
 				return await getSavedScriptVersion(actor, input);
 			} catch (error) {
 				return toScriptVersionOrpcError(error);
+			}
+		}),
+	refreshClaims: protectedProcedure
+		.input(scriptClaimRefreshInputSchema)
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			try {
+				const result = await executeScriptClaimRefresh({ actor, ...input });
+				return toPublicScriptClaimRefreshResult(result);
+			} catch (error) {
+				return toScriptClaimRefreshPublicError(error);
 			}
 		}),
 	restore: protectedProcedure
