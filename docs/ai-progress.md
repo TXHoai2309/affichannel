@@ -9,14 +9,15 @@
 Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
-0020 giữ nguyên; migration 0021 cho post-US18 Claim Refresh hiện chưa được tạo.
+0020 giữ nguyên; migration 0021 đã được tạo cho CR-A persistence foundation nhưng
+chưa được apply trong task này.
 AFF-US-019 chưa bắt đầu.
 
 Trước khi bắt đầu AFF-US-019 phải thực hiện checkpoint đầy đủ Affiliate Scripted:
 Project → Product / Product Facts → Script Generation → ScriptVersion →
 ClaimManifest → Manifest-first Fact Lock → FactLockGate → Voice.
 
-## 2026-08-27 — POST AFF-US-018 Script Claim Refresh persistence contract lock
+## 2026-08-27 — POST AFF-US-018 Script Claim Refresh CR-A persistence foundation
 
 Đã hoàn tất contract/design-only hardening theo DEC-034. Audit xác nhận
 ScriptGeneration hiện dùng Product Facts để tạo/giới hạn candidate claims ban đầu,
@@ -31,8 +32,12 @@ prompt/output versions, requestHash, workspace idempotency, pending semantic
 uniqueness, durable single-winner execution claim, provider uncertainty và
 ScriptVersion CAS. Với source revision `R`, refresh thành công tạo revision `R+1`
 và `claimsSourceRevision=R+1`; ClaimManifest chỉ build sau khi claims current.
-Implementation được tách CR-A/CR-B/CR-C; migration `0021` chưa tạo, không có runtime,
-schema, provider hoặc database change. AFF-US-019 vẫn NOT STARTED.
+CR-A đã thêm additive schema/migration `0021`, strict persisted-row parser,
+workspace-scoped idempotency repository, pending semantic uniqueness và disposable
+integration harness. Chưa apply migration vào production/dev, chưa có provider,
+execution claim, ScriptVersion mutation, public API/UI hoặc runtime. Disposable DB
+acceptance cần explicit CR-A test authority; chưa đánh dấu CR-A PASS. CR-B/CR-C và
+AFF-US-019 vẫn NOT STARTED.
 
 ## 2026-08-27 — AFF-US-018 Phase 18F public cutover final acceptance
 

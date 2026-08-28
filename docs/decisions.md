@@ -13,7 +13,7 @@ DEC-025 cho công việc mới.
 
 ## DEC-034 — Durable Script Claim Refresh boundary sau AFF-US-018
 
-- Trạng thái: Đã chấp nhận ở mức contract/design; chưa implement
+- Trạng thái: Đã chấp nhận contract/design; CR-A persistence implementation đang chờ disposable acceptance
 - Ngày: 2026-08-27
 - Mở rộng: DEC-021, DEC-031, DEC-033 và `docs/claim-manifest-fact-lock-contract.md`
 
@@ -27,8 +27,8 @@ nhiều application instance.
 
 ### Quyết định
 
-- Claim Refresh sở hữu execution artifact riêng trong migration tương lai `0021`,
-  dự kiến là `script_claim_refresh_run`. Không tái sử dụng `FactLockRun` hoặc
+- Claim Refresh sở hữu execution artifact riêng trong migration `0021`, là
+  `script_claim_refresh_run`. Không tái sử dụng `FactLockRun` hoặc
   `ScriptGeneration` làm persistence owner.
 - Claim Refresh chỉ nhận exact current Script content. Product Facts hiện được
   dùng bởi ScriptGeneration để tạo/giới hạn candidate claims ban đầu, nhưng audit
@@ -101,7 +101,8 @@ provider primitives trước khi tạo migration.
 
 Implementation được tách thành CR-A (migration + repository), CR-B (provider/runtime
 và CAS apply) và CR-C (public editor action, current ScriptVersion read model,
-workflow refresh và regression). DEC-034 không tạo migration hoặc runtime.
+workflow refresh và regression). CR-A đã tạo persistence foundation; DEC-034 không
+cho phép suy ra rằng runtime/provider đã bắt đầu.
 
 ## DEC-033 — Manifest provider prompt boundary cho AFF-US-018 Phase 18D
 

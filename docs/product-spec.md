@@ -252,7 +252,8 @@ Sau claim-bearing edit, claims của current ScriptVersion là `stale` và khôn
 boundary riêng: chỉ inventory exact Script content, không verify Product Facts,
 không sửa text và không tạo Manifest. ClaimManifest chỉ được build sau khi refresh
 đã CAS-apply claims mới thành `current`; contract persistence của refresh nằm tại
-DEC-034 và chưa implement.
+DEC-034 và CR-A đã thêm additive persistence foundation. Runtime/provider/CAS
+apply và public flow chưa implement.
 
 ### Fact Lock run
 

@@ -8,7 +8,7 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
-### POST AFF-US-018 — Script Claim Refresh persistence contract
+### POST AFF-US-018 — Script Claim Refresh CR-A persistence foundation
 
 - Khóa contract/design cho flow Script edit → `claimsStatus=stale` → explicit
   durable Claim Refresh → current claims → ClaimManifest → Manifest-first Fact Lock.
@@ -17,8 +17,12 @@ sử dụng Semantic Versioning.
 - Chọn execution artifact riêng `script_claim_refresh_run`, durable idempotency,
   pending semantic uniqueness, single-winner execution claim, provider uncertainty
   và ScriptVersion CAS. Revision semantics là source `R` → result `R+1`.
-- Chưa implement runtime/UI, chưa tạo migration `0021`, chưa gọi provider hoặc
-  database. Đây là hardening sau AFF-US-018; AFF-US-019 vẫn chưa bắt đầu.
+- Implement additive `script_claim_refresh_run` schema và migration `0021`, strict
+  persisted-row parsing, repository create/reuse/read, workspace idempotency và
+  pending semantic uniqueness; thêm disposable migration/repository harness.
+- Chưa apply migration vào production/dev, chưa implement runtime/UI/provider,
+  execution claim hoặc ScriptVersion mutation. CR-A còn chờ disposable DB acceptance;
+  đây là hardening sau AFF-US-018 và AFF-US-019 vẫn chưa bắt đầu.
 
 ### AFF-US-018 Phase 18F public Manifest-first cutover
 

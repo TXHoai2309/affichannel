@@ -15,8 +15,8 @@ affiliate baseline phải tiếp tục xanh trong toàn bộ rollout.
 ### Post-US18 hardening checkpoint — Script Claim Refresh
 
 DEC-034 đã khóa contract/design cho Claim Refresh sau AFF-US-018 DONE. Đây không
-phải một lần mở lại US18 và không đánh dấu AFF-US-019 bắt đầu. Claim Refresh sẽ có
-execution artifact riêng `script_claim_refresh_run` ở migration tương lai `0021`,
+phải một lần mở lại US18 và không đánh dấu AFF-US-019 bắt đầu. Claim Refresh có
+execution artifact riêng `script_claim_refresh_run` ở migration `0021`,
 với durable idempotency, pending semantic uniqueness, single-winner execution
 claim, provider ngoài transaction và ScriptVersion CAS. Product Facts không thuộc
 refresh input/hash; Fact Lock vẫn là bước verify claims với Product Facts.
@@ -27,7 +27,9 @@ revision `R+1`, `claimsSourceRevision=R+1`, run ghi `sourceScriptRevision=R` và
 là `failed`, provider uncertainty là `indeterminate`, không automatic paid retry.
 Implementation sẽ được acceptance riêng theo CR-A (persistence/repository), CR-B
 (provider/runtime/CAS) và CR-C (public editor/read-model/workflow regression).
-Checkpoint này chỉ cập nhật contract, không tạo schema/migration hoặc gọi provider.
+CR-A đã tạo schema/migration và repository foundation additively; checkpoint này
+chưa claim CR-A acceptance cho tới khi disposable DB gate chạy. Không có provider,
+runtime, ScriptVersion mutation hoặc public cutover.
 
 ## 2. Gate A — Migration và compatibility
 

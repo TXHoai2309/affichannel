@@ -324,7 +324,7 @@ giữ nguyên; Phase 18F không tạo migration mới hoặc thay đổi schema.
 chưa bắt đầu. Trước AFF-US-019 phải chạy full Affiliate Scripted flow checkpoint
 từ Project tới Voice.
 
-### POST AFF-US-018 — Script Claim Refresh hardening
+### POST AFF-US-018 — Script Claim Refresh hardening / CR-A
 
 Đây là contract/design checkpoint sau khi AFF-US-018 đã DONE, không mở lại
 AFF-US-018 và không bắt đầu AFF-US-019. Claim Refresh là paid extraction operation
@@ -334,8 +334,9 @@ CAS thành công và claims trở thành `current` mới được build ClaimMan
 không extract lại claims và Product Facts không thuộc semantic input/hash của Claim
 Refresh.
 
-Execution phải có artifact bền vững riêng `script_claim_refresh_run` trong migration
-tương lai `0021` — không dùng `FactLockRun` hoặc `ScriptGeneration`. Contract đã khóa
+Execution có artifact bền vững riêng `script_claim_refresh_run` trong migration
+`0021` — không dùng `FactLockRun` hoặc `ScriptGeneration`. CR-A đã tạo additive
+schema/migration và repository foundation; contract đã khóa
 tại DEC-034: source projection/hash deterministic (selected hook, ordered voiceover,
 scene on-screen text, CTA, caption), request hash server-owned, workspace-scoped
 idempotency, pending semantic uniqueness, durable single-winner execution claim,
@@ -347,7 +348,8 @@ Với source revision `R`, refresh thành công tạo ScriptVersion revision `R+
 `claimsSourceRevision=R+1`, còn run giữ `sourceScriptRevision=R` và
 `resultScriptRevision=R+1`. Phasing implementation: CR-A persistence/repository,
 CR-B provider/runtime/CAS, CR-C public editor action + current ScriptVersion
-read-model + workflow refresh. Chưa tạo migration `0021` trong checkpoint này.
+read-model + workflow refresh. CR-A chưa được đánh dấu PASS trước disposable DB
+acceptance; CR-B/CR-C chưa bắt đầu.
 
 ## 5. Ma trận invariant
 

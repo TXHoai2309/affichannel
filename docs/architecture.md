@@ -373,8 +373,8 @@ voiceover, scene on-screen text, CTA và caption, trả `{text, occurrence}`, r�
 chỉ sau khi durable execution/CAS thành công mới cho phép build ClaimManifest.
 Product Facts không thuộc semantic input/hash của refresh; Fact Lock mới đối chiếu
 claims với Product Facts. Contract persistence là DEC-034 với execution artifact
-riêng `script_claim_refresh_run`, dự kiến migration `0021`; hiện chưa có runtime
-hoặc migration implementation.
+riêng `script_claim_refresh_run` trong migration `0021`; CR-A đã có schema,
+migration và repository foundation, còn runtime implementation chưa bắt đầu.
 
 Client không được đặt `isEmpty` hoặc fingerprint. Empty manifest chỉ hợp lệ sau
 normalization thành công và inventory thực sự rỗng; lỗi hoặc uncertainty phải fail

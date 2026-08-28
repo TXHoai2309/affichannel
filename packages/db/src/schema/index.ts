@@ -11,6 +11,7 @@ export * from "./product";
 export * from "./product-fact";
 export * from "./product-fact-history";
 export * from "./project";
+export * from "./script-claim-refresh";
 export * from "./script-generation";
 export * from "./script-version";
 export * from "./voice-config";
