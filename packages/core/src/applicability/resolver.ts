@@ -264,7 +264,13 @@ function deriveFactLock(
 			ApplicabilityReasonCode,
 		]
 	>;
-	const [state, completion, reasonCode] = mapped[input.factLock.gateReason];
+	const gateReason =
+		input.factLock.gateReason === "FACT_LOCK_NOT_RUN" &&
+		input.script.currentVersionPresent &&
+		!input.script.currentVersionFactLockReady
+			? "SCRIPT_NOT_READY"
+			: input.factLock.gateReason;
+	const [state, completion, reasonCode] = mapped[gateReason];
 	const dependencies = [
 		{
 			dependency: "SCRIPT_VERSION",

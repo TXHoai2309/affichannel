@@ -369,6 +369,27 @@ describe("AFF-US-014 Applicability Resolver matrix", () => {
 		);
 	});
 
+	it("blocks Fact Lock when current Script claims are stale", () => {
+		const input = baseInput();
+		withCurrentScript(input);
+		input.script.currentVersionFactLockReady = false;
+		input.factLock.gateReason = "FACT_LOCK_NOT_RUN";
+
+		expectCapability(input, "SCRIPT", {
+			state: "BLOCKED",
+			completion: "IN_PROGRESS",
+			reasonCode: "SCRIPT_VERSION_NOT_FACT_LOCK_READY",
+		});
+		expectCapability(input, "FACT_LOCK", {
+			state: "REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "FACT_LOCK_SCRIPT_NOT_READY",
+		});
+		expect(resolveProjectApplicability(input).nextApplicableStep).toBe(
+			"SCRIPT",
+		);
+	});
+
 	it.each([
 		["FACT_LOCK_REVIEW_REQUIRED", "FACT_LOCK_REVIEW_REQUIRED"],
 		["FACT_LOCK_FAILED", "FACT_LOCK_FAILED"],

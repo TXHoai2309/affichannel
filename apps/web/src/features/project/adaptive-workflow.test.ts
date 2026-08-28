@@ -369,6 +369,50 @@ describe("AFF-US-015 Adaptive Workflow mapper", () => {
 		},
 	);
 
+	it("keeps Fact Lock blocked until current Script claims are current", () => {
+		const input = baseInput();
+		currentScript(input);
+		input.script.currentVersionFactLockReady = false;
+		input.factLock.gateReason = "FACT_LOCK_NOT_RUN";
+
+		const beforeRefresh = mapAdaptiveWorkflowReadModel(
+			resolveProjectApplicability(input),
+		);
+		expect(
+			beforeRefresh.steps.find((step) => step.capability === "SCRIPT"),
+		).toMatchObject({
+			applicabilityState: "BLOCKED",
+			completion: "IN_PROGRESS",
+			reasonCode: "SCRIPT_VERSION_NOT_FACT_LOCK_READY",
+		});
+		expect(
+			beforeRefresh.steps.find((step) => step.capability === "FACT_LOCK"),
+		).toMatchObject({
+			applicabilityState: "REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "FACT_LOCK_SCRIPT_NOT_READY",
+		});
+
+		input.script.currentVersionFactLockReady = true;
+		const afterRefresh = mapAdaptiveWorkflowReadModel(
+			resolveProjectApplicability(input),
+		);
+		expect(
+			afterRefresh.steps.find((step) => step.capability === "SCRIPT"),
+		).toMatchObject({
+			applicabilityState: "READY",
+			completion: "COMPLETE",
+			reasonCode: "SCRIPT_READY",
+		});
+		expect(
+			afterRefresh.steps.find((step) => step.capability === "FACT_LOCK"),
+		).toMatchObject({
+			applicabilityState: "READY",
+			completion: "NOT_STARTED",
+			reasonCode: "FACT_LOCK_RUN_REQUIRED",
+		});
+	});
+
 	it("distinguishes NOT_REQUIRED and all OPTIONAL selection states", () => {
 		const conceptual: ProjectApplicabilityResult = {
 			capabilities: [

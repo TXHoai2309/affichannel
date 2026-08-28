@@ -224,8 +224,14 @@ export function normalizeLegacyApplicability(
 			ApplicabilityReasonCode,
 		]
 	>;
+	const factLockGateReason =
+		input.factLock.gateReason === "FACT_LOCK_NOT_RUN" &&
+		input.script.currentVersionPresent &&
+		!input.script.currentVersionFactLockReady
+			? "SCRIPT_NOT_READY"
+			: input.factLock.gateReason;
 	const [factLockState, factLockCompletion, factLockReason] =
-		factLockMap[input.factLock.gateReason];
+		factLockMap[factLockGateReason];
 	const factLock = legacyCapability(
 		"FACT_LOCK",
 		factLockState,

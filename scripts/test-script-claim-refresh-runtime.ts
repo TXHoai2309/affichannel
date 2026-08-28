@@ -89,6 +89,28 @@ function waitFor(predicate: () => boolean, timeoutMs = 5_000): Promise<void> {
 	});
 }
 
+function withTimeout<T>(
+	promise: Promise<T>,
+	timeoutMs: number,
+	message: string,
+): Promise<T> {
+	return new Promise((resolvePromise, reject) => {
+		const timeout = setTimeout(() => reject(new Error(message)), timeoutMs);
+		void promise.then(
+			(value) => {
+				clearTimeout(timeout);
+				resolvePromise(value);
+			},
+			(error) => {
+				clearTimeout(timeout);
+				reject(error);
+			},
+		);
+	});
+}
+
+const CONCURRENT_LOSER_WATCHDOG_MS = 5_000;
+
 const sourceSnapshot = (
 	status: "current" | "stale" = "stale",
 ): ScriptVersionEditableSnapshot => ({
@@ -695,16 +717,20 @@ async function main(): Promise<void> {
 			{ ...requestBase, idempotencyKey: "runtime-concurrency-b" },
 			{ provider: concurrencyProvider },
 		);
-		const settledSecond = await Promise.race([
-			second.then(() => true),
-			new Promise<boolean>((resolvePromise) =>
-				setTimeout(() => resolvePromise(false), 100),
-			),
-		]);
+		const loserResult = await withTimeout(
+			second,
+			CONCURRENT_LOSER_WATCHDOG_MS,
+			`Concurrent loser watchdog exceeded ${CONCURRENT_LOSER_WATCHDOG_MS}ms.`,
+		);
 		assertEqual(
-			settledSecond,
-			true,
-			"Concurrent loser must not call provider or block on winner",
+			loserResult.kind,
+			"pending",
+			"Concurrent loser must resolve pending before winner provider release",
+		);
+		assertEqual(
+			concurrencyProvider.calls,
+			1,
+			"Concurrent loser must not call provider",
 		);
 		concurrencyProvider.release();
 		const [firstResult, secondResult] = await Promise.all([first, second]);

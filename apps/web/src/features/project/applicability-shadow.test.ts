@@ -160,6 +160,33 @@ describe("AFF-US-014 legacy oracle and comparison", () => {
 		}
 	});
 
+	it("keeps shadow parity when current Script claims are stale", () => {
+		const value = input();
+		Object.assign(value.script, {
+			generationStatus: "USABLE",
+			usableGenerationPresent: true,
+			currentVersionPresent: true,
+			currentVersionFactLockReady: false,
+		});
+		value.factLock.gateReason = "FACT_LOCK_NOT_RUN";
+
+		const resolver = resolveProjectApplicability(value);
+		const factLock = resolver.capabilities.find(
+			(item) => item.capability === "FACT_LOCK",
+		);
+		expect(factLock).toMatchObject({
+			state: "REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "FACT_LOCK_SCRIPT_NOT_READY",
+		});
+		expect(
+			compareApplicabilityResults(
+				normalizeLegacyApplicability(value),
+				resolver,
+			),
+		).toEqual([]);
+	});
+
 	it("classifies every canonical mismatch category", () => {
 		const resolver = resolveProjectApplicability(input());
 		const state = cloneResult(resolver);
