@@ -18,7 +18,7 @@ export type TextProviderRequest = {
 	mode: "full" | "repair";
 	sections: string[];
 	idempotencyKey: string;
-	operation?: "script-generation" | "fact-lock";
+	operation?: "script-generation" | "fact-lock" | "script-claim-refresh";
 	factLockSnapshot?: unknown;
 };
 
@@ -40,7 +40,7 @@ export type TextProviderEstimateRequest = {
 	model: string;
 	mode: "full" | "repair";
 	sections: string[];
-	operation?: "script-generation" | "fact-lock";
+	operation?: "script-generation" | "fact-lock" | "script-claim-refresh";
 };
 
 export type TextProviderEstimate = {

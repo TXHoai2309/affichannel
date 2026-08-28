@@ -4,7 +4,7 @@
   M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 chưa bắt
   đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-27
+- Cập nhật lần cuối: 2026-08-28
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
 
 ## 1. Mục tiêu
@@ -348,8 +348,8 @@ Với source revision `R`, refresh thành công tạo ScriptVersion revision `R+
 `claimsSourceRevision=R+1`, còn run giữ `sourceScriptRevision=R` và
 `resultScriptRevision=R+1`. Phasing implementation: CR-A persistence/repository,
 CR-B provider/runtime/CAS, CR-C public editor action + current ScriptVersion
-read-model + workflow refresh. CR-A chưa được đánh dấu PASS trước disposable DB
-acceptance; CR-B/CR-C chưa bắt đầu.
+ read-model + workflow refresh. CR-A persistence/repository và CR-B
+ provider/runtime/CAS đã PASS trên disposable DB; CR-C chưa bắt đầu.
 
 ## 5. Ma trận invariant
 

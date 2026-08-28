@@ -8,6 +8,19 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### POST AFF-US-018 — Script Claim Refresh CR-B provider/runtime/CAS
+
+- Hoàn tất runtime provider cho Claim Refresh với source projection/hash và prompt
+  server-owned, strict `{text, occurrence}` validation, locator grounding và
+  deterministic ordering.
+- Thêm durable single-winner execution claim; provider chạy ngoài transaction với
+  pinned input; success dùng ScriptVersion revision CAS `R → R+1`, source race và
+  uncertainty không tự retry trả phí.
+- Disposable acceptance chứng minh happy path, no-op, malformed/mismatch,
+  same-key/different-key concurrency, source-edit race, stale execution và
+  double-finalize; live provider calls = 0.
+- CR-C public/editor integration và AFF-US-019 chưa bắt đầu.
+
 ### POST AFF-US-018 — Script Claim Refresh CR-A persistence foundation
 
 - Khóa contract/design cho flow Script edit → `claimsStatus=stale` → explicit

@@ -788,7 +788,8 @@ try {
 		"claim_manifest must not exist through 0018.",
 	);
 
-	await migrate(drizzle(pool), { migrationsFolder: migrationsRoot });
+	const through0020 = await migrationFolderThrough(20);
+	await migrate(drizzle(pool), { migrationsFolder: through0020 });
 	assert(
 		(await migrationCount(pool)) === 21,
 		"Post-0020 migration count must be 21.",

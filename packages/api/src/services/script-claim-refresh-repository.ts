@@ -12,7 +12,7 @@ import {
 	scriptVersion,
 	workspace,
 } from "@affichannel/db";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 
 type ScriptClaimRefreshRunRow = typeof scriptClaimRefreshRun.$inferSelect;
 
@@ -21,6 +21,7 @@ export type ScriptClaimRefreshRepositoryTransaction = Parameters<
 >[0];
 
 export const scriptClaimRefreshRepositoryErrorCodes = [
+	"SCRIPT_CLAIM_REFRESH_NOT_FOUND",
 	"SCRIPT_CLAIM_REFRESH_INPUT_INVALID",
 	"SCRIPT_CLAIM_REFRESH_IDEMPOTENCY_CONFLICT",
 	"SCRIPT_CLAIM_REFRESH_PERSISTED_DATA_INVALID",
@@ -67,6 +68,12 @@ const SHA256 = /^[0-9a-f]{64}$/;
 function repositoryInputInvalid(): ScriptClaimRefreshRepositoryError {
 	return new ScriptClaimRefreshRepositoryError(
 		"SCRIPT_CLAIM_REFRESH_INPUT_INVALID",
+	);
+}
+
+function repositoryNotFound(): ScriptClaimRefreshRepositoryError {
+	return new ScriptClaimRefreshRepositoryError(
+		"SCRIPT_CLAIM_REFRESH_NOT_FOUND",
 	);
 }
 
@@ -187,7 +194,9 @@ function hasExactSemanticPayload(
 	}
 }
 
-function mapPersistedRow(row: ScriptClaimRefreshRunRow): ScriptClaimRefreshRun {
+export function mapScriptClaimRefreshRunRow(
+	row: ScriptClaimRefreshRunRow,
+): ScriptClaimRefreshRun {
 	try {
 		return Object.freeze(
 			parseScriptClaimRefreshRunRecord({
@@ -334,12 +343,12 @@ async function createOrReuseWithTransaction(
 		.returning();
 
 	if (inserted) {
-		return { created: true, run: mapPersistedRow(inserted) };
+		return { created: true, run: mapScriptClaimRefreshRunRow(inserted) };
 	}
 
 	const existingByKey = await findByIdempotencyKey(transaction, input);
 	if (existingByKey) {
-		const existing = mapPersistedRow(existingByKey);
+		const existing = mapScriptClaimRefreshRunRow(existingByKey);
 		if (!hasExactSemanticPayload(existingByKey, input)) {
 			throw idempotencyConflict();
 		}
@@ -351,7 +360,10 @@ async function createOrReuseWithTransaction(
 		if (!hasExactSemanticPayload(existingPending, input)) {
 			throw idempotencyConflict();
 		}
-		return { created: false, run: mapPersistedRow(existingPending) };
+		return {
+			created: false,
+			run: mapScriptClaimRefreshRunRow(existingPending),
+		};
 	}
 
 	throw idempotencyConflict();
@@ -405,7 +417,7 @@ export async function getScriptClaimRefreshRunById(input: {
 			),
 		)
 		.limit(1);
-	return row ? mapPersistedRow(row) : null;
+	return row ? mapScriptClaimRefreshRunRow(row) : null;
 }
 
 export async function getScriptClaimRefreshRunByIdempotencyKey(input: {
@@ -423,7 +435,7 @@ export async function getScriptClaimRefreshRunByIdempotencyKey(input: {
 			),
 		)
 		.limit(1);
-	return row ? mapPersistedRow(row) : null;
+	return row ? mapScriptClaimRefreshRunRow(row) : null;
 }
 
 export async function findPendingScriptClaimRefreshRun(input: {
@@ -445,5 +457,158 @@ export async function findPendingScriptClaimRefreshRun(input: {
 			),
 		)
 		.limit(1);
-	return row ? mapPersistedRow(row) : null;
+	return row ? mapScriptClaimRefreshRunRow(row) : null;
+}
+
+export const SCRIPT_CLAIM_REFRESH_EXECUTION_CLAIM_TIMEOUT_MS = 5 * 60 * 1000;
+
+export type ScriptClaimRefreshExecutionClaim =
+	| Readonly<{
+			owner: true;
+			run: ScriptClaimRefreshRun;
+			claimedAt: Date;
+	  }>
+	| Readonly<{
+			owner: false;
+			run: ScriptClaimRefreshRun;
+			stale: boolean;
+	  }>;
+
+export async function claimScriptClaimRefreshExecution(input: {
+	workspaceId: string;
+	id: string;
+}): Promise<ScriptClaimRefreshExecutionClaim> {
+	assertLookupInput(input.workspaceId, input.id);
+	return db.transaction(async (transaction) => {
+		const claimedAt = new Date();
+		const [claimed] = await transaction
+			.update(scriptClaimRefreshRun)
+			.set({ executionClaimedAt: claimedAt })
+			.where(
+				and(
+					eq(scriptClaimRefreshRun.workspaceId, input.workspaceId),
+					eq(scriptClaimRefreshRun.id, input.id),
+					eq(scriptClaimRefreshRun.status, "pending"),
+					isNull(scriptClaimRefreshRun.executionClaimedAt),
+				),
+			)
+			.returning();
+		if (claimed) {
+			return {
+				owner: true as const,
+				run: mapScriptClaimRefreshRunRow(claimed),
+				claimedAt,
+			};
+		}
+
+		const [current] = await transaction
+			.select()
+			.from(scriptClaimRefreshRun)
+			.where(
+				and(
+					eq(scriptClaimRefreshRun.workspaceId, input.workspaceId),
+					eq(scriptClaimRefreshRun.id, input.id),
+				),
+			)
+			.limit(1);
+		if (!current) throw repositoryNotFound();
+		const stale =
+			current.status === "pending" &&
+			current.executionClaimedAt !== null &&
+			Date.now() - current.executionClaimedAt.getTime() >
+				SCRIPT_CLAIM_REFRESH_EXECUTION_CLAIM_TIMEOUT_MS;
+		return {
+			owner: false as const,
+			run: mapScriptClaimRefreshRunRow(current),
+			stale,
+		};
+	});
+}
+
+export type ScriptClaimRefreshTerminalUpdate = Readonly<{
+	workspaceId: string;
+	id: string;
+	executionClaimedAt: Date;
+	status: "completed" | "failed" | "indeterminate";
+	resultScriptRevision: number | null;
+	errorCode: string | null;
+	errorMessage: string | null;
+	providerRequestId?: string | null;
+	inputTokens?: number | null;
+	outputTokens?: number | null;
+	estimatedCostMicros?: bigint | null;
+	actualCostMicros?: bigint | null;
+	currency?: string | null;
+}>;
+
+export async function finalizeScriptClaimRefreshRunInTransaction(
+	transaction: ScriptClaimRefreshRepositoryTransaction,
+	input: ScriptClaimRefreshTerminalUpdate,
+): Promise<ScriptClaimRefreshRun | null> {
+	assertLookupInput(input.workspaceId, input.id);
+	if (
+		input.status === "completed" &&
+		(input.resultScriptRevision === null ||
+			input.errorCode !== null ||
+			input.errorMessage !== null)
+	) {
+		throw repositoryInputInvalid();
+	}
+	if (
+		(input.status === "failed" || input.status === "indeterminate") &&
+		(input.resultScriptRevision !== null ||
+			input.errorCode === null ||
+			input.errorMessage === null)
+	) {
+		throw repositoryInputInvalid();
+	}
+	const [updated] = await transaction
+		.update(scriptClaimRefreshRun)
+		.set({
+			status: input.status,
+			resultScriptRevision: input.resultScriptRevision,
+			errorCode: input.errorCode,
+			errorMessage: input.errorMessage,
+			providerRequestId: input.providerRequestId,
+			inputTokens: input.inputTokens,
+			outputTokens: input.outputTokens,
+			estimatedCostMicros: input.estimatedCostMicros,
+			actualCostMicros: input.actualCostMicros,
+			currency: input.currency,
+			finishedAt: new Date(),
+		})
+		.where(
+			and(
+				eq(scriptClaimRefreshRun.workspaceId, input.workspaceId),
+				eq(scriptClaimRefreshRun.id, input.id),
+				eq(scriptClaimRefreshRun.status, "pending"),
+				eq(scriptClaimRefreshRun.executionClaimedAt, input.executionClaimedAt),
+			),
+		)
+		.returning();
+	return updated ? mapScriptClaimRefreshRunRow(updated) : null;
+}
+
+export async function finalizeScriptClaimRefreshRun(
+	input: ScriptClaimRefreshTerminalUpdate,
+): Promise<ScriptClaimRefreshRun> {
+	return db.transaction(async (transaction) => {
+		const updated = await finalizeScriptClaimRefreshRunInTransaction(
+			transaction,
+			input,
+		);
+		if (updated) return updated;
+		const [current] = await transaction
+			.select()
+			.from(scriptClaimRefreshRun)
+			.where(
+				and(
+					eq(scriptClaimRefreshRun.workspaceId, input.workspaceId),
+					eq(scriptClaimRefreshRun.id, input.id),
+				),
+			)
+			.limit(1);
+		if (!current) throw repositoryNotFound();
+		return mapScriptClaimRefreshRunRow(current);
+	});
 }

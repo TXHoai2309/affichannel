@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-27
+- Cập nhật lần cuối: 2026-08-28
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -13,7 +13,7 @@ DEC-025 cho công việc mới.
 
 ## DEC-034 — Durable Script Claim Refresh boundary sau AFF-US-018
 
-- Trạng thái: Đã chấp nhận contract/design; CR-A persistence implementation đang chờ disposable acceptance
+- Trạng thái: Đã chấp nhận; CR-A persistence và CR-B provider/runtime/CAS đã PASS trên disposable DB; CR-C chưa bắt đầu
 - Ngày: 2026-08-27
 - Mở rộng: DEC-021, DEC-031, DEC-033 và `docs/claim-manifest-fact-lock-contract.md`
 
@@ -101,8 +101,8 @@ provider primitives trước khi tạo migration.
 
 Implementation được tách thành CR-A (migration + repository), CR-B (provider/runtime
 và CAS apply) và CR-C (public editor action, current ScriptVersion read model,
-workflow refresh và regression). CR-A đã tạo persistence foundation; DEC-034 không
-cho phép suy ra rằng runtime/provider đã bắt đầu.
+workflow refresh và regression). CR-A persistence/repository và CR-B
+provider/runtime/CAS đã PASS trên disposable DB; CR-C chưa bắt đầu.
 
 ## DEC-033 — Manifest provider prompt boundary cho AFF-US-018 Phase 18D
 

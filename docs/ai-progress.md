@@ -4,14 +4,24 @@
   AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 DONE;
   AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
   legacy `inputMode=NULL` chỉ còn read compatibility.
-- Cập nhật lần cuối: 2026-08-27
+- Cập nhật lần cuối: 2026-08-28
 
 Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
-0020 giữ nguyên; migration 0021 đã được tạo cho CR-A persistence foundation nhưng
-chưa được apply trong task này.
+0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
+hoàn tất provider/runtime/CAS trên disposable DB. CR-C chưa bắt đầu.
 AFF-US-019 chưa bắt đầu.
+
+## 2026-08-28 — POST AFF-US-018 Script Claim Refresh CR-B runtime
+
+CR-B đã PASS: source projection/hash và dedicated prompt được kiểm tra bằng frozen
+vectors; provider output được validate theo locator/grounding; execution claim là
+single-winner; provider chạy ngoài transaction trên pinned input; successful apply
+thực hiện ScriptVersion CAS R→R+1 và chỉ cập nhật claims metadata. Provider
+mismatch, source race, uncertainty, stale claim và duplicate finalization đều có
+evidence disposable; live provider calls = 0. CR-C public/editor integration chưa
+bắt đầu.
 
 Trước khi bắt đầu AFF-US-019 phải thực hiện checkpoint đầy đủ Affiliate Scripted:
 Project → Product / Product Facts → Script Generation → ScriptVersion →

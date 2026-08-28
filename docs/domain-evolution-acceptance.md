@@ -3,7 +3,7 @@
 - Trạng thái: Canonical; M4/AFF-US-015 retained/accepted; Domain Evolution M5,
   AFF-US-013, AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-27
+- Cập nhật lần cuối: 2026-08-28
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
 
 ## 1. Nguyên tắc đạt
@@ -25,11 +25,10 @@ Revision semantics đã khóa: source `R` → successful refresh tạo ScriptVer
 revision `R+1`, `claimsSourceRevision=R+1`, run ghi `sourceScriptRevision=R` và
 `resultScriptRevision=R+1`. Provider output chỉ gồm `{text, occurrence}`; mismatch
 là `failed`, provider uncertainty là `indeterminate`, không automatic paid retry.
-Implementation sẽ được acceptance riêng theo CR-A (persistence/repository), CR-B
+Implementation được acceptance riêng theo CR-A (persistence/repository), CR-B
 (provider/runtime/CAS) và CR-C (public editor/read-model/workflow regression).
-CR-A đã tạo schema/migration và repository foundation additively; checkpoint này
-chưa claim CR-A acceptance cho tới khi disposable DB gate chạy. Không có provider,
-runtime, ScriptVersion mutation hoặc public cutover.
+CR-A persistence/repository và CR-B provider/runtime/CAS đã PASS trên disposable
+DB. CR-C chưa bắt đầu; không có public cutover.
 
 ## 2. Gate A — Migration và compatibility
 

@@ -3,7 +3,7 @@
 - Trạng thái: Canonical US17+US18; AFF-US-017 DONE; AFF-US-018 Phase 18A–18F
   PASS và DONE; AFF-US-019 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-27
+- Cập nhật lần cuối: 2026-08-28
 - Quyết định liên quan: DEC-025, DEC-028, DEC-031, DEC-032, DEC-033, DEC-034,
   V08-DEC-011, V08-DEC-013
 
@@ -22,7 +22,8 @@ Fact Lock new writes hiện Manifest-first qua public prepare/run boundary; lega
 Post-US18 hardening có một boundary riêng cho Script Claim Refresh. Đây là paid
 extraction operation của ScriptVersion, không phải ClaimManifest builder và không
 phải Fact Lock execution. Contract persistence của nó được khóa tại DEC-034;
-implementation sẽ đi theo CR-A/CR-B/CR-C và chưa thuộc AFF-US-019.
+implementation đã hoàn tất CR-A/CR-B theo acceptance disposable; CR-C public/editor
+integration chưa bắt đầu và vẫn chưa thuộc AFF-US-019.
 
 ## 2. ClaimManifest canonical
 

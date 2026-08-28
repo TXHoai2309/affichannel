@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-27
+- Cập nhật lần cuối: 2026-08-28
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -34,8 +34,8 @@ Organic, Quick Image và Media First vẫn chưa active.
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.
 Checkpoint này không phải AFF-US-019, không thay đổi trạng thái DONE của AFF-US-018
-và hiện CR-A mới có persistence foundation/migration `0021`, đang chờ acceptance;
-CR-B/CR-C chưa bắt đầu.
+và hiện CR-A persistence/repository cùng CR-B provider/runtime/CAS đã PASS trên
+disposable DB; CR-C public/editor integration chưa bắt đầu.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
 canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
