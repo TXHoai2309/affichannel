@@ -6,6 +6,8 @@ import {
 	getFactLockErrorMessage,
 	getFactLockOccurrenceLabel,
 	getFactLockSummary,
+	settleFactLockMutation,
+	shouldRefreshFactLockWorkflow,
 } from "./fact-lock-review-state";
 
 const claim = (
@@ -30,6 +32,49 @@ const claim = (
 	}) satisfies FactLockStoredClaim;
 
 describe("Fact Lock Review state", () => {
+	it("refetches state before refreshing workflow after a terminal mutation", async () => {
+		const events: string[] = [];
+		const result = await settleFactLockMutation(
+			Promise.resolve({ status: "passed" as const }),
+			async () => {
+				events.push("refetch");
+			},
+			() => {
+				events.push("router.refresh");
+			},
+		);
+
+		expect(result.status).toBe("passed");
+		expect(events).toEqual(["refetch", "router.refresh"]);
+	});
+
+	it("refetches pending state without refreshing workflow until terminal", async () => {
+		const events: string[] = [];
+		await settleFactLockMutation(
+			Promise.resolve({ status: "pending" as const }),
+			async () => {
+				events.push("refetch");
+			},
+			() => {
+				events.push("router.refresh");
+			},
+		);
+
+		expect(events).toEqual(["refetch"]);
+	});
+
+	it.each(["review_required", "failed", "indeterminate"] as const)(
+		"refreshes workflow when pending polling reaches %s",
+		(status) => {
+			expect(shouldRefreshFactLockWorkflow("pending", status)).toBe(true);
+		},
+	);
+
+	it("does not refresh workflow for initial or still-pending state", () => {
+		expect(shouldRefreshFactLockWorkflow(null, "passed")).toBe(false);
+		expect(shouldRefreshFactLockWorkflow("pending", "pending")).toBe(false);
+	});
+
 	it("summarizes and filters server classifications without reclassifying", () => {
 		const claims = [
 			claim("SUPPORTED", "AUTO_PASSED"),

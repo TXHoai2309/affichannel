@@ -2,6 +2,7 @@
 
 import type {
 	FactLockReadModel,
+	FactLockRunStatus,
 	FactLockStoredClaim,
 } from "@affichannel/core/fact-lock/types";
 import { Badge } from "@affichannel/ui/components/badge";
@@ -40,7 +41,8 @@ import {
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { orpc } from "@/utils/orpc";
@@ -55,6 +57,8 @@ import {
 	getFactLockOccurrenceLabel,
 	getFactLockReviewRun,
 	getFactLockSummary,
+	settleFactLockMutation,
+	shouldRefreshFactLockWorkflow,
 } from "./fact-lock-review-state";
 
 const FILTERS: Array<{ key: FactLockFilter; label: string }> = [
@@ -152,6 +156,7 @@ function ErrorPanel({
 }
 
 export default function FactLockReview({ projectId }: { projectId: string }) {
+	const router = useRouter();
 	const [filter, setFilter] = useState<FactLockFilter>("ALL");
 	const [selectedClaimId, setSelectedClaimId] = useState<string | null>(null);
 	const [editingClaim, setEditingClaim] = useState<FactLockStoredClaim | null>(
@@ -194,6 +199,20 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 	);
 
 	const model = stateQuery.data as FactLockReadModel | undefined;
+	const currentRequestStatus: FactLockRunStatus | null =
+		model?.latestRequest?.status ?? null;
+	const previousRequestStatus = useRef<FactLockRunStatus | null>(null);
+	useEffect(() => {
+		if (
+			shouldRefreshFactLockWorkflow(
+				previousRequestStatus.current,
+				currentRequestStatus,
+			)
+		) {
+			void router.refresh();
+		}
+		previousRequestStatus.current = currentRequestStatus;
+	}, [currentRequestStatus, router]);
 	const reviewRun = model ? getFactLockReviewRun(model) : null;
 	const claims = reviewRun?.claims ?? [];
 	const summary = getFactLockSummary(claims);
@@ -232,12 +251,15 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 				scriptVersionId: currentScriptVersion.id,
 				expectedScriptVersionRevision: currentScriptVersion.revision,
 			});
-			await runMutation.mutateAsync({
-				projectId,
-				claimManifestId: manifest.claimManifestId,
-				idempotencyKey: getRunIdempotencyKey(),
-			});
-			await refresh();
+			await settleFactLockMutation(
+				runMutation.mutateAsync({
+					projectId,
+					claimManifestId: manifest.claimManifestId,
+					idempotencyKey: getRunIdempotencyKey(),
+				}),
+				refresh,
+				() => router.refresh(),
+			);
 			toast.success("Đã chạy Fact Lock", {
 				description: "Kết quả đối chiếu đã được lưu để review.",
 			});

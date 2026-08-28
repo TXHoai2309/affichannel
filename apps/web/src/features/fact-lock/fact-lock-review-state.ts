@@ -1,6 +1,7 @@
 import type {
 	FactLockClassification,
 	FactLockReadModel,
+	FactLockRunStatus,
 	FactLockStoredClaim,
 } from "@affichannel/core/fact-lock/types";
 
@@ -24,6 +25,34 @@ export const FACT_LOCK_STATUS_LABELS = {
 } as const;
 
 export type FactLockFilter = "ALL" | FactLockClassification;
+
+export function isFactLockTerminalRunStatus(
+	status: FactLockRunStatus | null | undefined,
+): status is Exclude<FactLockRunStatus, "pending"> {
+	return status !== null && status !== undefined && status !== "pending";
+}
+
+export function shouldRefreshFactLockWorkflow(
+	previousStatus: FactLockRunStatus | null,
+	currentStatus: FactLockRunStatus | null,
+): boolean {
+	return (
+		previousStatus === "pending" && isFactLockTerminalRunStatus(currentStatus)
+	);
+}
+
+export async function settleFactLockMutation<
+	T extends { status: FactLockRunStatus },
+>(
+	mutation: Promise<T>,
+	refetch: () => Promise<unknown>,
+	refreshWorkflow: () => void | Promise<void>,
+): Promise<T> {
+	const result = await mutation;
+	await refetch();
+	if (isFactLockTerminalRunStatus(result.status)) await refreshWorkflow();
+	return result;
+}
 
 export function getFactLockSummary(claims: FactLockStoredClaim[]) {
 	return {
