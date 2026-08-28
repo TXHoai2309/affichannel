@@ -2,9 +2,11 @@ import { resolve } from "node:path";
 import { defineConfig } from "@playwright/test";
 import dotenv from "dotenv";
 
-dotenv.config({
-	path: resolve(__dirname, ".env"),
-});
+if (process.env.AFFICHANNEL_ISOLATED_TEST_ENV !== "1") {
+	dotenv.config({
+		path: resolve(__dirname, ".env"),
+	});
+}
 
 if (process.env.E2E_BASE_URL?.trim()) {
 	throw new Error(

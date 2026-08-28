@@ -39,6 +39,10 @@ export function createDb(): Database {
 		const pool = createNodePostgresPool(testDatabaseUrl);
 		return drizzleNodePostgres(pool, { schema }) as unknown as Database;
 	}
+	if (process.env.AFFICHANNEL_ISOLATED_TEST_ENV === "1") {
+		const pool = createNodePostgresPool(env.DATABASE_URL);
+		return drizzleNodePostgres(pool, { schema }) as unknown as Database;
+	}
 
 	return createNeonDb();
 }

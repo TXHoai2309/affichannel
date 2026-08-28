@@ -10,8 +10,28 @@ Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimMan
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
-hoàn tất provider/runtime/CAS trên disposable DB. CR-C chưa bắt đầu.
-AFF-US-019 chưa bắt đầu.
+hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên disposable
+E2E/integration infrastructure; AFF-US-019 chưa bắt đầu.
+
+## 2026-08-28 — POST AFF-US-018 Script Claim Refresh CR-C final acceptance
+
+CR-C đã PASS: public `scriptVersion.refreshClaims`, strict server-owned input và
+safe public DTO/error mapping đã được kiểm tra cùng autosave flush, exact source
+revision, idempotency và current `ScriptVersion` read-model. Editor CTA chỉ
+refresh explicit khi claims stale; thành công CAS tạo revision kế tiếp và UI
+quay về bản current, không sử dụng artifact cũ làm nguồn sự thật.
+
+Validation harness đã được harden: M1 chạy historical 0016 → 0017, chạy M1 DB
+harness trước khi nâng lên migration hiện tại, sau đó mới chạy chín golden suites;
+`--golden-only` chỉ nhận đúng state 0017 hoặc current và tự nâng cấp state 0017.
+Current migration count/latest được lấy động từ migration journal. Fresh M1 path,
+current-schema golden-only và chín golden suites đều PASS.
+
+Authenticated E2E dùng authority riêng, chỉ loopback disposable PostgreSQL, isolated
+environment không đọc `apps/web/.env`, local voice và deterministic providers;
+10/10 Script Studio tests PASS, live provider calls = 0. Không có production DB
+call, không có schema/migration change ngoài các migration đã tồn tại, và không có
+AFF-US-019 activation.
 
 ## 2026-08-28 — POST AFF-US-018 Script Claim Refresh CR-B runtime
 
@@ -66,8 +86,7 @@ provider và production DB calls bằng 0.
 
 18A–18E, ClaimManifest 17A–17E, legacy Fact Lock, Voice, Applicability/Adaptive,
 9/9 current-schema golden suites, type-check, Biome và full Web tests đều PASS.
-AFF-US-019 chưa bắt đầu; không có schema/migration change, backfill hoặc
-future-mode activation.
+AFF-US-019 chưa bắt đầu; không có backfill hoặc future-mode activation.
 
 ## 2026-08-25 — AFF-US-017 Phase 17E final acceptance
 

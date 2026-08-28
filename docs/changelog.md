@@ -8,6 +8,19 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### POST AFF-US-018 — Script Claim Refresh CR-C final acceptance
+
+- Hoàn tất public refresh action, strict input/error boundary, autosave flush và
+  current `ScriptVersion` read-model; stale claims chỉ được refresh qua explicit
+  user action với exact source revision và idempotency key.
+- Bổ sung validation harness an toàn: M1 historical 0016 → 0017 được kiểm tra
+  trước M1 harness, sau đó mới nâng lên migration hiện tại; migration count/latest
+  lấy động từ journal và golden-only chỉ nhận state 0017 hoặc current.
+- Bổ sung E2E authority riêng cho disposable loopback DB, isolated env không đọc
+  `apps/web/.env`, deterministic auth/voice/provider và sanitized child output.
+  Script Studio authenticated E2E 10/10 PASS; live provider calls = 0; AFF-US-019
+  vẫn chưa bắt đầu.
+
 ### POST AFF-US-018 — Script Claim Refresh CR-B provider/runtime/CAS
 
 - Hoàn tất runtime provider cho Claim Refresh với source projection/hash và prompt
@@ -19,7 +32,8 @@ sử dụng Semantic Versioning.
 - Disposable acceptance chứng minh happy path, no-op, malformed/mismatch,
   same-key/different-key concurrency, source-edit race, stale execution và
   double-finalize; live provider calls = 0.
-- CR-C public/editor integration và AFF-US-019 chưa bắt đầu.
+- CR-C public/editor integration được hoàn tất ở entry CR-C phía trên; AFF-US-019
+  vẫn chưa bắt đầu.
 
 ### POST AFF-US-018 — Script Claim Refresh CR-A persistence foundation
 

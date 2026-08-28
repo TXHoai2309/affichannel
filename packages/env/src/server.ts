@@ -2,12 +2,16 @@ import { createEnv } from "@t3-oss/env-core";
 import dotenv from "dotenv";
 import { z } from "zod";
 
+import { shouldLoadLocalDotenv } from "./dotenv-policy";
+
 // Next loads the app env file in development, but inherited shell variables can
 // otherwise win. When a local .env is present, keep app and migration runtime on
 // the same database. Hosted deployments have no local file, so their env stays.
 const inheritedDeterministicTtsFlag =
 	process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC;
-dotenv.config({ override: true });
+if (shouldLoadLocalDotenv()) {
+	dotenv.config({ override: true });
+}
 if (inheritedDeterministicTtsFlag !== undefined) {
 	process.env.AFFICHANNEL_E2E_TTS_DETERMINISTIC = inheritedDeterministicTtsFlag;
 }

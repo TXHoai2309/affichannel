@@ -348,8 +348,19 @@ Với source revision `R`, refresh thành công tạo ScriptVersion revision `R+
 `claimsSourceRevision=R+1`, còn run giữ `sourceScriptRevision=R` và
 `resultScriptRevision=R+1`. Phasing implementation: CR-A persistence/repository,
 CR-B provider/runtime/CAS, CR-C public editor action + current ScriptVersion
- read-model + workflow refresh. CR-A persistence/repository và CR-B
- provider/runtime/CAS đã PASS trên disposable DB; CR-C chưa bắt đầu.
+ read-model + workflow refresh. CR-A persistence/repository, CR-B
+ provider/runtime/CAS và CR-C public/editor/read-model/workflow regression đã
+ PASS trên disposable DB.
+
+### POST AFF-US-018 — Script Claim Refresh CR-C validation boundary
+
+CR-C final acceptance bao gồm public refresh action, autosave/source-revision
+coordination, current ScriptVersion read-model và workflow refresh. Validation
+harness M1 giữ historical contract bằng cách chạy 0016 → 0017 → M1 harness trước
+khi nâng lên current migration journal; `--golden-only` chỉ chấp nhận state 0017
+hoặc current. Authenticated E2E dùng dedicated disposable authority, loopback-only
+và isolated environment không load `apps/web/.env`; provider/voice đều
+deterministic và live calls bằng 0. AFF-US-019 chưa bắt đầu.
 
 ## 5. Ma trận invariant
 

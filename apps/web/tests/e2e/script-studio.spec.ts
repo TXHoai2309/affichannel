@@ -1,5 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { db, product, project } from "@affichannel/db";
+import {
+	channelSettings,
+	db,
+	product,
+	productFact,
+	project,
+	user,
+} from "@affichannel/db";
 import { expect, type Page, type Route, test } from "@playwright/test";
 import { eq } from "drizzle-orm";
 
@@ -519,9 +526,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			await expect(
 				page.getByText("Đã lưu phiên bản script").first(),
 			).toBeVisible();
-			await expect(
-				page.getByRole("heading", { name: "Generated Script" }),
-			).toBeVisible();
+			await expect(page.getByTestId("current-script-view")).toBeVisible();
 			await expect(page.getByText("Phiên bản hiện tại: #1")).toBeVisible();
 			await expect(
 				page.getByRole("button", { name: "Chỉnh sửa" }),
@@ -536,9 +541,7 @@ test.describe("AFF-US-009 Phase 2 Script Editor & Autosave", () => {
 			await expect(
 				page.getByText("Đã lưu phiên bản script").first(),
 			).toBeVisible();
-			await expect(
-				page.getByRole("heading", { name: "Generated Script" }),
-			).toBeVisible();
+			await expect(page.getByTestId("current-script-view")).toBeVisible();
 			await expect(page.getByText("Phiên bản hiện tại: #2")).toBeVisible();
 			await page.getByRole("button", { name: "Lịch sử" }).click();
 			await expect(page.getByText("Bản lưu #2")).toBeVisible();
@@ -1107,26 +1110,79 @@ async function createProject(page: Page): Promise<ProjectFixture> {
 	await page.getByLabel("Mục tiêu").fill("Tạo nội dung chuyển đổi");
 	await page.getByLabel("Góc tiếp cận").fill("Trải nghiệm thật");
 	await page.getByRole("button", { name: "Tạo dự án" }).click();
-	await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\/product$/i);
+	await expect(page).toHaveURL(/\/projects\/[0-9a-f-]{36}\/content$/i);
+	const [createdProduct] = await db
+		.select({ id: product.id })
+		.from(product)
+		.where(eq(product.name, productName))
+		.limit(1);
+	const [account] = await db
+		.select({ id: user.id })
+		.from(user)
+		.where(eq(user.email, fixedAccountEmail as string))
+		.limit(1);
+	if (!createdProduct || !account) {
+		throw new Error(
+			"E2E fixture prerequisites could not find account/product.",
+		);
+	}
+	await db
+		.insert(channelSettings)
+		.values({
+			id: "e2e-script-studio-channel-settings",
+			workspaceId: "internal",
+			niche: "Consumer audio",
+			targetAudience: "Người dùng TikTok",
+			tone: "Rõ ràng và thực tế",
+			contentPillar: "Trải nghiệm sản phẩm",
+			defaultCta: "Xem thêm",
+			affiliateDisclosure: "Nội dung có thể chứa liên kết affiliate",
+			avoidWords: [],
+			createdByUserId: account.id,
+			updatedByUserId: account.id,
+		})
+		.onConflictDoNothing();
+	await db.insert(productFact).values({
+		id: `e2e-product-fact-${fixtureSafeId(projectName)}`,
+		workspaceId: "internal",
+		productId: createdProduct.id,
+		content: "Sản phẩm có thiết kế gọn nhẹ và dễ sử dụng.",
+		type: "feature",
+		status: "verified",
+		sourceType: "official",
+		sourceLabel: "E2E fixture",
+		confirmedAt: new Date().toISOString().slice(0, 10),
+		createdByUserId: account.id,
+		updatedByUserId: account.id,
+	});
 
 	return {
 		projectId: page
 			.url()
-			.match(/\/projects\/([0-9a-f-]{36})\/product$/i)?.[1] as string,
+			.match(/\/projects\/([0-9a-f-]{36})\/content$/i)?.[1] as string,
 		projectName,
 		productName,
 	};
 }
 
 async function deleteProjectFixture(fixture: ProjectFixture) {
-	await db.delete(project).where(eq(project.id, fixture.projectId));
 	const [createdProduct] = await db
 		.select({ id: product.id })
 		.from(product)
 		.where(eq(product.name, fixture.productName))
 		.limit(1);
-	if (createdProduct)
+	await db.delete(project).where(eq(project.id, fixture.projectId));
+	if (createdProduct) {
+		await db
+			.delete(productFact)
+			.where(eq(productFact.productId, createdProduct.id));
+		await db.delete(project).where(eq(project.productId, createdProduct.id));
 		await db.delete(product).where(eq(product.id, createdProduct.id));
+	}
+}
+
+function fixtureSafeId(value: string) {
+	return value.replace(/[^a-z0-9]/giu, "-").toLowerCase();
 }
 
 async function signIn(page: Page) {

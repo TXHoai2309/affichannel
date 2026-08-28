@@ -55,3 +55,4 @@ coverage
 tmp
 temp
 apps/web/.data/
+apps/web/.next-e2e/

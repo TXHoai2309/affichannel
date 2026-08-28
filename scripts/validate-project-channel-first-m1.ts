@@ -45,6 +45,12 @@ type MigrationJournal = {
 	}>;
 };
 
+async function readMigrationJournal(): Promise<MigrationJournal> {
+	return JSON.parse(
+		await readFile(join(MIGRATIONS_FOLDER, "meta", "_journal.json"), "utf8"),
+	) as MigrationJournal;
+}
+
 function rowsOf<T>(result: unknown): T[] {
 	if (Array.isArray(result)) return result as T[];
 	if (result && typeof result === "object" && "rows" in result) {
@@ -101,10 +107,7 @@ function requireTestDatabase(): ValidatedTestDatabase {
 async function createM1MigrationFolderThrough(
 	lastIndex: number,
 ): Promise<string> {
-	const journalPath = join(MIGRATIONS_FOLDER, "meta", "_journal.json");
-	const journal = JSON.parse(
-		await readFile(journalPath, "utf8"),
-	) as MigrationJournal;
+	const journal = await readMigrationJournal();
 	const entries = journal.entries.filter((entry) => entry.idx <= lastIndex);
 	if (entries.length !== lastIndex + 1) {
 		throw new Error(
@@ -130,11 +133,9 @@ async function createM1MigrationFolderThrough(
 	return temporaryFolder;
 }
 
-async function assertMigrationCount(
+async function getMigrationCount(
 	database: ReturnType<typeof drizzle>,
-	expected: number,
-	label: string,
-): Promise<void> {
+): Promise<number> {
 	const rows = rowsOf<{ count: number | string }>(
 		await database.execute(
 			sql.raw(
@@ -142,7 +143,15 @@ async function assertMigrationCount(
 			),
 		),
 	);
-	const count = Number(rows[0]?.count);
+	return Number(rows[0]?.count);
+}
+
+async function assertMigrationCount(
+	database: ReturnType<typeof drizzle>,
+	expected: number,
+	label: string,
+): Promise<void> {
+	const count = await getMigrationCount(database);
 	if (count !== expected) {
 		throw new Error(
 			`${label}: expected ${expected} applied migrations, found ${count}.`,
@@ -183,7 +192,9 @@ async function printDatabaseIdentity(
 	);
 }
 
-async function applyM1Migrations(target: ValidatedTestDatabase): Promise<void> {
+async function applyHistoricalMigrations(
+	target: ValidatedTestDatabase,
+): Promise<void> {
 	const pool = createNodePostgresPool(target.url);
 	const database = drizzle(pool);
 	let beforeM1Folder: string | undefined;
@@ -212,15 +223,54 @@ async function applyM1Migrations(target: ValidatedTestDatabase): Promise<void> {
 	}
 }
 
-async function assertExistingM1MigrationState(
+async function upgradeFreshHistoricalStateToCurrent(
+	target: ValidatedTestDatabase,
+): Promise<void> {
+	const pool = createNodePostgresPool(target.url);
+	const database = drizzle(pool);
+	try {
+		await upgradeHistoricalStateToCurrent(database);
+	} finally {
+		await pool.end();
+	}
+}
+
+async function upgradeHistoricalStateToCurrent(
+	database: ReturnType<typeof drizzle>,
+): Promise<void> {
+	const journal = await readMigrationJournal();
+	await migrate(database, { migrationsFolder: MIGRATIONS_FOLDER });
+	await assertMigrationCount(
+		database,
+		journal.entries.length,
+		"Current schema upgrade",
+	);
+	console.log(
+		`Current schema upgrade through ${journal.entries.at(-1)?.tag ?? "latest"}: PASS`,
+	);
+}
+
+async function assertExistingM1MigrationStateAndUpgrade(
 	target: ValidatedTestDatabase,
 ): Promise<void> {
 	const pool = createNodePostgresPool(target.url);
 	const database = drizzle(pool);
 	try {
 		await printDatabaseIdentity(database, target.host);
-		await assertMigrationCount(database, 18, "Existing migration state 0017");
-		console.log("Existing migration state 0017: PASS");
+		const currentMigrationCount = (await readMigrationJournal()).entries.length;
+		const existingMigrationCount = await getMigrationCount(database);
+		if (existingMigrationCount === 18) {
+			console.log("Existing migration state 0017: PASS");
+			await upgradeHistoricalStateToCurrent(database);
+			return;
+		}
+		if (existingMigrationCount === currentMigrationCount) {
+			console.log("Existing current migration state: PASS");
+			return;
+		}
+		throw new Error(
+			`REFUSED: golden-only requires exact migration state 0017 (18) or current (${currentMigrationCount}); found ${existingMigrationCount}.`,
+		);
 	} finally {
 		await pool.end();
 	}
@@ -344,12 +394,12 @@ async function main(): Promise<void> {
 
 	let m1Passed = true;
 	if (goldenOnly) {
-		await assertExistingM1MigrationState(target);
+		await assertExistingM1MigrationStateAndUpgrade(target);
 		console.log(
 			"Runner-only mode: migration application and M1 DB harness were not rerun.",
 		);
 	} else {
-		await applyM1Migrations(target);
+		await applyHistoricalMigrations(target);
 		console.log("M1 DB harness: START");
 		m1Passed = runPnpmChild(
 			"m1-db-harness",
@@ -357,6 +407,9 @@ async function main(): Promise<void> {
 			target.url,
 		);
 		console.log(`M1 DB harness: ${m1Passed ? "PASS" : "FAIL"}`);
+		if (m1Passed) {
+			await upgradeFreshHistoricalStateToCurrent(target);
+		}
 	}
 
 	if (!m1Passed) {

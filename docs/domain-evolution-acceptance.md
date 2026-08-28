@@ -27,8 +27,16 @@ revision `R+1`, `claimsSourceRevision=R+1`, run ghi `sourceScriptRevision=R` và
 là `failed`, provider uncertainty là `indeterminate`, không automatic paid retry.
 Implementation được acceptance riêng theo CR-A (persistence/repository), CR-B
 (provider/runtime/CAS) và CR-C (public editor/read-model/workflow regression).
-CR-A persistence/repository và CR-B provider/runtime/CAS đã PASS trên disposable
-DB. CR-C chưa bắt đầu; không có public cutover.
+CR-A persistence/repository, CR-B provider/runtime/CAS và CR-C
+public/editor/read-model/workflow regression đã PASS trên disposable DB. CR-C
+không mở thêm schema/migration; AFF-US-019 chưa bắt đầu.
+
+CR-C validation hardening: M1 historical harness chạy ở state 0017 trước khi
+upgrade lên migration hiện tại; current journal count/latest được derive động và
+golden-only chỉ nhận state 0017 hoặc current. Authenticated E2E dùng dedicated
+loopback disposable authority, isolated environment không đọc `apps/web/.env`,
+deterministic auth/voice/provider và sanitized output. Script Studio E2E đạt 10/10;
+live provider calls = 0.
 
 ## 2. Gate A — Migration và compatibility
 

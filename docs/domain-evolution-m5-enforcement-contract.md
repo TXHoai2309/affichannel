@@ -213,6 +213,13 @@ rollback migration only when operationally necessary.
   dependency was later satisfied and Phase 17A–17E is now DONE. AFF-US-018
   Phase 18A–18F is now PASS and DONE; AFF-US-019 has not started.
 
+Post-US18 CR-C validation is accepted as a compatibility/read-model and
+validation-infrastructure checkpoint. The M1 validator preserves the historical
+0016 → 0017 harness boundary before upgrading to the current migration journal;
+authenticated E2E uses a dedicated loopback disposable authority and isolated
+environment, with deterministic local providers and sanitized output. CR-C does
+not alter M5 enforcement, migrations, or the AFF-US-019 start boundary.
+
 ## 9. Stable acceptance criteria
 
 - `AC-M5-01` — production preflight reports zero legacy all-null identities.
