@@ -1,8 +1,24 @@
-import type { VoiceSegmentEffectiveStatus } from "@affichannel/core";
+import type {
+	VoiceSegmentArtifactStatus,
+	VoiceSegmentEffectiveStatus,
+} from "@affichannel/core";
 
 import { getVoiceStudioErrorCode } from "./voice-studio-state";
 
 export const VOICE_SEGMENT_WAVEFORM_BAR_COUNT = 48;
+
+export async function settleVoiceSegmentMutation<
+	T extends { artifact: { status: VoiceSegmentArtifactStatus } },
+>(
+	mutation: Promise<T>,
+	refetchVoiceState: () => Promise<unknown>,
+	refreshWorkflow: () => void | Promise<void>,
+): Promise<T> {
+	const result = await mutation;
+	await refetchVoiceState();
+	if (result.artifact.status === "completed") await refreshWorkflow();
+	return result;
+}
 
 const VOICE_SEGMENT_STATUS_LABELS: Record<VoiceSegmentEffectiveStatus, string> =
 	{

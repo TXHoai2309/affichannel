@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
@@ -35,6 +36,7 @@ import {
 	getVoiceSegmentErrorMessage,
 	getVoiceSegmentStatusLabel,
 	getVoiceSegmentStatusVariant,
+	settleVoiceSegmentMutation,
 } from "./voice-segment-studio-state";
 import { VoiceSegmentWaveform } from "./voice-segment-waveform";
 import {
@@ -313,6 +315,7 @@ export default function VoiceSegmentStudio({
 	configRevision: number | null;
 	onFactLockStale: () => void;
 }) {
+	const router = useRouter();
 	const queryClient = useQueryClient();
 	const listQuery = useQuery(
 		orpc.voiceSegment.list.queryOptions({
@@ -400,8 +403,19 @@ export default function VoiceSegmentStudio({
 		);
 		const mutationPromise = generateMutation.mutateAsync(input);
 		void listQuery.refetch();
+		let mutationSucceeded = false;
 		try {
-			await mutationPromise;
+			await settleVoiceSegmentMutation(
+				mutationPromise,
+				() =>
+					Promise.allSettled([
+						listQuery.refetch(),
+						summaryQuery.refetch(),
+						refreshSegmentState(segmentKey),
+					]),
+				() => router.refresh(),
+			);
+			mutationSucceeded = true;
 		} catch (error) {
 			if (isVoiceStudioFactLockError(error)) {
 				onFactLockStale();
@@ -412,11 +426,13 @@ export default function VoiceSegmentStudio({
 				message: getVoiceSegmentErrorMessage(error),
 			});
 		} finally {
-			await Promise.allSettled([
-				listQuery.refetch(),
-				summaryQuery.refetch(),
-				refreshSegmentState(segmentKey),
-			]);
+			if (!mutationSucceeded) {
+				await Promise.allSettled([
+					listQuery.refetch(),
+					summaryQuery.refetch(),
+					refreshSegmentState(segmentKey),
+				]);
+			}
 			setActiveSegmentKey(null);
 		}
 	};

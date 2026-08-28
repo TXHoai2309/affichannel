@@ -8,10 +8,45 @@ import {
 	formatVoiceSegmentDuration,
 	getVoiceSegmentErrorMessage,
 	getVoiceSegmentStatusLabel,
+	settleVoiceSegmentMutation,
 	waveformCacheKey,
 } from "./voice-segment-studio-state";
 
 describe("Voice Segment Studio state", () => {
+	it("refetches Voice state before refreshing workflow after completed generation", async () => {
+		const events: string[] = [];
+		const result = await settleVoiceSegmentMutation(
+			Promise.resolve({ artifact: { status: "completed" as const } }),
+			async () => {
+				events.push("voice-state-refetch");
+			},
+			() => {
+				events.push("router.refresh");
+			},
+		);
+
+		expect(result.artifact.status).toBe("completed");
+		expect(events).toEqual(["voice-state-refetch", "router.refresh"]);
+	});
+
+	it.each(["pending", "failed", "indeterminate"] as const)(
+		"does not refresh workflow for non-completed artifact status %s",
+		async (status) => {
+			const events: string[] = [];
+			await settleVoiceSegmentMutation(
+				Promise.resolve({ artifact: { status } }),
+				async () => {
+					events.push("voice-state-refetch");
+				},
+				() => {
+					events.push("router.refresh");
+				},
+			);
+
+			expect(events).toEqual(["voice-state-refetch"]);
+		},
+	);
+
 	it("keeps server status labels distinct, including stale audio", () => {
 		expect(getVoiceSegmentStatusLabel("not_generated")).toBe("Chưa tạo");
 		expect(getVoiceSegmentStatusLabel("pending")).toBe("Đang tạo");
