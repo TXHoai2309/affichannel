@@ -1,9 +1,9 @@
 # Đặc tả sản phẩm AffiChannel Personal
 
 - Trạng thái: Canonical; Affiliate baseline, Adaptive UI và M5 identity enforcement
-  active; future identities vẫn gated
+  active; AFF-US-019 19A.2 contract locked; future runtime identities vẫn gated
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-25
+- Cập nhật lần cuối: 2026-09-02
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -218,7 +218,13 @@ dimension mới, không thay persisted generation operation mode `full | repair`
 Cả hai input source mode giữ output ScriptDraft, versioning, repair, idempotency,
 snapshot/hash và provider metadata hiện tại.
 Provider output vẫn là dữ liệu không đáng tin cậy và candidate claim chưa qua
-policy gate khi gate áp dụng.
+policy gate khi gate áp dụng. Các dòng trên là target v0.8, chưa phải capability
+đã active. AFF-US-019 Phase 19A.2 đã khóa deterministic Product/general claim
+contract theo DEC-035; runtime 19A.3/19B chưa active và không được dùng keyword,
+Product name hoặc Fact Lock verification classification làm thay thế. DEC-035 đã
+khóa `GENERAL | PRODUCT/PROJECT_PRODUCT`, confirmation authority và fail-closed
+currentness; 19A.3/19B mới được phép triển khai runtime. Xem
+`docs/aff-us-019-organic-scripted-content.md`.
 
 Script generation không phải nội dung đã được người dùng chọn/chỉnh và không tự hoàn tất workflow.
 `pending`, `failed` hoặc `indeterminate` không được làm mất artifact completed/partial trước đó.
@@ -281,10 +287,12 @@ tăng giữa các snapshot và không cộng trực tiếp nhiều snapshot tíc
 ## 8. Hành vi Fact Lock
 
 Fact Lock là mandatory capability cho mọi Affiliate trước TTS/render và mọi
-Organic có Product claim. Khi mandatory, runtime state có thể là `REQUIRED`,
-`READY`, `BLOCKED` hoặc `STALE`; không được kiểm tra applicability bằng riêng phép
-so sánh `state === REQUIRED`. Organic không Product claim trả `NOT_REQUIRED`;
-factual knowledge không dựa trên Product Facts thuộc manual evidence flow riêng.
+Organic có confirmed Product claim. Khi mandatory, runtime state có thể là
+`REQUIRED`, `READY`, `BLOCKED` hoặc `STALE`; không được kiểm tra applicability bằng
+riêng phép so sánh `state === REQUIRED`. Organic claimless/general-only chỉ trả
+`NOT_REQUIRED` khi current claim inventory authoritative, mọi subject confirmed và
+confirmed Product claim count bằng zero; factual knowledge không dựa trên Product
+Facts thuộc manual evidence flow riêng.
 
 Classification của claim trong một Fact Lock run:
 
@@ -486,7 +494,8 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
   có Product claim; tạo `AFFILIATE + QUICK_IMAGE` vẫn bắt buộc Product.
 - Organic có Product claim nhưng `productId=null` bị reject; link Product hợp lệ
   không làm Content Type tự chuyển thành Affiliate.
-- Organic Scripted AI dùng `ORGANIC_NO_PRODUCT` mà không lookup Product Facts.
+- Organic Scripted AI dùng `ORGANIC_NO_PRODUCT` mà không lookup Product Facts;
+  free-text claims không tự động trở thành `GENERAL/CONFIRMED`.
 - UI phân biệt `NOT_REQUIRED` và `BLOCKED`; Resolver derive
   `nextApplicableStep` mà không persist applicability hoặc mutate workflow. Sau
   approved cutover, business action riêng mới có thể đồng bộ persisted step mà
@@ -502,7 +511,8 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
   ID/fingerprint và hiện chỉ nhận executable `SCRIPT_VERSION` Manifest. Nullable
   Script provenance là schema compatibility cho future sources; AFF-US-018 không
   activate no-script run. Legacy Script-linked rows vẫn đọc được.
-- Organic no-claim có thể opt-in Voice/TTS khi Fact Lock là `NOT_REQUIRED`; khi
+- Organic claimless/general-only chỉ có thể opt-in Voice/TTS khi Fact Lock là
+  `NOT_REQUIRED` và currentness đã được server recheck; khi
   Fact Lock là mandatory/applicable, Voice/TTS vẫn fail closed đến khi PASS.
 - Quick Image render tạo immutable MP4 variation; retry idempotent không làm mất
   Project hoặc tạo duplicate charge/output ngoài contract.
@@ -528,7 +538,8 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
 baseline. AFF-US-013/AFF-US-016/AFF-US-017/AFF-US-018 đã DONE qua các phase đã
 chấp nhận; Fact Lock new writes hiện Manifest-first và legacy rows vẫn đọc được.
-AFF-US-019 chưa bắt đầu; Organic, Quick Image và Media First cũng chưa active.
+AFF-US-019 19A.2 đã lock claim subject contract; 19A.3/runtime chưa bắt đầu.
+Organic, Quick Image và Media First vẫn chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

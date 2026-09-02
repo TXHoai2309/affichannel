@@ -6,7 +6,35 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
+Cập nhật lần cuối: 2026-09-02.
+
 ## Chưa phát hành
+
+### AFF-US-019 Phase 19A.2 Claim Subject contract lock
+
+- Lock canonical `GENERAL` và `PRODUCT` với binding `PROJECT_PRODUCT`; chỉ User,
+  deterministic Structured Source và Legacy Compatibility là confirmation
+  authority. Provider/AI chỉ tạo proposal.
+- Lock distinction giữa claimless, general-only, Product-bearing và
+  stale/unknown/unconfirmed; các trạng thái không chắc chắn fail closed cho
+  Product/Fact Lock và paid Voice.
+- ClaimManifest giữ full inventory + subject metadata; Fact Lock chỉ verify
+  confirmed Product subset; historical Affiliate thiếu subject dùng effective
+  adapter, không backfill/rewrite.
+- Lock version impact, Product change/edit invalidation, Voice TOCTOU và phase
+  boundary. 19A.3 chưa bắt đầu; Organic runtime chưa active; không có provider call.
+
+### AFF-US-019 Phase 19A architecture audit — blocker identified (historical)
+
+- Audit-only: Organic Scripted target contract được đối chiếu với Project,
+  ScriptGeneration, ScriptVersion, Claim Refresh, ClaimManifest, Fact Lock và
+  Voice foundation; không thay runtime, schema, migration hoặc provider.
+- Tại thời điểm audit, Phase 19A chưa thể lock contract vì current claim model chỉ
+  có `text + occurrence`; chưa có Product/general claim discriminator. Fact Lock
+  `SUPPORTED`/`UNSUPPORTED` là verification result, không phải claim kind.
+- Không được suy luận Product claim bằng keyword, Product name hoặc AI-only output.
+  DEC-035 sau đó đã khóa contract; AFF-US-019 19B vẫn chưa được authorize và
+  Organic/Quick Image/Media First vẫn chưa active.
 
 ### POST AFF-US-018 — Script Claim Refresh CR-C final acceptance
 

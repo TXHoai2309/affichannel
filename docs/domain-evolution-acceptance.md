@@ -1,10 +1,11 @@
 # Acceptance Plan cho Domain Evolution v0.8
 
 - Trạng thái: Canonical; M4/AFF-US-015 retained/accepted; Domain Evolution M5,
-  AFF-US-013, AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 chưa bắt đầu
+  AFF-US-013, AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 Phase 19A.2
+  **CONTRACT LOCKED**; 19A.3 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-28
-- Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
+- Cập nhật lần cuối: 2026-09-02
+- Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030, DEC-035
 
 ## 1. Nguyên tắc đạt
 
@@ -111,6 +112,13 @@ live provider calls = 0.
 
 ## 5. Gate D — Script generation input source modes
 
+AFF-US-019 Phase 19A.2 đã lock Product/general claim subject contract theo DEC-035;
+19A.3 mới là phase kế tiếp cho pure foundation và frozen vectors. Vì vậy các mục
+Gate D vẫn là future acceptance criteria, chưa authorize runtime implementation.
+Không dùng keyword, AI output hoặc `FactLockClassification` để thay thế claim
+source-of-truth. Audit/contract chi tiết nằm tại
+`docs/aff-us-019-organic-scripted-content.md`.
+
 - [ ] Server chọn `PRODUCT_BACKED` cho path/policy cần Product.
 - [ ] `ORGANIC_NO_PRODUCT` không lookup Product/Facts và không lỗi vì `productId=null`.
 - [ ] Persisted operation mode `full | repair` hiện hữu không bị đổi nghĩa hoặc
@@ -118,6 +126,20 @@ live provider calls = 0.
 - [ ] Prompt/output validator chặn Product claim bị invent trong claimless mode.
 - [ ] Snapshot/hash/idempotency khác nhau giữa hai mode khi input semantics khác.
 - [ ] ScriptDraft/version history và golden generation regression vẫn xanh.
+
+### Gate D.1 — Claim Subject contract (19A.2)
+
+- [x] Vocabulary chỉ gồm `GENERAL` và `PRODUCT` với binding `PROJECT_PRODUCT`.
+- [x] Provider/AI chỉ là proposal; `USER`, deterministic `STRUCTURED_SOURCE` và
+  `LEGACY_COMPATIBILITY` mới là confirmation authority.
+- [x] Stale, unknown, malformed và `NEEDS_CONFIRMATION` fail closed; không bypass
+  Fact Lock hoặc paid Voice.
+- [x] Organic claimless khác general-only; zero Product claim chỉ được kết luận
+  khi current ScriptVersion inventory authoritative và mọi subject confirmed.
+- [x] ClaimManifest giữ full inventory; Fact Lock chỉ verify confirmed Product
+  subset; historical Affiliate adapter không backfill/rewrite.
+- [x] Product binding, de-escalation, Voice TOCTOU và version impact đã được khóa
+  tại DEC-035; 19A.3 chưa bắt đầu.
 
 ## 6. Gate E — ClaimManifest
 
@@ -161,8 +183,9 @@ không được activate trong AFF-US-017/AFF-US-018 clarification.
 
 Gate F PASS qua Phase 18A–18F. Public new writes dùng `prepareManifest` rồi
 explicit `claimManifestId`; legacy `inputMode=NULL` chỉ còn read compatibility.
-AFF-US-019 chưa bắt đầu. Full Affiliate Scripted flow checkpoint là bắt buộc
-trước khi bắt đầu story đó.
+AFF-US-019 19A.2 contract đã LOCKED theo DEC-035; 19A.3 và runtime chưa bắt đầu.
+Full Affiliate Scripted flow checkpoint vẫn là bắt buộc trước khi bắt đầu story
+runtime đó.
 
 ## 8. Gate G — Voice, render và Quick Image
 
@@ -255,7 +278,8 @@ call occurred.
 M5D final regression/sign-off PASS: M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive
 Workflow, M5A, chín golden suites, type-check và full Web tests đều xanh trên
 disposable DB; provider call bằng 0. Gate J và `AC-M5-01–20` DONE. AFF-US-013,
-AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 chưa bắt đầu.
+AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 19A.2 đã lock contract,
+19A.3/runtime chưa bắt đầu.
 
 AFF-US-018 Phase 18F public cutover PASS: Manifest preparation, explicit public
 Manifest run, zero-claim path, dual-mode read/gate, status-only review approval,

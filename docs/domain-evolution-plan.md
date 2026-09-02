@@ -1,11 +1,12 @@
 # Kế hoạch Domain Evolution v0.8
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016/AFF-US-017 DONE;
-  M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 chưa bắt
-  đầu
+  M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 Phase 19A
+  audit và 19A.2 claim subject contract đã PASS; 19A.3 chưa bắt đầu, 19B chưa
+  bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-28
-- Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030
+- Cập nhật lần cuối: 2026-09-02
+- Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030, DEC-035
 
 ## 1. Mục tiêu
 
@@ -52,10 +53,36 @@ không được thêm vào enum `project_step_status.status`.
 Server chọn một trong hai input source mode:
 
 - `PRODUCT_BACKED`: đọc Product, Product Facts và dependency hiện hữu.
-- `ORGANIC_NO_PRODUCT`: không lookup Product/Facts và không được invent Product claim.
+- `ORGANIC_NO_PRODUCT`: target future mode, không lookup Product/Facts và không được
+  invent Product claim. Mode này chưa active; DEC-035 đã khóa claim subject
+  `GENERAL | PRODUCT(PROJECT_PRODUCT)`, confirmation authority và fail-closed
+  currentness cho Product/Fact Lock/Voice.
 
 Input source mode không thay persisted operation mode `full | repair`. Output
 ScriptDraft, versioning, repair, idempotency và audit hiện hữu được giữ nguyên.
+
+## AFF-US-019 — Phase 19A audit boundary (current)
+
+Phase 19A là contract/architecture audit; Phase 19A.2 đã khóa discriminator
+Product/general, confirmation authority, currentness, Product binding, Manifest
+full-inventory strategy và Fact Lock Product subset tại DEC-035. Runtime vẫn chưa
+active: 19A.3 phải hoàn tất pure foundation/frozen vectors trước 19B. Không được
+dùng keyword, Product name hoặc AI output làm authority.
+
+Audit đầy đủ, target matrix và phase boundary nằm tại
+`docs/aff-us-019-organic-scripted-content.md`. Các bullet Organic bên dưới là
+target v0.8, không phải runtime đã active.
+
+### AFF-US-019 Phase 19A.2 — locked claim subject contract
+
+DEC-035 khóa `GENERAL | PRODUCT` với binding `PROJECT_PRODUCT`, confirmation
+authority `USER | STRUCTURED_SOURCE | LEGACY_COMPATIBILITY`, provider proposal-only
+và fail-closed cho stale/unknown/unconfirmed. Claimless khác general-only;
+ClaimManifest giữ full inventory còn Fact Lock chỉ verify confirmed Product subset.
+Historical Affiliate subject-less dùng effective compatibility adapter, không
+backfill/rewrite. Subject metadata nằm trong versioned JSONB payload; không tạo
+migration ở 19A.2. 19A.3 chỉ làm pure foundation/frozen vectors và chưa activate
+Organic.
 
 ## 3. Phase 0 baseline readiness audit (historical)
 
@@ -369,8 +396,8 @@ deterministic và live calls bằng 0. AFF-US-019 chưa bắt đầu.
 | Affiliate + Scripted | Required | Required | Required | Theo path/config | Chỉ khi gate đạt |
 | Affiliate + Quick Image | Required | Not required | Required | Optional | Chỉ khi gate đạt |
 | Organic claimless + Quick Image | Not required | Not required | Not required | Optional | Cho phép khi composition ready |
-| Organic claimless + Scripted | Not required | Required | Not required | Optional | Cho phép khi composition ready |
-| Organic có Product claim | Required | Theo path | Required | Optional | Chỉ khi gate đạt |
+| Organic claimless + Scripted | Not required | Required | Not required | Optional | Target; chưa active trong 19A |
+| Organic có Product claim | Required | Theo path | Required | Optional | Target; chờ Product claim authority và chỉ khi gate đạt |
 
 `Required/Optional/Not required` trong bảng là requirement policy class ở mức
 identity, không phải full runtime state hay persisted completion. Tại runtime,

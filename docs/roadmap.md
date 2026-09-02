@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-28
+- Cập nhật lần cuối: 2026-09-02
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -27,8 +27,10 @@ parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
 dependency AFF-US-017 ClaimManifest Foundation đã PASS Phase 17A–17E và DONE.
 AFF-US-018 Manifest-First Fact Lock đã hoàn tất Phase 18A–18F và DONE; new writes
 dùng Manifest-first, legacy `inputMode=NULL` chỉ còn read compatibility. Canonical
-next story là AFF-US-019, hiện NOT STARTED. Full Affiliate Scripted flow checkpoint
-phải PASS trước khi bắt đầu AFF-US-019.
+next story là AFF-US-019. Phase 19A.2 claim subject contract đã LOCKED theo DEC-035;
+19A.3 frozen vectors/pure foundation chưa bắt đầu và 19B chưa được authorize.
+Full Affiliate Scripted flow checkpoint vẫn phải PASS trước khi tiếp tục
+AFF-US-019 runtime.
 Organic, Quick Image và Media First vẫn chưa active.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
@@ -38,8 +40,8 @@ và hiện CR-A persistence/repository cùng CR-B provider/runtime/CAS đã PASS
 disposable DB; CR-C public/editor integration chưa bắt đầu.
 
 Chi tiết dependency và acceptance của thứ tự này nằm tại “Chuỗi kích hoạt
-canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md` và
-`docs/domain-evolution-acceptance.md`.
+canonical v0.8” trong tài liệu này, `docs/domain-evolution-plan.md`,
+`docs/domain-evolution-acceptance.md` và DEC-035 cho claim subject contract.
 
 ## CANONICAL v0.8 BACKLOG — AFF-US-013–030
 
@@ -457,15 +459,19 @@ implementation history. Công việc mới đi theo thứ tự phụ thuộc:
   persisted step status.
 - Thêm ScriptGeneration input source mode
   `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`; không thay persisted operation mode
-  `full | repair` hiện hữu.
+  `full | repair` hiện hữu. Đây là target future contract; activation bị chặn tại
+  Phase 19A.2 đã khóa Product claim classification/source-of-truth tại DEC-035;
+  runtime activation vẫn chờ 19A.3.
 
 ### 3. ClaimManifest và Fact Lock Manifest-first
 
 - Tạo immutable server-built ClaimManifest từ mọi output-bearing source.
 - Mở rộng FactLockRun new writes bằng Manifest ID/fingerprint; giữ read adapter cho
   Script-linked legacy rows.
-- Áp dụng conditional gate: Affiliate và Organic Product claim cần Fact Lock;
-  Organic claimless là `NOT_REQUIRED`, kể cả khi opt-in Voice.
+- Áp dụng conditional gate: Affiliate và Organic confirmed Product claim cần Fact
+  Lock; Organic claimless/general-only chỉ là `NOT_REQUIRED` khi current inventory
+  authoritative, mọi subject confirmed và Product claim count bằng zero. Đây là
+  target policy; Organic chưa active, contract đã lock và 19A.3 còn chờ.
 
 ### 4. Quick Image vertical slice
 

@@ -3,15 +3,37 @@
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013 và AFF-US-016 DONE;
   AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 DONE;
   AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
-  legacy `inputMode=NULL` chỉ còn read compatibility.
-- Cập nhật lần cuối: 2026-08-28
+  legacy `inputMode=NULL` chỉ còn read compatibility. AFF-US-019 Phase 19A.2
+  **CONTRACT LOCKED** theo DEC-035; 19A.3 chưa bắt đầu.
+- Cập nhật lần cuối: 2026-09-02
 
 Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
 hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên disposable
-E2E/integration infrastructure; AFF-US-019 chưa bắt đầu.
+E2E/integration infrastructure; AFF-US-019 Phase 19A.2 đã lock Product claim
+subject contract theo DEC-035, 19A.3 và 19B chưa bắt đầu.
+
+## 2026-09-02 — AFF-US-019 Phase 19A.2 Claim Subject contract lock
+
+DEC-035 khóa vocabulary `GENERAL | PRODUCT/PROJECT_PRODUCT`, authority
+`USER | STRUCTURED_SOURCE | LEGACY_COMPATIBILITY`, provider proposal-only,
+stale/unknown/unconfirmed fail-closed, full ClaimManifest inventory và confirmed
+Product subset cho Fact Lock. Historical Affiliate thiếu subject dùng effective
+legacy adapter, không backfill/rewrite. 19A.3 chỉ làm pure foundation/frozen
+vectors; Organic runtime vẫn chưa active và không có provider call.
+
+## 2026-08-28 — AFF-US-019 Phase 19A architecture audit
+
+Audit xác nhận Project identity và `input_snapshot_json` có thể làm nền cho một
+future Organic source mode mà không cần migration chỉ để lưu source mode. Nhưng
+current `ScriptDraft.claims`, ScriptVersion candidate claims, Claim Refresh output
+và ClaimManifest không phân biệt Product claim với general factual claim;
+FactLockClassification chỉ là verification result. Không được suy luận bằng
+keyword/Product name/AI-only output. Blocker này đã được giải quyết ở DEC-035;
+runtime vẫn chưa active và 19A.3 chưa bắt đầu. Chi tiết tại
+`docs/aff-us-019-organic-scripted-content.md`.
 
 ## 2026-08-28 — POST AFF-US-018 Script Claim Refresh CR-C final acceptance
 

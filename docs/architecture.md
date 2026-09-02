@@ -1,9 +1,9 @@
 # Kiến trúc AffiChannel
 
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
-  future identities vẫn gated
+  future identities vẫn gated; AFF-US-019 19A.2 contract đã lock
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-08-25
+- Cập nhật lần cuối: 2026-09-02
 
 ## 1. Mục tiêu kiến trúc
 
@@ -230,7 +230,13 @@ Script generation nhận discriminated input source mode do server chọn:
 `PRODUCT_BACKED` hoặc `ORGANIC_NO_PRODUCT`. Đây là dimension riêng, không thay cột
 operation mode `full | repair` hiện hữu. Input source mode thứ hai không lookup
 Product/Facts và prompt/output validation không được tự sinh Product claim. Output
-ScriptDraft/versioning hiện hữu không đổi.
+ScriptDraft/versioning hiện hữu không đổi trong current runtime. DEC-035 đã lock
+claim subject `GENERAL` hoặc `PRODUCT/PROJECT_PRODUCT`, confirmation authority,
+stale/unknown fail-closed, Manifest full inventory và Fact Lock Product subset.
+AI/provider chỉ là proposal; `SUPPORTED`/`UNSUPPORTED` của Fact Lock vẫn là
+verification result, không phải claim kind. Contract đã lock nhưng Organic runtime
+chưa active; 19A.3 phải hoàn tất pure foundation/frozen vectors trước 19B. Xem
+`docs/aff-us-019-organic-scripted-content.md`.
 
 ## 8. Transaction và Neon
 
@@ -380,9 +386,11 @@ claims với Product Facts. Contract persistence là DEC-034 với execution art
 Client không được đặt `isEmpty` hoặc fingerprint. Empty manifest chỉ hợp lệ sau
 normalization thành công và inventory thực sự rỗng; lỗi hoặc uncertainty phải fail
 closed thành `indeterminate`/`blocked`. Affiliate luôn cần policy check trước
-TTS/render. Organic không Product claim trả `NOT_REQUIRED`; nếu người dùng opt-in
-Voice thì TTS được phép chạy mà không đòi Fact Lock PASS. Organic có Product claim
-phải có accessible Product, Product Facts evidence và Fact Lock PASS.
+TTS/render. Organic claimless hoặc general-only chỉ trả `NOT_REQUIRED` khi current
+claim inventory authoritative, mọi subject confirmed và Product claim count bằng
+zero. Organic có Product claim phải có accessible Product, Product Facts evidence
+và Fact Lock PASS. Stale, unknown, unbound hoặc unconfirmed state phải block trước
+paid provider.
 
 LLM output là structured input không đáng tin cậy và phải qua schema validation.
 Model không được tự ghi trạng thái approved cuối cùng nếu thiếu server-side rule

@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-08-28
+- Cập nhật lần cuối: 2026-09-02
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -103,6 +103,82 @@ Implementation được tách thành CR-A (migration + repository), CR-B (provid
 và CAS apply) và CR-C (public editor action, current ScriptVersion read model,
 workflow refresh và regression). CR-A persistence/repository và CR-B
 provider/runtime/CAS đã PASS trên disposable DB; CR-C chưa bắt đầu.
+
+## DEC-035 — Claim Subject contract cho AFF-US-019 Phase 19A.2
+
+- Trạng thái: Đã chấp nhận cho contract lock; 19A.3 chưa bắt đầu
+- Ngày: 2026-09-02
+- Mở rộng: DEC-025, DEC-028, DEC-030, DEC-034 và các contract AFF-US-017/018
+
+### Bối cảnh
+
+Organic Scripted cần phân biệt Product claim với general factual claim để
+Applicability Resolver quyết định Product/Fact Lock/Voice. Shape hiện hữu chỉ có
+`text + occurrence`, trong khi Fact Lock classification là verification outcome
+và Claim Refresh provider không thể là policy authority.
+
+### Quyết định
+
+- Canonical subject vocabulary chỉ gồm `GENERAL` và
+  `PRODUCT` với binding `PROJECT_PRODUCT`. Không persist `productId` bên trong
+  claim; Product hiệu lực luôn là `Project.productId` hiện tại.
+- `ClaimSubjectStatus` là `CONFIRMED | NEEDS_CONFIRMATION`. `CONFIRMED` bắt buộc
+  có authoritative source; `NEEDS_CONFIRMATION` là unknown đối với policy.
+- `ClaimSubjectSource` là `USER | STRUCTURED_SOURCE | LEGACY_COMPATIBILITY`.
+  AI/provider chỉ được tạo proposal, không được tự tạo confirmed authority.
+- Free-text Organic generation và Claim Refresh output không được tự động gắn
+  `GENERAL/CONFIRMED`. Structured source chỉ được dùng khi structure tự xác định
+  deterministic semantics.
+- `PRODUCT_UNBOUND` là effective state khi có confirmed Product claim nhưng
+  `Project.productId` là null; không thêm persisted subject kind mới. State này
+  block Product, Fact Lock và paid Voice.
+- Organic claimless (`claims=[]`) và Organic general-only là hai trạng thái khác
+  nhau. `FACT_LOCK=NOT_REQUIRED` chỉ hợp lệ khi current ScriptVersion inventory
+  authoritative, mọi subject confirmed và Product claim count bằng zero.
+- Stale, missing, malformed, unknown hoặc `NEEDS_CONFIRMATION` làm
+  `productClaimState=UNKNOWN`; không được bypass Fact Lock hoặc paid Voice.
+- Resolver chỉ nhận summary server-derived, không nhận raw claim text để classify.
+- ClaimManifest giữ full inventory và subject metadata; Fact Lock chỉ verify
+  confirmed `PRODUCT` subset. General claims không bị xóa khỏi provenance.
+- Product change/remove làm Product-dependent verification stale; không silent
+  rebind và không rewrite historical ScriptVersion, Manifest hoặc FactLockRun.
+- Historical Affiliate payload thiếu subject được effective-map thành
+  `PRODUCT / CONFIRMED / LEGACY_COMPATIBILITY`, không backfill và không bắt user
+  cũ confirm lại claim. Affiliate accepted flow không đổi.
+- Claim Refresh vẫn là explicit paid preparation; user confirmation không gọi
+  provider. Claim-bearing edit làm current classification stale.
+- Trước mọi paid Voice Preview/Segment/regeneration, server phải re-read Project,
+  current ScriptVersion, claim summary và Resolver trong authorization boundary.
+  Stale/unknown/unbound state phải block trước provider call.
+
+### Version impact
+
+| Contract/constant hiện tại | Next target | Lý do |
+|---|---|---|
+| `script-input.v2` | `script-input.v3` ở 19B | Thêm source mode/policy |
+| `script-draft.v2` | `script-draft.v3` | Thêm subject/status/source vào claim; ScriptVersion dùng constant này |
+| `script-prompt.v2` | `script-prompt.v3` | Organic no-Product prompt policy |
+| `script-claim-refresh.v1` | Giữ v1 | Source projection/hash không đổi |
+| `script-claim-refresh-prompt.v1` | `script-claim-refresh-prompt.v2` | Provider proposal semantics |
+| `script-claim-refresh-output.v1` | `script-claim-refresh-output.v2` | Thêm `proposedSubject` không authoritative |
+| `claim-manifest.v1` | Giữ v1 envelope | DB CHECK hiện chỉ cho phép v1; subject additive trong JSONB |
+| `claim-manifest-builder.v1` | `claim-manifest-builder.v2` | Fingerprint projection thêm subject metadata |
+| `fact-lock.manifest.v1` | `fact-lock.manifest.v2` cho subject-aware path | Input semantics chỉ verify Product subset |
+| `fact-lock-manifest-prompt.v1` | `fact-lock-manifest-prompt.v2` | Prompt nhận Product subset |
+| `fact-lock-output.v1` | Giữ v1 | Verification result shape không đổi |
+| `fact-lock-prompt.v3` | Giữ v3 | Legacy Affiliate path không đổi |
+| `fact-lock-zero-claim.v1` | Giữ v1 | Organic không tự chạy zero-claim Fact Lock |
+
+`sourceContentHash` vẫn hash claim-bearing Script content, không hash lại theo
+subject metadata. `claim-manifest.v1` là envelope hiện hữu; nếu muốn tạo
+envelope v2 trong tương lai phải có decision/migration riêng, không thuộc 19A.3.
+
+### Hệ quả và phase boundary
+
+19A.3 chỉ implement pure domain schemas/types, legacy adapter, summary helper,
+version constants và frozen vectors. 19A.3 không activate Organic. 19B–19E lần
+lượt sở hữu ScriptGeneration, Applicability/Manifest/Fact Lock, Voice TOCTOU và
+UI/E2E. Không bulk backfill hoặc rewrite historical artifacts.
 
 ## DEC-033 — Manifest provider prompt boundary cho AFF-US-018 Phase 18D
 
@@ -558,7 +634,7 @@ không thay thế hoặc đánh lại số ADR hiện hữu trong file này.
 | `V08-DEC-009` | Project lịch sử được backfill thành `AFFILIATE + SCRIPTED`, giữ nguyên Product và artifacts. |
 | `V08-DEC-010` | Applicability/readiness states là runtime-derived DTO; không thêm `NOT_REQUIRED`, `OPTIONAL`, `REQUIRED`, `READY`, `STALE` vào `project_step_status.status`. |
 | `V08-DEC-011` | Server-built immutable ClaimManifest là nguồn claim canonical cho Fact Lock; ScriptVersion chỉ là một source adapter. |
-| `V08-DEC-012` | Script generation hỗ trợ server-selected input source mode `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; đây không thay persisted operation mode `full | repair`. Output ScriptDraft/versioning hiện tại giữ nguyên. |
+| `V08-DEC-012` | Target v0.8: Script generation hỗ trợ server-selected input source mode `PRODUCT_BACKED` và `ORGANIC_NO_PRODUCT`; đây không thay persisted operation mode `full | repair`. Output ScriptDraft/versioning hiện tại giữ nguyên. Activation của Organic mode vẫn chờ AFF-US-019 contract lock và Product claim source-of-truth. |
 | `V08-DEC-013` | FactLockRun new writes dùng `inputMode=MANIFEST_V1`, lưu server-derived ClaimManifest ID/fingerprint; current US18 runtime chỉ nhận executable `SCRIPT_VERSION` Manifest và vẫn populate Script provenance. Legacy `inputMode=NULL` rows tiếp tục đọc được; request/pending identity dùng Manifest fingerprint + exact Product Facts fingerprint + server input version. |
 
 Resolver là derived policy dùng chung cho UI, API readiness và worker preflight.
