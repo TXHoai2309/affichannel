@@ -25,6 +25,7 @@
 		"apply:project-channel-first-m5": "tsx scripts/apply-project-channel-first-m5.ts",
 		"test:unit:m5-preflight": "pnpm --filter web exec vitest run src/features/project/m5-preflight.test.ts",
 		"test:unit:claim-manifest": "pnpm --filter web exec vitest run src/features/claim-manifest/claim-manifest-domain.test.ts",
+		"test:unit:claim-subject": "tsx scripts/test-claim-subject.ts",
 		"test:unit:fact-lock-manifest": "pnpm --filter web exec vitest run src/features/fact-lock/fact-lock-manifest-domain.test.ts",
 		"test:integration:manifest-fact-lock-persistence": "tsx scripts/test-manifest-fact-lock-persistence.ts",
 		"test:integration:manifest-fact-lock-service": "tsx scripts/test-manifest-fact-lock-service.ts",
