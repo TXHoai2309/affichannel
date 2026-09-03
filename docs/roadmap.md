@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-03
+- Cập nhật lần cuối: 2026-09-02
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -28,7 +28,7 @@ dependency AFF-US-017 ClaimManifest Foundation đã PASS Phase 17A–17E và DON
 AFF-US-018 Manifest-First Fact Lock đã hoàn tất Phase 18A–18F và DONE; new writes
 dùng Manifest-first, legacy `inputMode=NULL` chỉ còn read compatibility. Canonical
 next story là AFF-US-019. Phase 19A.2 claim subject contract đã LOCKED theo DEC-035;
-19A.3 frozen vectors/pure foundation đã PASS và 19B chưa được authorize.
+19A.3 frozen vectors/pure foundation chưa bắt đầu và 19B chưa được authorize.
 Full Affiliate Scripted flow checkpoint vẫn phải PASS trước khi tiếp tục
 AFF-US-019 runtime.
 Organic, Quick Image và Media First vẫn chưa active.
@@ -461,7 +461,7 @@ implementation history. Công việc mới đi theo thứ tự phụ thuộc:
   `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`; không thay persisted operation mode
   `full | repair` hiện hữu. Đây là target future contract; activation bị chặn tại
   Phase 19A.2 đã khóa Product claim classification/source-of-truth tại DEC-035;
-  19A.3 foundation đã PASS; runtime activation vẫn chờ 19B.
+  runtime activation vẫn chờ 19A.3.
 
 ### 3. ClaimManifest và Fact Lock Manifest-first
 

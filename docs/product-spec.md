@@ -1,10 +1,9 @@
 # Đặc tả sản phẩm AffiChannel Personal
 
 - Trạng thái: Canonical; Affiliate baseline, Adaptive UI và M5 identity enforcement
-  active; AFF-US-019 19A.2 contract locked và 19A.3 foundation PASS; future
-  runtime identities vẫn gated
+  active; AFF-US-019 19A.2 contract locked; future runtime identities vẫn gated
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-03
+- Cập nhật lần cuối: 2026-09-02
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -539,8 +538,7 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
 baseline. AFF-US-013/AFF-US-016/AFF-US-017/AFF-US-018 đã DONE qua các phase đã
 chấp nhận; Fact Lock new writes hiện Manifest-first và legacy rows vẫn đọc được.
-AFF-US-019 19A.2 đã lock claim subject contract; 19A.3 foundation đã PASS,
-19B/runtime chưa bắt đầu.
+AFF-US-019 19A.2 đã lock claim subject contract; 19A.3/runtime chưa bắt đầu.
 Organic, Quick Image và Media First vẫn chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong

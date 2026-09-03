@@ -234,9 +234,8 @@ ScriptDraft/versioning hiện hữu không đổi trong current runtime. DEC-035
 claim subject `GENERAL` hoặc `PRODUCT/PROJECT_PRODUCT`, confirmation authority,
 stale/unknown fail-closed, Manifest full inventory và Fact Lock Product subset.
 AI/provider chỉ là proposal; `SUPPORTED`/`UNSUPPORTED` của Fact Lock vẫn là
-verification result, không phải claim kind. Contract đã lock, 19A.3 pure
-foundation/frozen vectors đã PASS nhưng Organic runtime chưa active; 19B chưa bắt
-đầu. Xem
+verification result, không phải claim kind. Contract đã lock nhưng Organic runtime
+chưa active; 19A.3 phải hoàn tất pure foundation/frozen vectors trước 19B. Xem
 `docs/aff-us-019-organic-scripted-content.md`.
 
 ## 8. Transaction và Neon

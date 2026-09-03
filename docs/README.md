@@ -12,9 +12,8 @@ DEC-030/M5 persisted identity enforcement đã DONE qua production migration 001
 postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 đã PASS
 Phase 17A–17E và DONE. AFF-US-018 Phase 18A–18F đã PASS và DONE: Fact Lock new
 writes là Manifest-first, còn legacy `inputMode=NULL` chỉ được đọc tương thích.
-AFF-US-019 Phase 19A.2 đã LOCKED contract theo DEC-035; 19A.3 claim subject
-foundation đã PASS, còn 19B/runtime chưa bắt đầu và full Affiliate Scripted flow
-checkpoint vẫn bắt buộc trước runtime. M5
+AFF-US-019 Phase 19A.2 đã LOCKED contract theo DEC-035; 19A.3/runtime chưa bắt
+đầu và full Affiliate Scripted flow checkpoint vẫn bắt buộc trước runtime. M5
 không activate future identities.
 
 ## Thứ tự đọc

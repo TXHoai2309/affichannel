@@ -2,10 +2,10 @@
 
 ## Phase 19A — Contract Lock + Architecture Audit
 
-- Trạng thái: **19A.3 CLAIM SUBJECT FOUNDATION PASS — 19B NOT STARTED**
-- Cập nhật: 2026-09-03
-- Phạm vi: pure claim-subject foundation, compatibility adapter và frozen vectors
-- Runtime Organic, schema, migration và provider activation: chưa thực hiện
+- Trạng thái: **CONTRACT LOCKED — READY FOR 19A.3**
+- Cập nhật: 2026-09-02
+- Phạm vi: contract lock only; 19A.3 chưa bắt đầu
+- Runtime, schema, migration và provider activation: chưa thực hiện
 
 AFF-US-001–012 là historical/golden baseline. AFF-US-013–018 đã được accepted;
 Organic, Quick Image và Media First vẫn là các capability chưa active. Tài liệu này
@@ -13,9 +13,9 @@ ghi lại audit trước 19B và không tự mở bất kỳ runtime path nào.
 
 ## 1. Verdict
 
-Phase 19A.2 đã khóa contract cho Product/general claim classification và 19A.3 đã
-PASS phần pure foundation, compatibility adapter và frozen vectors. Runtime,
-schema và provider activation vẫn chưa được thực hiện; 19B là phase kế tiếp.
+Phase 19A.2 đã khóa contract cho Product/general claim classification. Runtime,
+schema và provider activation vẫn chưa được thực hiện; 19A.3 là phase kế tiếp cho
+pure foundation, compatibility adapter và frozen vectors.
 
 Không được giải quyết blocker bằng keyword matching, suy luận từ tên Product, AI
 output hoặc bằng cách coi mọi factual claim là Product claim. Không được tạo một

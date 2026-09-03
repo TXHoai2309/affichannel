@@ -2,9 +2,9 @@
 
 - Trạng thái: Canonical; M4/AFF-US-015 retained/accepted; Domain Evolution M5,
   AFF-US-013, AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 Phase 19A.2
-  **CONTRACT LOCKED**; 19A.3 claim subject foundation PASS; 19B chưa bắt đầu
+  **CONTRACT LOCKED**; 19A.3 chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-03
+- Cập nhật lần cuối: 2026-09-02
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030, DEC-035
 
 ## 1. Nguyên tắc đạt
@@ -139,7 +139,7 @@ source-of-truth. Audit/contract chi tiết nằm tại
 - [x] ClaimManifest giữ full inventory; Fact Lock chỉ verify confirmed Product
   subset; historical Affiliate adapter không backfill/rewrite.
 - [x] Product binding, de-escalation, Voice TOCTOU và version impact đã được khóa
-  tại DEC-035; 19A.3 pure foundation/frozen vectors đã PASS.
+  tại DEC-035; 19A.3 chưa bắt đầu.
 
 ## 6. Gate E — ClaimManifest
 
@@ -279,7 +279,7 @@ M5D final regression/sign-off PASS: M1, M2A/M2B/M2C, M3B, M4 shadow, Adaptive
 Workflow, M5A, chín golden suites, type-check và full Web tests đều xanh trên
 disposable DB; provider call bằng 0. Gate J và `AC-M5-01–20` DONE. AFF-US-013,
 AFF-US-016, AFF-US-017 và AFF-US-018 DONE; AFF-US-019 19A.2 đã lock contract,
-19A.3 foundation PASS, Organic runtime chưa bắt đầu.
+19A.3/runtime chưa bắt đầu.
 
 AFF-US-018 Phase 18F public cutover PASS: Manifest preparation, explicit public
 Manifest run, zero-claim path, dual-mode read/gate, status-only review approval,
