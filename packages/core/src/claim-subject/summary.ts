@@ -1,4 +1,5 @@
 import { isContentType, isCreationPath } from "../project/channel-first-types";
+import type { ScriptVersionReadModel } from "../script-version/types";
 import {
 	adaptLegacyAffiliateClaim,
 	hasClaimSubjectMetadata,
@@ -114,3 +115,28 @@ export function summarizeClaimInventory(
 }
 
 export const deriveClaimInventorySummary = summarizeClaimInventory;
+
+/**
+ * Canonical read boundary for applicability. Only the current ScriptVersion
+ * may supply claim truth; historical generations, manifests, and UI state are
+ * intentionally not accepted here.
+ */
+export function summarizeCurrentScriptVersionClaims(input: {
+	contentType: string | null;
+	creationPath: string | null;
+	currentScriptVersion:
+		| Pick<ScriptVersionReadModel, "editableSnapshot">
+		| null
+		| undefined;
+}): ClaimInventorySummary {
+	const snapshot = input.currentScriptVersion?.editableSnapshot;
+	if (!snapshot) {
+		return unknownSummary();
+	}
+	return summarizeClaimInventory({
+		contentType: input.contentType ?? "",
+		creationPath: input.creationPath ?? "",
+		claimsStatus: snapshot.claimsStatus,
+		claims: snapshot.claims,
+	});
+}

@@ -1,3 +1,4 @@
+import type { ClaimInventorySummary } from "../claim-subject/types";
 import {
 	classifyLegacyProject,
 	LEGACY_AFFILIATE_IDENTITY,
@@ -85,7 +86,29 @@ function isCurrentAffiliateIdentity(input: ProjectApplicabilityInput) {
 	);
 }
 
-function deriveProduct(
+function isOrganicScriptedIdentity(input: ProjectApplicabilityInput) {
+	return (
+		input.projectIdentity.contentType === "ORGANIC" &&
+		input.projectIdentity.creationPath === "SCRIPTED" &&
+		input.projectIdentity.contentFormatKey === "SCRIPTED_STANDARD" &&
+		input.projectIdentity.contentFormatVersion === 1
+	);
+}
+
+function claimSummary(input: ProjectApplicabilityInput): ClaimInventorySummary {
+	return (
+		input.claimSummary ??
+		input.script.claimSummary ?? {
+			status: "UNKNOWN",
+			subjectResolution: "UNKNOWN",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
+		}
+	);
+}
+
+function deriveAffiliateProduct(
 	input: ProjectApplicabilityInput,
 ): ApplicabilityCapabilityResult {
 	if (!input.projectIdentity.hasProduct) {
@@ -111,7 +134,79 @@ function deriveProduct(
 	]);
 }
 
-function deriveScript(
+function deriveOrganicProduct(
+	input: ProjectApplicabilityInput,
+): ApplicabilityCapabilityResult {
+	const summary = claimSummary(input);
+	if (summary.status === "STALE") {
+		return result(
+			"PRODUCT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"SCRIPT_CLAIMS_NOT_CURRENT",
+			[{ dependency: "SCRIPT_VERSION", status: "CURRENT" }],
+		);
+	}
+	if (summary.status === "UNKNOWN") {
+		return result(
+			"PRODUCT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"CLAIM_SUBJECT_INVALID",
+			[{ dependency: "SCRIPT_VERSION", status: "CURRENT" }],
+		);
+	}
+	if (summary.subjectResolution === "NEEDS_CONFIRMATION") {
+		return result(
+			"PRODUCT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"CLAIM_SUBJECT_CONFIRMATION_REQUIRED",
+			[{ dependency: "SCRIPT_VERSION", status: "CURRENT" }],
+		);
+	}
+	if (summary.productClaimState === "NONE") {
+		return result(
+			"PRODUCT",
+			"NOT_REQUIRED",
+			"NOT_STARTED",
+			"PRODUCT_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
+			[{ dependency: "PRODUCT_LINK", status: "NOT_STARTED" }],
+		);
+	}
+	if (summary.productClaimState !== "PRESENT") {
+		return result(
+			"PRODUCT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"CLAIM_SUBJECT_INVALID",
+			[{ dependency: "SCRIPT_VERSION", status: "CURRENT" }],
+		);
+	}
+	if (!input.projectIdentity.hasProduct) {
+		return result(
+			"PRODUCT",
+			"REQUIRED",
+			"NOT_STARTED",
+			"PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+			[{ dependency: "PRODUCT_LINK", status: "MISSING" }],
+		);
+	}
+	if (!input.product.accessible) {
+		return result(
+			"PRODUCT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"PRODUCT_NOT_ACCESSIBLE",
+			[{ dependency: "PRODUCT_LINK", status: "INACCESSIBLE" }],
+		);
+	}
+	return result("PRODUCT", "READY", "COMPLETE", "PRODUCT_READY", [
+		{ dependency: "PRODUCT_LINK", status: "CURRENT" },
+	]);
+}
+
+function deriveAffiliateScript(
 	input: ProjectApplicabilityInput,
 	productResult: ApplicabilityCapabilityResult,
 ): ApplicabilityCapabilityResult {
@@ -230,7 +325,97 @@ function deriveScript(
 	);
 }
 
-function deriveFactLock(
+/** Organic Scripted content has no Product/Facts prerequisite for generation. */
+function deriveOrganicScript(
+	input: ProjectApplicabilityInput,
+): ApplicabilityCapabilityResult {
+	const dependencies: ApplicabilityCapabilityResult["dependencies"] = [
+		{
+			dependency: "SCRIPT_GENERATION",
+			status:
+				input.script.generationStatus === "NONE"
+					? "NOT_STARTED"
+					: input.script.generationStatus === "USABLE"
+						? "READY"
+						: input.script.generationStatus,
+		},
+		{
+			dependency: "SCRIPT_VERSION",
+			status: input.script.currentVersionPresent ? "CURRENT" : "MISSING",
+		},
+	];
+	if (!input.script.channelSettingsComplete) {
+		return result(
+			"SCRIPT",
+			"BLOCKED",
+			"NOT_STARTED",
+			"SCRIPT_CHANNEL_SETTINGS_INCOMPLETE",
+			dependencies,
+		);
+	}
+	// Claim subject resolution is downstream policy metadata. A current script
+	// remains complete while Product/Fact Lock can independently block.
+	if (input.script.currentVersionPresent) {
+		return result("SCRIPT", "READY", "COMPLETE", "SCRIPT_READY", dependencies);
+	}
+	if (
+		input.script.usableGenerationPresent &&
+		!input.script.sourceDependencyCurrent
+	) {
+		return result(
+			"SCRIPT",
+			"STALE",
+			"IN_PROGRESS",
+			"SCRIPT_SOURCE_DEPENDENCY_STALE",
+			dependencies,
+		);
+	}
+	if (input.script.generationStatus === "PENDING") {
+		return result(
+			"SCRIPT",
+			"REQUIRED",
+			"IN_PROGRESS",
+			"SCRIPT_GENERATION_PENDING",
+			dependencies,
+		);
+	}
+	if (input.script.generationStatus === "FAILED") {
+		return result(
+			"SCRIPT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"SCRIPT_GENERATION_FAILED",
+			dependencies,
+		);
+	}
+	if (input.script.generationStatus === "INDETERMINATE") {
+		return result(
+			"SCRIPT",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"SCRIPT_GENERATION_INDETERMINATE",
+			dependencies,
+		);
+	}
+	if (input.script.usableGenerationPresent) {
+		return result(
+			"SCRIPT",
+			"READY",
+			"IN_PROGRESS",
+			"CURRENT_SCRIPT_VERSION_REQUIRED",
+			dependencies,
+		);
+	}
+	return result(
+		"SCRIPT",
+		"READY",
+		"NOT_STARTED",
+		"SCRIPT_GENERATION_REQUIRED",
+		dependencies,
+	);
+}
+
+function deriveAffiliateFactLock(
 	input: ProjectApplicabilityInput,
 ): ApplicabilityCapabilityResult {
 	const mapped = {
@@ -291,6 +476,103 @@ function deriveFactLock(
 		},
 	] as const satisfies ApplicabilityCapabilityResult["dependencies"];
 	return result("FACT_LOCK", state, completion, reasonCode, dependencies);
+}
+
+function deriveOrganicFactLock(
+	input: ProjectApplicabilityInput,
+): ApplicabilityCapabilityResult {
+	const summary = claimSummary(input);
+	if (summary.status === "STALE") {
+		return result(
+			"FACT_LOCK",
+			"STALE",
+			"IN_PROGRESS",
+			"SCRIPT_CLAIMS_NOT_CURRENT",
+			[
+				{ dependency: "SCRIPT_VERSION", status: "CURRENT" },
+				{ dependency: "FACT_LOCK_GATE", status: "STALE" },
+			],
+		);
+	}
+	if (summary.status === "UNKNOWN") {
+		return result(
+			"FACT_LOCK",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"CLAIM_SUBJECT_INVALID",
+			[
+				{ dependency: "SCRIPT_VERSION", status: "CURRENT" },
+				{ dependency: "FACT_LOCK_GATE", status: "FAILED" },
+			],
+		);
+	}
+	if (summary.subjectResolution === "NEEDS_CONFIRMATION") {
+		return result(
+			"FACT_LOCK",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"CLAIM_SUBJECT_CONFIRMATION_REQUIRED",
+			[
+				{ dependency: "SCRIPT_VERSION", status: "CURRENT" },
+				{ dependency: "FACT_LOCK_GATE", status: "FAILED" },
+			],
+		);
+	}
+	if (summary.productClaimState === "NONE") {
+		return result(
+			"FACT_LOCK",
+			"NOT_REQUIRED",
+			"NOT_STARTED",
+			"FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+			[{ dependency: "FACT_LOCK_GATE", status: "NOT_STARTED" }],
+		);
+	}
+	if (summary.productClaimState !== "PRESENT") {
+		return result(
+			"FACT_LOCK",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"CLAIM_SUBJECT_INVALID",
+			[
+				{ dependency: "SCRIPT_VERSION", status: "CURRENT" },
+				{ dependency: "FACT_LOCK_GATE", status: "FAILED" },
+			],
+		);
+	}
+	if (!input.projectIdentity.hasProduct) {
+		return result(
+			"FACT_LOCK",
+			"BLOCKED",
+			"NOT_STARTED",
+			"PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+			[
+				{ dependency: "PRODUCT_LINK", status: "MISSING" },
+				{ dependency: "SCRIPT_VERSION", status: "CURRENT" },
+			],
+		);
+	}
+	if (!input.product.accessible) {
+		return result(
+			"FACT_LOCK",
+			"BLOCKED",
+			"IN_PROGRESS",
+			"PRODUCT_NOT_ACCESSIBLE",
+			[
+				{ dependency: "PRODUCT_LINK", status: "INACCESSIBLE" },
+				{ dependency: "SCRIPT_VERSION", status: "CURRENT" },
+			],
+		);
+	}
+	// Organic v3 Fact Lock execution is intentionally not cut over in 19C.1.
+	// Reuse the established lifecycle mapping for the policy/read model while
+	// treating the current ScriptVersion as structurally ready for this branch.
+	return deriveAffiliateFactLock({
+		...input,
+		script: {
+			...input.script,
+			currentVersionFactLockReady: true,
+		},
+	});
 }
 
 function deriveVoice(
@@ -475,12 +757,21 @@ export function resolveProjectApplicability(
 		return invalidIdentityResult(input, productReason);
 	}
 	if (!isCurrentAffiliateIdentity(input)) {
-		return invalidIdentityResult(input, "PROJECT_IDENTITY_UNSUPPORTED");
+		if (!isOrganicScriptedIdentity(input)) {
+			return invalidIdentityResult(input, "PROJECT_IDENTITY_UNSUPPORTED");
+		}
 	}
 
-	const product = deriveProduct(input);
-	const script = deriveScript(input, product);
-	const factLock = deriveFactLock(input);
+	const organic = isOrganicScriptedIdentity(input);
+	const product = organic
+		? deriveOrganicProduct(input)
+		: deriveAffiliateProduct(input);
+	const script = organic
+		? deriveOrganicScript(input)
+		: deriveAffiliateScript(input, product);
+	const factLock = organic
+		? deriveOrganicFactLock(input)
+		: deriveAffiliateFactLock(input);
 	const voice = deriveVoice(input, factLock);
 	const render = deriveRender(input, [product, script, factLock, voice]);
 	const capabilities = [product, script, factLock, voice, render];

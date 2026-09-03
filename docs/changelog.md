@@ -10,6 +10,19 @@ Cập nhật lần cuối: 2026-09-03.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19C.1 Claim Applicability PASS
+
+- Applicability derives one canonical claim summary from the current
+  ScriptVersion. Organic Scripted claimless/general-confirmed state skips
+  Product and Fact Lock; confirmed Product claims require them; stale,
+  unresolved, unknown, and malformed state fails closed.
+- Single-read and batch workflow inputs, Adaptive Workflow/navigation, and M4
+  shadow parity consume the same summary. Affiliate Scripted behavior remains
+  unchanged.
+- Claim Refresh v2, subject-aware Manifest/Fact Lock execution, Voice TOCTOU,
+  schema/migrations, and project creation UI remain out of scope. Clean-room
+  loopback DB validation passed with live AI/TTS calls disabled.
+
 ### AFF-US-019 Phase 19B Organic ScriptGeneration PASS
 
 - Organic + Scripted + `SCRIPTED_STANDARD` v1 với `Project.productId = null` đã

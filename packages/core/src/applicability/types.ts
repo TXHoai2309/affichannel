@@ -1,3 +1,4 @@
+import type { ClaimInventorySummary } from "../claim-subject/types";
 import type { FactLockGateReason } from "../fact-lock/gate";
 import type { LegacyProjectState } from "../project/legacy-affiliate-compatibility";
 
@@ -38,11 +39,13 @@ export const APPLICABILITY_REASON_CODES = [
 	"AFFILIATE_PRODUCT_NOT_LINKED",
 	"PRODUCT_NOT_ACCESSIBLE",
 	"PRODUCT_READY",
+	"PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
 	"SCRIPT_NOT_REQUIRED_FOR_CREATION_PATH",
 	"SCRIPT_REQUIRES_ACCESSIBLE_PRODUCT",
 	"SCRIPT_CHANNEL_SETTINGS_INCOMPLETE",
 	"SCRIPT_PRODUCT_FACTS_UNUSABLE",
 	"SCRIPT_SOURCE_DEPENDENCY_STALE",
+	"SCRIPT_CLAIMS_NOT_CURRENT",
 	"SCRIPT_GENERATION_PENDING",
 	"SCRIPT_GENERATION_FAILED",
 	"SCRIPT_GENERATION_INDETERMINATE",
@@ -60,6 +63,9 @@ export const APPLICABILITY_REASON_CODES = [
 	"FACT_LOCK_INDETERMINATE",
 	"FACT_LOCK_STALE_SCRIPT",
 	"FACT_LOCK_RUN_REQUIRED",
+	"FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+	"CLAIM_SUBJECT_CONFIRMATION_REQUIRED",
+	"CLAIM_SUBJECT_INVALID",
 	"VOICE_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
 	"VOICE_ARTIFACTS_STALE",
 	"VOICE_REQUIRES_FACT_LOCK_PASS",
@@ -140,7 +146,11 @@ export type ProjectApplicabilityInput = {
 		currentVersionFactLockReady: boolean;
 		channelSettingsComplete: boolean;
 		productFactsUsable: boolean;
+		/** Canonical summary derived from the current ScriptVersion. */
+		claimSummary?: ClaimInventorySummary;
 	};
+	/** Backward-compatible top-level alias for read-model callers. */
+	claimSummary?: ClaimInventorySummary;
 	factLock: {
 		gateReason: FactLockGateReason;
 	};

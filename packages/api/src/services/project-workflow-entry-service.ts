@@ -10,6 +10,7 @@ import {
 	type ProjectWorkflowEntrySummary,
 	resolveBusinessToday,
 	resolveProjectApplicability,
+	summarizeCurrentScriptVersionClaims,
 	validateScriptVersionForFactLock,
 } from "@affichannel/core";
 import type {
@@ -112,6 +113,13 @@ function emptyInput(
 			channelSettingsComplete: false,
 			productFactsUsable: false,
 		},
+		claimSummary: {
+			status: "UNKNOWN",
+			subjectResolution: "UNKNOWN",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
+		},
 		factLock: { gateReason: "NO_SCRIPT_VERSION" },
 		voice: {
 			configPresent: false,
@@ -172,6 +180,15 @@ function productFactsUsable(facts: readonly ProductFactRow[], today: string) {
 	);
 }
 
+function isOrganicScriptedSubject(subject: ProjectWorkflowSubject) {
+	return (
+		subject.contentType === "ORGANIC" &&
+		subject.creationPath === "SCRIPTED" &&
+		subject.contentFormatKey === "SCRIPTED_STANDARD" &&
+		subject.contentFormatVersion === 1
+	);
+}
+
 export function buildProjectWorkflowEntrySnapshots(
 	actor: WorkspaceActor,
 	rows: ProjectWorkflowEntryBatchRows,
@@ -209,7 +226,11 @@ export function buildProjectWorkflowEntrySnapshots(
 
 	return rows.subjects.map((subject) => {
 		let input = emptyInput(subject);
-		if (subject.productAccessible) {
+		const identityClassification = classifyLegacyProject(input.projectIdentity);
+		if (
+			identityClassification.kind !== "exception" &&
+			(subject.productAccessible || isOrganicScriptedSubject(subject))
+		) {
 			const generations = (generationsByProject.get(subject.id) ?? []).sort(
 				latestFirst,
 			);
@@ -279,9 +300,14 @@ export function buildProjectWorkflowEntrySnapshots(
 			const statuses = voice.segments.map(
 				(segment) => segment.readModel.effectiveStatus,
 			);
+			const currentClaimSummary = summarizeCurrentScriptVersionClaims({
+				contentType: subject.contentType,
+				creationPath: subject.creationPath,
+				currentScriptVersion: currentVersion,
+			});
 			input = {
 				...input,
-				product: { accessible: true },
+				product: { accessible: subject.productAccessible },
 				script: {
 					generationStatus: generationStatus(
 						latestGeneration,
@@ -302,7 +328,9 @@ export function buildProjectWorkflowEntrySnapshots(
 						: false,
 					channelSettingsComplete: settingsComplete,
 					productFactsUsable: productFactsUsable(productFacts, today),
+					claimSummary: currentClaimSummary,
 				},
+				claimSummary: currentClaimSummary,
 				factLock: { gateReason: gate.reason },
 				voice: {
 					configPresent: voice.summary.voiceConfigPresent,

@@ -5,17 +5,30 @@
   AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
   legacy `inputMode=NULL` chỉ còn read compatibility. AFF-US-019 Phase 19A.2
   **CONTRACT LOCKED** theo DEC-035; 19A.3 claim subject foundation PASS;
-  19B Organic ScriptGeneration PASS; 19C chưa bắt đầu.
+  19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS;
+  19C.2/19C.3 chưa bắt đầu.
 - Cập nhật lần cuối: 2026-09-03
 
-Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
+Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.1 PASS. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
 hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên disposable
 E2E/integration infrastructure; AFF-US-019 Phase 19A.2 đã lock Product claim
 subject contract theo DEC-035; 19A.3 claim subject foundation đã PASS và 19B
-đã PASS runtime Organic ScriptGeneration 19B; 19C claim applicability chưa bắt đầu.
+đã PASS runtime Organic ScriptGeneration 19B; 19C.1 claim applicability đã PASS;
+19C.2 Claim Resolution/Refresh và 19C.3 Manifest/Fact Lock chưa bắt đầu.
+
+## 2026-09-03 — AFF-US-019 Phase 19C.1 Claim Applicability acceptance
+
+Resolver/read models now derive one canonical claim summary from the current
+ScriptVersion. Organic Scripted claimless/general-confirmed state skips Product
+and Fact Lock; confirmed Product claims escalate prerequisites; stale, unknown,
+unconfirmed, and malformed state fails closed. Single-read, batch entry, adaptive
+workflow, navigation, and shadow parity tests pass. Affiliate behavior remains
+unchanged; Claim Refresh v2, subject-aware Manifest/Fact Lock execution, and Voice
+TOCTOU remain not started. Clean-room DB checks used loopback PostgreSQL only;
+live AI/TTS calls = 0.
 
 ## 2026-09-03 — AFF-US-019 Phase 19B Organic ScriptGeneration acceptance
 
@@ -35,7 +48,7 @@ ClaimManifest, Fact Lock, Claim Refresh, Voice, Applicability/Adaptive, Web,
 types và Biome regressions đều xanh. Validation attempt trước đó bị invalid do
 remote `.env` contact; lần clean-room này đã supersede certification đó. Không
 thay runtime/schema/migration, không backfill/rewrite lịch sử, không activate
-Organic hoặc provider. 19B vẫn **NOT STARTED**.
+applicable providers. 19B/19C.1 được acceptance ở các mục tiếp theo.
 
 ## 2026-09-02 — AFF-US-019 Phase 19A.2 Claim Subject contract lock
 

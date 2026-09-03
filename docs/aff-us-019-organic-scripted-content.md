@@ -1,16 +1,31 @@
 # AFF-US-019 — Organic Scripted Content
 
-## Phase 19B — Organic ScriptGeneration No-Product Runtime
+## Phase 19C.1 — Claim Applicability + Resolver Cutover
 
-- Trạng thái: **19B ORGANIC SCRIPTGENERATION PASS — 19C NOT STARTED**
+- Trạng thái: **19C.1 CLAIM APPLICABILITY PASS — 19C.2 NOT STARTED**
 - Cập nhật: 2026-09-03
-- Phạm vi: Organic Scripted no-product ScriptGeneration runtime trên foundation
+- Phạm vi: Organic Scripted current-claim applicability/read-model policy
 - Organic dùng source mode `ORGANIC_NO_PRODUCT`, input/output/prompt v3; Affiliate
   giữ nguyên v2. Không có schema/migration mới.
 
-AFF-US-001–012 là historical/golden baseline. AFF-US-013–018 và 19B đã accepted;
-Claim applicability là 19C kế tiếp. Quick Image/Media First, Organic Fact Lock,
-Voice và Project creation UI không thuộc 19B.
+AFF-US-001–012 là historical/golden baseline. AFF-US-013–018, 19B và 19C.1 đã
+accepted. Quick Image/Media First, Claim Refresh v2, Organic Fact Lock runtime,
+Voice TOCTOU và Project creation UI không thuộc 19C.1.
+
+## 19C.1 acceptance
+
+Resolver now consumes one canonical claim summary derived from the current
+ScriptVersion. Organic Scripted claimless/general-confirmed content returns
+`PRODUCT = NOT_REQUIRED` and `FACT_LOCK = NOT_REQUIRED`; confirmed Product claims
+escalate Product/Fact Lock, while stale, unresolved, unknown, and malformed claim
+state fails closed. Current ScriptVersion wins over historical versions, manifests,
+and FactLock runs. Affiliate Scripted remains on its accepted compatibility path.
+
+The adaptive workflow and both single-read/batch entry paths receive the same
+summary. Product/Fact Lock are hidden as not-required steps for claimless Organic;
+Voice execution and subject-aware Fact Lock execution remain outside this phase.
+Shadow parity covers Organic vectors. Clean-room DB checks use loopback only and
+live AI/TTS providers remain disabled.
 
 ## 1. Verdict
 
@@ -20,7 +35,8 @@ activate đúng identity Organic + Scripted + `SCRIPTED_STANDARD` v1 với
 
 Organic preflight không query Product/Product Facts; provider PRODUCT proposal
 fail closed, GENERAL proposal là proposal-only (`NEEDS_CONFIRMATION`, null source),
-zero-claim valid. Claim applicability/Fact Lock/Voice remain inactive until 19C/19D.
+zero-claim valid. Claim applicability is active in 19C.1 read policy; Claim Refresh
+v2, subject-aware Fact Lock execution and Voice remain inactive until later phases.
 
 Fresh clean-room acceptance đã PASS trên disposable PostgreSQL loopback với
 process-only authorities và live AI/TTS tắt. Validation attempt trước đó invalid
@@ -45,8 +61,8 @@ contentFormat     = SCRIPTED_STANDARD v1
 productId         = null
 ```
 
-Đây là khả năng biểu diễn identity, không phải bằng chứng Organic Scripted runtime
-đã được activate.
+Đây là identity đã được 19B kích hoạt cho ScriptGeneration no-product; 19C.1
+tiếp tục kích hoạt policy/read-model applicability trên đúng boundary này.
 
 ### ScriptGeneration
 
@@ -136,7 +152,7 @@ Contract đã được khóa tại Phase 19A.2; các yêu cầu `US019-T04`, `US
 `US019-T07`, `US019-T09` và TOCTOU escalation chỉ được implement sau 19A.3 theo
 đúng contract này.
 
-## 5. Target applicability matrix (not active)
+## 5. Applicability matrix (19C.1 read policy)
 
 | Case | Product | Script | Fact Lock | Voice paid operation |
 |---|---|---|---|---|
@@ -147,8 +163,8 @@ Contract đã được khóa tại Phase 19A.2; các yêu cầu `US019-T04`, `US
 | Organic + Scripted, Product selected, không Product claim | policy-dependent/optional | applicable | NOT_REQUIRED nếu resolver trả đúng policy | eligible sau server recheck |
 | Affiliate + Scripted | current accepted behavior | current accepted behavior | current accepted behavior | current accepted behavior |
 
-Matrix này là contract đích, chưa phải runtime evidence. Organic vẫn chưa active;
-runtime chỉ được bắt đầu sau 19A.3.
+Matrix này là 19C.1 policy/read-model evidence. Paid Voice and subject-aware Fact
+Lock execution remain phase-gated.
 
 ## 6. Escalation, de-escalation và TOCTOU target
 
@@ -169,8 +185,10 @@ runtime chỉ được bắt đầu sau 19A.3.
 
 - **19B — Organic ScriptGeneration:** source mode, no-Product preflight, snapshot/
   prompt, repair và fail-closed generated-output protection.
-- **19C — Product Claim Applicability:** khóa claim taxonomy/source, current claim
-  inventory, Resolver policy, conditional ClaimManifest/Fact Lock và escalation.
+- **19C.1 — Claim Applicability:** current ScriptVersion summary, Organic Resolver
+  policy, adaptive/read-model propagation, fail-closed state and shadow parity.
+- **19C.2 — Claim Resolution/Refresh:** confirmation and Organic refresh runtime.
+- **19C.3 — Manifest/Fact Lock:** subject-aware Manifest/Fact Lock execution.
 - **19D — Voice Applicability:** Config policy, Preview/Segment server recheck,
   TOCTOU protection và zero-provider-call tests khi gate fail.
 - **19E — UI/E2E/manual:** Organic Project creation, Script Studio, escalation/
@@ -423,7 +441,7 @@ action. It must not show a skipped Product/Fact Lock step as successfully
 completed. Claim Refresh, confirmation, Fact Lock, and AI/TTS generation remain
 explicit actions; no background provider call is introduced by classification.
 
-### M. Implementation sequence and decision gates
+### M. Historical implementation sequence and decision gates
 
 After 19A.2 accepts the exact names and payload contract:
 
@@ -433,8 +451,9 @@ After 19A.2 accepts the exact names and payload contract:
   unbound, stale, malformed, Product-change, and escalation/de-escalation vectors.
 - **19B — Organic ScriptGeneration:** add source mode and no-Product preflight;
   no Organic runtime activation before the claim policy is enforced.
-- **19C — Claim applicability:** expose the current inventory to Resolver and
-  implement conditional Manifest/Fact Lock behavior.
+- **19C.1 — Claim applicability:** expose the current inventory to Resolver and
+  implement Organic conditional read-model policy (completed).
+- **19C.2/19C.3 — Claim resolution and Manifest/Fact Lock:** later runtime phases.
 - **19D — Voice:** add the immediate server-side TOCTOU recheck and zero-call
   blocked-path tests.
 - **19E — UI/E2E:** activate Organic creation/editor flow and perform parity /
@@ -450,26 +469,29 @@ The five questions that must pass before 19B are:
    only Product claims?
 5. Can Affiliate history continue through its existing path without backfill?
 
-All five have a viable answer in this recommendation. Phase 19A.2 now locks the
-contract below; 19A.3 remains the next implementation/test phase.
+All five have a viable answer in this recommendation. Phase 19A.2/19A.3 and 19B
+are accepted; 19C.1 now owns the current claim applicability read policy.
 
-### N. 19A.2 locked decision
+### N. 19A.2 locked decision (historical contract)
 
-The repository still has no runtime Product/general discriminator because runtime
-implementation is intentionally deferred. The following decision is now locked
-for 19A.3 and later implementation:
+The runtime now reads the accepted subject metadata from current Organic v3
+ScriptVersions while retaining the compatibility adapter for Affiliate v2. The
+following decision remains locked:
 
 - `ClaimSubject` uses only `GENERAL` and `PRODUCT/PROJECT_PRODUCT`;
 - confirmation is required for free-text/provider proposals, with no AI bypass;
 - stale/unknown/unconfirmed states fail closed;
 - versioning, reason codes and the legacy Affiliate adapter follow DEC-035.
 
-## 9. Audit conclusion
+## 9. Current acceptance boundary
 
 ```text
-AFF-US-019 Phase 19A.2: CONTRACT LOCKED
-19A.3 status: NOT STARTED
-Runtime changed: NO
+AFF-US-019 Phase 19C.1: CLAIM APPLICABILITY PASS
+19C.2 status: NOT STARTED
+19C.3 status: NOT STARTED
+19D status: NOT STARTED
+19E status: NOT STARTED
+Runtime changed: Organic read-model policy only
 Schema changed: NO
 Migration created: NO
 Provider calls: 0
@@ -477,5 +499,5 @@ Production DB touched: NO
 Development manual DB touched: NO
 ```
 
-Required next action is 19A.3 pure foundation and frozen vectors. Do not start 19B
-until 19A.3 is accepted.
+Required next action is 19C.2 Claim Resolution/Refresh. Subject-aware Fact Lock
+execution and Voice TOCTOU remain phase-gated.

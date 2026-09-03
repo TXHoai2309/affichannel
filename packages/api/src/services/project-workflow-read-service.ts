@@ -5,6 +5,7 @@ import {
 	type ProjectApplicabilityInput,
 	type ProjectApplicabilityResult,
 	resolveProjectApplicability,
+	summarizeCurrentScriptVersionClaims,
 	validateScriptVersionForFactLock,
 } from "@affichannel/core";
 
@@ -58,6 +59,15 @@ function generationStatus(
 	return readModel.latestUsableArtifact ? "USABLE" : "INDETERMINATE";
 }
 
+function isOrganicScriptedSubject(subject: ProjectWorkflowSubject) {
+	return (
+		subject.contentType === "ORGANIC" &&
+		subject.creationPath === "SCRIPTED" &&
+		subject.contentFormatKey === "SCRIPTED_STANDARD" &&
+		subject.contentFormatVersion === 1
+	);
+}
+
 function emptyInput(
 	subject: ProjectWorkflowSubject,
 ): ProjectApplicabilityInput {
@@ -78,6 +88,13 @@ function emptyInput(
 			currentVersionFactLockReady: false,
 			channelSettingsComplete: false,
 			productFactsUsable: false,
+		},
+		claimSummary: {
+			status: "UNKNOWN",
+			subjectResolution: "UNKNOWN",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
 		},
 		factLock: { gateReason: "NO_SCRIPT_VERSION" },
 		voice: {
@@ -104,8 +121,8 @@ export function projectDetailsToWorkflowSubject(
 		creationPath: project.creationPath,
 		contentFormatKey: project.contentFormat?.ref.key ?? null,
 		contentFormatVersion: project.contentFormat?.ref.version ?? null,
-		productId: project.product.id,
-		productAccessible: true,
+		productId: project.product.id.trim() || null,
+		productAccessible: project.product.id.trim().length > 0,
 	};
 }
 
@@ -115,7 +132,17 @@ export async function gatherProjectApplicabilityInput(
 	subject: ProjectWorkflowSubject,
 	dependencies: ProjectWorkflowReadDependencies = defaultDependencies,
 ): Promise<ProjectApplicabilityInput> {
-	if (!subject.productAccessible) return emptyInput(subject);
+	const organicScripted = isOrganicScriptedSubject(subject);
+	const identityClassification = classifyLegacyProject({
+		contentType: subject.contentType,
+		creationPath: subject.creationPath,
+		contentFormatKey: subject.contentFormatKey,
+		contentFormatVersion: subject.contentFormatVersion,
+		hasProduct: subject.productId !== null,
+	});
+	if (identityClassification.kind === "exception") return emptyInput(subject);
+	if (!subject.productAccessible && !organicScripted)
+		return emptyInput(subject);
 
 	const [scriptReadModel, currentScriptVersion, factLockGate] =
 		await Promise.all([
@@ -130,6 +157,11 @@ export async function gatherProjectApplicabilityInput(
 	const effectiveStatuses = voice.segments.map(
 		(segment) => segment.readModel.effectiveStatus,
 	);
+	const currentClaimSummary = summarizeCurrentScriptVersionClaims({
+		contentType: subject.contentType,
+		creationPath: subject.creationPath,
+		currentScriptVersion,
+	});
 
 	return {
 		projectIdentity: {
@@ -139,7 +171,7 @@ export async function gatherProjectApplicabilityInput(
 			contentFormatVersion: subject.contentFormatVersion,
 			hasProduct: subject.productId !== null,
 		},
-		product: { accessible: true },
+		product: { accessible: subject.productAccessible },
 		script: {
 			generationStatus: generationStatus(scriptReadModel),
 			usableGenerationPresent: scriptReadModel.latestUsableArtifact !== null,
@@ -155,7 +187,9 @@ export async function gatherProjectApplicabilityInput(
 			productFactsUsable: (scriptReadModel.context.facts ?? []).some(
 				(fact) => fact.generationUsability !== "blocked",
 			),
+			claimSummary: currentClaimSummary,
 		},
+		claimSummary: currentClaimSummary,
 		factLock: { gateReason: factLockGate.reason },
 		voice: {
 			configPresent: voice.summary.voiceConfigPresent,

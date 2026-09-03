@@ -202,6 +202,60 @@ const resolverInputs: readonly ProjectApplicabilityInput[] = [
 		currentVoice(value);
 		value.render.inputsStale = true;
 	}),
+	input((value) => {
+		value.projectIdentity.contentType = "ORGANIC";
+		value.projectIdentity.hasProduct = false;
+		value.product.accessible = false;
+		value.claimSummary = {
+			status: "CURRENT",
+			subjectResolution: "CONFIRMED",
+			productClaimState: "NONE",
+			productClaimCount: 0,
+			generalClaimCount: 0,
+		};
+	}),
+	input((value) => {
+		value.projectIdentity.contentType = "ORGANIC";
+		value.projectIdentity.hasProduct = false;
+		value.product.accessible = false;
+		value.claimSummary = {
+			status: "CURRENT",
+			subjectResolution: "CONFIRMED",
+			productClaimState: "PRESENT",
+			productClaimCount: 1,
+			generalClaimCount: 0,
+		};
+	}),
+	input((value) => {
+		value.projectIdentity.contentType = "ORGANIC";
+		value.claimSummary = {
+			status: "CURRENT",
+			subjectResolution: "NEEDS_CONFIRMATION",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
+		};
+	}),
+	input((value) => {
+		value.projectIdentity.contentType = "ORGANIC";
+		value.claimSummary = {
+			status: "STALE",
+			subjectResolution: "UNKNOWN",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
+		};
+	}),
+	input((value) => {
+		value.projectIdentity.contentType = "ORGANIC";
+		value.claimSummary = {
+			status: "UNKNOWN",
+			subjectResolution: "UNKNOWN",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
+		};
+	}),
 ];
 
 describe("AFF-US-015 canonical Applicability tuple invariant", () => {
@@ -215,7 +269,6 @@ describe("AFF-US-015 canonical Applicability tuple invariant", () => {
 		}
 
 		const futureNotRequiredReasons = new Set([
-			"PRODUCT_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
 			"SCRIPT_NOT_REQUIRED_FOR_CREATION_PATH",
 			"VOICE_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
 			"RENDER_NOT_REQUIRED_FOR_PROJECT_IDENTITY",

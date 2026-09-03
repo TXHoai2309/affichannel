@@ -56,6 +56,10 @@ const REASON_PRESENTATION = {
 		helperText: "Sản phẩm đã sẵn sàng.",
 		actionLabel: "Xem sản phẩm",
 	},
+	PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS: {
+		helperText: "Cần liên kết sản phẩm cho các claim Product.",
+		actionLabel: "Liên kết sản phẩm",
+	},
 	SCRIPT_NOT_REQUIRED_FOR_CREATION_PATH: {
 		helperText: "Creation path này không cần Script.",
 	},
@@ -71,6 +75,10 @@ const REASON_PRESENTATION = {
 	SCRIPT_SOURCE_DEPENDENCY_STALE: {
 		helperText: "Nguồn của nội dung đã thay đổi và cần cập nhật.",
 		actionLabel: "Cập nhật nội dung",
+	},
+	SCRIPT_CLAIMS_NOT_CURRENT: {
+		helperText: "Claim hiện tại chưa được xác nhận; cần cập nhật nội dung.",
+		actionLabel: "Kiểm tra claim",
 	},
 	SCRIPT_GENERATION_PENDING: {
 		helperText: "Nội dung đang được tạo.",
@@ -137,6 +145,17 @@ const REASON_PRESENTATION = {
 	FACT_LOCK_RUN_REQUIRED: {
 		helperText: "Fact Lock đã sẵn sàng để chạy.",
 		actionLabel: "Chạy Fact Lock",
+	},
+	FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS: {
+		helperText: "Không có claim Product; bước Fact Lock không bắt buộc.",
+	},
+	CLAIM_SUBJECT_CONFIRMATION_REQUIRED: {
+		helperText: "Cần xác nhận phạm vi claim trước khi tiếp tục.",
+		actionLabel: "Xác nhận claim",
+	},
+	CLAIM_SUBJECT_INVALID: {
+		helperText: "Dữ liệu phạm vi claim không hợp lệ; cần kiểm tra lại.",
+		actionLabel: "Kiểm tra claim",
 	},
 	VOICE_NOT_REQUIRED_FOR_PROJECT_IDENTITY: {
 		helperText: "Project này không cần giọng đọc.",

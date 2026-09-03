@@ -89,6 +89,33 @@ function legacyNextStep(
 	);
 }
 
+function isOrganicScriptedIdentity(input: ProjectApplicabilityInput) {
+	return (
+		input.projectIdentity.contentType === "ORGANIC" &&
+		input.projectIdentity.creationPath === "SCRIPTED" &&
+		input.projectIdentity.contentFormatKey === "SCRIPTED_STANDARD" &&
+		input.projectIdentity.contentFormatVersion === 1
+	);
+}
+
+/**
+ * Organic has no distributed pre-19C authority. The shadow still emits a
+ * normalized comparison result so every Organic matrix vector is observed;
+ * dependencies are intentionally omitted from the legacy comparison domain.
+ */
+function normalizeOrganicApplicability(
+	input: ProjectApplicabilityInput,
+): ProjectApplicabilityResult {
+	const canonical = resolveProjectApplicability(input);
+	return {
+		capabilities: canonical.capabilities.map((capability) => ({
+			...capability,
+			dependencies: [],
+		})),
+		nextApplicableStep: canonical.nextApplicableStep,
+	};
+}
+
 /**
  * Normalizes the currently distributed Affiliate authorities into the M4
  * comparison domain. It remains an observer and intentionally ignores
@@ -98,6 +125,9 @@ export function normalizeLegacyApplicability(
 	input: ProjectApplicabilityInput,
 ): ProjectApplicabilityResult | null {
 	const identity = input.projectIdentity;
+	if (isOrganicScriptedIdentity(input)) {
+		return normalizeOrganicApplicability(input);
+	}
 	const baseline =
 		identity.contentType === "AFFILIATE" &&
 		identity.creationPath === "SCRIPTED" &&
@@ -389,7 +419,10 @@ export async function gatherProjectApplicabilityInput(
 	actor: WorkspaceActor,
 	project: ProjectDetails,
 ): Promise<ProjectApplicabilityInput> {
-	const accessibleProduct = await findProduct(actor, project.product.id);
+	const productId = project.product.id.trim() || null;
+	const accessibleProduct = productId
+		? await findProduct(actor, productId)
+		: undefined;
 	const subject = projectDetailsToWorkflowSubject(project);
 	return gatherSharedProjectApplicabilityInput(actor, {
 		...subject,
@@ -399,7 +432,8 @@ export async function gatherProjectApplicabilityInput(
 
 export function isM4ShadowBaselineProject(project: ProjectDetails) {
 	return (
-		project.contentType === "AFFILIATE" &&
+		(project.contentType === "AFFILIATE" ||
+			project.contentType === "ORGANIC") &&
 		project.creationPath === "SCRIPTED" &&
 		project.contentFormat?.ref.key === "SCRIPTED_STANDARD" &&
 		project.contentFormat.ref.version === 1 &&
@@ -450,11 +484,14 @@ export function observeProjectApplicabilityShadowFromSnapshot(
 		identity.contentFormatKey === null &&
 		identity.contentFormatVersion === null;
 	const canonical =
-		identity.contentType === "AFFILIATE" &&
+		(identity.contentType === "AFFILIATE" ||
+			identity.contentType === "ORGANIC") &&
 		identity.creationPath === "SCRIPTED" &&
 		identity.contentFormatKey === "SCRIPTED_STANDARD" &&
 		identity.contentFormatVersion === 1;
-	const baseline = identity.hasProduct && (allNull || canonical);
+	const baseline =
+		(identity.contentType === "ORGANIC" && canonical) ||
+		(identity.hasProduct && (allNull || canonical));
 	if (!baseline) return { status: "skipped" };
 
 	try {
