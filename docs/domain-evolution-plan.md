@@ -2,10 +2,10 @@
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016/AFF-US-017 DONE;
   M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 Phase 19A
-  audit và 19A.2 claim subject contract đã PASS; 19A.3 chưa bắt đầu, 19B chưa
-  bắt đầu
+  audit và 19A.2 claim subject contract đã PASS; 19A.3 claim subject foundation
+  đã PASS; 19B chưa bắt đầu
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-02
+- Cập nhật lần cuối: 2026-09-03
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030, DEC-035
 
 ## 1. Mục tiêu
@@ -65,9 +65,9 @@ ScriptDraft, versioning, repair, idempotency và audit hiện hữu được gi�
 
 Phase 19A là contract/architecture audit; Phase 19A.2 đã khóa discriminator
 Product/general, confirmation authority, currentness, Product binding, Manifest
-full-inventory strategy và Fact Lock Product subset tại DEC-035. Runtime vẫn chưa
-active: 19A.3 phải hoàn tất pure foundation/frozen vectors trước 19B. Không được
-dùng keyword, Product name hoặc AI output làm authority.
+full-inventory strategy và Fact Lock Product subset tại DEC-035. 19A.3 pure
+foundation/frozen vectors đã PASS; Organic runtime vẫn chưa active và 19B chưa
+bắt đầu. Không được dùng keyword, Product name hoặc AI output làm authority.
 
 Audit đầy đủ, target matrix và phase boundary nằm tại
 `docs/aff-us-019-organic-scripted-content.md`. Các bullet Organic bên dưới là
@@ -81,8 +81,7 @@ và fail-closed cho stale/unknown/unconfirmed. Claimless khác general-only;
 ClaimManifest giữ full inventory còn Fact Lock chỉ verify confirmed Product subset.
 Historical Affiliate subject-less dùng effective compatibility adapter, không
 backfill/rewrite. Subject metadata nằm trong versioned JSONB payload; không tạo
-migration ở 19A.2. 19A.3 chỉ làm pure foundation/frozen vectors và chưa activate
-Organic.
+migration ở 19A.2. 19A.3 foundation đã PASS và chưa activate Organic runtime.
 
 ## 3. Phase 0 baseline readiness audit (historical)
 
