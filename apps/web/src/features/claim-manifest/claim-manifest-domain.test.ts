@@ -7,7 +7,9 @@ import type {
 import {
 	assignSameLocatorOrdinals,
 	buildClaimManifestFromScriptVersion,
+	buildSubjectAwareClaimManifestFromScriptVersion,
 	CLAIM_MANIFEST_BUILDER_VERSION,
+	CLAIM_MANIFEST_BUILDER_VERSION_V2,
 	CLAIM_MANIFEST_SCHEMA_VERSION,
 	canonicalClaimManifestLocator,
 	canonicalClaimSourceText,
@@ -15,8 +17,10 @@ import {
 	claimManifestFingerprintProjection,
 	claimManifestSourceTextHash,
 	parseBuiltClaimManifest,
+	parseClaimManifestByBuilderVersion,
 	scriptVersionClaimManifestLocator,
 	scriptVersionSourceContentHash,
+	selectConfirmedProductManifestClaims,
 	sha256Hex,
 	validateBuiltClaimManifest,
 } from "@affichannel/core";
@@ -86,6 +90,37 @@ function buildInput(
 		scriptVersionRevision: 7,
 		snapshot: snapshot(),
 		...overrides,
+	};
+}
+
+type OrganicSnapshotFixture = {
+	[key: string]: unknown;
+	claims: Array<Record<string, unknown>>;
+};
+
+function organicSnapshot(): OrganicSnapshotFixture {
+	return {
+		...snapshot(),
+		schemaVersion: "script-draft.v3",
+		selectedHookKey: "hook-a",
+		claims: [
+			{
+				text: "Pin dùng liên tục 20 giờ",
+				occurrence: { section: "hook", hookKey: "hook-a" },
+				subject: { kind: "PRODUCT", binding: "PROJECT_PRODUCT" },
+				subjectStatus: "CONFIRMED",
+				subjectSource: "USER",
+			},
+			{
+				text: "chống ồn chủ động",
+				occurrence: { section: "voiceover", segmentKey: "voice-a" },
+				subject: { kind: "GENERAL" },
+				subjectStatus: "CONFIRMED",
+				subjectSource: "STRUCTURED_SOURCE",
+			},
+		],
+		claimsSourceRevision: 7,
+		claimsStatus: "current",
 	};
 }
 
@@ -586,5 +621,131 @@ describe("AFF-US-017 Phase 17A ClaimManifest domain", () => {
 					"e5ed0bfdd1495b709fe56e5df3048b3c7eed9ef2dd88e5e07c97149db4cecd21",
 			},
 		]);
+	});
+});
+
+describe("AFF-US-019 Phase 19C.3A subject-aware Manifest v2", () => {
+	it("builds the full Organic inventory and selects Product claims purely", async () => {
+		const manifest = await buildSubjectAwareClaimManifestFromScriptVersion({
+			...buildInput({ snapshot: organicSnapshot() }),
+			scriptVersionRevision: 7,
+		});
+		expect(manifest.schemaVersion).toBe("claim-manifest.v1");
+		expect(manifest.builderVersion).toBe(CLAIM_MANIFEST_BUILDER_VERSION_V2);
+		expect(manifest.claims).toHaveLength(2);
+		expect(manifest.claims[0]).not.toHaveProperty("proposedSubject");
+		expect(selectConfirmedProductManifestClaims(manifest)).toHaveLength(1);
+		expect(
+			(await parseClaimManifestByBuilderVersion(manifest)).builderVersion,
+		).toBe(CLAIM_MANIFEST_BUILDER_VERSION_V2);
+	});
+
+	it("keeps claim identity/source hashes stable while subject changes alter authority fingerprint", async () => {
+		const base = await buildSubjectAwareClaimManifestFromScriptVersion({
+			...buildInput({ snapshot: organicSnapshot() }),
+			scriptVersionRevision: 7,
+		});
+		const changedSnapshot = organicSnapshot();
+		changedSnapshot.claims[0] = {
+			...changedSnapshot.claims[0],
+			subject: { kind: "GENERAL" },
+			subjectSource: "STRUCTURED_SOURCE",
+		};
+		const changed = await buildSubjectAwareClaimManifestFromScriptVersion({
+			...buildInput({ snapshot: changedSnapshot }),
+			scriptVersionRevision: 7,
+		});
+		expect(changed.claims[0]?.claimKey).toBe(base.claims[0]?.claimKey);
+		expect(changed.claims[0]?.sourceTextHash).toBe(
+			base.claims[0]?.sourceTextHash,
+		);
+		expect(changed.source.sourceContentHash).toBe(
+			base.source.sourceContentHash,
+		);
+		expect(changed.fingerprint).not.toBe(base.fingerprint);
+
+		const proposalOnly = organicSnapshot();
+		proposalOnly.claims[0] = {
+			...proposalOnly.claims[0],
+			proposedSubject: "GENERAL",
+		};
+		const proposalManifest =
+			await buildSubjectAwareClaimManifestFromScriptVersion({
+				...buildInput({ snapshot: proposalOnly }),
+				scriptVersionRevision: 7,
+			});
+		expect(proposalManifest.fingerprint).toBe(base.fingerprint);
+	});
+
+	it("rejects stale, unresolved, legacy and malformed v2 inputs without v1 fallback", async () => {
+		for (const mutation of [
+			{ claimsStatus: "stale" },
+			{ claimsSourceRevision: 6 },
+			{
+				claims: [
+					{
+						...organicSnapshot().claims[0],
+						subjectStatus: "NEEDS_CONFIRMATION",
+						subjectSource: null,
+						proposedSubject: "PRODUCT",
+					},
+				],
+			},
+			{
+				claims: [
+					{
+						...organicSnapshot().claims[0],
+						subjectSource: "LEGACY_COMPATIBILITY",
+					},
+				],
+			},
+		] as const) {
+			const value = { ...organicSnapshot(), ...mutation };
+			await expect(
+				buildSubjectAwareClaimManifestFromScriptVersion({
+					...buildInput({ snapshot: value }),
+					scriptVersionRevision: 7,
+				}),
+			).rejects.toMatchObject({ code: "CLAIM_MANIFEST_SOURCE_NOT_USABLE" });
+		}
+		const valid = await buildSubjectAwareClaimManifestFromScriptVersion({
+			...buildInput({ snapshot: organicSnapshot() }),
+			scriptVersionRevision: 7,
+		});
+		await expect(
+			parseClaimManifestByBuilderVersion({
+				...valid,
+				builderVersion: CLAIM_MANIFEST_BUILDER_VERSION_V2,
+				fingerprint: "f".repeat(64),
+			}),
+		).rejects.toMatchObject({ issueCodes: ["FINGERPRINT_MISMATCH"] });
+		await expect(
+			parseClaimManifestByBuilderVersion({
+				...valid,
+				builderVersion: "claim-manifest-builder.v99",
+			}),
+		).rejects.toMatchObject({ issueCodes: ["UNSUPPORTED_SCHEMA_VERSION"] });
+	});
+
+	it("matches the frozen v2 deterministic vector", async () => {
+		const manifest = await buildSubjectAwareClaimManifestFromScriptVersion({
+			...buildInput({ snapshot: organicSnapshot() }),
+			scriptVersionRevision: 7,
+		});
+		expect({
+			sourceContentHash: manifest.source.sourceContentHash,
+			firstClaimKey: manifest.claims[0]?.claimKey,
+			firstSourceTextHash: manifest.claims[0]?.sourceTextHash,
+			fingerprint: manifest.fingerprint,
+		}).toEqual({
+			sourceContentHash:
+				"76c8512be054dffbe658131d0bc2c488dcaff3b7d460d31bec6ff3d5f7624cff",
+			firstClaimKey:
+				"claim_8cdca7340791f2a3490612b98c78eec2773f9d318fec33ca0b58a04a0463ebaa",
+			firstSourceTextHash:
+				"5c2b64544fb655e2eaee35ba832044c29f46ee4e4ed0b623ec9442f414cf93b3",
+			fingerprint:
+				"6e35e6bcbf59ca8fbefb6c0bd902ec09bd6e11114f436c9ffeeca894504364a2",
+		});
 	});
 });

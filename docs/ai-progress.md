@@ -7,10 +7,10 @@
   **CONTRACT LOCKED** theo DEC-035; 19A.3 claim subject foundation PASS;
   19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS; 19C.2A
   Organic Claim Refresh v2 PASS; 19C.2B Claim Subject Confirmation API PASS;
-  19C.3 chưa bắt đầu.
+  19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B chưa bắt đầu.
 - Cập nhật lần cuối: 2026-09-03
 
-Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.2B PASS. Public Fact Lock tạo/reuse ClaimManifest
+Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.3A PASS. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
@@ -18,8 +18,24 @@ hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên dispo
 E2E/integration infrastructure; AFF-US-019 Phase 19A.2 đã lock Product claim
 subject contract theo DEC-035; 19A.3 claim subject foundation đã PASS và 19B
 đã PASS runtime Organic ScriptGeneration 19B; 19C.1 claim applicability, 19C.2A
-Organic Claim Refresh v2 và 19C.2B Claim Confirmation API đã PASS; 19C.3
-Manifest/Fact Lock chưa bắt đầu.
+Organic Claim Refresh v2, 19C.2B Claim Confirmation API, and 19C.3A
+subject-aware ClaimManifest persistence đã PASS; 19C.3B Product-subset Fact
+Lock chưa bắt đầu.
+
+## 2026-09-03 — AFF-US-019 Phase 19C.3A Subject-aware ClaimManifest Builder v2 acceptance
+
+Organic Scripted Standard v1 now routes the public prepare-manifest request to a
+strict subject-aware ClaimManifest builder v2 when the current `script-draft.v3`
+claim inventory is current and fully confirmed. The `claim-manifest.v1` envelope,
+Affiliate builder v1 vectors, and Fact Lock `MANIFEST_V1` execution contract stay
+frozen. Organic v2 stores the full ordered GENERAL + PRODUCT inventory, binds
+Product claims only to the server-loaded Project Product, fingerprints authority
+subject metadata (excluding provider proposals), and returns deterministic
+`not_required` with no row for claimless/general-only inventories. Version-aware
+repository parsing accepts both v1/v2 and rejects malformed or unknown versions
+without fallback. Disposable loopback PostgreSQL service/repository, frozen-vector,
+Fact Lock, refresh/confirmation, web, type, and Biome regressions pass; 19C.3B
+Product-subset Fact Lock v2 is next.
 
 ## 2026-09-03 — AFF-US-019 Phase 19C.2B Claim Subject Confirmation API acceptance
 

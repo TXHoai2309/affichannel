@@ -7,6 +7,7 @@ import { resolveTextProvider } from "../providers/text/text-provider-registry";
 import {
 	ClaimManifestServiceError,
 	createClaimManifestFromScriptVersion,
+	isClaimManifestNotRequiredResult,
 } from "../services/claim-manifest-service";
 import { FactLockGate } from "../services/fact-lock-gate-service";
 import { executeManifestFactLock } from "../services/fact-lock-manifest-service";
@@ -147,6 +148,16 @@ export const factLockRouter = {
 					actor,
 					...input,
 				});
+				if (isClaimManifestNotRequiredResult(result)) {
+					return {
+						kind: "not_required" as const,
+						reason: result.reason,
+						scriptVersionId: result.scriptVersionId,
+						scriptVersionRevision: result.scriptVersionRevision,
+						claimCount: 0,
+						isEmpty: true,
+					};
+				}
 				const { manifest } = result;
 				return {
 					claimManifestId: manifest.id,

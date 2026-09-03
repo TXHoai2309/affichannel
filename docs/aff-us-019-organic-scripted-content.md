@@ -1,16 +1,44 @@
 # AFF-US-019 — Organic Scripted Content
 
-## Phase 19C.2B — Claim Subject Confirmation API
+## Phase 19C.3A — Subject-Aware ClaimManifest Builder v2
 
-- Trạng thái: **19C.2B CLAIM SUBJECT CONFIRMATION API PASS — 19C.3 NOT STARTED**
+- Trạng thái: **19C.3A SUBJECT-AWARE CLAIMMANIFEST PASS — READY FOR 19C.3B**
 - Cập nhật: 2026-09-03
-- Phạm vi: Organic Scripted claim subject confirmation mutation
+- Phạm vi: Organic Scripted subject-aware ClaimManifest construction/persistence
 - Organic dùng source mode `ORGANIC_NO_PRODUCT`, Claim Refresh input v1 và
   prompt/output v2; Affiliate giữ nguyên Claim Refresh v1. Không có schema/migration mới.
 
 AFF-US-001–012 là historical/golden baseline. AFF-US-013–018, 19B và 19C.1 đã
 accepted. Quick Image/Media First, Organic Fact Lock runtime, Voice TOCTOU và
 Project creation UI không thuộc 19C.2B.
+
+## 19C.3A acceptance
+
+The public `factLock.prepareManifest` contract remains
+`projectId`/`scriptVersionId`/`expectedScriptVersionRevision`; the server derives
+the exact Organic Scripted Standard v1 identity and routes current confirmed
+`script-draft.v3` inventories to `claim-manifest-builder.v2`. The envelope remains
+`claim-manifest.v1`; Affiliate continues to use the frozen builder v1 byte
+semantics and Fact Lock remains Affiliate-only on `fact-lock.manifest.v1` with no
+`MANIFEST_V2` input mode.
+
+Organic v2 persists the complete ordered GENERAL + PRODUCT inventory. It requires
+current claims, an exact claims-source revision match, CONFIRMED subject metadata,
+and USER/STRUCTURED_SOURCE authority; unresolved, stale, legacy, malformed, or
+subject-less claims fail closed. A claimless/general-only inventory returns a
+deterministic `not_required` result and creates no row. A PRODUCT claim with no
+accessible Project Product returns `CLAIM_MANIFEST_PRODUCT_REQUIRED` and never
+persists a null-product executable manifest.
+
+Claim keys and source-text hashes retain the v1 textual/structural identity, while
+the v2 authority fingerprint includes subject metadata and Product identity and
+excludes `proposedSubject`, timestamps, IDs, and provider data. Subject-only
+changes therefore create a new historical row without rewriting the prior row;
+existing v1 history remains readable through the version-aware parser. Repository
+create/reuse, malformed-v2 fail-closed reads, Organic eligibility, full inventory,
+Product-change history, frozen v2 vectors, refresh→confirm→manifest composition,
+Affiliate, Fact Lock, web, type, and formatting regressions pass on a disposable
+loopback PostgreSQL database with live AI/TTS calls disabled.
 
 ## 19C.2B acceptance
 
@@ -528,12 +556,12 @@ following decision remains locked:
 ## 9. Current acceptance boundary
 
 ```text
-AFF-US-019 Phase 19C.2B: CLAIM SUBJECT CONFIRMATION API PASS
-19C.2 status: COMPLETE (Organic Claim Refresh v2 + confirmation)
-19C.3 status: NOT STARTED
+AFF-US-019 Phase 19C.3A: SUBJECT-AWARE CLAIMMANIFEST PASS
+19C.3A status: COMPLETE (Organic ClaimManifest builder v2 + persistence)
+19C.3B status: NEXT (Product-subset Fact Lock v2)
 19D status: NOT STARTED
 19E status: NOT STARTED
-Runtime changed: Organic Claim Refresh v2 and protected user confirmation
+Runtime changed: Organic Claim Refresh v2, protected confirmation, and Organic ClaimManifest v2
 Schema changed: NO
 Migration created: NO
 Provider calls: 0
@@ -541,5 +569,6 @@ Production DB touched: NO
 Development manual DB touched: NO
 ```
 
-Required next action is 19C.3 Manifest / Fact Lock v2. Voice TOCTOU remains
-phase-gated for 19D, and no UI was added in 19C.2B.
+Required next action is 19C.3B Product-subset Fact Lock v2. Organic Fact Lock
+execution remains inactive; Voice TOCTOU remains phase-gated for 19D, and no UI
+was added in 19C.3A.

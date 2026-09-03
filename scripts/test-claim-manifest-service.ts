@@ -91,6 +91,51 @@ function snapshot(label: string, claims = 2): ScriptVersionEditableSnapshot {
 	};
 }
 
+function organicSnapshot(
+	label: string,
+	options: {
+		productClaim?: boolean;
+		claimsStatus?: "current" | "stale";
+		claimsSourceRevision?: number;
+		legacy?: boolean;
+		unresolved?: boolean;
+	} = {},
+): unknown {
+	const base = snapshot(label, 2);
+	return {
+		...base,
+		schemaVersion: "script-draft.v3",
+		claims: base.claims.map((claim, index) => ({
+			...claim,
+			subject: {
+				kind:
+					index === 0 && options.productClaim !== false ? "PRODUCT" : "GENERAL",
+				...(index === 0 && options.productClaim !== false
+					? { binding: "PROJECT_PRODUCT" }
+					: {}),
+			},
+			subjectStatus: options.unresolved ? "NEEDS_CONFIRMATION" : "CONFIRMED",
+			subjectSource: options.unresolved
+				? null
+				: options.legacy
+					? "LEGACY_COMPATIBILITY"
+					: index === 0
+						? "USER"
+						: "STRUCTURED_SOURCE",
+			...(options.unresolved
+				? {
+						proposedSubject:
+							index === 0 && options.productClaim !== false
+								? "PRODUCT"
+								: "GENERAL",
+					}
+				: {}),
+		})),
+		claimsSourceRevision: options.claimsSourceRevision ?? 1,
+		claimsStatus: options.claimsStatus ?? "current",
+	};
+}
+
 type WorkspaceFixture = {
 	workspaceId: string;
 	userId: string;
@@ -277,7 +322,10 @@ async function expectServiceError(
 		| "CLAIM_MANIFEST_SOURCE_REVISION_CONFLICT"
 		| "CLAIM_MANIFEST_SOURCE_NOT_USABLE"
 		| "CLAIM_MANIFEST_PRODUCT_REQUIRED"
-		| "CLAIM_MANIFEST_CONTENT_FORMAT_UNSUPPORTED",
+		| "CLAIM_MANIFEST_CONTENT_FORMAT_UNSUPPORTED"
+		| "SCRIPT_CLAIMS_NOT_CURRENT"
+		| "CLAIM_SUBJECT_CONFIRMATION_REQUIRED"
+		| "CLAIM_SUBJECT_INVALID",
 	action: () => Promise<unknown>,
 ): Promise<void> {
 	try {
@@ -639,6 +687,7 @@ try {
 		label: "unsupported",
 		productId: unsupportedProduct,
 		contentType: "ORGANIC",
+		creationPath: "QUICK_IMAGE",
 	});
 	const unsupportedSource = await seedScriptVersion({
 		pool,
@@ -950,6 +999,249 @@ try {
 				coherentRace.revision &&
 			coherentRaceResult.manifest.productId === coherentRace.productId,
 		"Manifest must pin one coherent locked ScriptVersion revision and Project Product.",
+	);
+
+	const organicWorkspace = await seedWorkspace(pool, "organic-v2");
+	const organicProduct = await seedProduct(
+		pool,
+		organicWorkspace,
+		"organic-v2",
+	);
+	const organicProject = await seedProject({
+		pool,
+		workspace: organicWorkspace,
+		label: "organic-v2",
+		productId: organicProduct,
+		contentType: "ORGANIC",
+	});
+	const organicSource = await seedScriptVersion({
+		pool,
+		workspace: organicWorkspace,
+		projectId: organicProject,
+		label: "organic-v2",
+		snapshot: organicSnapshot("organic-v2"),
+	});
+	const organicInput = {
+		actor: {
+			workspaceId: organicWorkspace.workspaceId,
+			userId: organicWorkspace.userId,
+		},
+		projectId: organicProject,
+		scriptVersionId: organicSource,
+		expectedScriptVersionRevision: 1,
+	};
+	const organicFirst = await createClaimManifestFromScriptVersion(organicInput);
+	assert(
+		!("kind" in organicFirst),
+		"Organic product claims must persist a manifest.",
+	);
+	assert(
+		organicFirst.manifest.builderVersion === "claim-manifest-builder.v2" &&
+			organicFirst.manifest.claims.length === 2 &&
+			organicFirst.manifest.claims.every((claim) => "subject" in claim),
+		"Organic v2 must persist full subject-aware inventory.",
+	);
+	const organicRepeat =
+		await createClaimManifestFromScriptVersion(organicInput);
+	assert(
+		!("kind" in organicRepeat) &&
+			!organicRepeat.created &&
+			organicRepeat.manifest.id === organicFirst.manifest.id,
+		"Organic exact repeat must reuse the same v2 row.",
+	);
+	const subjectChangedSnapshot = organicSnapshot("organic-v2");
+	(subjectChangedSnapshot.claims[0] as Record<string, unknown>).subject = {
+		kind: "GENERAL",
+	};
+	(subjectChangedSnapshot.claims[0] as Record<string, unknown>).subjectSource =
+		"STRUCTURED_SOURCE";
+	(subjectChangedSnapshot.claims[1] as Record<string, unknown>).subject = {
+		kind: "PRODUCT",
+		binding: "PROJECT_PRODUCT",
+	};
+	(subjectChangedSnapshot.claims[1] as Record<string, unknown>).subjectSource =
+		"USER";
+	(subjectChangedSnapshot as Record<string, unknown>).claimsSourceRevision = 2;
+	await pool.query(
+		"update script_version set revision = 2, editable_snapshot_json = $1 where id = $2",
+		[JSON.stringify(subjectChangedSnapshot), organicSource],
+	);
+	const subjectChanged = await createClaimManifestFromScriptVersion({
+		...organicInput,
+		expectedScriptVersionRevision: 2,
+	});
+	assert(
+		!("kind" in subjectChanged) &&
+			subjectChanged.created &&
+			subjectChanged.manifest.fingerprint !==
+				organicFirst.manifest.fingerprint &&
+			subjectChanged.manifest.claims[0]?.claimKey ===
+				organicFirst.manifest.claims[0]?.claimKey &&
+			subjectChanged.manifest.claims[0]?.sourceTextHash ===
+				organicFirst.manifest.claims[0]?.sourceTextHash &&
+			(await manifestCount(pool, organicProject)) === 2,
+		"Subject-only changes must retain claim identity/source hash and create history.",
+	);
+	const replacementOrganicProduct = await seedProduct(
+		pool,
+		organicWorkspace,
+		"organic-v2-replacement",
+	);
+	await pool.query("update project set product_id = $1 where id = $2", [
+		replacementOrganicProduct,
+		organicProject,
+	]);
+	const productChangedSnapshot = organicSnapshot("organic-v2");
+	(productChangedSnapshot as Record<string, unknown>).claimsSourceRevision = 3;
+	await pool.query(
+		"update script_version set revision = 3, editable_snapshot_json = $1 where id = $2",
+		[JSON.stringify(productChangedSnapshot), organicSource],
+	);
+	const productChanged = await createClaimManifestFromScriptVersion({
+		...organicInput,
+		expectedScriptVersionRevision: 3,
+	});
+	assert(
+		!("kind" in productChanged) &&
+			productChanged.created &&
+			productChanged.manifest.productId === replacementOrganicProduct &&
+			(await manifestCount(pool, organicProject)) === 3,
+		"Product changes must create a new current fingerprint and preserve history.",
+	);
+	const organicHistory = await listClaimManifestsForProject({
+		actor: {
+			workspaceId: organicWorkspace.workspaceId,
+			userId: organicWorkspace.userId,
+		},
+		projectId: organicProject,
+		direction: "oldest_first",
+		limit: 10,
+	});
+	assert(
+		organicHistory.items.length === 3 &&
+			organicHistory.items.every(
+				(manifest) => manifest.builderVersion === "claim-manifest-builder.v2",
+			),
+		"Version-aware history reads must return all Organic v2 rows.",
+	);
+
+	const generalWorkspace = await seedWorkspace(pool, "organic-general-only");
+	const generalProject = await seedProject({
+		pool,
+		workspace: generalWorkspace,
+		label: "organic-general-only",
+		productId: null,
+		contentType: "ORGANIC",
+	});
+	const generalSource = await seedScriptVersion({
+		pool,
+		workspace: generalWorkspace,
+		projectId: generalProject,
+		label: "organic-general-only",
+		snapshot: organicSnapshot("organic-general-only", { productClaim: false }),
+	});
+	const generalResult = await createClaimManifestFromScriptVersion({
+		actor: {
+			workspaceId: generalWorkspace.workspaceId,
+			userId: generalWorkspace.userId,
+		},
+		projectId: generalProject,
+		scriptVersionId: generalSource,
+		expectedScriptVersionRevision: 1,
+	});
+	assert(
+		generalResult.kind === "not_required" &&
+			(await manifestCount(pool, generalProject)) === 0,
+		"Organic general-only inventory must be deterministic not_required with no row.",
+	);
+
+	const organicNoProductWorkspace = await seedWorkspace(
+		pool,
+		"organic-product-required",
+	);
+	const organicNoProductProject = await seedProject({
+		pool,
+		workspace: organicNoProductWorkspace,
+		label: "organic-product-required",
+		productId: null,
+		contentType: "ORGANIC",
+	});
+	const organicNoProductSource = await seedScriptVersion({
+		pool,
+		workspace: organicNoProductWorkspace,
+		projectId: organicNoProductProject,
+		label: "organic-product-required",
+		snapshot: organicSnapshot("organic-product-required"),
+	});
+	await expectServiceError(
+		"Organic Product missing",
+		"CLAIM_MANIFEST_PRODUCT_REQUIRED",
+		() =>
+			createClaimManifestFromScriptVersion({
+				actor: {
+					workspaceId: organicNoProductWorkspace.workspaceId,
+					userId: organicNoProductWorkspace.userId,
+				},
+				projectId: organicNoProductProject,
+				scriptVersionId: organicNoProductSource,
+				expectedScriptVersionRevision: 1,
+			}),
+	);
+	assert(
+		(await manifestCount(pool, organicNoProductProject)) === 0,
+		"Product-required Organic must not persist null-product row.",
+	);
+
+	for (const [label, opts, code] of [
+		[
+			"stale",
+			{ claimsStatus: "stale" as const },
+			"SCRIPT_CLAIMS_NOT_CURRENT" as const,
+		],
+		[
+			"mismatch",
+			{ claimsSourceRevision: 2 },
+			"SCRIPT_CLAIMS_NOT_CURRENT" as const,
+		],
+		[
+			"unresolved",
+			{ unresolved: true },
+			"CLAIM_SUBJECT_CONFIRMATION_REQUIRED" as const,
+		],
+		["legacy", { legacy: true }, "CLAIM_SUBJECT_INVALID" as const],
+	] as const) {
+		const workspace = await seedWorkspace(pool, `organic-${label}`);
+		const productId = await seedProduct(pool, workspace, `organic-${label}`);
+		const projectId = await seedProject({
+			pool,
+			workspace,
+			label: `organic-${label}`,
+			productId,
+			contentType: "ORGANIC",
+		});
+		const sourceId = await seedScriptVersion({
+			pool,
+			workspace,
+			projectId,
+			label: `organic-${label}`,
+			snapshot: organicSnapshot(`organic-${label}`, opts),
+		});
+		await expectServiceError(`Organic ${label}`, code, () =>
+			createClaimManifestFromScriptVersion({
+				actor: { workspaceId: workspace.workspaceId, userId: workspace.userId },
+				projectId,
+				scriptVersionId: sourceId,
+				expectedScriptVersionRevision: 1,
+			}),
+		);
+		assert(
+			(await manifestCount(pool, projectId)) === 0,
+			`Organic ${label} must not persist a row.`,
+		);
+	}
+
+	console.log(
+		"Organic v2 full inventory / reuse / subject gates / not_required: PASS",
 	);
 
 	console.log("Happy create / exact reuse / creator provenance: PASS");

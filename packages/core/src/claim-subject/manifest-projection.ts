@@ -5,10 +5,7 @@ import type {
 	SubjectAwareScriptClaim,
 } from "./types";
 
-/**
- * Future Manifest builder v2 projection. The existing v1 builder is not
- * replaced by this helper in 19A.3.
- */
+/** Canonical subject-aware claim projection used by Organic Manifest v2. */
 export function buildSubjectAwareManifestClaimProjection(input: {
 	claimKey: string;
 	claim: SubjectAwareScriptClaim;

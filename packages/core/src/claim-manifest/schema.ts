@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { claimSubjectSchema } from "../claim-subject/schema";
 import { claimOccurrenceSchema } from "../script-generation/schema";
 import {
 	CLAIM_MANIFEST_BUILDER_VERSION,
+	CLAIM_MANIFEST_BUILDER_VERSION_V2,
 	CLAIM_MANIFEST_MAX_CLAIMS,
 	CLAIM_MANIFEST_SCHEMA_VERSION,
 	claimManifestSourceTypes,
@@ -147,6 +149,67 @@ export const builtClaimManifestSchema = z
 						message: "CLAIM_REFERENCE_INVALID",
 					});
 				}
+			}
+		}
+	});
+
+/** Organic subject-aware manifest payload. The v1 envelope is retained. */
+export const subjectAwareClaimManifestClaimSchema = claimManifestClaimSchema
+	.extend({
+		subject: claimSubjectSchema,
+		subjectStatus: z.literal("CONFIRMED"),
+		subjectSource: z.enum(["USER", "STRUCTURED_SOURCE"]),
+	})
+	.strict();
+
+export const builtSubjectAwareClaimManifestSchema = z
+	.object({
+		workspaceId: idSchema,
+		projectId: idSchema,
+		source: scriptVersionClaimManifestSourceSchema,
+		productId: idSchema.nullable(),
+		schemaVersion: z.literal(CLAIM_MANIFEST_SCHEMA_VERSION),
+		builderVersion: z.literal(CLAIM_MANIFEST_BUILDER_VERSION_V2),
+		claims: z
+			.array(subjectAwareClaimManifestClaimSchema)
+			.max(CLAIM_MANIFEST_MAX_CLAIMS),
+		claimCount: z.number().int().min(0).max(CLAIM_MANIFEST_MAX_CLAIMS),
+		isEmpty: z.boolean(),
+		fingerprint: hashSchema,
+	})
+	.strict()
+	.superRefine((manifest, context) => {
+		if (manifest.claimCount !== manifest.claims.length) {
+			context.addIssue({
+				code: "custom",
+				path: ["claimCount"],
+				message: "CLAIM_COUNT_MISMATCH",
+			});
+		}
+		if (manifest.isEmpty !== (manifest.claims.length === 0)) {
+			context.addIssue({
+				code: "custom",
+				path: ["isEmpty"],
+				message: "CLAIM_EMPTY_MISMATCH",
+			});
+		}
+		if (
+			new Set(manifest.claims.map((claim) => claim.claimKey)).size !==
+			manifest.claims.length
+		) {
+			context.addIssue({
+				code: "custom",
+				path: ["claims"],
+				message: "DUPLICATE_CLAIM_KEY",
+			});
+		}
+		for (const [index, claim] of manifest.claims.entries()) {
+			if (claim.locator.sourceType !== manifest.source.sourceType) {
+				context.addIssue({
+					code: "custom",
+					path: ["claims", index, "locator"],
+					message: "CLAIM_REFERENCE_INVALID",
+				});
 			}
 		}
 	});

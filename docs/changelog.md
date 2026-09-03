@@ -10,6 +10,20 @@ Cập nhật lần cuối: 2026-09-03.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19C.3A Subject-aware ClaimManifest Builder v2 PASS
+
+- Organic Scripted Standard v1 now derives a server-side builder-v2 route from
+  the current confirmed `script-draft.v3` inventory while retaining the
+  `claim-manifest.v1` envelope and frozen Affiliate builder v1 behavior.
+- Full ordered GENERAL + PRODUCT claims, subject status/source, exact current
+  claims revision, Product binding, authority fingerprinting, history/reuse,
+  malformed-v2 fail-closed parsing, and deterministic general-only
+  `not_required` behavior are covered. `proposedSubject` is excluded from the
+  persisted claim and fingerprint projection.
+- Fact Lock remains Affiliate-only with `MANIFEST_V1`; no `MANIFEST_V2`, schema,
+  migration, provider, or Voice changes. 19C.3B Product-subset Fact Lock v2 is
+  next.
+
 ### AFF-US-019 Phase 19C.2B Claim Subject Confirmation API PASS
 
 - Added protected `scriptVersion.confirmClaimSubjects` with strict server-owned

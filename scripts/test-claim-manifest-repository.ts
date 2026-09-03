@@ -618,6 +618,27 @@ try {
 				claimManifestId: corruptId,
 			}),
 	);
+	const malformedV2Id = `claim-manifest-malformed-v2-${randomUUID()}`;
+	await insertRawManifest(pool, {
+		id: malformedV2Id,
+		manifest: {
+			...noScript,
+			builderVersion: "claim-manifest-builder.v2",
+		},
+		createdByUserId: fixtureB.userId,
+		claims: noScript.claims,
+		fingerprint: hash(`malformed-v2-${randomUUID()}`),
+	});
+	await expectRepositoryError(
+		"malformed v2 persisted row must not fall back to v1",
+		"CLAIM_MANIFEST_PERSISTED_DATA_INVALID",
+		() =>
+			getClaimManifestById({
+				workspaceId: fixtureB.workspaceId,
+				projectId: fixtureB.otherProjectId,
+				claimManifestId: malformedV2Id,
+			}),
+	);
 
 	await expectRepositoryError(
 		"contradictory create scope",

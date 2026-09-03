@@ -3,6 +3,9 @@ import type { ClaimOccurrence } from "../script-generation/types";
 export const CLAIM_MANIFEST_SCHEMA_VERSION = "claim-manifest.v1" as const;
 export const CLAIM_MANIFEST_BUILDER_VERSION =
 	"claim-manifest-builder.v1" as const;
+export const CLAIM_MANIFEST_BUILDER_VERSION_V1 = CLAIM_MANIFEST_BUILDER_VERSION;
+export const CLAIM_MANIFEST_BUILDER_VERSION_V2 =
+	"claim-manifest-builder.v2" as const;
 export const CLAIM_MANIFEST_MAX_CLAIMS = 64 as const;
 
 export const claimManifestSourceTypes = [
@@ -71,6 +74,15 @@ export type ClaimManifestClaim = Readonly<{
 	sourceTextHash: string;
 }>;
 
+/** Subject metadata persisted by the Organic v2 builder. */
+export type SubjectAwareClaimManifestClaim = Readonly<
+	ClaimManifestClaim & {
+		subject: import("../claim-subject/types").ClaimSubject;
+		subjectStatus: "CONFIRMED";
+		subjectSource: "USER" | "STRUCTURED_SOURCE";
+	}
+>;
+
 export type ClaimManifestSourceContentProjection = Readonly<{
 	selectedHookKey: string;
 	hookVariants: readonly Readonly<{ key: string; text: string }>[];
@@ -102,18 +114,37 @@ export type ClaimManifestFingerprintProjection = Readonly<{
 	}>[];
 }>;
 
+export type SubjectAwareClaimManifestFingerprintProjection = Readonly<{
+	domain: typeof CLAIM_MANIFEST_SCHEMA_VERSION;
+	builderVersion: typeof CLAIM_MANIFEST_BUILDER_VERSION_V2;
+	workspaceId: string;
+	projectId: string;
+	source: ClaimManifestSource;
+	productId: string | null;
+	claims: readonly SubjectAwareClaimManifestClaim[];
+}>;
+
 export type BuiltClaimManifest = Readonly<{
 	workspaceId: string;
 	projectId: string;
 	source: ClaimManifestSource;
 	productId: string | null;
 	schemaVersion: typeof CLAIM_MANIFEST_SCHEMA_VERSION;
-	builderVersion: typeof CLAIM_MANIFEST_BUILDER_VERSION;
+	builderVersion:
+		| typeof CLAIM_MANIFEST_BUILDER_VERSION_V1
+		| typeof CLAIM_MANIFEST_BUILDER_VERSION_V2;
 	claims: readonly ClaimManifestClaim[];
 	claimCount: number;
 	isEmpty: boolean;
 	fingerprint: string;
 }>;
+
+export type BuiltSubjectAwareClaimManifest = Readonly<
+	Omit<BuiltClaimManifest, "builderVersion" | "claims"> & {
+		builderVersion: typeof CLAIM_MANIFEST_BUILDER_VERSION_V2;
+		claims: readonly SubjectAwareClaimManifestClaim[];
+	}
+>;
 
 export type ClaimManifest = Readonly<
 	BuiltClaimManifest & {

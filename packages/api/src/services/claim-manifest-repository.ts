@@ -1,11 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type {
-	BuiltClaimManifest,
-	ClaimManifest,
-	ClaimManifestClaim,
-	ClaimManifestSource,
+import type { BuiltClaimManifest, ClaimManifest } from "@affichannel/core";
+import {
+	canonicalizeJson,
+	parseClaimManifestByBuilderVersion,
 } from "@affichannel/core";
-import { canonicalizeJson, parseBuiltClaimManifest } from "@affichannel/core";
 import { claimManifest, db } from "@affichannel/db";
 import {
 	and,
@@ -79,15 +77,15 @@ function persistedDataInvalid(): ClaimManifestRepositoryError {
 	);
 }
 
-function builtManifestFromRow(row: ClaimManifestRow): BuiltClaimManifest {
+function builtManifestFromRow(row: ClaimManifestRow): Record<string, unknown> {
 	return {
 		workspaceId: row.workspaceId,
 		projectId: row.projectId,
-		source: row.sourceSnapshotJson as ClaimManifestSource,
+		source: row.sourceSnapshotJson,
 		productId: row.productId,
-		schemaVersion: row.schemaVersion as BuiltClaimManifest["schemaVersion"],
-		builderVersion: row.builderVersion as BuiltClaimManifest["builderVersion"],
-		claims: row.claimsJson as readonly ClaimManifestClaim[],
+		schemaVersion: row.schemaVersion,
+		builderVersion: row.builderVersion,
+		claims: row.claimsJson,
 		claimCount: row.claimCount,
 		isEmpty: row.isEmpty,
 		fingerprint: row.fingerprint,
@@ -145,8 +143,15 @@ function hasExactSemanticPayload(
 async function mapClaimManifestRow(
 	row: ClaimManifestRow,
 ): Promise<ClaimManifest> {
-	const built = builtManifestFromRow(row);
-	const expectedSourceColumns = sourceColumnsFromManifest(built);
+	let validated: BuiltClaimManifest;
+	try {
+		validated = await parseClaimManifestByBuilderVersion(
+			builtManifestFromRow(row),
+		);
+	} catch {
+		throw persistedDataInvalid();
+	}
+	const expectedSourceColumns = sourceColumnsFromManifest(validated);
 	if (
 		row.sourceType !== expectedSourceColumns.sourceType ||
 		row.sourceScriptVersionId !== expectedSourceColumns.sourceScriptVersionId ||
@@ -160,12 +165,6 @@ async function mapClaimManifestRow(
 		throw persistedDataInvalid();
 	}
 
-	let validated: BuiltClaimManifest;
-	try {
-		validated = await parseBuiltClaimManifest(built);
-	} catch {
-		throw persistedDataInvalid();
-	}
 	return Object.freeze({
 		...validated,
 		id: row.id,
@@ -195,7 +194,7 @@ async function createOrReuseClaimManifestWithTransaction(
 ): Promise<CreateOrReuseClaimManifestResult> {
 	let manifest: BuiltClaimManifest;
 	try {
-		manifest = await parseBuiltClaimManifest(input.builtManifest);
+		manifest = await parseClaimManifestByBuilderVersion(input.builtManifest);
 	} catch {
 		throw new ClaimManifestRepositoryError("CLAIM_MANIFEST_INPUT_INVALID");
 	}

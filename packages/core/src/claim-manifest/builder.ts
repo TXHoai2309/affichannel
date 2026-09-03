@@ -1,5 +1,10 @@
+import { buildSubjectAwareManifestClaimProjection } from "../claim-subject/manifest-projection";
+import type { SubjectAwareScriptClaim } from "../claim-subject/types";
 import { canonicalizeJson } from "../script-generation/canonical-json";
-import { SCRIPT_OUTPUT_SCHEMA_VERSION } from "../script-generation/policy";
+import {
+	ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+	SCRIPT_OUTPUT_SCHEMA_VERSION,
+} from "../script-generation/policy";
 import type { ClaimOccurrence } from "../script-generation/types";
 import { scriptVersionEditableSnapshotSchema } from "../script-version/schema";
 import type { ScriptVersionEditableSnapshot } from "../script-version/types";
@@ -10,18 +15,24 @@ import {
 	sha256Hex,
 } from "./canonicalization";
 import { ClaimManifestError } from "./errors";
-import { claimManifestFingerprint } from "./fingerprint";
+import {
+	claimManifestFingerprint,
+	subjectAwareClaimManifestFingerprint,
+} from "./fingerprint";
 import { buildClaimManifestFromScriptVersionInputSchema } from "./schema";
 import type {
 	BuildClaimManifestFromScriptVersionInput,
 	BuiltClaimManifest,
+	BuiltSubjectAwareClaimManifest,
 	ClaimManifestClaim,
 	ClaimManifestLocator,
 	ClaimManifestSourceContentProjection,
 	ScriptVersionClaimManifestLocator,
+	SubjectAwareClaimManifestClaim,
 } from "./types";
 import {
 	CLAIM_MANIFEST_BUILDER_VERSION,
+	CLAIM_MANIFEST_BUILDER_VERSION_V2,
 	CLAIM_MANIFEST_MAX_CLAIMS,
 	CLAIM_MANIFEST_SCHEMA_VERSION,
 } from "./types";
@@ -182,6 +193,62 @@ async function buildClaims(
 	);
 }
 
+async function buildSubjectAwareClaims(
+	snapshot: ScriptVersionEditableSnapshot,
+): Promise<SubjectAwareClaimManifestClaim[]> {
+	const locators = snapshot.claims.map((claim) =>
+		scriptVersionClaimManifestLocator(claim.occurrence),
+	);
+	const ordinals = assignSameLocatorOrdinals(locators);
+	return Promise.all(
+		snapshot.claims.map(async (rawClaim, index) => {
+			const locator = locators[index];
+			const sameLocatorOrdinal = ordinals[index];
+			if (!locator || sameLocatorOrdinal === undefined) {
+				throw new ClaimManifestError("INVALID_CLAIM_MANIFEST", [
+					"CLAIM_REFERENCE_INVALID",
+				]);
+			}
+			const claim = rawClaim as SubjectAwareScriptClaim;
+			if (
+				claim.subjectStatus !== "CONFIRMED" ||
+				(claim.subjectSource !== "USER" &&
+					claim.subjectSource !== "STRUCTURED_SOURCE")
+			) {
+				throw new ClaimManifestError("CLAIM_MANIFEST_SOURCE_NOT_USABLE", [
+					"INVALID_SOURCE",
+				]);
+			}
+			const sourceText = sourceTextForOccurrence(snapshot, claim.occurrence);
+			if (
+				!sourceText ||
+				!comparisonText(sourceText).includes(comparisonText(claim.text))
+			) {
+				throw new ClaimManifestError("CLAIM_MANIFEST_SOURCE_NOT_USABLE", [
+					"CLAIM_REFERENCE_INVALID",
+				]);
+			}
+			const claimKeyHash = await sha256Hex({
+				sourceType: "SCRIPT_VERSION",
+				locator,
+				sameLocatorOrdinal,
+				claimText: canonicalClaimSourceText(claim.text),
+			});
+			const projected = buildSubjectAwareManifestClaimProjection({
+				claimKey: `claim_${claimKeyHash}`,
+				claim,
+				locator,
+				sourceTextHash: await claimManifestSourceTextHash(sourceText),
+			});
+			return {
+				...projected,
+				subjectStatus: "CONFIRMED" as const,
+				subjectSource: claim.subjectSource,
+			};
+		}),
+	);
+}
+
 function rawClaimCount(snapshot: unknown): number | null {
 	if (!snapshot || typeof snapshot !== "object" || !("claims" in snapshot))
 		return null;
@@ -259,6 +326,83 @@ export async function buildClaimManifestFromScriptVersion(
 		isEmpty: claims.length === 0,
 		fingerprint,
 	}) as BuiltClaimManifest;
+}
+
+/**
+ * Builds the subject-aware Organic manifest while retaining the claim-manifest.v1
+ * envelope. The full GENERAL + PRODUCT inventory is persisted; Fact Lock may
+ * select its confirmed PRODUCT subset in a later phase.
+ */
+export async function buildSubjectAwareClaimManifestFromScriptVersion(
+	rawInput: BuildClaimManifestFromScriptVersionInput,
+): Promise<BuiltSubjectAwareClaimManifest> {
+	const input =
+		buildClaimManifestFromScriptVersionInputSchema.safeParse(rawInput);
+	if (!input.success) {
+		throw new ClaimManifestError("INVALID_CLAIM_MANIFEST", ["INVALID_SOURCE"]);
+	}
+	if ((rawClaimCount(input.data.snapshot) ?? 0) > CLAIM_MANIFEST_MAX_CLAIMS) {
+		throw new ClaimManifestError("CLAIM_MANIFEST_SOURCE_NOT_USABLE", [
+			"CLAIM_LIMIT_EXCEEDED",
+		]);
+	}
+	const snapshot = scriptVersionEditableSnapshotSchema.safeParse(
+		input.data.snapshot,
+	);
+	if (
+		!snapshot.success ||
+		snapshot.data.schemaVersion !== ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION
+	) {
+		throw new ClaimManifestError("CLAIM_MANIFEST_SOURCE_NOT_USABLE", [
+			"INVALID_SOURCE",
+		]);
+	}
+	if (
+		snapshot.data.claimsStatus !== "current" ||
+		snapshot.data.claimsSourceRevision !== input.data.scriptVersionRevision
+	) {
+		throw new ClaimManifestError("CLAIM_MANIFEST_SOURCE_NOT_USABLE", [
+			"INVALID_SOURCE",
+		]);
+	}
+	const projection = scriptVersionSourceContentProjection(snapshot.data);
+	const sourceContentHash = await sha256Hex(projection);
+	const claims = await buildSubjectAwareClaims(snapshot.data);
+	const source = {
+		sourceType: "SCRIPT_VERSION" as const,
+		scriptVersionId: input.data.scriptVersionId,
+		scriptVersionRevision: input.data.scriptVersionRevision,
+		claimsSourceRevision: snapshot.data.claimsSourceRevision,
+		sourceContentHash,
+	};
+	const fingerprint = await subjectAwareClaimManifestFingerprint({
+		workspaceId: input.data.workspaceId,
+		projectId: input.data.projectId,
+		source,
+		productId: input.data.productId,
+		claims,
+	});
+	return immutable({
+		workspaceId: input.data.workspaceId,
+		projectId: input.data.projectId,
+		source,
+		productId: input.data.productId,
+		schemaVersion: CLAIM_MANIFEST_SCHEMA_VERSION,
+		builderVersion: CLAIM_MANIFEST_BUILDER_VERSION_V2,
+		claims,
+		claimCount: claims.length,
+		isEmpty: claims.length === 0,
+		fingerprint,
+	}) as BuiltSubjectAwareClaimManifest;
+}
+
+export function selectConfirmedProductManifestClaims(
+	manifest: BuiltSubjectAwareClaimManifest,
+): readonly SubjectAwareClaimManifestClaim[] {
+	return manifest.claims.filter(
+		(claim) =>
+			claim.subject.kind === "PRODUCT" && claim.subjectStatus === "CONFIRMED",
+	);
 }
 
 export function canonicalSourceProjectionJson(

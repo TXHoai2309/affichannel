@@ -251,6 +251,9 @@ export default function FactLockReview({ projectId }: { projectId: string }) {
 				scriptVersionId: currentScriptVersion.id,
 				expectedScriptVersionRevision: currentScriptVersion.revision,
 			});
+			if ("kind" in manifest && manifest.kind === "not_required") {
+				throw new Error(manifest.reason);
+			}
 			await settleFactLockMutation(
 				runMutation.mutateAsync({
 					projectId,

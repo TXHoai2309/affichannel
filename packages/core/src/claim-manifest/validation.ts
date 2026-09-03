@@ -1,8 +1,18 @@
 import type { z } from "zod";
 import { ClaimManifestError, type ClaimManifestIssueCode } from "./errors";
-import { hasValidClaimManifestFingerprint } from "./fingerprint";
-import { builtClaimManifestSchema } from "./schema";
+import {
+	hasValidClaimManifestFingerprint,
+	hasValidSubjectAwareClaimManifestFingerprint,
+} from "./fingerprint";
+import {
+	builtClaimManifestSchema,
+	builtSubjectAwareClaimManifestSchema,
+} from "./schema";
 import type { BuiltClaimManifest } from "./types";
+import {
+	CLAIM_MANIFEST_BUILDER_VERSION,
+	CLAIM_MANIFEST_BUILDER_VERSION_V2,
+} from "./types";
 
 function immutable<T>(value: T): Readonly<T> {
 	if (!value || typeof value !== "object" || Object.isFrozen(value))
@@ -62,6 +72,58 @@ export async function parseBuiltClaimManifest(
 	raw: unknown,
 ): Promise<BuiltClaimManifest> {
 	const result = await validateBuiltClaimManifest(raw);
+	if (!result.success) throw result.error;
+	return result.data;
+}
+
+/** Version-aware parser. Unknown builders and malformed v2 rows fail closed. */
+export async function validateClaimManifestByBuilderVersion(
+	raw: unknown,
+): Promise<
+	| { success: true; data: BuiltClaimManifest }
+	| { success: false; error: ClaimManifestError }
+> {
+	const builderVersion =
+		raw && typeof raw === "object" && "builderVersion" in raw
+			? (raw as { builderVersion?: unknown }).builderVersion
+			: undefined;
+	if (builderVersion === CLAIM_MANIFEST_BUILDER_VERSION) {
+		return validateBuiltClaimManifest(raw);
+	}
+	if (builderVersion !== CLAIM_MANIFEST_BUILDER_VERSION_V2) {
+		return {
+			success: false,
+			error: new ClaimManifestError("INVALID_CLAIM_MANIFEST", [
+				"UNSUPPORTED_SCHEMA_VERSION",
+			]),
+		};
+	}
+	const parsed = builtSubjectAwareClaimManifestSchema.safeParse(raw);
+	if (!parsed.success) {
+		return {
+			success: false,
+			error: new ClaimManifestError(
+				"INVALID_CLAIM_MANIFEST",
+				issueCodesFromZodError(parsed.error),
+			),
+		};
+	}
+	const data = immutable(parsed.data) as BuiltClaimManifest;
+	if (!(await hasValidSubjectAwareClaimManifestFingerprint(data))) {
+		return {
+			success: false,
+			error: new ClaimManifestError("INVALID_CLAIM_MANIFEST", [
+				"FINGERPRINT_MISMATCH",
+			]),
+		};
+	}
+	return { success: true, data };
+}
+
+export async function parseClaimManifestByBuilderVersion(
+	raw: unknown,
+): Promise<BuiltClaimManifest> {
+	const result = await validateClaimManifestByBuilderVersion(raw);
 	if (!result.success) throw result.error;
 	return result.data;
 }
