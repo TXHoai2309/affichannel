@@ -1,11 +1,17 @@
 import { canonicalizeJson } from "../script-generation/canonical-json";
+import { organicCanonicalClaimSchema } from "../script-generation/schema";
 import { scriptVersionEditableSnapshotSchema } from "../script-version/schema";
 import type { ScriptVersionEditableSnapshot } from "../script-version/types";
-import { scriptClaimRefreshProviderOutputSchema } from "./runtime-schema";
+import {
+	organicScriptClaimRefreshProviderOutputSchema,
+	scriptClaimRefreshProviderOutputSchema,
+} from "./runtime-schema";
 import type {
+	OrganicScriptClaimRefreshCandidateClaim,
 	ScriptClaimRefreshCandidateClaim,
 	ScriptClaimRefreshSourceProjection,
 } from "./runtime-types";
+import { SCRIPT_CLAIM_REFRESH_MAX_CLAIMS } from "./runtime-types";
 
 export function buildScriptClaimRefreshSourceProjection(
 	rawSnapshot: unknown,
@@ -113,6 +119,84 @@ export function validateScriptClaimRefreshProviderOutput(
 			};
 }
 
+export type OrganicScriptClaimRefreshProviderOutputValidation =
+	| {
+			success: true;
+			claims: readonly OrganicScriptClaimRefreshCandidateClaim[];
+	  }
+	| {
+			success: false;
+			issueCodes: readonly ScriptClaimRefreshProviderOutputIssueCode[];
+	  };
+
+export function validateOrganicScriptClaimRefreshProviderOutput(
+	rawOutput: unknown,
+	source: ScriptClaimRefreshSourceProjection,
+): OrganicScriptClaimRefreshProviderOutputValidation {
+	const parsed =
+		organicScriptClaimRefreshProviderOutputSchema.safeParse(rawOutput);
+	if (!parsed.success) {
+		return { success: false, issueCodes: ["MALFORMED_OUTPUT"] };
+	}
+	const issueCodes = new Set<ScriptClaimRefreshProviderOutputIssueCode>();
+	for (const claim of parsed.data.claims) {
+		const sourceText = sourceTextForOccurrence(source, claim.occurrence);
+		if (!sourceText) {
+			issueCodes.add("INVALID_LOCATOR");
+			continue;
+		}
+		if (!comparisonText(sourceText).includes(comparisonText(claim.text))) {
+			issueCodes.add("CLAIM_NOT_GROUNDED");
+		}
+	}
+	return issueCodes.size > 0
+		? { success: false, issueCodes: [...issueCodes] }
+		: {
+				success: true,
+				claims: orderOrganicScriptClaimRefreshCandidates(
+					parsed.data.claims,
+					source,
+				),
+			};
+}
+
+/**
+ * Checks an already-persisted Organic v3 claim inventory against the current
+ * source projection. This is deliberately separate from provider output
+ * validation because confirmed user corrections may retain a proposal that
+ * differs from the authoritative subject.
+ */
+export function validateCurrentOrganicScriptClaimInventory(
+	claims: unknown,
+	source: ScriptClaimRefreshSourceProjection,
+): boolean {
+	if (!Array.isArray(claims) || claims.length > SCRIPT_CLAIM_REFRESH_MAX_CLAIMS)
+		return false;
+	const seen = new Set<string>();
+	for (const rawClaim of claims) {
+		const parsed = organicCanonicalClaimSchema.safeParse(rawClaim);
+		if (!parsed.success) return false;
+		if (
+			parsed.data.subjectStatus === "NEEDS_CONFIRMATION" &&
+			parsed.data.proposedSubject === undefined
+		)
+			return false;
+		const sourceText = sourceTextForOccurrence(source, parsed.data.occurrence);
+		if (
+			!sourceText ||
+			!comparisonText(sourceText).includes(comparisonText(parsed.data.text))
+		)
+			return false;
+		const identity = JSON.stringify([
+			parsed.data.text.normalize("NFKC").replace(/\s+/g, " ").trim(),
+			parsed.data.occurrence,
+		]);
+		if (seen.has(identity)) return false;
+		seen.add(identity);
+	}
+	return true;
+}
+
 function occurrenceRank(
 	source: ScriptClaimRefreshSourceProjection,
 	occurrence: ScriptClaimRefreshCandidateClaim["occurrence"],
@@ -138,6 +222,22 @@ export function orderScriptClaimRefreshCandidates(
 	claims: readonly ScriptClaimRefreshCandidateClaim[],
 	source: ScriptClaimRefreshSourceProjection,
 ): readonly ScriptClaimRefreshCandidateClaim[] {
+	return [...claims].sort((left, right) => {
+		const rankDifference =
+			occurrenceRank(source, left.occurrence) -
+			occurrenceRank(source, right.occurrence);
+		if (rankDifference !== 0) return rankDifference;
+		return comparisonText(left.text).localeCompare(
+			comparisonText(right.text),
+			"vi",
+		);
+	});
+}
+
+export function orderOrganicScriptClaimRefreshCandidates(
+	claims: readonly OrganicScriptClaimRefreshCandidateClaim[],
+	source: ScriptClaimRefreshSourceProjection,
+): readonly OrganicScriptClaimRefreshCandidateClaim[] {
 	return [...claims].sort((left, right) => {
 		const rankDifference =
 			occurrenceRank(source, left.occurrence) -

@@ -106,6 +106,39 @@ export const scriptClaimRefreshProviderOutputSchema = z
 		}
 	});
 
+export const organicScriptClaimRefreshProviderOutputSchema = z
+	.object({
+		claims: z
+			.array(
+				z
+					.object({
+						text: nonEmptyText.max(4_000),
+						occurrence: claimOccurrenceSchema,
+						proposedSubject: z.enum(["GENERAL", "PRODUCT"]),
+					})
+					.strict(),
+			)
+			.max(SCRIPT_CLAIM_REFRESH_MAX_CLAIMS),
+	})
+	.strict()
+	.superRefine((output, context) => {
+		const seen = new Set<string>();
+		for (const [index, claim] of output.claims.entries()) {
+			const identity = JSON.stringify([
+				claim.text.normalize("NFKC").replace(/\s+/g, " ").trim(),
+				claim.occurrence,
+			]);
+			if (seen.has(identity)) {
+				context.addIssue({
+					code: "custom",
+					path: ["claims", index],
+					message: "Duplicate candidate claim.",
+				});
+			}
+			seen.add(identity);
+		}
+	});
+
 export type ScriptClaimRefreshInputSnapshotInput = z.input<
 	typeof scriptClaimRefreshInputSnapshotSchema
 >;
@@ -114,10 +147,18 @@ export type ScriptClaimRefreshProviderOutputInput = z.input<
 	typeof scriptClaimRefreshProviderOutputSchema
 >;
 
+export type OrganicScriptClaimRefreshProviderOutputInput = z.input<
+	typeof organicScriptClaimRefreshProviderOutputSchema
+>;
+
 export function parseScriptClaimRefreshInputSnapshot(value: unknown) {
 	return scriptClaimRefreshInputSnapshotSchema.parse(value);
 }
 
 export function parseScriptClaimRefreshProviderOutput(value: unknown) {
 	return scriptClaimRefreshProviderOutputSchema.parse(value);
+}
+
+export function parseOrganicScriptClaimRefreshProviderOutput(value: unknown) {
+	return organicScriptClaimRefreshProviderOutputSchema.parse(value);
 }

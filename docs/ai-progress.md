@@ -5,19 +5,29 @@
   AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
   legacy `inputMode=NULL` chỉ còn read compatibility. AFF-US-019 Phase 19A.2
   **CONTRACT LOCKED** theo DEC-035; 19A.3 claim subject foundation PASS;
-  19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS;
-  19C.2/19C.3 chưa bắt đầu.
+  19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS; 19C.2A
+  Organic Claim Refresh v2 PASS; 19C.2B/19C.3 chưa bắt đầu.
 - Cập nhật lần cuối: 2026-09-03
 
-Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.1 PASS. Public Fact Lock tạo/reuse ClaimManifest
+Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.2A PASS. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
 hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên disposable
 E2E/integration infrastructure; AFF-US-019 Phase 19A.2 đã lock Product claim
 subject contract theo DEC-035; 19A.3 claim subject foundation đã PASS và 19B
-đã PASS runtime Organic ScriptGeneration 19B; 19C.1 claim applicability đã PASS;
-19C.2 Claim Resolution/Refresh và 19C.3 Manifest/Fact Lock chưa bắt đầu.
+đã PASS runtime Organic ScriptGeneration 19B; 19C.1 claim applicability và 19C.2A
+Organic Claim Refresh v2 đã PASS; 19C.2B Claim Confirmation và 19C.3 Manifest/Fact
+Lock chưa bắt đầu.
+
+## 2026-09-03 — AFF-US-019 Phase 19C.2A Organic Claim Refresh v2 acceptance
+
+Organic `script-draft.v3` refresh now routes to prompt/output v2 while Affiliate
+remains frozen on prompt/output v1 and input v1. GENERAL and PRODUCT proposals are
+persisted as unresolved subject-aware claims; current unresolved inventories no-op,
+stale inventories use durable R→R+1 CAS, and zero claims complete without Product
+or Fact Lock. Confirmation API is deferred to 19C.2B; clean-room DB used loopback
+PostgreSQL only and live AI/TTS calls = 0.
 
 ## 2026-09-03 — AFF-US-019 Phase 19C.1 Claim Applicability acceptance
 

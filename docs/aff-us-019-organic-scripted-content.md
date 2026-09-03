@@ -1,16 +1,27 @@
 # AFF-US-019 — Organic Scripted Content
 
-## Phase 19C.1 — Claim Applicability + Resolver Cutover
+## Phase 19C.2A — Organic Claim Refresh v2
 
-- Trạng thái: **19C.1 CLAIM APPLICABILITY PASS — 19C.2 NOT STARTED**
+- Trạng thái: **19C.2A ORGANIC CLAIM REFRESH V2 PASS — 19C.2B NOT STARTED**
 - Cập nhật: 2026-09-03
-- Phạm vi: Organic Scripted current-claim applicability/read-model policy
-- Organic dùng source mode `ORGANIC_NO_PRODUCT`, input/output/prompt v3; Affiliate
-  giữ nguyên v2. Không có schema/migration mới.
+- Phạm vi: Organic Scripted claim refresh proposal runtime
+- Organic dùng source mode `ORGANIC_NO_PRODUCT`, Claim Refresh input v1 và
+  prompt/output v2; Affiliate giữ nguyên Claim Refresh v1. Không có schema/migration mới.
 
 AFF-US-001–012 là historical/golden baseline. AFF-US-013–018, 19B và 19C.1 đã
-accepted. Quick Image/Media First, Claim Refresh v2, Organic Fact Lock runtime,
-Voice TOCTOU và Project creation UI không thuộc 19C.1.
+accepted. Quick Image/Media First, Organic Fact Lock runtime, Voice TOCTOU và
+Project creation UI không thuộc 19C.2A.
+
+## 19C.2A acceptance
+
+Claim Refresh keeps input v1 and the Affiliate prompt/output v1 contract. Exact
+Organic Scripted `script-draft.v3` uses prompt/output v2, with the same source
+projection and no Product/Product Facts/Manifest/Fact Lock input. Both GENERAL and
+PRODUCT provider proposals are accepted as unresolved claims carrying
+`NEEDS_CONFIRMATION` and `subjectSource = null`; no provider result is authority.
+Current unresolved Organic claims are `NOT_REQUIRED`, stale claims refresh with
+R→R+1 CAS, and zero claims complete without Product or Fact Lock. User confirmation
+is intentionally deferred to 19C.2B.
 
 ## 19C.1 acceptance
 
@@ -34,9 +45,8 @@ activate đúng identity Organic + Scripted + `SCRIPTED_STANDARD` v1 với
 `productId = null`; server tự derive source mode và không nhận sourceMode từ client.
 
 Organic preflight không query Product/Product Facts; provider PRODUCT proposal
-fail closed, GENERAL proposal là proposal-only (`NEEDS_CONFIRMATION`, null source),
-zero-claim valid. Claim applicability is active in 19C.1 read policy; Claim Refresh
-v2, subject-aware Fact Lock execution and Voice remain inactive until later phases.
+trong ScriptGeneration vẫn fail closed. Claim applicability remains active in
+19C.1; subject-aware Fact Lock execution and Voice remain inactive until later phases.
 
 Fresh clean-room acceptance đã PASS trên disposable PostgreSQL loopback với
 process-only authorities và live AI/TTS tắt. Validation attempt trước đó invalid
@@ -486,8 +496,8 @@ following decision remains locked:
 ## 9. Current acceptance boundary
 
 ```text
-AFF-US-019 Phase 19C.1: CLAIM APPLICABILITY PASS
-19C.2 status: NOT STARTED
+AFF-US-019 Phase 19C.2A: ORGANIC CLAIM REFRESH V2 PASS
+19C.2B status: NOT STARTED
 19C.3 status: NOT STARTED
 19D status: NOT STARTED
 19E status: NOT STARTED
@@ -499,5 +509,5 @@ Production DB touched: NO
 Development manual DB touched: NO
 ```
 
-Required next action is 19C.2 Claim Resolution/Refresh. Subject-aware Fact Lock
+Required next action is 19C.2B Claim Subject Confirmation. Subject-aware Fact Lock
 execution and Voice TOCTOU remain phase-gated.

@@ -10,6 +10,18 @@ Cập nhật lần cuối: 2026-09-03.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19C.2A Organic Claim Refresh v2 PASS
+
+- Claim Refresh input `script-claim-refresh.v1` and Affiliate prompt/output v1
+  remain unchanged; exact Organic Scripted `script-draft.v3` routes to prompt v2
+  and output v2.
+- Provider proposals remain unresolved (`NEEDS_CONFIRMATION`, null source), with
+  both GENERAL and PRODUCT accepted for escalation discovery; no Product, Product
+  Facts, ClaimManifest, or Fact Lock is consulted.
+- Current unresolved claims return `not_required`; stale refresh persists fresh
+  subject-aware claims through the existing durable run/CAS path. User confirmation
+  is not implemented yet; 19C.2B is next.
+
 ### AFF-US-019 Phase 19C.1 Claim Applicability PASS
 
 - Applicability derives one canonical claim summary from the current

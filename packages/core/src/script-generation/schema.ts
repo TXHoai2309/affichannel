@@ -135,7 +135,17 @@ export const organicClaimSchema = z
 				});
 			}
 			if (
+				claim.subjectStatus === "NEEDS_CONFIRMATION" &&
+				claim.proposedSubject === undefined
+			) {
+				context.addIssue({
+					code: "custom",
+					message: "Unconfirmed Organic claims require a subject proposal.",
+				});
+			}
+			if (
 				claim.proposedSubject !== undefined &&
+				claim.subjectStatus === "NEEDS_CONFIRMATION" &&
 				claim.proposedSubject !== claim.subject?.kind
 			) {
 				context.addIssue({

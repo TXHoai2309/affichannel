@@ -26,6 +26,7 @@ export function createNeedsConfirmationClaim(
 		subject: subjectForProposal(input.proposedSubject),
 		subjectStatus: "NEEDS_CONFIRMATION" as const,
 		subjectSource: null,
+		proposedSubject: input.proposedSubject,
 	});
 }
 

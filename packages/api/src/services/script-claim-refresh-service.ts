@@ -1,16 +1,25 @@
-import type { ScriptClaimRefreshInputSnapshot } from "@affichannel/core";
 import {
 	aiSettingsSchema,
 	buildScriptClaimRefreshSourceProjection,
+	createNeedsConfirmationClaim,
+	type OrganicScriptClaimRefreshCandidateClaim,
 	parseScriptClaimRefreshInputSnapshot,
+	resolveScriptClaimRefreshStrategy,
+	resolveScriptClaimRefreshVersionPair,
 	SCRIPT_CLAIM_REFRESH_INPUT_VERSION,
-	SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION,
-	SCRIPT_CLAIM_REFRESH_PROMPT_VERSION,
+	SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION_V1,
+	SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION_V2,
+	SCRIPT_CLAIM_REFRESH_PROMPT_VERSION_V1,
+	SCRIPT_CLAIM_REFRESH_PROMPT_VERSION_V2,
 	type ScriptClaimRefreshCandidateClaim,
+	type ScriptClaimRefreshInputSnapshot,
+	type ScriptClaimRefreshMode,
 	type ScriptClaimRefreshSourceProjection,
 	type ScriptVersionEditableSnapshot,
 	type ScriptVersionReadModel,
 	scriptVersionEditableSnapshotSchema,
+	validateCurrentOrganicScriptClaimInventory,
+	validateOrganicScriptClaimRefreshProviderOutput,
 	validateScriptClaimRefreshProviderOutput,
 	validateScriptVersionForFactLockRun,
 } from "@affichannel/core";
@@ -32,7 +41,7 @@ import { TextProviderError } from "../providers/text/text-provider";
 import { resolveTextProvider } from "../providers/text/text-provider-registry";
 import {
 	canonicalScriptClaimRefreshPrompt,
-	renderScriptClaimRefreshPrompt,
+	renderScriptClaimRefreshPromptForVersion,
 } from "./script-claim-refresh-prompt";
 import {
 	claimScriptClaimRefreshExecution,
@@ -86,10 +95,15 @@ export type ScriptClaimRefreshRequest = Readonly<{
 }>;
 
 export type ScriptClaimRefreshProviderConfig = Readonly<{
+	mode: ScriptClaimRefreshMode;
 	provider: string;
 	model: string;
-	promptVersion: typeof SCRIPT_CLAIM_REFRESH_PROMPT_VERSION;
-	outputSchemaVersion: typeof SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION;
+	promptVersion:
+		| typeof SCRIPT_CLAIM_REFRESH_PROMPT_VERSION_V1
+		| typeof SCRIPT_CLAIM_REFRESH_PROMPT_VERSION_V2;
+	outputSchemaVersion:
+		| typeof SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION_V1
+		| typeof SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION_V2;
 }>;
 
 export type ScriptClaimRefreshRuntimeDependencies = Readonly<{
@@ -166,25 +180,10 @@ function assertRequest(input: ScriptClaimRefreshRequest): void {
 	}
 }
 
-function assertActiveScriptedAffiliateProject(record: {
-	contentType: string;
-	creationPath: string;
-	contentFormatKey: string;
-	contentFormatVersion: number;
-}): void {
-	if (
-		record.contentType !== "AFFILIATE" ||
-		record.creationPath !== "SCRIPTED" ||
-		record.contentFormatKey !== "SCRIPTED_STANDARD" ||
-		record.contentFormatVersion !== 1
-	) {
-		throw serviceError("SCRIPT_CLAIM_REFRESH_NOT_ELIGIBLE");
-	}
-}
-
 async function resolveProviderConfig(
 	transaction: ScriptClaimRefreshTransaction,
 	workspaceId: string,
+	mode: ScriptClaimRefreshMode,
 ): Promise<ScriptClaimRefreshProviderConfig> {
 	const [settings] = await transaction
 		.select({
@@ -199,13 +198,38 @@ async function resolveProviderConfig(
 		throw serviceError("SCRIPT_CLAIM_REFRESH_PROVIDER_NOT_CONFIGURED");
 	}
 	return {
+		mode,
 		provider: parsed.success
 			? parsed.data.textProvider
 			: env.TEXT_AI_DEFAULT_PROVIDER,
 		model: parsed.success ? parsed.data.textModel : env.TEXT_AI_DEFAULT_MODEL,
-		promptVersion: SCRIPT_CLAIM_REFRESH_PROMPT_VERSION,
-		outputSchemaVersion: SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION,
+		promptVersion:
+			mode === "AFFILIATE_V1"
+				? SCRIPT_CLAIM_REFRESH_PROMPT_VERSION_V1
+				: SCRIPT_CLAIM_REFRESH_PROMPT_VERSION_V2,
+		outputSchemaVersion:
+			mode === "AFFILIATE_V1"
+				? SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION_V1
+				: SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION_V2,
 	};
+}
+
+function configFromRun(
+	run: import("@affichannel/core").ScriptClaimRefreshRun,
+): ScriptClaimRefreshProviderConfig | null {
+	const strategy = resolveScriptClaimRefreshVersionPair({
+		promptVersion: run.promptVersion,
+		outputSchemaVersion: run.outputSchemaVersion,
+	});
+	return strategy
+		? {
+				mode: strategy.mode,
+				provider: run.provider,
+				model: run.model,
+				promptVersion: strategy.promptVersion,
+				outputSchemaVersion: strategy.outputSchemaVersion,
+			}
+		: null;
 }
 
 function sourceSnapshotFromRow(
@@ -216,6 +240,10 @@ function sourceSnapshotFromRow(
 	);
 	if (!parsed.success)
 		throw serviceError("SCRIPT_CLAIM_REFRESH_SOURCE_NOT_USABLE");
+	// Organic v3 claims are subject-aware and intentionally do not satisfy the
+	// legacy Fact Lock claim shape. Structural v3 validation above is the only
+	// refresh precondition; retain the stricter legacy check for Affiliate v2.
+	if (parsed.data.schemaVersion === "script-draft.v3") return parsed.data;
 	const validForRun = validateScriptVersionForFactLockRun(parsed.data);
 	if (!validForRun.success)
 		throw serviceError("SCRIPT_CLAIM_REFRESH_SOURCE_NOT_USABLE");
@@ -223,6 +251,7 @@ function sourceSnapshotFromRow(
 }
 
 function claimMetadataIsCurrent(
+	mode: ScriptClaimRefreshMode,
 	snapshot: ScriptVersionEditableSnapshot,
 	projection: ScriptClaimRefreshSourceProjection,
 	revision: number,
@@ -232,6 +261,12 @@ function claimMetadataIsCurrent(
 		snapshot.claimsSourceRevision !== revision
 	) {
 		return false;
+	}
+	if (mode === "ORGANIC_V2") {
+		return (
+			snapshot.schemaVersion === "script-draft.v3" &&
+			validateCurrentOrganicScriptClaimInventory(snapshot.claims, projection)
+		);
 	}
 	return validateScriptClaimRefreshProviderOutput(
 		{ claims: snapshot.claims },
@@ -317,22 +352,6 @@ async function prepareInTransaction(
 		.for("update", { of: project });
 	if (!projectRecord)
 		throw serviceError("SCRIPT_CLAIM_REFRESH_PROJECT_NOT_FOUND");
-	assertActiveScriptedAffiliateProject(projectRecord);
-	if (!projectRecord.productId)
-		throw serviceError("SCRIPT_CLAIM_REFRESH_PRODUCT_NOT_FOUND");
-
-	const [accessibleProduct] = await transaction
-		.select({ id: product.id })
-		.from(product)
-		.where(
-			and(
-				eq(product.id, projectRecord.productId),
-				eq(product.workspaceId, input.actor.workspaceId),
-			),
-		)
-		.limit(1);
-	if (!accessibleProduct)
-		throw serviceError("SCRIPT_CLAIM_REFRESH_PRODUCT_NOT_FOUND");
 
 	const [sourceRow] = await transaction
 		.select()
@@ -353,8 +372,36 @@ async function prepareInTransaction(
 	}
 
 	const sourceSnapshot = sourceSnapshotFromRow(sourceRow);
+	const strategy = resolveScriptClaimRefreshStrategy({
+		...projectRecord,
+		scriptSchemaVersion: sourceSnapshot.schemaVersion,
+	});
+	if (!strategy) throw serviceError("SCRIPT_CLAIM_REFRESH_NOT_ELIGIBLE");
+	if (strategy.mode === "AFFILIATE_V1") {
+		if (!projectRecord.productId)
+			throw serviceError("SCRIPT_CLAIM_REFRESH_PRODUCT_NOT_FOUND");
+		const [accessibleProduct] = await transaction
+			.select({ id: product.id })
+			.from(product)
+			.where(
+				and(
+					eq(product.id, projectRecord.productId),
+					eq(product.workspaceId, input.actor.workspaceId),
+				),
+			)
+			.limit(1);
+		if (!accessibleProduct)
+			throw serviceError("SCRIPT_CLAIM_REFRESH_PRODUCT_NOT_FOUND");
+	}
 	const source = buildScriptClaimRefreshSourceProjection(sourceSnapshot);
-	if (claimMetadataIsCurrent(sourceSnapshot, source, sourceRow.revision)) {
+	if (
+		claimMetadataIsCurrent(
+			strategy.mode,
+			sourceSnapshot,
+			source,
+			sourceRow.revision,
+		)
+	) {
 		return {
 			kind: "not_required",
 			scriptVersion: mapScriptVersionRecord(sourceRow),
@@ -378,11 +425,37 @@ async function prepareInTransaction(
 		sourceContentHash,
 	});
 	const inputHash = await sha256Hex(inputSnapshot);
-	const config = await resolveProviderConfig(
-		transaction,
-		input.actor.workspaceId,
+	// Reuse the persisted provider/version pin when a pending idempotency key
+	// already exists. This keeps restart execution independent of changed AI
+	// settings or whichever refresh version is globally newest.
+	const [existingRunRow] = await transaction
+		.select()
+		.from(scriptClaimRefreshRun)
+		.where(
+			and(
+				eq(scriptClaimRefreshRun.workspaceId, input.actor.workspaceId),
+				eq(scriptClaimRefreshRun.idempotencyKey, input.idempotencyKey),
+			),
+		)
+		.limit(1);
+	const existingRunConfig = existingRunRow
+		? configFromRun(mapScriptClaimRefreshRunRow(existingRunRow))
+		: null;
+	if (existingRunRow && !existingRunConfig)
+		throw serviceError("SCRIPT_CLAIM_REFRESH_INPUT_INVALID");
+	if (existingRunConfig && existingRunConfig.mode !== strategy.mode)
+		throw serviceError("SCRIPT_CLAIM_REFRESH_INPUT_INVALID");
+	const config =
+		existingRunConfig ??
+		(await resolveProviderConfig(
+			transaction,
+			input.actor.workspaceId,
+			strategy.mode,
+		));
+	const prompt = renderScriptClaimRefreshPromptForVersion(
+		inputSnapshot,
+		config.promptVersion,
 	);
-	const prompt = renderScriptClaimRefreshPrompt(inputSnapshot);
 	const promptHash = await sha256Hex(canonicalScriptClaimRefreshPrompt(prompt));
 	const created = await import("./script-claim-refresh-repository").then(
 		({ createOrReuseScriptClaimRefreshRunInTransaction }) =>
@@ -410,7 +483,7 @@ async function prepareInTransaction(
 		created: created.created,
 		inputSnapshot,
 		source,
-		config,
+		config: configFromRun(created.run) ?? config,
 	};
 }
 
@@ -468,7 +541,10 @@ function providerRequest(
 	run: import("@affichannel/core").ScriptClaimRefreshRun,
 	snapshot: ScriptClaimRefreshInputSnapshot,
 ) {
-	const prompt = renderScriptClaimRefreshPrompt(snapshot);
+	const prompt = renderScriptClaimRefreshPromptForVersion(
+		snapshot,
+		run.promptVersion,
+	);
 	return {
 		messages: [
 			{ role: "system" as const, content: prompt.trustedInstructions },
@@ -537,7 +613,10 @@ async function finalizeFailure(
 async function finalizeSuccessfulApply(
 	input: ScriptClaimRefreshRequest,
 	run: import("@affichannel/core").ScriptClaimRefreshRun,
-	claims: readonly ScriptClaimRefreshCandidateClaim[],
+	mode: ScriptClaimRefreshMode,
+	claims:
+		| readonly ScriptClaimRefreshCandidateClaim[]
+		| readonly OrganicScriptClaimRefreshCandidateClaim[],
 	telemetry: ReturnType<typeof providerTelemetry>,
 ): Promise<ScriptClaimRefreshExecutionResult> {
 	return db.transaction(async (transaction) => {
@@ -649,12 +728,20 @@ async function finalizeSuccessfulApply(
 		}
 
 		const nextRevision = current.revision + 1;
+		const nextClaims =
+			mode === "ORGANIC_V2"
+				? (claims as readonly OrganicScriptClaimRefreshCandidateClaim[]).map(
+						(claim) => createNeedsConfirmationClaim(claim),
+					)
+				: (claims as readonly ScriptClaimRefreshCandidateClaim[]).map(
+						(claim) => ({
+							text: claim.text,
+							occurrence: claim.occurrence,
+						}),
+					);
 		const nextSnapshot = {
 			...currentSnapshot,
-			claims: claims.map((claim) => ({
-				text: claim.text,
-				occurrence: claim.occurrence,
-			})),
+			claims: nextClaims,
 			claimsStatus: "current" as const,
 			claimsSourceRevision: nextRevision,
 		};
@@ -773,8 +860,11 @@ async function executePrepared(
 	const run = claim.run;
 	if (!run.executionClaimedAt)
 		throw serviceError("SCRIPT_CLAIM_REFRESH_INPUT_INVALID");
+	const pinnedConfig = configFromRun(run);
 	let persistedSnapshot: ScriptClaimRefreshInputSnapshot;
 	try {
+		if (!pinnedConfig || pinnedConfig.mode !== prepared.config.mode)
+			throw new Error("unsupported persisted version pair");
 		persistedSnapshot = parseScriptClaimRefreshInputSnapshot(
 			run.inputSnapshotJson,
 		);
@@ -786,7 +876,10 @@ async function executePrepared(
 			sourceScriptRevision: persistedSnapshot.sourceScriptRevision,
 			sourceContentHash: persistedSnapshot.sourceContentHash,
 		});
-		const prompt = renderScriptClaimRefreshPrompt(persistedSnapshot);
+		const prompt = renderScriptClaimRefreshPromptForVersion(
+			persistedSnapshot,
+			run.promptVersion,
+		);
 		const promptHash = await sha256Hex(
 			canonicalScriptClaimRefreshPrompt(prompt),
 		);
@@ -795,8 +888,8 @@ async function executePrepared(
 			inputHash !== run.inputHash ||
 			requestHash !== run.requestHash ||
 			promptHash !== run.promptHash ||
-			run.promptVersion !== SCRIPT_CLAIM_REFRESH_PROMPT_VERSION ||
-			run.outputSchemaVersion !== SCRIPT_CLAIM_REFRESH_OUTPUT_SCHEMA_VERSION
+			run.promptVersion !== pinnedConfig.promptVersion ||
+			run.outputSchemaVersion !== pinnedConfig.outputSchemaVersion
 		) {
 			throw new Error("pinned semantic payload mismatch");
 		}
@@ -831,10 +924,16 @@ async function executePrepared(
 	}
 
 	const telemetry = providerTelemetry(providerResult);
-	const validation = validateScriptClaimRefreshProviderOutput(
-		providerResult.content,
-		persistedSnapshot.source,
-	);
+	const validation =
+		pinnedConfig.mode === "ORGANIC_V2"
+			? validateOrganicScriptClaimRefreshProviderOutput(
+					providerResult.content,
+					persistedSnapshot.source,
+				)
+			: validateScriptClaimRefreshProviderOutput(
+					providerResult.content,
+					persistedSnapshot.source,
+				);
 	if (!validation.success) {
 		const failed = await finalizeFailure(
 			run,
@@ -845,7 +944,13 @@ async function executePrepared(
 		return resultFromTerminalRun(failed);
 	}
 
-	return finalizeSuccessfulApply(input, run, validation.claims, telemetry);
+	return finalizeSuccessfulApply(
+		input,
+		run,
+		pinnedConfig.mode,
+		validation.claims,
+		telemetry,
+	);
 }
 
 export async function executeScriptClaimRefresh(

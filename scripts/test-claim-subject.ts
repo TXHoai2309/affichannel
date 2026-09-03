@@ -25,6 +25,7 @@ import {
 	confirmStructuredClaimSubject,
 	createNeedsConfirmationClaim,
 	LEGACY_AFFILIATE_CLAIM_SUBJECT,
+	organicCanonicalClaimSchema,
 	parseScriptClaimByOutputVersion,
 	parseSubjectAwareScriptClaim,
 	resolveProductClaimBinding,
@@ -122,6 +123,37 @@ const tests: readonly [string, () => void][] = [
 		},
 	],
 	[
+		"Organic v3 preserves provider evidence across user correction",
+		() => {
+			const corrected = organicCanonicalClaimSchema.safeParse({
+				text: generalClaim.text,
+				occurrence: generalClaim.occurrence,
+				proposedSubject: "PRODUCT",
+				subject: { kind: "GENERAL" },
+				subjectStatus: "CONFIRMED",
+				subjectSource: "USER",
+			});
+			assert.equal(corrected.success, true);
+			const unresolvedMismatch = organicCanonicalClaimSchema.safeParse({
+				text: generalClaim.text,
+				occurrence: generalClaim.occurrence,
+				proposedSubject: "PRODUCT",
+				subject: { kind: "GENERAL" },
+				subjectStatus: "NEEDS_CONFIRMATION",
+				subjectSource: null,
+			});
+			assert.equal(unresolvedMismatch.success, false);
+			const unresolvedWithoutProposal = organicCanonicalClaimSchema.safeParse({
+				text: generalClaim.text,
+				occurrence: generalClaim.occurrence,
+				subject: { kind: "GENERAL" },
+				subjectStatus: "NEEDS_CONFIRMATION",
+				subjectSource: null,
+			});
+			assert.equal(unresolvedWithoutProposal.success, false);
+		},
+	],
+	[
 		"frozen subject-aware claim vectors are literal and deterministic",
 		() => {
 			assert.equal(
@@ -139,7 +171,7 @@ const tests: readonly [string, () => void][] = [
 			});
 			assert.equal(
 				subjectAwareScriptClaimJson(unresolvedProduct),
-				'{"occurrence":{"section":"voiceover","segmentKey":"segment-1"},"subject":{"binding":"PROJECT_PRODUCT","kind":"PRODUCT"},"subjectSource":null,"subjectStatus":"NEEDS_CONFIRMATION","text":"Sản phẩm có thiết kế nhỏ gọn."}',
+				'{"occurrence":{"section":"voiceover","segmentKey":"segment-1"},"proposedSubject":"PRODUCT","subject":{"binding":"PROJECT_PRODUCT","kind":"PRODUCT"},"subjectSource":null,"subjectStatus":"NEEDS_CONFIRMATION","text":"Sản phẩm có thiết kế nhỏ gọn."}',
 			);
 		},
 	],
@@ -408,6 +440,7 @@ const tests: readonly [string, () => void][] = [
 				subject: { kind: "GENERAL" },
 				subjectStatus: "CONFIRMED",
 				subjectSource: "USER",
+				proposedSubject: "PRODUCT",
 			});
 			assert.deepEqual(summary([confirmedGeneral]), {
 				status: "CURRENT",
