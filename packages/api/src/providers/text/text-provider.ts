@@ -5,7 +5,10 @@ export type TextProviderScenario =
 	| "timeout"
 	| "timeout_uncertain"
 	| "provider_uncertain"
-	| "provider_error";
+	| "provider_error"
+	| "organic_general_proposal"
+	| "organic_product_proposal"
+	| "organic_zero_claims";
 
 export type TextProviderMessage = {
 	role: "system" | "developer" | "user";

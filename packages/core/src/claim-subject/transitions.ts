@@ -45,6 +45,9 @@ export function confirmClaimSubject(input: {
 		subject,
 		subjectStatus: "CONFIRMED" as const,
 		subjectSource: "USER" as const,
+		...(claim.proposedSubject
+			? { proposedSubject: claim.proposedSubject }
+			: {}),
 	});
 }
 
@@ -64,5 +67,8 @@ export function confirmStructuredClaimSubject(input: {
 		subject,
 		subjectStatus: "CONFIRMED" as const,
 		subjectSource: "STRUCTURED_SOURCE" as const,
+		...(claim.proposedSubject
+			? { proposedSubject: claim.proposedSubject }
+			: {}),
 	});
 }

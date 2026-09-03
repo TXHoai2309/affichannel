@@ -5,7 +5,7 @@
   AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
   legacy `inputMode=NULL` chỉ còn read compatibility. AFF-US-019 Phase 19A.2
   **CONTRACT LOCKED** theo DEC-035; 19A.3 claim subject foundation PASS;
-  19B chưa bắt đầu.
+  19B Organic ScriptGeneration PASS; 19C chưa bắt đầu.
 - Cập nhật lần cuối: 2026-09-03
 
 Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
@@ -15,7 +15,17 @@ trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; 
 hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên disposable
 E2E/integration infrastructure; AFF-US-019 Phase 19A.2 đã lock Product claim
 subject contract theo DEC-035; 19A.3 claim subject foundation đã PASS và 19B
-chưa bắt đầu.
+đã PASS runtime Organic ScriptGeneration 19B; 19C claim applicability chưa bắt đầu.
+
+## 2026-09-03 — AFF-US-019 Phase 19B Organic ScriptGeneration acceptance
+
+Organic no-product runtime đã PASS trên disposable PostgreSQL loopback với
+source mode server-derived `ORGANIC_NO_PRODUCT`. Organic dùng riêng input/prompt/
+output v3; Affiliate v2, Claim Refresh/ClaimManifest/Fact Lock/Voice và
+Applicability không cutover. PRODUCT provider proposal bị reject fail-closed;
+GENERAL proposal giữ `NEEDS_CONFIRMATION`/`subjectSource=null`; zero claims hợp lệ.
+DB-backed story/tips/general/zero/product-negative/repair fixtures, ScriptVersion
+v3 initialization/autosave và Affiliate regression đều PASS; live AI/TTS = 0.
 
 ## 2026-09-03 — AFF-US-019 Phase 19A.3 Claim Subject foundation acceptance
 

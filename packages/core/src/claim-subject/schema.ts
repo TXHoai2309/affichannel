@@ -41,6 +41,7 @@ export const subjectAwareScriptClaimSchema = z
 		subject: claimSubjectSchema,
 		subjectStatus: claimSubjectStatusSchema,
 		subjectSource: claimSubjectSourceSchema.nullable(),
+		proposedSubject: proposedClaimSubjectSchema.optional(),
 	})
 	.strict()
 	.superRefine((claim, context) => {

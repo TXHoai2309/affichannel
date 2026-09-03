@@ -1,8 +1,9 @@
 import { z } from "zod";
-
+import { proposedClaimSubjects } from "../claim-subject/types";
 import { canonicalizeJson } from "./canonical-json";
 import { defaultOutputRules } from "./input-contract";
 import {
+	ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
 	SCRIPT_GENERATION_LIMITS,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
 } from "./policy";
@@ -10,6 +11,7 @@ import { parseSingleJsonObject } from "./structured-json";
 import {
 	type ClaimOccurrence,
 	type PartialScriptDraft,
+	type ScriptDraft,
 	type ScriptGenerationSection,
 	scriptGenerationSections,
 } from "./types";
@@ -66,6 +68,98 @@ export const hashtagsSchema = z
 export const claimSchema = z
 	.object({ text: text(), occurrence: claimOccurrenceSchema })
 	.strict();
+
+const organicClaimSubjectSchema = z.discriminatedUnion("kind", [
+	z.object({ kind: z.literal("GENERAL") }).strict(),
+	z
+		.object({
+			kind: z.literal("PRODUCT"),
+			binding: z.literal("PROJECT_PRODUCT"),
+		})
+		.strict(),
+]);
+
+/**
+ * Organic providers return a proposal, while persisted v3 claims retain the
+ * proposal alongside unresolved subject metadata.  No provider payload can
+ * satisfy the CONFIRMED/source invariant by itself.
+ */
+export const organicClaimSchema = z
+	.object({
+		text: text(),
+		occurrence: claimOccurrenceSchema,
+		proposedSubject: z.enum(proposedClaimSubjects).optional(),
+		subject: organicClaimSubjectSchema.optional(),
+		subjectStatus: z.enum(["CONFIRMED", "NEEDS_CONFIRMATION"]).optional(),
+		subjectSource: z
+			.enum(["USER", "STRUCTURED_SOURCE", "LEGACY_COMPATIBILITY"])
+			.nullable()
+			.optional(),
+	})
+	.strict()
+	.superRefine((claim, context) => {
+		const hasAnySubjectField =
+			claim.subject !== undefined ||
+			claim.subjectStatus !== undefined ||
+			claim.subjectSource !== undefined;
+		const hasAllSubjectFields =
+			claim.subject !== undefined &&
+			claim.subjectStatus !== undefined &&
+			claim.subjectSource !== undefined;
+		if (hasAnySubjectField && !hasAllSubjectFields) {
+			context.addIssue({
+				code: "custom",
+				message: "Organic claim subject metadata must be complete.",
+			});
+		}
+		if (!hasAnySubjectField && claim.proposedSubject === undefined) {
+			context.addIssue({
+				code: "custom",
+				message: "Organic claims require a subject proposal.",
+			});
+		}
+		if (hasAllSubjectFields) {
+			if (claim.subjectStatus === "CONFIRMED" && claim.subjectSource === null) {
+				context.addIssue({
+					code: "custom",
+					message: "Confirmed Organic claims require an explicit source.",
+				});
+			}
+			if (
+				claim.subjectStatus === "NEEDS_CONFIRMATION" &&
+				claim.subjectSource !== null
+			) {
+				context.addIssue({
+					code: "custom",
+					message: "Unconfirmed Organic claims cannot carry a source.",
+				});
+			}
+			if (
+				claim.proposedSubject !== undefined &&
+				claim.proposedSubject !== claim.subject?.kind
+			) {
+				context.addIssue({
+					code: "custom",
+					message: "Organic proposal and subject metadata disagree.",
+				});
+			}
+		}
+	});
+
+export const organicCanonicalClaimSchema = organicClaimSchema.superRefine(
+	(claim, context) => {
+		if (
+			claim.subject === undefined ||
+			claim.subjectStatus === undefined ||
+			claim.subjectSource === undefined
+		) {
+			context.addIssue({
+				code: "custom",
+				message: "Persisted Organic claims require subject-aware metadata.",
+			});
+		}
+	},
+);
 
 const unique = <T>(values: T[]) => new Set(values).size === values.length;
 const uniqueNormalized = (values: string[]) =>
@@ -171,6 +265,99 @@ export const scriptDraftSchema = z
 		}
 	});
 
+export const scriptDraftV3Schema = z
+	.object({
+		schemaVersion: z.literal(ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION),
+		language: z.string().trim().min(2).max(20),
+		hookVariants: hookVariantsSchema,
+		voiceoverSegments: z
+			.array(voiceoverSegmentSchema)
+			.min(1)
+			.max(SCRIPT_GENERATION_LIMITS.maxVoiceoverSegments),
+		scenes: z.array(sceneSchema).min(1).max(SCRIPT_GENERATION_LIMITS.maxScenes),
+		cta: ctaSchema,
+		caption: text(),
+		hashtags: hashtagsSchema,
+		// Organic content never carries the Affiliate disclosure. Empty string is
+		// the explicit v3 "none" representation.
+		disclosure: z.string().trim().max(500),
+		claims: z
+			.array(organicCanonicalClaimSchema)
+			.max(SCRIPT_GENERATION_LIMITS.maxClaims),
+	})
+	.strict()
+	.superRefine((draft, context) => {
+		if (!unique(draft.hookVariants.map((variant) => variant.key)))
+			context.addIssue({
+				code: "custom",
+				path: ["hookVariants"],
+				message: "Hook variant keys must be unique.",
+			});
+		if (!uniqueNormalized(draft.hashtags))
+			context.addIssue({
+				code: "custom",
+				path: ["hashtags"],
+				message: "Hashtags must be unique after normalization.",
+			});
+		const voiceoverKeys = draft.voiceoverSegments.map((segment) => segment.key);
+		if (!unique(voiceoverKeys))
+			context.addIssue({
+				code: "custom",
+				path: ["voiceoverSegments"],
+				message: "Voiceover keys must be unique.",
+			});
+		const orders = draft.scenes.map((scene) => scene.order);
+		if (!unique(orders) || orders.some((order, index) => order !== index + 1))
+			context.addIssue({
+				code: "custom",
+				path: ["scenes"],
+				message: "Scene order must be unique and sequential.",
+			});
+		const voiceoverKeySet = new Set(voiceoverKeys);
+		for (const [index, scene] of draft.scenes.entries()) {
+			if (
+				!unique(scene.voiceoverSegmentKeys) ||
+				scene.voiceoverSegmentKeys.some((key) => !voiceoverKeySet.has(key))
+			)
+				context.addIssue({
+					code: "custom",
+					path: ["scenes", index, "voiceoverSegmentKeys"],
+					message:
+						"Scene references an unknown or duplicate voiceover segment.",
+				});
+		}
+		const hookKeys = new Set(draft.hookVariants.map((variant) => variant.key));
+		for (const [index, claim] of draft.claims.entries()) {
+			const occurrence = claim.occurrence;
+			if (occurrence.section === "hook" && !hookKeys.has(occurrence.hookKey))
+				context.addIssue({
+					code: "custom",
+					path: ["claims", index, "occurrence"],
+					message: "Claim references an unknown hook variant.",
+				});
+			if (
+				occurrence.section === "voiceover" &&
+				!voiceoverKeySet.has(occurrence.segmentKey)
+			)
+				context.addIssue({
+					code: "custom",
+					path: ["claims", index, "occurrence"],
+					message: "Claim references an unknown voiceover segment.",
+				});
+			if (
+				occurrence.section === "scene" &&
+				!orders.includes(occurrence.sceneOrder)
+			)
+				context.addIssue({
+					code: "custom",
+					path: ["claims", index, "occurrence"],
+					message: "Claim references an unknown scene.",
+				});
+		}
+	});
+
+export type OrganicScriptDraft = z.infer<typeof scriptDraftV3Schema>;
+
 export const scriptSectionSchemas = {
 	hook: hookVariantsSchema,
 	voiceover: z
@@ -253,6 +440,8 @@ export const scriptOutputValidationIssueCodes = [
 	"REPAIR_OUTPUT_INVALID",
 	"REPAIR_MERGE_INVALID",
 	"REPAIR_RESULT_INVALID",
+	"ORGANIC_PRODUCT_CLAIM_PROPOSAL",
+	"ORGANIC_PROVIDER_AUTHORITY_FORBIDDEN",
 ] as const;
 
 export type ScriptOutputValidationIssueCode =
@@ -690,6 +879,207 @@ export function validateRepairScriptOutput(
 		(output as Record<string, unknown>)[key] = result.data;
 	}
 	return { success: true, output };
+}
+
+function organicCanonicalClaim(claim: z.infer<typeof organicClaimSchema>) {
+	if (
+		claim.proposedSubject === "PRODUCT" ||
+		claim.subject?.kind === "PRODUCT"
+	) {
+		return null;
+	}
+	if (claim.subject) return claim;
+	// Provider proposals are deliberately unresolved.  A GENERAL proposal is
+	// useful metadata, never confirmation authority.
+	return {
+		text: claim.text,
+		occurrence: claim.occurrence,
+		subject: { kind: "GENERAL" as const },
+		subjectStatus: "NEEDS_CONFIRMATION" as const,
+		subjectSource: null,
+		proposedSubject: claim.proposedSubject,
+	};
+}
+
+/**
+ * Organic v3 validation shares the established structural rules with v2,
+ * while adding strict subject proposals and an explicit empty disclosure.
+ * The temporary v2 projection is validation-only; the returned payload is
+ * always v3 and retains subject/proposal metadata.
+ */
+export function validateOrganicScriptDraftOutput(
+	raw: unknown,
+	targetDurationSeconds: number,
+	claimLimit: number | null = null,
+	options: ScriptDraftValidationOptions = {},
+): ScriptOutputValidation {
+	const parsed = parseSingleJsonObject(raw);
+	if (!parsed.success) return failedValidation([parsed.issueCode]);
+	const root = parsed.data;
+	if (root.schemaVersion !== ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION)
+		return failedValidation(["SCHEMA_VERSION_MISMATCH"]);
+	const expectedLanguage =
+		options.expectedLanguage ?? defaultOutputRules.language;
+	if (
+		typeof root.language !== "string" ||
+		root.language.trim() !== expectedLanguage
+	)
+		return failedValidation(["LANGUAGE_MISMATCH"]);
+	if (
+		"disclosure" in root &&
+		(typeof root.disclosure !== "string" || root.disclosure.trim() !== "")
+	)
+		return failedValidation([
+			typeof root.disclosure === "string"
+				? "DISCLOSURE_POLICY_INVALID"
+				: "DISCLOSURE_SCHEMA_INVALID",
+		]);
+
+	let canonicalClaims: ScriptDraft["claims"] | undefined;
+	if ("claims" in root) {
+		if (!Array.isArray(root.claims))
+			return failedValidation(["CLAIMS_SCHEMA_INVALID"]);
+		canonicalClaims = [];
+		for (const rawClaim of root.claims) {
+			const claim = organicClaimSchema.safeParse(rawClaim);
+			if (!claim.success) return failedValidation(["CLAIMS_SCHEMA_INVALID"]);
+			if (
+				claim.data.subjectStatus === "CONFIRMED" ||
+				(claim.data.subjectSource !== undefined &&
+					claim.data.subjectSource !== null)
+			)
+				return failedValidation(["ORGANIC_PROVIDER_AUTHORITY_FORBIDDEN"]);
+			const canonical = organicCanonicalClaim(claim.data);
+			if (!canonical)
+				return failedValidation(["ORGANIC_PRODUCT_CLAIM_PROPOSAL"]);
+			canonicalClaims.push(canonical);
+		}
+	}
+
+	const originalDisclosure =
+		typeof root.disclosure === "string" ? root.disclosure.trim() : "";
+	const compatible = {
+		...root,
+		schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		...("disclosure" in root
+			? {
+					disclosure:
+						typeof root.disclosure === "string" && originalDisclosure
+							? root.disclosure
+							: typeof root.disclosure === "string"
+								? "__organic_disclosure_none__"
+								: root.disclosure,
+				}
+			: {}),
+		...(canonicalClaims
+			? {
+					claims: canonicalClaims.map((claim) => ({
+						text: (claim as { text: string }).text,
+						occurrence: (claim as { occurrence: unknown }).occurrence,
+					})),
+				}
+			: {}),
+	};
+	const validated = validateScriptDraftOutput(
+		compatible,
+		targetDurationSeconds,
+		claimLimit,
+		{
+			expectedLanguage,
+			requiredDisclosure: null,
+			avoidWords: options.avoidWords,
+		},
+	);
+	if (!validated.output) return validated;
+	const output: PartialScriptDraft = {
+		...validated.output,
+		schemaVersion: ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+		disclosure: originalDisclosure,
+		...(canonicalClaims ? { claims: canonicalClaims } : {}),
+	};
+	return { ...validated, output };
+}
+
+export function validateRepairOrganicScriptOutput(
+	raw: unknown,
+	repairSections: ScriptGenerationSection[],
+	claimLimit: number | null = null,
+	options: ScriptDraftValidationOptions = {},
+): RepairOutputValidation {
+	const parsed = parseSingleJsonObject(raw);
+	if (!parsed.success) return { success: false, output: null };
+	const root = parsed.data;
+	if (root.schemaVersion !== ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION)
+		return { success: false, output: null };
+	if (
+		"disclosure" in root &&
+		(typeof root.disclosure !== "string" || root.disclosure.trim() !== "")
+	)
+		return { success: false, output: null };
+	let canonicalClaims: ScriptDraft["claims"] | undefined;
+	if ("claims" in root) {
+		if (!Array.isArray(root.claims)) return { success: false, output: null };
+		canonicalClaims = [];
+		for (const rawClaim of root.claims) {
+			const claim = organicClaimSchema.safeParse(rawClaim);
+			if (!claim.success) return { success: false, output: null };
+			if (
+				claim.data.subjectStatus === "CONFIRMED" ||
+				(claim.data.subjectSource !== undefined &&
+					claim.data.subjectSource !== null)
+			)
+				return { success: false, output: null };
+			const canonical = organicCanonicalClaim(claim.data);
+			if (!canonical) return { success: false, output: null };
+			canonicalClaims.push(canonical);
+		}
+	}
+	const compatible = {
+		...root,
+		schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+		...("disclosure" in root
+			? {
+					disclosure:
+						typeof root.disclosure === "string"
+							? root.disclosure.trim() || "__organic_disclosure_none__"
+							: root.disclosure,
+				}
+			: {}),
+		...(canonicalClaims
+			? {
+					claims: canonicalClaims.map((claim) => ({
+						text: (claim as { text: string }).text,
+						occurrence: (claim as { occurrence: unknown }).occurrence,
+					})),
+				}
+			: {}),
+	};
+	const validated = validateRepairScriptOutput(
+		compatible,
+		repairSections,
+		claimLimit,
+		{
+			expectedLanguage: options.expectedLanguage,
+			requiredDisclosure: null,
+			avoidWords: options.avoidWords,
+		},
+	);
+	if (!validated.success || !validated.output)
+		return { success: false, output: null };
+	return {
+		success: true,
+		output: {
+			...validated.output,
+			schemaVersion: ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+			...("disclosure" in root
+				? {
+						disclosure:
+							typeof root.disclosure === "string" ? root.disclosure.trim() : "",
+					}
+				: {}),
+			...(canonicalClaims ? { claims: canonicalClaims } : {}),
+		},
+	};
 }
 
 export type ValidScriptDraft = z.infer<typeof scriptDraftSchema>;

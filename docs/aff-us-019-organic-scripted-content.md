@@ -1,21 +1,26 @@
 # AFF-US-019 — Organic Scripted Content
 
-## Phase 19A — Contract Lock + Architecture Audit
+## Phase 19B — Organic ScriptGeneration No-Product Runtime
 
-- Trạng thái: **19A.3 CLAIM SUBJECT FOUNDATION ACCEPTED — 19B NOT STARTED**
+- Trạng thái: **19B ORGANIC SCRIPTGENERATION PASS — 19C NOT STARTED**
 - Cập nhật: 2026-09-03
-- Phạm vi: pure claim-subject foundation, compatibility adapter và frozen vectors
-- Runtime Organic, schema, migration và provider activation: chưa thực hiện
+- Phạm vi: Organic Scripted no-product ScriptGeneration runtime trên foundation
+- Organic dùng source mode `ORGANIC_NO_PRODUCT`, input/output/prompt v3; Affiliate
+  giữ nguyên v2. Không có schema/migration mới.
 
-AFF-US-001–012 là historical/golden baseline. AFF-US-013–018 đã được accepted;
-Organic, Quick Image và Media First vẫn là các capability chưa active. Tài liệu này
-ghi lại audit trước 19B và không tự mở bất kỳ runtime path nào.
+AFF-US-001–012 là historical/golden baseline. AFF-US-013–018 và 19B đã accepted;
+Claim applicability là 19C kế tiếp. Quick Image/Media First, Organic Fact Lock,
+Voice và Project creation UI không thuộc 19B.
 
 ## 1. Verdict
 
-Phase 19A.2 đã khóa contract cho Product/general claim classification và 19A.3 đã
-được accepted cho pure foundation, compatibility adapter và frozen vectors. Runtime,
-schema và provider activation vẫn chưa được thực hiện; 19B là phase kế tiếp.
+Phase 19A.2/19A.3 đã khóa và accepted claim-subject foundation. Phase 19B đã
+activate đúng identity Organic + Scripted + `SCRIPTED_STANDARD` v1 với
+`productId = null`; server tự derive source mode và không nhận sourceMode từ client.
+
+Organic preflight không query Product/Product Facts; provider PRODUCT proposal
+fail closed, GENERAL proposal là proposal-only (`NEEDS_CONFIRMATION`, null source),
+zero-claim valid. Claim applicability/Fact Lock/Voice remain inactive until 19C/19D.
 
 Fresh clean-room acceptance đã PASS trên disposable PostgreSQL loopback với
 process-only authorities và live AI/TTS tắt. Validation attempt trước đó invalid

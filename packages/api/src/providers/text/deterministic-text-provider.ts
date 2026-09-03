@@ -1,4 +1,5 @@
 import {
+	ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
 	ScriptGenerationError,
 } from "@affichannel/core";
@@ -155,6 +156,58 @@ function deterministicManifestFactLockClaims(request: TextProviderRequest) {
 }
 
 function createDraft(snapshot: ScriptGenerationInputSnapshot) {
+	if (snapshot.snapshotVersion === "script-input.v3") {
+		const topic =
+			snapshot.contentBrief.description ?? snapshot.contentBrief.angle;
+		return {
+			schemaVersion: ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+			language: snapshot.outputRules.language,
+			hookVariants: [
+				{
+					key: "curiosity",
+					text: `Bạn có từng thử ${topic.toLocaleLowerCase("vi-VN")} chưa?`,
+				},
+				{
+					key: "benefit",
+					text: "Một cách nhỏ để biến điều này thành thói quen mỗi ngày.",
+				},
+				{ key: "problem", text: "Lưu lại để thử ngay trong hôm nay nhé." },
+			],
+			voiceoverSegments: [
+				{ key: "intro", text: topic },
+				{ key: "tip", text: snapshot.contentBrief.angle },
+			],
+			scenes: [
+				{
+					order: 1,
+					durationSeconds: Math.max(
+						1,
+						Math.round(snapshot.contentBrief.durationSeconds / 2),
+					),
+					visualDirection: "Cảnh minh họa đời sống hoặc không gian học tập.",
+					onScreenText: null,
+					voiceoverSegmentKeys: ["intro"],
+				},
+				{
+					order: 2,
+					durationSeconds:
+						snapshot.contentBrief.durationSeconds -
+						Math.max(1, Math.round(snapshot.contentBrief.durationSeconds / 2)),
+					visualDirection: "Cảnh kết thúc với lời nhắc lưu và theo dõi kênh.",
+					onScreenText: null,
+					voiceoverSegmentKeys: ["tip"],
+				},
+			],
+			cta: { text: "Theo dõi để xem thêm nội dung hữu ích." },
+			caption: `Chia sẻ nhỏ về ${snapshot.contentBrief.goal}.`,
+			hashtags: ["#kienthuc", "#thuthap", "#xaydungkenh"],
+			disclosure: "",
+			claims: [],
+		};
+	}
+	if (!snapshot.product || !snapshot.facts) {
+		throw new Error("Affiliate deterministic provider requires Product Facts.");
+	}
 	const firstFact = snapshot.facts[0]?.content ?? "thông tin đã được xác thực";
 	const draft = {
 		schemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
@@ -332,6 +385,31 @@ export class DeterministicTextProvider implements TextProvider {
 				"Script generation snapshot is missing.",
 			);
 		const draft = createDraft(this.snapshot);
+		if (this.snapshot.snapshotVersion === "script-input.v3") {
+			if (this.scenario === "organic_product_proposal") {
+				Object.assign(draft, {
+					claims: [
+						{
+							text: "Chiếc bình này giữ lạnh 12 giờ.",
+							occurrence: { section: "voiceover", segmentKey: "intro" },
+							proposedSubject: "PRODUCT",
+						},
+					],
+				});
+			} else if (this.scenario === "organic_general_proposal") {
+				Object.assign(draft, {
+					claims: [
+						{
+							text: "Một thói quen nhỏ có thể giúp việc học tập dễ bắt đầu hơn.",
+							occurrence: { section: "voiceover", segmentKey: "tip" },
+							proposedSubject: "GENERAL",
+						},
+					],
+				});
+			} else if (this.scenario === "organic_zero_claims") {
+				Object.assign(draft, { claims: [] });
+			}
+		}
 		const fullContent =
 			this.scenario === "partial"
 				? {

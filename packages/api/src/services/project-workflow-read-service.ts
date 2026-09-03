@@ -152,7 +152,7 @@ export async function gatherProjectApplicabilityInput(
 					).success
 				: false,
 			channelSettingsComplete: scriptReadModel.context.channelSettings !== null,
-			productFactsUsable: scriptReadModel.context.facts.some(
+			productFactsUsable: (scriptReadModel.context.facts ?? []).some(
 				(fact) => fact.generationUsability !== "blocked",
 			),
 		},

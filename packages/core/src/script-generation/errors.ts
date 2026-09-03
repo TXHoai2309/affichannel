@@ -20,6 +20,8 @@ export const scriptGenerationErrorCodes = [
 	"INVALID_REPAIR_REQUEST",
 	"GENERATION_INDETERMINATE",
 	"GENERATION_NOT_STALE",
+	"ORGANIC_PRODUCT_CLAIM_PROPOSAL",
+	"ORGANIC_SOURCE_NOT_SUPPORTED",
 ] as const;
 export type ScriptGenerationErrorCode =
 	(typeof scriptGenerationErrorCodes)[number];

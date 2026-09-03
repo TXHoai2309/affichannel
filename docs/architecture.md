@@ -1,9 +1,10 @@
 # Kiến trúc AffiChannel
 
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
-  future identities vẫn gated; AFF-US-019 19A.2 contract đã lock
+  AFF-US-019 19B Organic ScriptGeneration accepted; Applicability/Voice future
+  identities vẫn gated
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-02
+- Cập nhật lần cuối: 2026-09-03
 
 ## 1. Mục tiêu kiến trúc
 

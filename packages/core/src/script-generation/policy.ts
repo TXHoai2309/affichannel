@@ -2,6 +2,13 @@ export const SCRIPT_SNAPSHOT_VERSION = "script-input.v2";
 export const SCRIPT_OUTPUT_SCHEMA_VERSION = "script-draft.v2";
 export const SCRIPT_PROMPT_VERSION = "script-prompt.v2";
 
+// Organic Scripted is an additive, versioned contract.  These constants are
+// deliberately separate from the Affiliate v2 values above so historical
+// hashes and readers remain frozen.
+export const ORGANIC_SCRIPT_SNAPSHOT_VERSION = "script-input.v3";
+export const ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION = "script-draft.v3";
+export const ORGANIC_SCRIPT_PROMPT_VERSION = "script-prompt.v3";
+
 export const SCRIPT_GENERATION_LIMITS = {
 	maxInputSnapshotBytes: 128 * 1024,
 	maxOutputBytes: 128 * 1024,

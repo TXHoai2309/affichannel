@@ -6,6 +6,9 @@ import {
 	evaluateFactGenerationUsability,
 	isUsableMediaMetadata,
 	mediaMetadataSchema,
+	ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+	ORGANIC_SCRIPT_PROMPT_VERSION,
+	ORGANIC_SCRIPT_SNAPSHOT_VERSION,
 	outputRulesSchema,
 	resolveBusinessToday,
 	SCRIPT_OUTPUT_SCHEMA_VERSION,
@@ -14,6 +17,8 @@ import {
 	ScriptGenerationError,
 	type ScriptOutputValidation,
 	scriptGenerationSections,
+	validateOrganicScriptDraftOutput,
+	validateRepairOrganicScriptOutput,
 	validateRepairScriptOutput,
 	validateScriptDraftOutput,
 } from "@affichannel/core";
@@ -31,6 +36,7 @@ import type {
 	PartialScriptDraft,
 	ScriptGenerationArtifact,
 	ScriptGenerationContext,
+	ScriptGenerationFactSnapshot,
 	ScriptGenerationInputSnapshot,
 	ScriptGenerationMode,
 	ScriptGenerationReadModel,
@@ -50,7 +56,7 @@ import {
 	scriptGeneration,
 } from "@affichannel/db";
 import { env } from "@affichannel/env/server";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, isNull } from "drizzle-orm";
 import type {
 	TextProvider,
 	TextProviderEstimate,
@@ -239,6 +245,15 @@ function assertPreparationInput(input: PrepareScriptGenerationInput) {
 	return { idempotencyKey, intent: normalized };
 }
 
+type ScriptGenerationSource =
+	| {
+			kind: "affiliate";
+			productId: string;
+			productName: string;
+			productCategory: string | null;
+	  }
+	| { kind: "organic" };
+
 function createSnapshot(
 	projectRecord: {
 		id: string;
@@ -248,9 +263,11 @@ function createSnapshot(
 		durationSeconds: number;
 		angle: string;
 		description: string | null;
-		productId: string;
-		productName: string;
-		productCategory: string | null;
+		contentType: string;
+		creationPath: string;
+		contentFormatKey: string;
+		contentFormatVersion: number;
+		projectProductId: string | null;
 	},
 	facts: Array<{
 		id: string;
@@ -270,6 +287,7 @@ function createSnapshot(
 	mediaSnapshots: MediaMetadataSnapshot[],
 	outputRulesValue: ScriptGenerationInputSnapshot["outputRules"],
 	config: Required<ScriptGenerationProviderConfig>,
+	source: ScriptGenerationSource,
 ): ScriptGenerationInputSnapshot {
 	const usableFacts = facts.flatMap((fact) => {
 		const evaluated = evaluateDbFact(fact, today);
@@ -279,7 +297,7 @@ function createSnapshot(
 				id: fact.id,
 				revision: fact.revision,
 				content: fact.content,
-				type: fact.type as ScriptGenerationInputSnapshot["facts"][number]["type"],
+				type: fact.type as ScriptGenerationFactSnapshot["type"],
 				assessment: evaluated.assessment,
 				generationUsability: evaluated.usability,
 				source: {
@@ -292,12 +310,19 @@ function createSnapshot(
 			},
 		];
 	});
-	return {
-		snapshotVersion: SCRIPT_SNAPSHOT_VERSION,
+	const common = {
 		request,
 		project: {
 			id: projectRecord.id,
 			name: projectRecord.name,
+			...(source.kind === "organic"
+				? {
+						contentType: "ORGANIC" as const,
+						creationPath: "SCRIPTED" as const,
+						contentFormat: "SCRIPTED_STANDARD" as const,
+						contentFormatVersion: 1 as const,
+					}
+				: {}),
 		},
 		contentBrief: {
 			platform: projectRecord.platform as "tiktok",
@@ -305,11 +330,6 @@ function createSnapshot(
 			durationSeconds: projectRecord.durationSeconds,
 			angle: projectRecord.angle,
 			description: normalizeDescription(projectRecord.description),
-		},
-		product: {
-			id: projectRecord.productId,
-			name: projectRecord.productName,
-			category: projectRecord.productCategory,
 		},
 		channelSettings,
 		mediaMetadata: mediaSnapshots,
@@ -322,6 +342,28 @@ function createSnapshot(
 		},
 		facts: usableFacts,
 	};
+	if (source.kind === "organic") {
+		const { facts: _facts, ...organic } = common;
+		return {
+			...organic,
+			snapshotVersion: ORGANIC_SCRIPT_SNAPSHOT_VERSION,
+			sourceMode: "ORGANIC_NO_PRODUCT" as const,
+			generationConfig: {
+				...common.generationConfig,
+				promptVersion: ORGANIC_SCRIPT_PROMPT_VERSION,
+				outputSchemaVersion: ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+			},
+		} as ScriptGenerationInputSnapshot;
+	}
+	return {
+		...common,
+		snapshotVersion: SCRIPT_SNAPSHOT_VERSION,
+		product: {
+			id: source.productId,
+			name: source.productName,
+			category: source.productCategory,
+		},
+	} as ScriptGenerationInputSnapshot;
 }
 
 async function prepareInTransaction(
@@ -337,9 +379,11 @@ async function prepareInTransaction(
 		.select({
 			id: project.id,
 			name: project.name,
-			productId: product.id,
-			productName: product.name,
-			productCategory: product.category,
+			contentType: project.contentType,
+			creationPath: project.creationPath,
+			contentFormatKey: project.contentFormatKey,
+			contentFormatVersion: project.contentFormatVersion,
+			projectProductId: project.productId,
 			platform: contentBrief.platform,
 			goal: contentBrief.goal,
 			durationSeconds: contentBrief.durationSeconds,
@@ -347,13 +391,11 @@ async function prepareInTransaction(
 			description: contentBrief.description,
 		})
 		.from(project)
-		.innerJoin(product, eq(project.productId, product.id))
 		.innerJoin(contentBrief, eq(contentBrief.projectId, project.id))
 		.where(
 			and(
 				eq(project.id, input.projectId),
 				eq(project.workspaceId, actor.workspaceId),
-				eq(product.workspaceId, actor.workspaceId),
 			),
 		)
 		.limit(1)
@@ -363,29 +405,94 @@ async function prepareInTransaction(
 			"GENERATION_NOT_FOUND",
 			"Project was not found in this workspace.",
 		);
-
-	const facts = await transaction
-		.select({
-			id: productFact.id,
-			revision: productFact.revision,
-			content: productFact.content,
-			type: productFact.type,
-			status: productFact.status,
-			sourceType: productFact.sourceType,
-			sourceLabel: productFact.sourceLabel,
-			sourceUrl: productFact.sourceUrl,
-			confirmedAt: productFact.confirmedAt,
-			expiresAt: productFact.expiresAt,
-		})
-		.from(productFact)
-		.where(
-			and(
-				eq(productFact.workspaceId, actor.workspaceId),
-				eq(productFact.productId, projectRecord.productId),
-			),
-		)
-		.orderBy(productFact.id)
-		.for("update", { of: productFact });
+	if (
+		projectRecord.contentType === "AFFILIATE" &&
+		projectRecord.projectProductId === null
+	)
+		throw new ScriptGenerationError(
+			"GENERATION_NOT_FOUND",
+			"Project was not found in this workspace.",
+		);
+	let source: ScriptGenerationSource;
+	if (
+		projectRecord.contentType === "ORGANIC" &&
+		projectRecord.creationPath === "SCRIPTED" &&
+		projectRecord.contentFormatKey === "SCRIPTED_STANDARD" &&
+		projectRecord.contentFormatVersion === 1 &&
+		projectRecord.projectProductId === null
+	) {
+		source = { kind: "organic" };
+	} else if (
+		projectRecord.contentType === "AFFILIATE" &&
+		projectRecord.creationPath === "SCRIPTED" &&
+		projectRecord.contentFormatKey === "SCRIPTED_STANDARD" &&
+		projectRecord.contentFormatVersion === 1 &&
+		projectRecord.projectProductId !== null
+	) {
+		const [productRecord] = await transaction
+			.select({
+				id: product.id,
+				name: product.name,
+				category: product.category,
+			})
+			.from(product)
+			.where(
+				and(
+					eq(product.id, projectRecord.projectProductId),
+					eq(product.workspaceId, actor.workspaceId),
+				),
+			)
+			.limit(1);
+		if (!productRecord)
+			throw new ScriptGenerationError(
+				"GENERATION_NOT_FOUND",
+				"Project was not found in this workspace.",
+			);
+		source = {
+			kind: "affiliate",
+			productId: productRecord.id,
+			productName: productRecord.name,
+			productCategory: productRecord.category,
+		};
+	} else {
+		throw new ScriptGenerationError(
+			"ORGANIC_SOURCE_NOT_SUPPORTED",
+			"This project identity is not supported by the ScriptGeneration runtime.",
+		);
+	}
+	const effectiveConfig =
+		source.kind === "organic"
+			? {
+					...config,
+					promptVersion: ORGANIC_SCRIPT_PROMPT_VERSION,
+					outputSchemaVersion: ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
+				}
+			: config;
+	const facts =
+		source.kind === "affiliate"
+			? await transaction
+					.select({
+						id: productFact.id,
+						revision: productFact.revision,
+						content: productFact.content,
+						type: productFact.type,
+						status: productFact.status,
+						sourceType: productFact.sourceType,
+						sourceLabel: productFact.sourceLabel,
+						sourceUrl: productFact.sourceUrl,
+						confirmedAt: productFact.confirmedAt,
+						expiresAt: productFact.expiresAt,
+					})
+					.from(productFact)
+					.where(
+						and(
+							eq(productFact.workspaceId, actor.workspaceId),
+							eq(productFact.productId, source.productId),
+						),
+					)
+					.orderBy(productFact.id)
+					.for("update", { of: productFact })
+			: [];
 
 	const [channelSettingsRecord] = await transaction
 		.select()
@@ -485,6 +592,17 @@ async function prepareInTransaction(
 				"Repair parent must be a usable partial generation.",
 			);
 		}
+		const parentSnapshot =
+			parent.inputSnapshotJson as ScriptGenerationInputSnapshot;
+		const parentIsOrganic =
+			parentSnapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION &&
+			parentSnapshot.sourceMode === "ORGANIC_NO_PRODUCT";
+		if ((source.kind === "organic") !== parentIsOrganic) {
+			throw new ScriptGenerationError(
+				"GENERATION_INVALID_TRANSITION",
+				"Repair cannot switch between Organic and Affiliate source modes.",
+			);
+		}
 		const requestedSections = input.repairSections ?? [];
 		const invalidSections = parent.invalidSections as ScriptGenerationSection[];
 		if (
@@ -539,7 +657,8 @@ async function prepareInTransaction(
 		parsedChannelSettings.data,
 		mediaSnapshots,
 		parsedOutputRules.data,
-		config,
+		effectiveConfig,
+		source,
 	);
 	if (
 		new TextEncoder().encode(canonicalizeJson(snapshot)).byteLength >
@@ -550,7 +669,11 @@ async function prepareInTransaction(
 			"Generation input snapshot is too large.",
 		);
 	}
-	if (snapshot.facts.length === 0)
+	if (
+		source.kind === "affiliate" &&
+		snapshot.snapshotVersion === SCRIPT_SNAPSHOT_VERSION &&
+		(snapshot.facts ?? []).length === 0
+	)
 		throw new ScriptGenerationError(
 			"NO_USABLE_PRODUCT_FACTS",
 			"No verified, eligible Product Facts are available for generation.",
@@ -571,10 +694,10 @@ async function prepareInTransaction(
 			requestHash,
 			parentGenerationId: input.parentGenerationId ?? null,
 			mode: input.mode,
-			provider: config.provider,
-			model: config.model,
-			promptVersion: config.promptVersion,
-			outputSchemaVersion: config.outputSchemaVersion,
+			provider: effectiveConfig.provider,
+			model: effectiveConfig.model,
+			promptVersion: effectiveConfig.promptVersion,
+			outputSchemaVersion: effectiveConfig.outputSchemaVersion,
 			inputSnapshotJson: snapshot,
 			inputHash,
 			promptHash,
@@ -740,16 +863,28 @@ export function evaluateFullScriptGenerationResult(
 			errorCode: "AI_OUTPUT_TRUNCATED",
 		};
 	}
-	const validation = validateScriptDraftOutput(
-		result.content,
-		snapshot.contentBrief.durationSeconds,
-		snapshot.outputRules.claimLimit,
-		{
-			expectedLanguage: snapshot.outputRules.language,
-			requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
-			avoidWords: snapshot.channelSettings.avoidWords,
-		},
-	);
+	const validation =
+		snapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION
+			? validateOrganicScriptDraftOutput(
+					result.content,
+					snapshot.contentBrief.durationSeconds,
+					snapshot.outputRules.claimLimit,
+					{
+						expectedLanguage: snapshot.outputRules.language,
+						requiredDisclosure: null,
+						avoidWords: snapshot.channelSettings.avoidWords,
+					},
+				)
+			: validateScriptDraftOutput(
+					result.content,
+					snapshot.contentBrief.durationSeconds,
+					snapshot.outputRules.claimLimit,
+					{
+						expectedLanguage: snapshot.outputRules.language,
+						requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
+						avoidWords: snapshot.channelSettings.avoidWords,
+					},
+				);
 	return {
 		status: validation.status,
 		output: validation.output,
@@ -946,12 +1081,44 @@ export async function finalizeScriptGeneration(
 		} else {
 			const result = input.outcome.result;
 			const snapshot = row.inputSnapshotJson as ScriptGenerationInputSnapshot;
+			let organicIdentityStillCurrent = true;
+			if (snapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION) {
+				const [currentOrganicProject] = await transaction
+					.select({
+						contentType: project.contentType,
+						creationPath: project.creationPath,
+						contentFormatKey: project.contentFormatKey,
+						contentFormatVersion: project.contentFormatVersion,
+						productId: project.productId,
+					})
+					.from(project)
+					.where(
+						and(
+							eq(project.id, row.projectId),
+							eq(project.workspaceId, actor.workspaceId),
+							eq(project.contentType, "ORGANIC"),
+							eq(project.creationPath, "SCRIPTED"),
+							eq(project.contentFormatKey, "SCRIPTED_STANDARD"),
+							eq(project.contentFormatVersion, 1),
+							isNull(project.productId),
+						),
+					)
+					.limit(1);
+				organicIdentityStillCurrent = Boolean(currentOrganicProject);
+			}
 			const validationOptions = {
 				expectedLanguage: snapshot.outputRules.language,
-				requiredDisclosure: snapshot.channelSettings.affiliateDisclosure,
+				requiredDisclosure:
+					snapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION
+						? null
+						: snapshot.channelSettings.affiliateDisclosure,
 				avoidWords: snapshot.channelSettings.avoidWords,
 			};
-			if (row.mode === "full") {
+			if (!organicIdentityStillCurrent) {
+				status = "failed";
+				invalidSections = [...scriptGenerationSections];
+				errorCode = "ORGANIC_SOURCE_NOT_SUPPORTED";
+			} else if (row.mode === "full") {
 				const decision = evaluateFullScriptGenerationResult(result, snapshot);
 				status = decision.status;
 				outputJson = decision.output;
@@ -959,12 +1126,20 @@ export async function finalizeScriptGeneration(
 				invalidSections = decision.invalidSections;
 				errorCode = decision.errorCode;
 			} else if (snapshot.request.repair) {
-				let validation = validateScriptDraftOutput(
-					result.content,
-					snapshot.contentBrief.durationSeconds,
-					snapshot.outputRules.claimLimit,
-					validationOptions,
-				);
+				let validation =
+					snapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION
+						? validateOrganicScriptDraftOutput(
+								result.content,
+								snapshot.contentBrief.durationSeconds,
+								snapshot.outputRules.claimLimit,
+								validationOptions,
+							)
+						: validateScriptDraftOutput(
+								result.content,
+								snapshot.contentBrief.durationSeconds,
+								snapshot.outputRules.claimLimit,
+								validationOptions,
+							);
 				if (isTruncatedTextProviderFinishReason(result.finishReason)) {
 					validation = {
 						status: "failed",
@@ -976,12 +1151,20 @@ export async function finalizeScriptGeneration(
 					};
 					errorCode = "AI_OUTPUT_TRUNCATED";
 				} else {
-					const repairValidation = validateRepairScriptOutput(
-						result.content,
-						snapshot.request.repair.sections,
-						snapshot.outputRules.claimLimit,
-						validationOptions,
-					);
+					const repairValidation =
+						snapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION
+							? validateRepairOrganicScriptOutput(
+									result.content,
+									snapshot.request.repair.sections,
+									snapshot.outputRules.claimLimit,
+									validationOptions,
+								)
+							: validateRepairScriptOutput(
+									result.content,
+									snapshot.request.repair.sections,
+									snapshot.outputRules.claimLimit,
+									validationOptions,
+								);
 					if (repairValidation.success && repairValidation.output) {
 						const parentValidSections =
 							snapshot.request.repair.baseValidSections ??
@@ -1008,12 +1191,20 @@ export async function finalizeScriptGeneration(
 								issueCodes: ["REPAIR_MERGE_INVALID"],
 							};
 						} else {
-							const mergedValidation = validateScriptDraftOutput(
-								mergedRepair.output,
-								snapshot.contentBrief.durationSeconds,
-								snapshot.outputRules.claimLimit,
-								validationOptions,
-							);
+							const mergedValidation =
+								snapshot.snapshotVersion === ORGANIC_SCRIPT_SNAPSHOT_VERSION
+									? validateOrganicScriptDraftOutput(
+											mergedRepair.output,
+											snapshot.contentBrief.durationSeconds,
+											snapshot.outputRules.claimLimit,
+											validationOptions,
+										)
+									: validateScriptDraftOutput(
+											mergedRepair.output,
+											snapshot.contentBrief.durationSeconds,
+											snapshot.outputRules.claimLimit,
+											validationOptions,
+										);
 							const preservedContent = mergedRepair.preservedSections.every(
 								(section) => {
 									const mergedValue = getScriptSectionValue(
@@ -1219,9 +1410,11 @@ export async function getScriptGenerationContext(
 		.select({
 			id: project.id,
 			name: project.name,
-			productId: product.id,
-			productName: product.name,
-			productCategory: product.category,
+			contentType: project.contentType,
+			creationPath: project.creationPath,
+			contentFormatKey: project.contentFormatKey,
+			contentFormatVersion: project.contentFormatVersion,
+			projectProductId: project.productId,
 			platform: contentBrief.platform,
 			goal: contentBrief.goal,
 			durationSeconds: contentBrief.durationSeconds,
@@ -1229,13 +1422,11 @@ export async function getScriptGenerationContext(
 			description: contentBrief.description,
 		})
 		.from(project)
-		.innerJoin(product, eq(project.productId, product.id))
 		.innerJoin(contentBrief, eq(contentBrief.projectId, project.id))
 		.where(
 			and(
 				eq(project.id, projectId),
 				eq(project.workspaceId, actor.workspaceId),
-				eq(product.workspaceId, actor.workspaceId),
 			),
 		)
 		.limit(1);
@@ -1244,6 +1435,61 @@ export async function getScriptGenerationContext(
 			"GENERATION_NOT_FOUND",
 			"Project was not found in this workspace.",
 		);
+	if (
+		projectRecord.contentType === "AFFILIATE" &&
+		projectRecord.projectProductId === null
+	)
+		throw new ScriptGenerationError(
+			"GENERATION_NOT_FOUND",
+			"Project was not found in this workspace.",
+		);
+	let source: ScriptGenerationSource;
+	if (
+		projectRecord.contentType === "ORGANIC" &&
+		projectRecord.creationPath === "SCRIPTED" &&
+		projectRecord.contentFormatKey === "SCRIPTED_STANDARD" &&
+		projectRecord.contentFormatVersion === 1 &&
+		projectRecord.projectProductId === null
+	) {
+		source = { kind: "organic" };
+	} else if (
+		projectRecord.contentType === "AFFILIATE" &&
+		projectRecord.creationPath === "SCRIPTED" &&
+		projectRecord.contentFormatKey === "SCRIPTED_STANDARD" &&
+		projectRecord.contentFormatVersion === 1 &&
+		projectRecord.projectProductId !== null
+	) {
+		const [productRecord] = await db
+			.select({
+				id: product.id,
+				name: product.name,
+				category: product.category,
+			})
+			.from(product)
+			.where(
+				and(
+					eq(product.id, projectRecord.projectProductId),
+					eq(product.workspaceId, actor.workspaceId),
+				),
+			)
+			.limit(1);
+		if (!productRecord)
+			throw new ScriptGenerationError(
+				"GENERATION_NOT_FOUND",
+				"Project was not found in this workspace.",
+			);
+		source = {
+			kind: "affiliate",
+			productId: productRecord.id,
+			productName: productRecord.name,
+			productCategory: productRecord.category,
+		};
+	} else {
+		throw new ScriptGenerationError(
+			"ORGANIC_SOURCE_NOT_SUPPORTED",
+			"This project identity is not supported by the ScriptGeneration runtime.",
+		);
+	}
 
 	const [
 		facts,
@@ -1252,27 +1498,29 @@ export async function getScriptGenerationContext(
 		outputRulesRows,
 		aiSettingsRows,
 	] = await Promise.all([
-		db
-			.select({
-				id: productFact.id,
-				revision: productFact.revision,
-				content: productFact.content,
-				type: productFact.type,
-				status: productFact.status,
-				sourceType: productFact.sourceType,
-				sourceLabel: productFact.sourceLabel,
-				sourceUrl: productFact.sourceUrl,
-				confirmedAt: productFact.confirmedAt,
-				expiresAt: productFact.expiresAt,
-			})
-			.from(productFact)
-			.where(
-				and(
-					eq(productFact.workspaceId, actor.workspaceId),
-					eq(productFact.productId, projectRecord.productId),
-				),
-			)
-			.orderBy(productFact.id),
+		source.kind === "affiliate"
+			? db
+					.select({
+						id: productFact.id,
+						revision: productFact.revision,
+						content: productFact.content,
+						type: productFact.type,
+						status: productFact.status,
+						sourceType: productFact.sourceType,
+						sourceLabel: productFact.sourceLabel,
+						sourceUrl: productFact.sourceUrl,
+						confirmedAt: productFact.confirmedAt,
+						expiresAt: productFact.expiresAt,
+					})
+					.from(productFact)
+					.where(
+						and(
+							eq(productFact.workspaceId, actor.workspaceId),
+							eq(productFact.productId, source.productId),
+						),
+					)
+					.orderBy(productFact.id)
+			: Promise.resolve([]),
 		db
 			.select()
 			.from(channelSettings)
@@ -1310,7 +1558,7 @@ export async function getScriptGenerationContext(
 			id: fact.id,
 			revision: fact.revision,
 			content: fact.content,
-			type: fact.type as ScriptGenerationContext["facts"][number]["type"],
+			type: fact.type as ScriptGenerationFactSnapshot["type"],
 			assessment: evaluated.assessment,
 			generationUsability: evaluated.usability,
 			source: {
@@ -1371,6 +1619,14 @@ export async function getScriptGenerationContext(
 			: defaultOutputRules,
 	);
 	const aiSettingsRecord = aiSettingsRows[0];
+	const promptVersion =
+		source.kind === "organic"
+			? ORGANIC_SCRIPT_PROMPT_VERSION
+			: SCRIPT_PROMPT_VERSION;
+	const outputSchemaVersion =
+		source.kind === "organic"
+			? ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION
+			: SCRIPT_OUTPUT_SCHEMA_VERSION;
 
 	let generationConfig: ScriptGenerationContext["generationConfig"];
 	const parsedAiSettings = aiSettingsSchema.safeParse(aiSettingsRecord);
@@ -1378,26 +1634,26 @@ export async function getScriptGenerationContext(
 		generationConfig = {
 			textProvider: parsedAiSettings.data.textProvider,
 			textModel: parsedAiSettings.data.textModel,
-			promptVersion: SCRIPT_PROMPT_VERSION,
-			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+			promptVersion,
+			outputSchemaVersion,
 		};
 	} else if (!aiSettingsRecord) {
 		generationConfig = {
 			textProvider: env.TEXT_AI_DEFAULT_PROVIDER,
 			textModel: env.TEXT_AI_DEFAULT_MODEL,
-			promptVersion: SCRIPT_PROMPT_VERSION,
-			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+			promptVersion,
+			outputSchemaVersion,
 		};
 	} else {
 		generationConfig = {
 			textProvider: aiSettingsRecord.textProvider?.trim() || "Chưa cấu hình",
 			textModel: aiSettingsRecord.textModel?.trim() || "Chưa cấu hình",
-			promptVersion: SCRIPT_PROMPT_VERSION,
-			outputSchemaVersion: SCRIPT_OUTPUT_SCHEMA_VERSION,
+			promptVersion,
+			outputSchemaVersion,
 		};
 	}
 
-	return {
+	const contextBase = {
 		project: { id: projectRecord.id, name: projectRecord.name },
 		contentBrief: {
 			platform: projectRecord.platform as "tiktok",
@@ -1405,11 +1661,6 @@ export async function getScriptGenerationContext(
 			durationSeconds: projectRecord.durationSeconds,
 			angle: projectRecord.angle,
 			description: normalizeDescription(projectRecord.description),
-		},
-		product: {
-			id: projectRecord.productId,
-			name: projectRecord.productName,
-			category: projectRecord.productCategory,
 		},
 		channelSettings: parsedChannelSettings.success
 			? parsedChannelSettings.data
@@ -1419,8 +1670,31 @@ export async function getScriptGenerationContext(
 			? parsedOutputRules.data
 			: defaultOutputRules,
 		generationConfig,
-		facts: contextFacts,
 	};
+	if (source.kind === "organic") {
+		return {
+			...contextBase,
+			project: {
+				...contextBase.project,
+				contentType: "ORGANIC" as const,
+				creationPath: "SCRIPTED" as const,
+				contentFormat: "SCRIPTED_STANDARD" as const,
+				contentFormatVersion: 1 as const,
+			},
+			sourceMode: "ORGANIC_NO_PRODUCT" as const,
+			product: { id: "", name: "", category: null },
+			facts: [],
+		} as ScriptGenerationContext;
+	}
+	return {
+		...contextBase,
+		product: {
+			id: source.productId,
+			name: source.productName,
+			category: source.productCategory,
+		},
+		facts: contextFacts,
+	} as ScriptGenerationContext;
 }
 
 export { findScriptGeneration };

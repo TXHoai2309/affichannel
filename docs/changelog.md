@@ -10,6 +10,18 @@ Cập nhật lần cuối: 2026-09-03.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19B Organic ScriptGeneration PASS
+
+- Organic + Scripted + `SCRIPTED_STANDARD` v1 với `Project.productId = null` đã
+  dùng source mode server-derived `ORGANIC_NO_PRODUCT`, snapshot/prompt/output
+  v3 (`script-input.v3`, `script-prompt.v3`, `script-draft.v3`) trên các bảng
+  ScriptGeneration/ScriptVersion hiện hữu; không đổi schema/migration.
+- Affiliate Scripted giữ nguyên v2 và Product + usable Product Facts preflight.
+  Organic không đọc Product/Product Facts, không tạo ClaimManifest/Fact Lock;
+  PRODUCT proposal fail closed, GENERAL proposal vẫn NEEDS_CONFIRMATION.
+- Deterministic clean-room integration và v2/v3/editor regressions PASS; Claim
+  applicability, Organic Fact Lock/Voice và 19C vẫn chưa active.
+
 ### AFF-US-019 Phase 19A.3 Claim Subject foundation accepted
 
 - Pure claim-subject schema/types, strict version-aware parser, legacy Affiliate

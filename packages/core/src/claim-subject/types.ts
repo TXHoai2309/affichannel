@@ -33,6 +33,8 @@ export type SubjectAwareScriptClaim = Readonly<{
 	subject: ClaimSubject;
 	subjectStatus: ClaimSubjectStatus;
 	subjectSource: ClaimSubjectSource | null;
+	/** Provider classification is evidence only, never authority. */
+	proposedSubject?: ProposedClaimSubject;
 }>;
 
 export type LegacyScriptClaim = Readonly<{

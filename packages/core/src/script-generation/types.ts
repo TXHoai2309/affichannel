@@ -1,4 +1,10 @@
 import type {
+	ClaimSubject,
+	ClaimSubjectSource,
+	ClaimSubjectStatus,
+	ProposedClaimSubject,
+} from "../claim-subject/types";
+import type {
 	FactAssessment,
 	FactGenerationUsability,
 } from "../product-fact/freshness";
@@ -21,6 +27,13 @@ export type ScriptGenerationStatus = (typeof scriptGenerationStatuses)[number];
 
 export const scriptGenerationModes = ["full", "repair"] as const;
 export type ScriptGenerationMode = (typeof scriptGenerationModes)[number];
+
+export const scriptGenerationSourceModes = [
+	"PRODUCT_BACKED",
+	"ORGANIC_NO_PRODUCT",
+] as const;
+export type ScriptGenerationSourceMode =
+	(typeof scriptGenerationSourceModes)[number];
 
 export const scriptGenerationSections = [
 	"hook",
@@ -57,7 +70,17 @@ export type ScriptDraft = {
 	caption: string;
 	hashtags: string[];
 	disclosure: string;
-	claims: Array<{ text: string; occurrence: ClaimOccurrence }>;
+	claims: Array<
+		| { text: string; occurrence: ClaimOccurrence }
+		| {
+				text: string;
+				occurrence: ClaimOccurrence;
+				subject: ClaimSubject;
+				subjectStatus: ClaimSubjectStatus;
+				subjectSource: ClaimSubjectSource | null;
+				proposedSubject?: ProposedClaimSubject;
+		  }
+	>;
 };
 
 export type PartialScriptDraft = {
@@ -81,7 +104,7 @@ export type ScriptGenerationFactSnapshot = {
 	};
 };
 
-export type ScriptGenerationInputSnapshot = {
+type ScriptGenerationSnapshotBase = {
 	snapshotVersion: string;
 	request: {
 		mode: ScriptGenerationMode;
@@ -104,7 +127,7 @@ export type ScriptGenerationInputSnapshot = {
 		angle: string;
 		description: string | null;
 	};
-	product: {
+	product?: {
 		id: string;
 		name: string;
 		category: string | null;
@@ -116,7 +139,45 @@ export type ScriptGenerationInputSnapshot = {
 		promptVersion: string;
 		outputSchemaVersion: string;
 	};
-	facts: ScriptGenerationFactSnapshot[];
+	facts?: ScriptGenerationFactSnapshot[];
+};
+
+export type AffiliateScriptGenerationInputSnapshot =
+	ScriptGenerationSnapshotBase & {
+		snapshotVersion: typeof import("./policy").SCRIPT_SNAPSHOT_VERSION;
+		product: { id: string; name: string; category: string | null };
+		facts: ScriptGenerationFactSnapshot[];
+	};
+
+export type OrganicScriptGenerationInputSnapshot = Omit<
+	ScriptGenerationSnapshotBase,
+	"product"
+> & {
+	snapshotVersion: typeof import("./policy").ORGANIC_SCRIPT_SNAPSHOT_VERSION;
+	sourceMode: "ORGANIC_NO_PRODUCT";
+	project: ScriptGenerationSnapshotBase["project"] & {
+		contentType: "ORGANIC";
+		creationPath: "SCRIPTED";
+		contentFormat: "SCRIPTED_STANDARD";
+		contentFormatVersion: 1;
+	};
+};
+
+// Runtime readers accept both frozen v2 and additive v3 payloads.  The
+// version-specific aliases above remain available for strategy code, while
+// this boundary keeps historical fixture literals source-compatible.
+export type ScriptGenerationInputSnapshot = ScriptGenerationSnapshotBase & {
+	snapshotVersion: string;
+	sourceMode?: "ORGANIC_NO_PRODUCT";
+	project: ScriptGenerationSnapshotBase["project"] &
+		Partial<{
+			contentType: "ORGANIC" | "AFFILIATE";
+			creationPath: "SCRIPTED" | "QUICK_IMAGE" | "MEDIA_FIRST";
+			contentFormat: string;
+			contentFormatVersion: number;
+		}>;
+	product?: { id: string; name: string; category: string | null };
+	facts?: ScriptGenerationFactSnapshot[];
 };
 
 export type ScriptGenerationArtifact = {
@@ -152,9 +213,11 @@ export type ScriptGenerationArtifact = {
 
 export type ScriptGenerationContext = Omit<
 	ScriptGenerationInputSnapshot,
-	"snapshotVersion" | "request" | "channelSettings"
+	"snapshotVersion" | "request" | "channelSettings" | "product" | "facts"
 > & {
 	channelSettings: ChannelSettings | null;
+	product: { id: string; name: string; category: string | null };
+	facts: ScriptGenerationFactSnapshot[];
 };
 
 export type ScriptGenerationDependencyState = {

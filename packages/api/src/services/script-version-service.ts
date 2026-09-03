@@ -1,8 +1,10 @@
 import type { ScriptVersionEditableSnapshot } from "@affichannel/core";
 import {
 	mergeScriptVersionAutosave,
+	ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
 	ScriptVersionError,
 	scriptDraftSchema,
+	scriptDraftV3Schema,
 	validateScriptVersionDraft,
 } from "@affichannel/core";
 import {
@@ -24,7 +26,13 @@ import type { WorkspaceActor } from "./workspace";
 function createInitialSnapshot(
 	outputJson: unknown,
 ): ScriptVersionEditableSnapshot {
-	const parsed = scriptDraftSchema.safeParse(outputJson);
+	const parsed =
+		outputJson &&
+		typeof outputJson === "object" &&
+		"schemaVersion" in outputJson &&
+		outputJson.schemaVersion === ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION
+			? scriptDraftV3Schema.safeParse(outputJson)
+			: scriptDraftSchema.safeParse(outputJson);
 	if (!parsed.success) {
 		throw new ScriptVersionError(
 			"SCRIPT_GENERATION_NOT_EDITABLE",
