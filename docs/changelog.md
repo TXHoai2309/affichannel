@@ -6,9 +6,20 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-02.
+Cập nhật lần cuối: 2026-09-03.
 
 ## Chưa phát hành
+
+### AFF-US-019 Phase 19A.3 Claim Subject foundation PASS
+
+- Hoàn tất pure claim-subject schema/types, strict version-aware parser, legacy
+  Affiliate compatibility adapter, summary/projection helpers, confirmation
+  transitions và version constants theo DEC-035.
+- Khóa và xác nhận các frozen vectors hiện hữu; DB/integration, unit, Web,
+  type-check và Biome regressions PASS trên disposable loopback PostgreSQL với
+  live AI/TTS tắt.
+- Không thay ScriptGeneration/ClaimManifest/Fact Lock/Voice runtime, schema,
+  migration hoặc provider; Organic vẫn inactive và 19B **NOT STARTED**.
 
 ### AFF-US-019 Phase 19A.2 Claim Subject contract lock
 

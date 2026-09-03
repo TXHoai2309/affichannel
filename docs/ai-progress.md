@@ -4,8 +4,9 @@
   AFF-US-014 M4 shadow retained; AFF-US-015 DONE; AFF-US-017 DONE;
   AFF-US-018 Phase 18A–18F PASS và DONE. Fact Lock new writes là Manifest-first;
   legacy `inputMode=NULL` chỉ còn read compatibility. AFF-US-019 Phase 19A.2
-  **CONTRACT LOCKED** theo DEC-035; 19A.3 chưa bắt đầu.
-- Cập nhật lần cuối: 2026-09-02
+  **CONTRACT LOCKED** theo DEC-035; 19A.3 claim subject foundation PASS;
+  19B chưa bắt đầu.
+- Cập nhật lần cuối: 2026-09-03
 
 Current canonical status: AFF-US-018 DONE. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
@@ -13,7 +14,18 @@ trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; 
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
 hoàn tất provider/runtime/CAS trên disposable DB. CR-C đã PASS trên disposable
 E2E/integration infrastructure; AFF-US-019 Phase 19A.2 đã lock Product claim
-subject contract theo DEC-035, 19A.3 và 19B chưa bắt đầu.
+subject contract theo DEC-035; 19A.3 claim subject foundation đã PASS và 19B
+chưa bắt đầu.
+
+## 2026-09-03 — AFF-US-019 Phase 19A.3 Claim Subject foundation PASS
+
+Pure claim-subject schema/types, strict version-aware parsing, legacy Affiliate
+compatibility adapter, summary/projection helpers, confirmation transitions,
+version constants và frozen-vector tests đã PASS. Validation chạy trên disposable
+loopback PostgreSQL với live AI/TTS tắt; toàn bộ Affiliate/Manifest/Fact Lock,
+Claim Refresh, Voice, Applicability/Adaptive, Web, type và Biome regressions đều
+xanh. Không thay runtime/schema/migration, không backfill/rewrite lịch sử, không
+activate Organic hoặc provider. 19B vẫn **NOT STARTED**.
 
 ## 2026-09-02 — AFF-US-019 Phase 19A.2 Claim Subject contract lock
 
