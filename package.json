@@ -39,6 +39,7 @@
 		"test:integration:script-claim-refresh-repository": "tsx scripts/test-script-claim-refresh-persistence.ts",
 		"test:integration:script-claim-refresh-runtime": "tsx scripts/test-script-claim-refresh-runtime.ts",
 		"test:integration:script-claim-refresh-organic": "tsx scripts/test-script-claim-refresh-organic.ts",
+		"test:integration:script-version-claim-confirmation": "tsx scripts/test-script-version-claim-confirmation.ts",
 		"test:integration:project-channel-first-m5a": "tsx scripts/test-project-channel-first-m5a.ts",
 		"test:integration:project-channel-first-m5c": "tsx scripts/test-project-channel-first-m5c.ts",
 		"test:unit:legacy-affiliate-classifier": "pnpm --filter web exec vitest run src/features/project/legacy-affiliate-compatibility.test.ts",

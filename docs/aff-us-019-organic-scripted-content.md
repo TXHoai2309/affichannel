@@ -1,16 +1,47 @@
 # AFF-US-019 — Organic Scripted Content
 
-## Phase 19C.2A — Organic Claim Refresh v2
+## Phase 19C.2B — Claim Subject Confirmation API
 
-- Trạng thái: **19C.2A ORGANIC CLAIM REFRESH V2 PASS — 19C.2B NOT STARTED**
+- Trạng thái: **19C.2B CLAIM SUBJECT CONFIRMATION API PASS — 19C.3 NOT STARTED**
 - Cập nhật: 2026-09-03
-- Phạm vi: Organic Scripted claim refresh proposal runtime
+- Phạm vi: Organic Scripted claim subject confirmation mutation
 - Organic dùng source mode `ORGANIC_NO_PRODUCT`, Claim Refresh input v1 và
   prompt/output v2; Affiliate giữ nguyên Claim Refresh v1. Không có schema/migration mới.
 
 AFF-US-001–012 là historical/golden baseline. AFF-US-013–018, 19B và 19C.1 đã
 accepted. Quick Image/Media First, Organic Fact Lock runtime, Voice TOCTOU và
-Project creation UI không thuộc 19C.2A.
+Project creation UI không thuộc 19C.2B.
+
+## 19C.2B acceptance
+
+`scriptVersion.confirmClaimSubjects` is a protected, server-authorized batch
+mutation for the exact Organic + Scripted + `SCRIPTED_STANDARD` v1 identity and
+the current mutable `script-draft.v3` ScriptVersion only. Its strict input is
+`scriptVersionId`, `expectedScriptVersionRevision`, and zero-based
+`{ claimIndex, subject: GENERAL | PRODUCT }` decisions; caller-supplied source,
+binding, Product ID, claim status, applicability, or project identity is not
+accepted. The server requires every current `NEEDS_CONFIRMATION` claim to be
+covered, permits explicit correction of already-confirmed claims, and rejects
+duplicates, partial batches, and out-of-range indices.
+
+The repository locks the workspace-scoped Project and current draft in one
+transaction and applies one revision CAS (R→R+1) for the complete batch. It
+reuses `confirmClaimSubject`, writes `subjectStatus = CONFIRMED` and
+`subjectSource = USER`, preserves `proposedSubject` as provider provenance, and
+constructs the only allowed Product subject binding (`PROJECT_PRODUCT`) on the
+server. Product claims remain valid when `Project.productId` is null; the
+existing applicability resolver therefore derives Product `REQUIRED` and Fact
+Lock `BLOCKED` without mutating Project, Manifest, or Fact Lock state.
+
+Empty or already-confirmed inventories return sanitized `not_required` without a
+revision. Stale/mismatched claim source revisions, Affiliate identities,
+historical ScriptVersions, malformed persisted Organic claims, cross-workspace
+IDs, and CAS races fail closed with mapped public errors. Confirmation never
+calls a provider, refreshes claims, changes text/occurrences, creates a
+confirmation table, or changes schema/migrations. A subsequent Claim Refresh
+read sees current confirmed claims and returns `not_required` with zero provider
+calls. Clean-room matrix, concurrency, applicability, refresh, Affiliate, web,
+type, and formatting regressions pass on disposable loopback PostgreSQL.
 
 ## 19C.2A acceptance
 
@@ -20,8 +51,8 @@ projection and no Product/Product Facts/Manifest/Fact Lock input. Both GENERAL a
 PRODUCT provider proposals are accepted as unresolved claims carrying
 `NEEDS_CONFIRMATION` and `subjectSource = null`; no provider result is authority.
 Current unresolved Organic claims are `NOT_REQUIRED`, stale claims refresh with
-R→R+1 CAS, and zero claims complete without Product or Fact Lock. User confirmation
-is intentionally deferred to 19C.2B.
+R→R+1 CAS, and zero claims complete without Product or Fact Lock. At the 19C.2A
+boundary, user confirmation was intentionally deferred to 19C.2B.
 
 ## 19C.1 acceptance
 
@@ -197,7 +228,8 @@ Lock execution remain phase-gated.
   prompt, repair và fail-closed generated-output protection.
 - **19C.1 — Claim Applicability:** current ScriptVersion summary, Organic Resolver
   policy, adaptive/read-model propagation, fail-closed state and shadow parity.
-- **19C.2 — Claim Resolution/Refresh:** confirmation and Organic refresh runtime.
+- **19C.2 — Claim Resolution/Refresh:** confirmation and Organic refresh runtime
+  (completed).
 - **19C.3 — Manifest/Fact Lock:** subject-aware Manifest/Fact Lock execution.
 - **19D — Voice Applicability:** Config policy, Preview/Segment server recheck,
   TOCTOU protection và zero-provider-call tests khi gate fail.
@@ -496,12 +528,12 @@ following decision remains locked:
 ## 9. Current acceptance boundary
 
 ```text
-AFF-US-019 Phase 19C.2A: ORGANIC CLAIM REFRESH V2 PASS
-19C.2B status: NOT STARTED
+AFF-US-019 Phase 19C.2B: CLAIM SUBJECT CONFIRMATION API PASS
+19C.2 status: COMPLETE (Organic Claim Refresh v2 + confirmation)
 19C.3 status: NOT STARTED
 19D status: NOT STARTED
 19E status: NOT STARTED
-Runtime changed: Organic read-model policy only
+Runtime changed: Organic Claim Refresh v2 and protected user confirmation
 Schema changed: NO
 Migration created: NO
 Provider calls: 0
@@ -509,5 +541,5 @@ Production DB touched: NO
 Development manual DB touched: NO
 ```
 
-Required next action is 19C.2B Claim Subject Confirmation. Subject-aware Fact Lock
-execution and Voice TOCTOU remain phase-gated.
+Required next action is 19C.3 Manifest / Fact Lock v2. Voice TOCTOU remains
+phase-gated for 19D, and no UI was added in 19C.2B.

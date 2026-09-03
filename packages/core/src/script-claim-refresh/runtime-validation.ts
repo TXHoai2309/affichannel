@@ -176,6 +176,7 @@ export function validateCurrentOrganicScriptClaimInventory(
 	for (const rawClaim of claims) {
 		const parsed = organicCanonicalClaimSchema.safeParse(rawClaim);
 		if (!parsed.success) return false;
+		if (parsed.data.subjectSource === "LEGACY_COMPATIBILITY") return false;
 		if (
 			parsed.data.subjectStatus === "NEEDS_CONFIRMATION" &&
 			parsed.data.proposedSubject === undefined

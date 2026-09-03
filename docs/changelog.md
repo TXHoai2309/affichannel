@@ -10,6 +10,21 @@ Cập nhật lần cuối: 2026-09-03.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19C.2B Claim Subject Confirmation API PASS
+
+- Added protected `scriptVersion.confirmClaimSubjects` with strict server-owned
+  input, exact Organic Scripted v3 eligibility, workspace authorization, and a
+  single atomic batch revision CAS.
+- User decisions now persist authoritative GENERAL or server-constructed
+  PRODUCT/`PROJECT_PRODUCT` metadata as `CONFIRMED`/`USER` while preserving the
+  provider `proposedSubject`; corrections, empty/already-confirmed no-ops, stale
+  claims, malformed payloads, partial batches, and Affiliate rejection are
+  covered by the clean-room matrix.
+- Applicability continues to derive from current ScriptVersion claims, including
+  unbound Product claims (`productId = null`); no provider, refresh, Manifest,
+  Fact Lock, Voice, UI, schema, or migration changes were introduced. 19C.3 is
+  the next phase.
+
 ### AFF-US-019 Phase 19C.2A Organic Claim Refresh v2 PASS
 
 - Claim Refresh input `script-claim-refresh.v1` and Affiliate prompt/output v1
@@ -20,7 +35,7 @@ Cập nhật lần cuối: 2026-09-03.
   Facts, ClaimManifest, or Fact Lock is consulted.
 - Current unresolved claims return `not_required`; stale refresh persists fresh
   subject-aware claims through the existing durable run/CAS path. User confirmation
-  is not implemented yet; 19C.2B is next.
+  is now implemented by the protected 19C.2B confirmation mutation.
 
 ### AFF-US-019 Phase 19C.1 Claim Applicability PASS
 

@@ -4,6 +4,11 @@ import { z } from "zod";
 
 import { protectedProcedure } from "../index";
 import {
+	confirmClaimSubjectsInputSchema,
+	confirmScriptVersionClaimSubjects,
+	toClaimSubjectConfirmationPublicError,
+} from "../services/claim-subject-confirmation-service";
+import {
 	scriptClaimRefreshInputSchema,
 	toPublicScriptClaimRefreshResult,
 	toScriptClaimRefreshPublicError,
@@ -157,6 +162,16 @@ export const scriptVersionRouter = {
 				return toPublicScriptClaimRefreshResult(result);
 			} catch (error) {
 				return toScriptClaimRefreshPublicError(error);
+			}
+		}),
+	confirmClaimSubjects: protectedProcedure
+		.input(confirmClaimSubjectsInputSchema)
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			try {
+				return await confirmScriptVersionClaimSubjects(actor, input);
+			} catch (error) {
+				return toClaimSubjectConfirmationPublicError(error);
 			}
 		}),
 	restore: protectedProcedure
