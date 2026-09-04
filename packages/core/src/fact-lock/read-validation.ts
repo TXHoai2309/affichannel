@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { claimManifestSourceSchema } from "../claim-manifest/schema";
+import {
+	claimManifestSourceSchema,
+	subjectAwareClaimManifestClaimSchema,
+} from "../claim-manifest/schema";
 import {
 	factEvidenceStatuses,
 	factFreshnessReasons,
@@ -10,7 +13,10 @@ import { productFactTypes } from "../product-fact/types";
 import { outputRulesSchema } from "../script-generation/input-contract";
 import { scriptVersionEditableSnapshotSchema } from "../script-version/schema";
 import { FACT_LOCK_MANIFEST_INPUT_MODE } from "./manifest-contract";
-import { FACT_LOCK_MANIFEST_INPUT_VERSION } from "./manifest-request-hash";
+import {
+	FACT_LOCK_MANIFEST_INPUT_VERSION,
+	FACT_LOCK_MANIFEST_INPUT_VERSION_V2,
+} from "./manifest-request-hash";
 import { FACT_LOCK_SNAPSHOT_VERSION } from "./types";
 
 const idSchema = z.string().trim().min(1).max(120);
@@ -150,9 +156,67 @@ export const manifestFactLockInputSnapshotSchema = z
 		}
 	});
 
+export const manifestFactLockInputSnapshotV2Schema = z
+	.object({
+		inputMode: z.literal(FACT_LOCK_MANIFEST_INPUT_MODE),
+		inputVersion: z.literal(FACT_LOCK_MANIFEST_INPUT_VERSION_V2),
+		claimManifest: z.object({ id: idSchema, fingerprint: hashSchema }).strict(),
+		source: z
+			.object({
+				sourceType: z.literal("SCRIPT_VERSION"),
+				scriptVersionId: idSchema,
+				scriptVersionRevision: z.number().int().positive(),
+				claimsSourceRevision: z.number().int().positive(),
+				sourceContentHash: hashSchema,
+			})
+			.strict(),
+		productClaims: z.array(subjectAwareClaimManifestClaimSchema).min(1).max(64),
+		productFacts: z
+			.array(
+				factSnapshotSchema.extend({
+					generationUsability: z.enum(["allowed", "allowed_with_warning"]),
+				}),
+			)
+			.min(1),
+		productFactsFingerprint: hashSchema,
+		policy: manifestPolicySchema,
+		outputRules: outputRulesSchema,
+		zeroClaim: z.null(),
+	})
+	.strict()
+	.superRefine((snapshot, context) => {
+		const keys = snapshot.productClaims.map((claim) => claim.claimKey);
+		if (new Set(keys).size !== keys.length)
+			context.addIssue({
+				code: "custom",
+				path: ["productClaims"],
+				message: "DUPLICATE_CLAIM_KEY",
+			});
+		if (
+			snapshot.productClaims.some(
+				(claim) =>
+					claim.subject.kind !== "PRODUCT" ||
+					claim.subjectStatus !== "CONFIRMED",
+			)
+		)
+			context.addIssue({
+				code: "custom",
+				path: ["productClaims"],
+				message: "PRODUCT_SUBSET_INVALID",
+			});
+	});
+
+export const manifestFactLockInputSnapshotAnySchema = z.union([
+	manifestFactLockInputSnapshotSchema,
+	manifestFactLockInputSnapshotV2Schema,
+]);
+
 export type ParsedFactLockInputSnapshot = z.infer<
 	typeof factLockInputSnapshotSchema
 >;
 export type ParsedManifestFactLockInputSnapshot = z.infer<
 	typeof manifestFactLockInputSnapshotSchema
+>;
+export type ParsedManifestFactLockInputSnapshotV2 = z.infer<
+	typeof manifestFactLockInputSnapshotV2Schema
 >;

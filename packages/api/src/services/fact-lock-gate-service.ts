@@ -1,13 +1,16 @@
 import {
+	type BuiltSubjectAwareClaimManifest,
 	type ClaimManifest,
 	evaluateFactLockGate,
 	FactLockError,
 	type FactLockGateEvaluationInput,
 	type FactLockGateResult,
 	type FactLockProductFactSnapshot,
-	manifestFactLockInputSnapshotSchema,
+	manifestFactLockInputSnapshotAnySchema,
 	type ParsedFactLockInputSnapshot,
 	type ParsedManifestFactLockInputSnapshot,
+	scriptVersionEditableSnapshotSchema,
+	selectConfirmedProductManifestClaims,
 } from "@affichannel/core";
 import { FACT_LOCK_MANIFEST_INPUT_MODE } from "@affichannel/core/fact-lock/manifest-contract";
 import type { FactLockRunStatus } from "@affichannel/core/fact-lock/types";
@@ -32,6 +35,8 @@ type GateProject = {
 	contentFormatKey: string | null;
 	contentFormatVersion: number | null;
 	archivedAt?: Date | null;
+	productStatus?: string | null;
+	productArchivedAt?: Date | null;
 };
 
 export type FactLockGateInputBuilderInput = {
@@ -50,6 +55,22 @@ function invalidRead(message: string): never {
 
 function invalidManifest(message: string): never {
 	throw new FactLockError("CLAIM_MANIFEST_FINGERPRINT_MISMATCH", message);
+}
+
+function isCurrentOrganicScript(snapshot: unknown) {
+	const parsed = scriptVersionEditableSnapshotSchema.safeParse(snapshot);
+	return (
+		parsed.success &&
+		parsed.data.schemaVersion === "script-draft.v3" &&
+		parsed.data.claimsStatus === "current" &&
+		parsed.data.claims.every(
+			(claim) =>
+				"subjectStatus" in claim &&
+				claim.subjectStatus === "CONFIRMED" &&
+				(claim.subjectSource === "USER" ||
+					claim.subjectSource === "STRUCTURED_SOURCE"),
+		)
+	);
 }
 
 function factsAreCurrent(
@@ -97,7 +118,7 @@ function parseRun(row: GateRunRow) {
 	}
 	if (row.inputMode !== FACT_LOCK_MANIFEST_INPUT_MODE)
 		invalidRead("Fact Lock input mode không được hỗ trợ.");
-	const parsed = manifestFactLockInputSnapshotSchema.safeParse(
+	const parsed = manifestFactLockInputSnapshotAnySchema.safeParse(
 		row.inputSnapshotJson,
 	);
 	if (
@@ -115,7 +136,9 @@ function parseRun(row: GateRunRow) {
 		invalidManifest("Manifest Fact Lock snapshot không hợp lệ.");
 	return {
 		mode: "MANIFEST_V1" as const,
-		snapshot: parsed.data as ParsedManifestFactLockInputSnapshot,
+		snapshot: parsed.data as
+			| ParsedManifestFactLockInputSnapshot
+			| import("@affichannel/core").ParsedManifestFactLockInputSnapshotV2,
 		manifest: undefined as ClaimManifest | undefined,
 	};
 }
@@ -165,11 +188,22 @@ function buildInput(
 				? Boolean(
 						input.project &&
 							input.project.archivedAt === null &&
-							input.project.contentType === "AFFILIATE" &&
 							input.project.creationPath === "SCRIPTED" &&
 							input.project.contentFormatKey === "SCRIPTED_STANDARD" &&
 							input.project.contentFormatVersion === 1 &&
 							manifest.source.sourceType === "SCRIPT_VERSION" &&
+							((manifest.builderVersion === "claim-manifest-builder.v1" &&
+								input.project.contentType === "AFFILIATE") ||
+								(manifest.builderVersion === "claim-manifest-builder.v2" &&
+									input.project.contentType === "ORGANIC" &&
+									(input.project.productStatus === undefined ||
+										(input.project.productStatus === "active" &&
+											input.project.productArchivedAt === null)) &&
+									isCurrentOrganicScript(
+										input.currentScriptVersion?.snapshot,
+									) &&
+									input.currentScriptVersion?.snapshot.claimsSourceRevision ===
+										manifest.source.claimsSourceRevision)) &&
 							row.scriptVersionId === manifest.source.scriptVersionId &&
 							row.sourceScriptRevision ===
 								manifest.source.scriptVersionRevision &&
@@ -180,6 +214,18 @@ function buildInput(
 					)
 				: row.scriptVersionId === input.currentScriptVersion?.id &&
 					row.sourceScriptRevision === input.currentScriptVersion?.revision;
+			const organicProductCount =
+				manifest?.builderVersion === "claim-manifest-builder.v2"
+					? selectConfirmedProductManifestClaims(
+							manifest as unknown as BuiltSubjectAwareClaimManifest,
+						).length
+					: null;
+			const v2Snapshot =
+				parsed.mode === "MANIFEST_V1" &&
+				"inputVersion" in parsed.snapshot &&
+				parsed.snapshot.inputVersion === "fact-lock.manifest.v2"
+					? parsed.snapshot
+					: null;
 			const dependenciesCurrent =
 				parsed.mode === "MANIFEST_V1" &&
 				manifest?.claimCount === 0 &&
@@ -190,6 +236,15 @@ function buildInput(
 						runDependencies.length === 0
 					: (manifest === undefined ||
 							manifest.productId === input.productId) &&
+						(manifest?.builderVersion !== "claim-manifest-builder.v2" ||
+							(v2Snapshot !== null &&
+								v2Snapshot.productClaims.length === organicProductCount &&
+								JSON.stringify(v2Snapshot.productClaims) ===
+									JSON.stringify(
+										selectConfirmedProductManifestClaims(
+											manifest as unknown as BuiltSubjectAwareClaimManifest,
+										),
+									))) &&
 						factsAreCurrent(
 							snapshotFacts,
 							runDependencies,
@@ -211,7 +266,10 @@ function buildInput(
 }
 
 function inputFacts(
-	snapshot: ParsedFactLockInputSnapshot | ParsedManifestFactLockInputSnapshot,
+	snapshot:
+		| ParsedFactLockInputSnapshot
+		| ParsedManifestFactLockInputSnapshot
+		| import("@affichannel/core").ParsedManifestFactLockInputSnapshotV2,
 ) {
 	return snapshot.productFacts as FactLockProductFactSnapshot[];
 }

@@ -1,4 +1,5 @@
 import {
+	type BuiltSubjectAwareClaimManifest,
 	deriveFactLockEffectiveStatus,
 	FactLockError,
 	type FactLockGateEvaluationInput,
@@ -7,9 +8,12 @@ import {
 	type FactLockReadRun,
 	type FactLockRunStatus,
 	factLockInputSnapshotSchema,
-	manifestFactLockInputSnapshotSchema,
+	manifestFactLockInputSnapshotAnySchema,
 	type ParsedFactLockInputSnapshot,
 	type ParsedManifestFactLockInputSnapshot,
+	type ParsedManifestFactLockInputSnapshotV2,
+	scriptVersionEditableSnapshotSchema,
+	selectConfirmedProductManifestClaims,
 } from "@affichannel/core";
 import type { ClaimManifest } from "@affichannel/core/claim-manifest/types";
 import { FACT_LOCK_MANIFEST_INPUT_MODE } from "@affichannel/core/fact-lock/manifest-contract";
@@ -18,6 +22,7 @@ import {
 	db,
 	factDependency,
 	factLockRun,
+	product,
 	productFact,
 	project,
 	scriptVersion,
@@ -44,6 +49,8 @@ type ReadProject = {
 	contentFormatKey: string | null;
 	contentFormatVersion: number | null;
 	archivedAt: Date | null;
+	productStatus?: string | null;
+	productArchivedAt?: Date | null;
 };
 
 type ReadContextRun = FactLockReadRun & {
@@ -98,7 +105,9 @@ type ParsedLegacyReadRun = {
 type ParsedManifestReadRun = {
 	run: FactLockRunRow;
 	mode: "MANIFEST_V1";
-	snapshot: ParsedManifestFactLockInputSnapshot;
+	snapshot:
+		| ParsedManifestFactLockInputSnapshot
+		| import("@affichannel/core").ParsedManifestFactLockInputSnapshotV2;
 	manifest: ClaimManifest | undefined;
 };
 
@@ -106,8 +115,8 @@ type ParsedReadRun = ParsedLegacyReadRun | ParsedManifestReadRun;
 
 function parseManifestSnapshot(
 	row: FactLockRunRow,
-): ParsedManifestFactLockInputSnapshot {
-	const parsed = manifestFactLockInputSnapshotSchema.safeParse(
+): ParsedManifestReadRun["snapshot"] {
+	const parsed = manifestFactLockInputSnapshotAnySchema.safeParse(
 		row.inputSnapshotJson,
 	);
 	if (!parsed.success)
@@ -181,7 +190,7 @@ function manifestSourceCurrent(
 	manifest: ClaimManifest,
 	currentScriptVersion: FactLockGateEvaluationInput["currentScriptVersion"],
 ) {
-	return (
+	const affiliateCurrent =
 		projectRecord.archivedAt === null &&
 		projectRecord.contentType === "AFFILIATE" &&
 		projectRecord.creationPath === "SCRIPTED" &&
@@ -192,8 +201,35 @@ function manifestSourceCurrent(
 		run.sourceScriptRevision === manifest.source.scriptVersionRevision &&
 		currentScriptVersion !== null &&
 		currentScriptVersion.id === manifest.source.scriptVersionId &&
-		currentScriptVersion.revision === manifest.source.scriptVersionRevision
-	);
+		currentScriptVersion.revision === manifest.source.scriptVersionRevision;
+	const organicCurrent =
+		projectRecord.archivedAt === null &&
+		projectRecord.contentType === "ORGANIC" &&
+		projectRecord.creationPath === "SCRIPTED" &&
+		projectRecord.contentFormatKey === "SCRIPTED_STANDARD" &&
+		projectRecord.contentFormatVersion === 1 &&
+		manifest.builderVersion === "claim-manifest-builder.v2" &&
+		(projectRecord.productStatus === undefined ||
+			(projectRecord.productStatus === "active" &&
+				projectRecord.productArchivedAt === null)) &&
+		manifest.source.sourceType === "SCRIPT_VERSION" &&
+		currentScriptVersion !== null &&
+		scriptVersionEditableSnapshotSchema.safeParse(currentScriptVersion.snapshot)
+			.success &&
+		currentScriptVersion.snapshot.schemaVersion === "script-draft.v3" &&
+		currentScriptVersion.snapshot.claimsStatus === "current" &&
+		currentScriptVersion.snapshot.claims.every(
+			(claim) =>
+				"subjectStatus" in claim &&
+				claim.subjectStatus === "CONFIRMED" &&
+				(claim.subjectSource === "USER" ||
+					claim.subjectSource === "STRUCTURED_SOURCE"),
+		) &&
+		currentScriptVersion.snapshot.claimsSourceRevision ===
+			manifest.source.claimsSourceRevision &&
+		currentScriptVersion.id === manifest.source.scriptVersionId &&
+		currentScriptVersion.revision === manifest.source.scriptVersionRevision;
+	return affiliateCurrent || organicCurrent;
 }
 
 function mapCurrentScript(
@@ -265,12 +301,27 @@ function assertManifestClaimShape(
 	manifest: ClaimManifest,
 	claims: FactLockReadRun["claims"],
 ) {
-	if (claims.length > manifest.claimCount) {
+	const expectedCount =
+		manifest.builderVersion === "claim-manifest-builder.v2"
+			? selectConfirmedProductManifestClaims(
+					manifest as unknown as BuiltSubjectAwareClaimManifest,
+				).length
+			: manifest.claimCount;
+	if (manifest.builderVersion === "claim-manifest-builder.v2") {
+		const expectedKeys = new Set(
+			selectConfirmedProductManifestClaims(
+				manifest as unknown as BuiltSubjectAwareClaimManifest,
+			).map((claim) => claim.claimKey),
+		);
+		if (claims.some((claim) => !expectedKeys.has(claim.claimKey)))
+			manifestFailure("Fact Lock claims chứa General claim.");
+	}
+	if (claims.length > expectedCount) {
 		manifestFailure("Fact Lock claims chứa claim không thuộc Manifest.");
 	}
 	if (
 		(run.status === "passed" || run.status === "review_required") &&
-		claims.length !== manifest.claimCount
+		claims.length !== expectedCount
 	) {
 		manifestFailure("Fact Lock terminal claims không khớp Manifest.");
 	}
@@ -280,7 +331,9 @@ function assertManifestClaimShape(
 }
 
 function manifestDependenciesCurrent(
-	snapshot: ParsedManifestFactLockInputSnapshot,
+	snapshot:
+		| ParsedManifestFactLockInputSnapshot
+		| ParsedManifestFactLockInputSnapshotV2,
 	manifest: ClaimManifest,
 	dependencies: readonly FactDependencyRow[],
 	facts: readonly ProductFactRow[],
@@ -294,6 +347,20 @@ function manifestDependenciesCurrent(
 			manifest.productId === productId &&
 			dependencies.length === 0
 		);
+	}
+	if (manifest.builderVersion === "claim-manifest-builder.v2") {
+		const productClaims = selectConfirmedProductManifestClaims(
+			manifest as unknown as BuiltSubjectAwareClaimManifest,
+		);
+		if (
+			snapshot.inputVersion !== "fact-lock.manifest.v2" ||
+			snapshot.productClaims.length !== productClaims.length ||
+			snapshot.productClaims.some(
+				(claim, index) =>
+					JSON.stringify(claim) !== JSON.stringify(productClaims[index]),
+			)
+		)
+			return false;
 	}
 	return (
 		snapshot.zeroClaim === null &&
@@ -339,6 +406,23 @@ export async function loadFactLockReadContext(
 			"Project không tồn tại trong workspace.",
 		);
 	}
+	const [productRecord] = projectRecord.productId
+		? await db
+				.select({ status: product.status, archivedAt: product.archivedAt })
+				.from(product)
+				.where(
+					and(
+						eq(product.workspaceId, actor.workspaceId),
+						eq(product.id, projectRecord.productId),
+					),
+				)
+				.limit(1)
+		: [];
+	const readProject = {
+		...projectRecord,
+		productStatus: productRecord?.status ?? null,
+		productArchivedAt: productRecord?.archivedAt ?? null,
+	};
 
 	const [currentScript] = await db
 		.select({
@@ -563,7 +647,7 @@ export async function loadFactLockReadContext(
 		})),
 	};
 	return {
-		project: projectRecord,
+		project: readProject,
 		currentScriptVersion,
 		runs: contextRuns,
 		gateInput,

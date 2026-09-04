@@ -2,18 +2,24 @@ import {
 	type ClaimManifestClaim,
 	canonicalizeJson,
 	FACT_LOCK_MANIFEST_INPUT_VERSION,
+	FACT_LOCK_MANIFEST_INPUT_VERSION_V2,
 	FACT_LOCK_MANIFEST_PROMPT_VERSION,
+	FACT_LOCK_MANIFEST_PROMPT_VERSION_V2,
 	FACT_LOCK_OUTPUT_SCHEMA_VERSION,
 	type FactLockPolicySnapshot,
 	type ManifestProductFactsSnapshot,
 	type OutputRules,
+	type SubjectAwareClaimManifestClaim,
 } from "@affichannel/core";
 
 export type ManifestFactLockPromptInput = Readonly<{
-	claims: readonly ClaimManifestClaim[];
+	claims: readonly (ClaimManifestClaim | SubjectAwareClaimManifestClaim)[];
 	productFacts: readonly ManifestProductFactsSnapshot[number][];
 	policy: FactLockPolicySnapshot;
 	outputRules: OutputRules;
+	inputVersion?:
+		| typeof FACT_LOCK_MANIFEST_INPUT_VERSION
+		| typeof FACT_LOCK_MANIFEST_INPUT_VERSION_V2;
 }>;
 
 /**
@@ -24,12 +30,18 @@ export type ManifestFactLockPromptInput = Readonly<{
 export function renderManifestFactLockPrompt(
 	input: ManifestFactLockPromptInput,
 ) {
+	const inputVersion = input.inputVersion ?? FACT_LOCK_MANIFEST_INPUT_VERSION;
+	const organic = inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2;
 	return {
-		promptVersion: FACT_LOCK_MANIFEST_PROMPT_VERSION,
+		promptVersion: organic
+			? FACT_LOCK_MANIFEST_PROMPT_VERSION_V2
+			: FACT_LOCK_MANIFEST_PROMPT_VERSION,
 		trustedInstructions: [
 			"Bạn là bộ phân loại Fact Lock của AffiChannel.",
 			"Chỉ kiểm chứng các claim được cung cấp trong payload.",
-			"Danh sách claim được cung cấp là inventory duy nhất và có tính authoritative.",
+			organic
+				? "Danh sách claim Product được cung cấp là subset authoritative duy nhất cho Product Fact Lock. Claim GENERAL không nằm trong input và không được tự thêm vào."
+				: "Danh sách claim được cung cấp là inventory duy nhất và có tính authoritative.",
 			"Phải trả về chính xác một verdict cho mỗi claimKey được cung cấp.",
 			"Không được thêm claim, bỏ claim, tạo claim ID hoặc thay đổi claimKey.",
 			"Chỉ dùng Product Facts được cung cấp làm bằng chứng.",
@@ -48,7 +60,7 @@ export function renderManifestFactLockPrompt(
 			"Không trả về claimText hoặc locator để thay thế giá trị trong inventory.",
 		].join("\n"),
 		untrustedInputData: canonicalizeJson({
-			inputVersion: FACT_LOCK_MANIFEST_INPUT_VERSION,
+			inputVersion,
 			claims: input.claims,
 			productFacts: input.productFacts,
 			policy: input.policy,

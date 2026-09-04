@@ -6,9 +6,26 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-03.
+Cập nhật lần cuối: 2026-09-04.
 
 ## Chưa phát hành
+
+### AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 implementation
+
+- Organic Scripted Standard v1 now uses a server-derived Product-subset Fact
+  Lock strategy. The complete ordered subject-aware `claim-manifest.v1`
+  inventory remains persisted, while provider input and `FactLockClaim` rows
+  contain only confirmed PRODUCT claims in Manifest order.
+- `FactLockRun.inputMode` remains `MANIFEST_V1`; Affiliate keeps
+  `fact-lock.manifest.v1`, Organic uses `fact-lock.manifest.v2`, and output stays
+  `fact-lock-output.v1`. Read/gate/restart/idempotency/currentness,
+  mismatch/uncertainty, and manual-review flows are version-aware without any
+  schema or migration change.
+- Claimless/general-only Organic remains `NOT_REQUIRED` with zero provider
+  calls; Voice paid authorization remains deferred to 19D. Unit, web, type, and
+  Biome checks pass. Disposable PostgreSQL acceptance is blocked because no
+  approved local test database is available; no remote, development, or
+  production database was touched.
 
 ### AFF-US-019 Phase 19C.3A Subject-aware ClaimManifest Builder v2 PASS
 

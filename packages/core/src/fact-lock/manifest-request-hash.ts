@@ -11,8 +11,13 @@ import {
 	FACT_LOCK_ZERO_CLAIM_PROMPT_VERSION,
 } from "./types";
 
-export const FACT_LOCK_MANIFEST_INPUT_VERSION =
+export const FACT_LOCK_MANIFEST_INPUT_VERSION_V1 =
 	"fact-lock.manifest.v1" as const;
+export const FACT_LOCK_MANIFEST_INPUT_VERSION_V2 =
+	"fact-lock.manifest.v2" as const;
+/** Historical name retained for the Affiliate v1 contract. */
+export const FACT_LOCK_MANIFEST_INPUT_VERSION =
+	FACT_LOCK_MANIFEST_INPUT_VERSION_V1;
 
 export const FACT_LOCK_ZERO_CLAIM_POLICY = {
 	kind: "fact-lock-zero-claim",
@@ -174,6 +179,11 @@ export type ZeroClaimManifestRequestHashInput = z.infer<
 	typeof zeroClaimRequestHashInputSchema
 >;
 
+export const manifestV2RequestHashInputSchema = manifestRequestHashInputSchema;
+export type ManifestV2RequestHashInput = z.infer<
+	typeof manifestV2RequestHashInputSchema
+>;
+
 export function manifestRequestHashProjection(input: unknown) {
 	const parsed = manifestRequestHashInputSchema.parse(input);
 	return {
@@ -202,4 +212,19 @@ export async function computeZeroClaimManifestRequestHash(
 	input: ZeroClaimManifestRequestHashInput,
 ): Promise<string> {
 	return sha256Hex(zeroClaimManifestRequestHashProjection(input));
+}
+
+export function manifestV2RequestHashProjection(input: unknown) {
+	const parsed = manifestV2RequestHashInputSchema.parse(input);
+	return {
+		inputVersion: FACT_LOCK_MANIFEST_INPUT_VERSION_V2,
+		claimManifestFingerprint: parsed.claimManifestFingerprint,
+		productFactsFingerprint: parsed.productFactsFingerprint,
+	};
+}
+
+export async function computeManifestV2RequestHash(
+	input: ManifestV2RequestHashInput,
+): Promise<string> {
+	return sha256Hex(manifestV2RequestHashProjection(input));
 }

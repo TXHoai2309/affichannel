@@ -1,16 +1,39 @@
 # AFF-US-019 — Organic Scripted Content
 
-## Phase 19C.3A — Subject-Aware ClaimManifest Builder v2
+## Phase 19C.3B — Product-subset Fact Lock v2
 
-- Trạng thái: **19C.3A SUBJECT-AWARE CLAIMMANIFEST PASS — READY FOR 19C.3B**
-- Cập nhật: 2026-09-03
-- Phạm vi: Organic Scripted subject-aware ClaimManifest construction/persistence
+- Trạng thái: **19C.3B PRODUCT-SUBSET FACT LOCK V2 IMPLEMENTED — DB ACCEPTANCE BLOCKED**
+- Cập nhật: 2026-09-04
+- Phạm vi: Organic Scripted Product-subset Fact Lock v2 execution
 - Organic dùng source mode `ORGANIC_NO_PRODUCT`, Claim Refresh input v1 và
   prompt/output v2; Affiliate giữ nguyên Claim Refresh v1. Không có schema/migration mới.
 
 AFF-US-001–012 là historical/golden baseline. AFF-US-013–018, 19B và 19C.1 đã
 accepted. Quick Image/Media First, Organic Fact Lock runtime, Voice TOCTOU và
 Project creation UI không thuộc 19C.2B.
+
+## 19C.3B implementation boundary
+
+Organic Scripted Standard v1 now derives the `ORGANIC_PRODUCT_V2` strategy from
+the current confirmed `script-draft.v3` ClaimManifest builder v2. The persisted
+FactLockRun input mode remains `MANIFEST_V1`; only the semantic input version is
+`fact-lock.manifest.v2`. The full ordered GENERAL + PRODUCT Manifest remains
+provenance, while the provider and FactLockClaim rows contain only the confirmed
+PRODUCT subset in Manifest order. Product Facts use the existing exact snapshot
+and fingerprint helper, and v2 request identity includes the Manifest and Facts
+fingerprints.
+
+Affiliate remains on the frozen builder-v1 / `fact-lock.manifest.v1` path,
+including zero-claim behavior. Organic claimless/general-only states remain
+`not_required` with zero provider calls; Voice paid authorization remains
+deferred to 19D. Version-aware read, gate, restart, idempotency, mismatch,
+uncertainty, currentness, and manual-review paths recognize the v2 snapshot
+without adding a schema, migration, `MANIFEST_V2` mode, or output-version bump.
+
+Unit, web, type, and Biome checks pass. Disposable PostgreSQL acceptance is
+blocked in this environment because no approved `AFFICHANNEL_M1_TEST_DATABASE_URL`
+or local PostgreSQL/Docker runtime is available; no remote, development, or
+production database was contacted.
 
 ## 19C.3A acceptance
 
@@ -556,12 +579,12 @@ following decision remains locked:
 ## 9. Current acceptance boundary
 
 ```text
-AFF-US-019 Phase 19C.3A: SUBJECT-AWARE CLAIMMANIFEST PASS
+AFF-US-019 Phase 19C.3B: PRODUCT-SUBSET FACT LOCK V2 IMPLEMENTED / DB ACCEPTANCE BLOCKED
 19C.3A status: COMPLETE (Organic ClaimManifest builder v2 + persistence)
-19C.3B status: NEXT (Product-subset Fact Lock v2)
+19C.3B status: IMPLEMENTED; disposable PostgreSQL matrix pending
 19D status: NOT STARTED
 19E status: NOT STARTED
-Runtime changed: Organic Claim Refresh v2, protected confirmation, and Organic ClaimManifest v2
+Runtime changed: Organic Claim Refresh v2, protected confirmation, Organic ClaimManifest v2, and Product-subset Fact Lock v2
 Schema changed: NO
 Migration created: NO
 Provider calls: 0
@@ -569,6 +592,5 @@ Production DB touched: NO
 Development manual DB touched: NO
 ```
 
-Required next action is 19C.3B Product-subset Fact Lock v2. Organic Fact Lock
-execution remains inactive; Voice TOCTOU remains phase-gated for 19D, and no UI
-was added in 19C.3A.
+Required next action is to run the disposable PostgreSQL 19C.3B acceptance matrix.
+Voice TOCTOU remains phase-gated for 19D, and no UI was added in 19C.3B.

@@ -1,3 +1,4 @@
+import { scriptVersionEditableSnapshotSchema } from "../script-version/schema";
 import type { ScriptVersionEditableSnapshot } from "../script-version/types";
 import {
 	validateScriptVersionForFactLock,
@@ -73,13 +74,19 @@ export function evaluateFactLockGate(
 ): FactLockGateResult {
 	if (!input.currentScriptVersion) return result("NO_SCRIPT_VERSION", input);
 
-	const preRunValidation = validateScriptVersionForFactLock(
-		input.currentScriptVersion.snapshot,
-	);
+	const organicSnapshot = input.currentScriptVersion.snapshot;
+	const isOrganicDraft = organicSnapshot.schemaVersion === "script-draft.v3";
+	const preRunValidation = isOrganicDraft
+		? scriptVersionEditableSnapshotSchema.safeParse(organicSnapshot).success &&
+			organicSnapshot.selectedHookKey !== null &&
+			organicSnapshot.claimsStatus === "current"
+			? ({ success: true } as const)
+			: ({ success: false } as const)
+		: validateScriptVersionForFactLock(organicSnapshot);
 	if (!preRunValidation.success) {
-		const structurallyReady = validateScriptVersionForFactLockRun(
-			input.currentScriptVersion.snapshot,
-		).success;
+		const structurallyReady = isOrganicDraft
+			? scriptVersionEditableSnapshotSchema.safeParse(organicSnapshot).success
+			: validateScriptVersionForFactLockRun(organicSnapshot).success;
 		if (!structurallyReady) return result("SCRIPT_NOT_READY", input);
 	}
 

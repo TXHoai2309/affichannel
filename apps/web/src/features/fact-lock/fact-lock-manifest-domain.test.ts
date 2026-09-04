@@ -2,13 +2,17 @@ import {
 	buildManifestFactLockInputSnapshot,
 	buildManifestFactLockVerificationInput,
 	buildManifestZeroClaimOutcome,
+	buildOrganicManifestFactLockInputSnapshot,
+	buildOrganicManifestFactLockVerificationInput,
 	claimManifestFingerprint,
 	computeManifestRequestHash,
+	computeManifestV2RequestHash,
 	computeProductFactsFingerprint,
 	computeZeroClaimManifestRequestHash,
 	evaluateManifestExecutionEligibility,
 	FACT_LOCK_MANIFEST_INPUT_MODE,
 	FACT_LOCK_MANIFEST_INPUT_VERSION,
+	FACT_LOCK_MANIFEST_INPUT_VERSION_V2,
 	factLockInputModeSchema,
 	getManifestFactLockResolutionPolicy,
 	type ManifestFactLockManifest,
@@ -16,6 +20,8 @@ import {
 	type ManifestProductFactsSnapshot,
 	manifestRequestHashProjection,
 	productFactsFingerprintProjection,
+	selectConfirmedProductManifestClaims,
+	subjectAwareClaimManifestFingerprint,
 	validateManifestFactLockProviderResult,
 	zeroClaimManifestRequestHashProjection,
 } from "@affichannel/core";
@@ -23,6 +29,8 @@ import { describe, expect, it } from "vitest";
 
 const claimKeyA = `claim_${"a".repeat(64)}`;
 const claimKeyB = `claim_${"b".repeat(64)}`;
+const claimKeyC = `claim_${"c".repeat(64)}`;
+const claimKeyD = `claim_${"d".repeat(64)}`;
 
 function fact(
 	id: string,
@@ -472,6 +480,152 @@ describe("AFF-US-018 Phase 18A pure Manifest Fact Lock", () => {
 			dependenciesRequired: false,
 		});
 		expect(nonZeroSnapshot.zeroClaim).toBeNull();
+	});
+
+	it("freezes Organic v2 Product-subset order and request identity", async () => {
+		const fullClaims = [
+			...manifest().claims,
+			{
+				...manifest().claims[0],
+				claimKey: claimKeyC,
+				claimText: "Khối lượng nhẹ.",
+				sourceTextHash: "1".repeat(64),
+			},
+			{
+				...manifest().claims[1],
+				claimKey: claimKeyD,
+				claimText: "Bảo hành 2 năm.",
+				sourceTextHash: "2".repeat(64),
+			},
+		].map((claim, index) => ({
+			...claim,
+			subject:
+				index % 2 === 0
+					? ({ kind: "GENERAL" } as const)
+					: ({ kind: "PRODUCT", binding: "PROJECT_PRODUCT" } as const),
+			subjectStatus: "CONFIRMED" as const,
+			subjectSource: "USER" as const,
+		}));
+		const organic = {
+			...manifest(),
+			builderVersion: "claim-manifest-builder.v2" as const,
+			claims: fullClaims,
+			claimCount: fullClaims.length,
+			fingerprint: "".padStart(64, "0"),
+		};
+		const fingerprint = await subjectAwareClaimManifestFingerprint(organic);
+		const built = { ...organic, fingerprint };
+		const selected = selectConfirmedProductManifestClaims(built);
+		expect(selected.map((claim) => claim.claimKey)).toEqual([
+			claimKeyB,
+			claimKeyD,
+		]);
+		expect(
+			await evaluateManifestExecutionEligibility({
+				manifest: built,
+				project: executableProject({ contentType: "ORGANIC" }),
+				currentScriptVersion: {
+					id: "script-18a",
+					revision: 7,
+					status: "draft",
+					schemaVersion: "script-draft.v3",
+					claimsSourceRevision: 3,
+					claimsStatus: "current",
+				},
+			}),
+		).toEqual({
+			eligible: true,
+			reason: "ELIGIBLE",
+			strategy: "ORGANIC_PRODUCT_V2",
+		});
+		const generalOnly = {
+			...built,
+			claims: built.claims.map((claim) => ({
+				...claim,
+				subject: { kind: "GENERAL" as const },
+			})),
+		};
+		const generalOnlyWithFingerprint = {
+			...generalOnly,
+			fingerprint: await subjectAwareClaimManifestFingerprint(generalOnly),
+		};
+		expect(
+			await evaluateManifestExecutionEligibility({
+				manifest: generalOnlyWithFingerprint,
+				project: executableProject({ contentType: "ORGANIC" }),
+				currentScriptVersion: {
+					id: "script-18a",
+					revision: 7,
+					status: "draft",
+					schemaVersion: "script-draft.v3",
+					claimsSourceRevision: 3,
+					claimsStatus: "current",
+				},
+			}),
+		).toMatchObject({
+			eligible: false,
+			reason: "PRODUCT_CLAIM_SUBSET_EMPTY",
+		});
+		const snapshot = buildOrganicManifestFactLockInputSnapshot({
+			manifest: built,
+			productClaims: selected,
+			productFacts: facts(),
+			productFactsFingerprint: await computeProductFactsFingerprint(facts()),
+			policy: {
+				avoidWords: [],
+				affiliateDisclosure: "Disclosure",
+				language: "vi-VN",
+			},
+			outputRules: {
+				language: "vi-VN",
+				aspectRatio: "9:16",
+				subtitleSafeArea: "standard",
+				claimLimit: null,
+				requireFinalCta: true,
+			},
+		});
+		expect(snapshot.inputVersion).toBe(FACT_LOCK_MANIFEST_INPUT_VERSION_V2);
+		expect(snapshot.productClaims.map((claim) => claim.claimKey)).toEqual([
+			claimKeyB,
+			claimKeyD,
+		]);
+		const verification = buildOrganicManifestFactLockVerificationInput({
+			manifest: built,
+			productClaims: selected,
+			productFacts: facts(),
+		});
+		const reverseResult = {
+			schemaVersion: "fact-lock-output.v1",
+			claims: [
+				providerClaim(claimKeyD, "fact-a"),
+				providerClaim(claimKeyB, "fact-b"),
+			],
+		};
+		const reordered = validateManifestFactLockProviderResult(
+			reverseResult,
+			verification,
+		);
+		expect(reordered).toMatchObject({
+			success: true,
+			claims: [{ claimKey: claimKeyB }, { claimKey: claimKeyD }],
+		});
+		const extraGeneral = validateManifestFactLockProviderResult(
+			{
+				...reverseResult,
+				claims: [...reverseResult.claims, providerClaim(claimKeyA, "fact-a")],
+			},
+			verification,
+		);
+		expect(extraGeneral).toMatchObject({
+			success: false,
+			code: "FACT_LOCK_PROVIDER_RESULT_MISMATCH",
+		});
+		expect(
+			await computeManifestV2RequestHash({
+				claimManifestFingerprint: "a".repeat(64),
+				productFactsFingerprint: "b".repeat(64),
+			}),
+		).toBe("bc6658b1ffce2f246c03d874badecbd06a262a27a9708413d6ec32bc353b35bd");
 	});
 
 	it("rejects Product Fact and Manifest claim-state contradictions", () => {

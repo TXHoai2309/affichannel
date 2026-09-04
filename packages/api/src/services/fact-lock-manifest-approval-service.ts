@@ -1,15 +1,19 @@
 import {
+	type BuiltSubjectAwareClaimManifest,
 	deriveFactLockRunStatus,
 	FACT_LOCK_MANIFEST_INPUT_MODE,
 	FactLockError,
 	type FactLockStoredClaim,
-	manifestFactLockInputSnapshotSchema,
+	manifestFactLockInputSnapshotAnySchema,
+	scriptVersionEditableSnapshotSchema,
+	selectConfirmedProductManifestClaims,
 } from "@affichannel/core";
 import {
 	db,
 	factDependency,
 	factLockClaim,
 	factLockRun,
+	product,
 	productFact,
 	project,
 	scriptVersion,
@@ -92,7 +96,7 @@ async function assertManifestCurrent(
 			"ClaimManifest integrity check failed.",
 		);
 
-	const parsedSnapshot = manifestFactLockInputSnapshotSchema.safeParse(
+	const parsedSnapshot = manifestFactLockInputSnapshotAnySchema.safeParse(
 		run.inputSnapshotJson,
 	);
 	if (
@@ -126,8 +130,36 @@ async function assertManifestCurrent(
 		.limit(1)
 		.for("update", { of: project });
 	if (!projectRecord || projectRecord.archivedAt !== null) staleManifest();
+	const organic = manifest.builderVersion === "claim-manifest-builder.v2";
+	const [currentProduct] = projectRecord.productId
+		? organic
+			? await transaction
+					.select({ status: product.status, archivedAt: product.archivedAt })
+					.from(product)
+					.where(
+						and(
+							eq(product.workspaceId, actor.workspaceId),
+							eq(product.id, projectRecord.productId),
+						),
+					)
+					.limit(1)
+			: []
+		: [];
 	if (
-		projectRecord.contentType !== "AFFILIATE" ||
+		organic &&
+		(currentProduct?.status !== "active" || currentProduct?.archivedAt !== null)
+	)
+		staleManifest();
+	if (
+		(organic && parsedSnapshot.data.inputVersion !== "fact-lock.manifest.v2") ||
+		(!organic && parsedSnapshot.data.inputVersion !== "fact-lock.manifest.v1")
+	)
+		staleManifest();
+	if (
+		(!organic && manifest.builderVersion !== "claim-manifest-builder.v1") ||
+		(organic
+			? projectRecord.contentType !== "ORGANIC"
+			: projectRecord.contentType !== "AFFILIATE") ||
 		projectRecord.creationPath !== "SCRIPTED" ||
 		projectRecord.contentFormatKey !== "SCRIPTED_STANDARD" ||
 		projectRecord.contentFormatVersion !== 1 ||
@@ -137,7 +169,11 @@ async function assertManifestCurrent(
 		staleManifest();
 
 	const [currentScript] = await transaction
-		.select({ id: scriptVersion.id, revision: scriptVersion.revision })
+		.select({
+			id: scriptVersion.id,
+			revision: scriptVersion.revision,
+			editableSnapshotJson: scriptVersion.editableSnapshotJson,
+		})
 		.from(scriptVersion)
 		.where(
 			and(
@@ -161,6 +197,39 @@ async function assertManifestCurrent(
 		parsedSnapshot.data.source.scriptVersionRevision !== currentScript.revision
 	)
 		staleManifest();
+	if (
+		organic &&
+		(() => {
+			const parsed = scriptVersionEditableSnapshotSchema.safeParse(
+				currentScript.editableSnapshotJson,
+			);
+			return (
+				!parsed.success ||
+				parsed.data.schemaVersion !== "script-draft.v3" ||
+				parsed.data.claimsStatus !== "current" ||
+				parsed.data.claims.some(
+					(claim) =>
+						claim.subjectStatus !== "CONFIRMED" ||
+						(claim.subjectSource !== "USER" &&
+							claim.subjectSource !== "STRUCTURED_SOURCE"),
+				) ||
+				parsed.data.claimsSourceRevision !==
+					manifest.source.claimsSourceRevision
+			);
+		})()
+	)
+		staleManifest();
+	if (organic) {
+		const productClaims = selectConfirmedProductManifestClaims(
+			manifest as unknown as BuiltSubjectAwareClaimManifest,
+		);
+		if (
+			parsedSnapshot.data.inputVersion !== "fact-lock.manifest.v2" ||
+			JSON.stringify(parsedSnapshot.data.productClaims) !==
+				JSON.stringify(productClaims)
+		)
+			staleManifest();
+	}
 
 	const dependencies = await transaction
 		.select()
@@ -258,11 +327,15 @@ export async function manualApproveManifestFactLockClaim(
 				"FACT_LOCK_CLAIM_NOT_FOUND",
 				"Không tìm thấy claim trong Fact Lock run.",
 			);
-		if (
-			!manifest.claims.some(
-				(manifestClaim) => manifestClaim.claimKey === claim.claimKey,
-			)
-		)
+		const reviewableClaimKeys = new Set(
+			(manifest.builderVersion === "claim-manifest-builder.v2"
+				? selectConfirmedProductManifestClaims(
+						manifest as unknown as BuiltSubjectAwareClaimManifest,
+					)
+				: manifest.claims
+			).map((manifestClaim) => manifestClaim.claimKey),
+		);
+		if (!reviewableClaimKeys.has(claim.claimKey))
 			throw new FactLockError(
 				"CLAIM_MANIFEST_FINGERPRINT_MISMATCH",
 				"Claim không thuộc ClaimManifest đã chọn.",
@@ -305,7 +378,13 @@ export async function manualApproveManifestFactLockClaim(
 			run.id,
 			manifest,
 		);
-		if (claims.length !== manifest.claimCount)
+		const expectedClaimCount =
+			manifest.builderVersion === "claim-manifest-builder.v2"
+				? selectConfirmedProductManifestClaims(
+						manifest as unknown as BuiltSubjectAwareClaimManifest,
+					).length
+				: manifest.claimCount;
+		if (claims.length !== expectedClaimCount)
 			throw new FactLockError(
 				"CLAIM_MANIFEST_FINGERPRINT_MISMATCH",
 				"Fact Lock claims không khớp ClaimManifest đã chọn.",

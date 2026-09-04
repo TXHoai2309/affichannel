@@ -7,10 +7,12 @@
   **CONTRACT LOCKED** theo DEC-035; 19A.3 claim subject foundation PASS;
   19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS; 19C.2A
   Organic Claim Refresh v2 PASS; 19C.2B Claim Subject Confirmation API PASS;
-  19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B chưa bắt đầu.
-- Cập nhật lần cuối: 2026-09-03
+  19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B Product-subset
+  Fact Lock v2 implemented, disposable-DB acceptance blocked.
+- Cập nhật lần cuối: 2026-09-04
 
-Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.3A PASS. Public Fact Lock tạo/reuse ClaimManifest
+Current canonical status: AFF-US-018 DONE; AFF-US-019 19C.3B implementation
+complete, disposable-DB acceptance blocked. Public Fact Lock tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
@@ -20,7 +22,22 @@ subject contract theo DEC-035; 19A.3 claim subject foundation đã PASS và 19B
 đã PASS runtime Organic ScriptGeneration 19B; 19C.1 claim applicability, 19C.2A
 Organic Claim Refresh v2, 19C.2B Claim Confirmation API, and 19C.3A
 subject-aware ClaimManifest persistence đã PASS; 19C.3B Product-subset Fact
-Lock chưa bắt đầu.
+Lock v2 đã implement semantic routing and remains pending disposable-DB
+acceptance because no approved local test database is available.
+
+## 2026-09-04 — AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 implementation
+
+Organic Scripted Product claims now route through a server-derived v2 strategy:
+the complete subject-aware `claim-manifest.v1` inventory remains persisted, while
+Fact Lock provider input and `FactLockClaim` rows contain only confirmed PRODUCT
+claims in Manifest order. `FactLockRun.inputMode` remains `MANIFEST_V1`; Affiliate
+continues to use `fact-lock.manifest.v1`, Organic uses `fact-lock.manifest.v2`,
+and output remains `fact-lock-output.v1`. Read/gate/restart/idempotency,
+currentness, mismatch, uncertainty, and manual-review paths are version-aware;
+claimless/general-only Organic remains `NOT_REQUIRED` with zero provider calls;
+Voice remains deferred to 19D. Unit, web, type, and Biome checks pass, but the
+required disposable PostgreSQL matrix is blocked by the unavailable approved DB
+environment.
 
 ## 2026-09-03 — AFF-US-019 Phase 19C.3A Subject-aware ClaimManifest Builder v2 acceptance
 

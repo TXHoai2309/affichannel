@@ -1,17 +1,23 @@
 import { randomUUID } from "node:crypto";
 import {
+	type BuiltSubjectAwareClaimManifest,
 	buildManifestFactLockInputSnapshot,
 	buildManifestFactLockVerificationInput,
 	buildManifestZeroClaimOutcome,
+	buildOrganicManifestFactLockInputSnapshot,
+	buildOrganicManifestFactLockVerificationInput,
 	computeFactLockZeroClaimPolicyHash,
 	computeManifestFactLockInputHash,
 	computeManifestRequestHash,
+	computeManifestV2RequestHash,
 	computeProductFactsFingerprint,
 	computeZeroClaimManifestRequestHash,
 	deriveFactLockRunStatus,
 	evaluateManifestExecutionEligibility,
 	FACT_LOCK_MANIFEST_INPUT_MODE,
+	FACT_LOCK_MANIFEST_INPUT_VERSION_V2,
 	FACT_LOCK_MANIFEST_PROMPT_VERSION,
+	FACT_LOCK_MANIFEST_PROMPT_VERSION_V2,
 	FACT_LOCK_OUTPUT_SCHEMA_VERSION,
 	FACT_LOCK_ZERO_CLAIM_MODEL,
 	FACT_LOCK_ZERO_CLAIM_PROMPT_VERSION,
@@ -20,8 +26,12 @@ import {
 	type FactLockStoredClaim,
 	type ManifestExecutionEligibilityManifest,
 	type ManifestFactLockInputSnapshot,
+	type ManifestFactLockStrategy,
 	type ManifestFactLockVerificationInput,
 	type ManifestProductFactsSnapshot,
+	manifestFactLockInputSnapshotAnySchema,
+	scriptVersionEditableSnapshotSchema,
+	selectConfirmedProductManifestClaims,
 	validateManifestFactLockProviderResult,
 } from "@affichannel/core";
 import type { FactLockRunStatus } from "@affichannel/core/fact-lock/types";
@@ -95,6 +105,8 @@ type ManifestFactLockPreparedBase = Readonly<{
 	inputSnapshot: ManifestFactLockInputSnapshot;
 	inputHash: string;
 	idempotencyKey: string;
+	strategy: ManifestFactLockStrategy;
+	productClaims: readonly import("@affichannel/core").SubjectAwareClaimManifestClaim[];
 }>;
 
 export type ManifestFactLockPreparation =
@@ -116,7 +128,9 @@ export type ManifestFactLockPreparation =
 export type ManifestFactLockProviderConfig = Readonly<{
 	provider: string;
 	model: string;
-	promptVersion: typeof FACT_LOCK_MANIFEST_PROMPT_VERSION;
+	promptVersion:
+		| typeof FACT_LOCK_MANIFEST_PROMPT_VERSION
+		| typeof FACT_LOCK_MANIFEST_PROMPT_VERSION_V2;
 	outputSchemaVersion: typeof FACT_LOCK_OUTPUT_SCHEMA_VERSION;
 }>;
 
@@ -221,6 +235,26 @@ function manifestEligibilityProjection(
 		isEmpty: manifest.isEmpty,
 		schemaVersion: manifest.schemaVersion,
 		builderVersion: manifest.builderVersion,
+	};
+}
+
+function organicScriptClaimsMetadata(snapshot: unknown) {
+	const parsed = scriptVersionEditableSnapshotSchema.safeParse(snapshot);
+	if (
+		!parsed.success ||
+		parsed.data.schemaVersion !== "script-draft.v3" ||
+		parsed.data.claims.some(
+			(claim) =>
+				claim.subjectStatus !== "CONFIRMED" ||
+				(claim.subjectSource !== "USER" &&
+					claim.subjectSource !== "STRUCTURED_SOURCE"),
+		)
+	)
+		return null;
+	return {
+		schemaVersion: parsed.data.schemaVersion,
+		claimsSourceRevision: parsed.data.claimsSourceRevision,
+		claimsStatus: parsed.data.claimsStatus,
 	};
 }
 
@@ -425,10 +459,17 @@ async function buildPreparation(
 		)
 		.limit(1)
 		.for("update", { of: scriptVersion });
+	const currentScriptMetadata = organicScriptClaimsMetadata(
+		currentScript?.editableSnapshotJson,
+	);
 
 	if (!projectRecord.productId) notExecutable();
 	const [currentProduct] = await transaction
-		.select({ id: product.id })
+		.select({
+			id: product.id,
+			status: product.status,
+			archivedAt: product.archivedAt,
+		})
 		.from(product)
 		.where(
 			and(
@@ -439,6 +480,11 @@ async function buildPreparation(
 		.limit(1)
 		.for("update", { of: product });
 	if (!currentProduct) notExecutable();
+	if (
+		projectRecord.contentType === "ORGANIC" &&
+		(currentProduct.status !== "active" || currentProduct.archivedAt !== null)
+	)
+		notExecutable();
 
 	let manifest: ClaimManifestRecord | null = null;
 	try {
@@ -474,6 +520,10 @@ async function buildPreparation(
 					id: currentScript.id,
 					revision: currentScript.revision,
 					status: currentScript.status as "draft" | "saved",
+					schemaVersion: currentScriptMetadata?.schemaVersion ?? null,
+					claimsSourceRevision:
+						currentScriptMetadata?.claimsSourceRevision ?? null,
+					claimsStatus: currentScriptMetadata?.claimsStatus ?? null,
 				}
 			: null,
 	});
@@ -484,8 +534,13 @@ async function buildPreparation(
 			{ reason: eligibility.reason },
 		);
 	}
+	const strategy =
+		eligibility.strategy ??
+		(manifest.builderVersion === "claim-manifest-builder.v2"
+			? "ORGANIC_PRODUCT_V2"
+			: "AFFILIATE_V1");
 
-	if (manifest.claims.length === 0) {
+	if (strategy === "AFFILIATE_V1" && manifest.claims.length === 0) {
 		const inputSnapshot = buildManifestFactLockInputSnapshot({
 			manifest,
 			productFacts: [],
@@ -502,7 +557,23 @@ async function buildPreparation(
 			inputSnapshot,
 			inputHash: await computeManifestFactLockInputHash(inputSnapshot),
 			idempotencyKey: input.idempotencyKey,
+			strategy,
+			productClaims: [],
 		};
+	}
+
+	const productClaims =
+		strategy === "ORGANIC_PRODUCT_V2"
+			? selectConfirmedProductManifestClaims(
+					manifest as unknown as BuiltSubjectAwareClaimManifest,
+				)
+			: [];
+	if (strategy === "ORGANIC_PRODUCT_V2" && productClaims.length === 0) {
+		throw new FactLockError(
+			"CLAIM_MANIFEST_NOT_EXECUTABLE",
+			"Organic Fact Lock cần ít nhất một confirmed Product claim.",
+			{ reason: "PRODUCT_CLAIM_SUBSET_EMPTY" },
+		);
 	}
 
 	const loadedProductFacts = await loadFactLockProductFactsInTransaction(
@@ -528,24 +599,42 @@ async function buildPreparation(
 		transaction,
 		input.actor,
 	);
-	const inputSnapshot = buildManifestFactLockInputSnapshot({
-		manifest,
-		productFacts,
-		productFactsFingerprint,
-		policy,
-		outputRules,
-	});
+	const inputSnapshot =
+		strategy === "ORGANIC_PRODUCT_V2"
+			? buildOrganicManifestFactLockInputSnapshot({
+					manifest,
+					productClaims,
+					productFacts,
+					productFactsFingerprint,
+					policy,
+					outputRules,
+				})
+			: buildManifestFactLockInputSnapshot({
+					manifest,
+					productFacts,
+					productFactsFingerprint,
+					policy,
+					outputRules,
+				});
 	return {
 		manifest,
 		productFacts,
 		productFactsFingerprint,
-		requestHash: await computeManifestRequestHash({
-			claimManifestFingerprint: manifest.fingerprint,
-			productFactsFingerprint,
-		}),
+		requestHash:
+			strategy === "ORGANIC_PRODUCT_V2"
+				? await computeManifestV2RequestHash({
+						claimManifestFingerprint: manifest.fingerprint,
+						productFactsFingerprint,
+					})
+				: await computeManifestRequestHash({
+						claimManifestFingerprint: manifest.fingerprint,
+						productFactsFingerprint,
+					}),
 		inputSnapshot,
 		inputHash: await computeManifestFactLockInputHash(inputSnapshot),
 		idempotencyKey: input.idempotencyKey,
+		strategy,
+		productClaims,
 	};
 }
 
@@ -706,10 +795,14 @@ function buildManifestProviderPrompt(
 			"Manifest Fact Lock thiếu policy hoặc output rules.",
 		);
 	}
-	const verificationInput = buildManifestVerificationInput(
-		manifest,
-		inputSnapshot.productFacts,
-	);
+	const verificationInput =
+		inputSnapshot.inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2
+			? buildOrganicManifestFactLockVerificationInput({
+					manifest: manifestEligibilityProjection(manifest),
+					productClaims: inputSnapshot.productClaims,
+					productFacts: inputSnapshot.productFacts,
+				})
+			: buildManifestVerificationInput(manifest, inputSnapshot.productFacts);
 	return {
 		verificationInput,
 		prompt: renderManifestFactLockPrompt({
@@ -717,18 +810,23 @@ function buildManifestProviderPrompt(
 			productFacts: verificationInput.productFacts,
 			policy: inputSnapshot.policy,
 			outputRules: inputSnapshot.outputRules,
+			inputVersion: inputSnapshot.inputVersion,
 		}),
 	};
 }
 
 export async function resolveServerManifestFactLockConfig(
 	actor: WorkspaceActor,
+	strategy: ManifestFactLockStrategy = "AFFILIATE_V1",
 ): Promise<ManifestFactLockProviderConfig> {
 	const config = await resolveServerGenerationConfig(actor);
 	return {
 		provider: config.provider,
 		model: config.model,
-		promptVersion: FACT_LOCK_MANIFEST_PROMPT_VERSION,
+		promptVersion:
+			strategy === "ORGANIC_PRODUCT_V2"
+				? FACT_LOCK_MANIFEST_PROMPT_VERSION_V2
+				: FACT_LOCK_MANIFEST_PROMPT_VERSION,
 		outputSchemaVersion: FACT_LOCK_OUTPUT_SCHEMA_VERSION,
 	};
 }
@@ -860,13 +958,21 @@ async function loadManifestExecutionContext(
 	verificationInput: ManifestFactLockVerificationInput;
 	prompt: ReturnType<typeof renderManifestFactLockPrompt>;
 }> {
+	const parsedSnapshot = manifestFactLockInputSnapshotAnySchema.safeParse(
+		run.inputSnapshot,
+	);
+	if (!parsedSnapshot.success) persistedManifestInputFailure();
+	const snapshot = parsedSnapshot.data;
+	const expectedPromptVersion =
+		snapshot.inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2
+			? FACT_LOCK_MANIFEST_PROMPT_VERSION_V2
+			: FACT_LOCK_MANIFEST_PROMPT_VERSION;
 	if (
-		run.promptVersion !== FACT_LOCK_MANIFEST_PROMPT_VERSION ||
+		run.promptVersion !== expectedPromptVersion ||
 		run.outputSchemaVersion !== FACT_LOCK_OUTPUT_SCHEMA_VERSION
 	) {
 		persistedManifestInputFailure();
 	}
-	const snapshot = run.inputSnapshot;
 	if (
 		snapshot.inputMode !== FACT_LOCK_MANIFEST_INPUT_MODE ||
 		snapshot.claimManifest.id !== run.claimManifestId ||
@@ -899,29 +1005,144 @@ async function loadManifestExecutionContext(
 		persistedManifestInputFailure();
 	}
 	try {
+		if (snapshot.inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2) {
+			const [currentProject] = await transaction
+				.select({
+					id: project.id,
+					workspaceId: project.workspaceId,
+					contentType: project.contentType,
+					creationPath: project.creationPath,
+					contentFormatKey: project.contentFormatKey,
+					contentFormatVersion: project.contentFormatVersion,
+					productId: project.productId,
+					archivedAt: project.archivedAt,
+				})
+				.from(project)
+				.where(
+					and(
+						eq(project.workspaceId, actor.workspaceId),
+						eq(project.id, run.projectId),
+					),
+				)
+				.limit(1);
+			const [currentScript] = await transaction
+				.select()
+				.from(scriptVersion)
+				.where(
+					and(
+						eq(scriptVersion.workspaceId, actor.workspaceId),
+						eq(scriptVersion.projectId, run.projectId),
+						eq(scriptVersion.status, "draft"),
+					),
+				)
+				.limit(1);
+			const currentScriptMetadata = organicScriptClaimsMetadata(
+				currentScript?.editableSnapshotJson,
+			);
+			if (!currentProject?.productId || !currentScript)
+				persistedManifestInputFailure();
+			const [currentProduct] = await transaction
+				.select({
+					id: product.id,
+					status: product.status,
+					archivedAt: product.archivedAt,
+				})
+				.from(product)
+				.where(
+					and(
+						eq(product.workspaceId, actor.workspaceId),
+						eq(product.id, currentProject.productId),
+					),
+				)
+				.limit(1);
+			if (
+				currentProduct?.status !== "active" ||
+				currentProduct?.archivedAt !== null
+			)
+				persistedManifestInputFailure();
+			const currentEligibility = await evaluateManifestExecutionEligibility({
+				manifest: manifestEligibilityProjection(manifest),
+				project: {
+					id: currentProject.id,
+					workspaceId: currentProject.workspaceId,
+					contentType: currentProject.contentType as ContentType,
+					creationPath: currentProject.creationPath as CreationPath,
+					contentFormatKey: currentProject.contentFormatKey,
+					contentFormatVersion: currentProject.contentFormatVersion,
+					productId: currentProject.productId,
+					currentScriptVersionId: currentScript.id,
+				},
+				currentScriptVersion: {
+					id: currentScript.id,
+					revision: currentScript.revision,
+					status: currentScript.status as "draft" | "saved",
+					schemaVersion: currentScriptMetadata?.schemaVersion ?? null,
+					claimsSourceRevision:
+						currentScriptMetadata?.claimsSourceRevision ?? null,
+					claimsStatus: currentScriptMetadata?.claimsStatus ?? null,
+				},
+			});
+			if (!currentEligibility.eligible) persistedManifestInputFailure();
+			const currentFacts = await loadFactLockProductFactsInTransaction(
+				transaction,
+				actor,
+				currentProject.productId,
+			);
+			const currentFactsFingerprint =
+				await computeProductFactsFingerprint(currentFacts);
+			if (
+				snapshot.productFactsFingerprint !== currentFactsFingerprint ||
+				JSON.stringify(currentFacts) !== JSON.stringify(snapshot.productFacts)
+			)
+				persistedManifestInputFailure();
+			const currentProductClaims = selectConfirmedProductManifestClaims(
+				manifest as unknown as BuiltSubjectAwareClaimManifest,
+			);
+			if (
+				JSON.stringify(currentProductClaims) !==
+				JSON.stringify(snapshot.productClaims)
+			)
+				persistedManifestInputFailure();
+		}
 		const productFactsFingerprint = await computeProductFactsFingerprint(
 			snapshot.productFacts,
 		);
 		if (snapshot.productFactsFingerprint !== productFactsFingerprint) {
 			persistedManifestInputFailure();
 		}
-		const canonicalSnapshot = buildManifestFactLockInputSnapshot({
-			manifest,
-			productFacts: snapshot.productFacts,
-			productFactsFingerprint,
-			policy: snapshot.policy,
-			outputRules: snapshot.outputRules,
-		});
+		const canonicalSnapshot =
+			snapshot.inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2
+				? buildOrganicManifestFactLockInputSnapshot({
+						manifest,
+						productClaims: snapshot.productClaims,
+						productFacts: snapshot.productFacts,
+						productFactsFingerprint,
+						policy: snapshot.policy,
+						outputRules: snapshot.outputRules,
+					})
+				: buildManifestFactLockInputSnapshot({
+						manifest,
+						productFacts: snapshot.productFacts,
+						productFactsFingerprint,
+						policy: snapshot.policy,
+						outputRules: snapshot.outputRules,
+					});
 		if (
 			(await computeManifestFactLockInputHash(canonicalSnapshot)) !==
 			run.inputHash
 		) {
 			persistedManifestInputFailure();
 		}
-		const expectedRequestHash = await computeManifestRequestHash({
-			claimManifestFingerprint: manifest.fingerprint,
-			productFactsFingerprint,
-		});
+		const expectedRequestHash =
+			snapshot.inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2
+				? await computeManifestV2RequestHash({
+						claimManifestFingerprint: manifest.fingerprint,
+						productFactsFingerprint,
+					})
+				: await computeManifestRequestHash({
+						claimManifestFingerprint: manifest.fingerprint,
+						productFactsFingerprint,
+					});
 		if (expectedRequestHash !== run.requestHash) {
 			persistedManifestInputFailure();
 		}
@@ -1330,7 +1551,7 @@ export async function executeManifestFactLock(
 	} else {
 		run = await persistNonEmptyManifestFactLock(
 			input,
-			await resolveServerManifestFactLockConfig(actor),
+			await resolveServerManifestFactLockConfig(actor, preview.strategy),
 		);
 	}
 	if (run.status !== "pending")
@@ -1371,7 +1592,11 @@ export async function executeManifestFactLock(
 	const providerConfig: ManifestFactLockProviderConfig = {
 		provider: claimed.run.provider,
 		model: claimed.run.model,
-		promptVersion: FACT_LOCK_MANIFEST_PROMPT_VERSION,
+		promptVersion:
+			claimed.run.inputSnapshot.inputVersion ===
+			FACT_LOCK_MANIFEST_INPUT_VERSION_V2
+				? FACT_LOCK_MANIFEST_PROMPT_VERSION_V2
+				: FACT_LOCK_MANIFEST_PROMPT_VERSION,
 		outputSchemaVersion: FACT_LOCK_OUTPUT_SCHEMA_VERSION,
 	};
 	try {
