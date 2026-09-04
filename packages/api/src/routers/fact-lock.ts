@@ -196,6 +196,7 @@ export const factLockRouter = {
 					}
 					const provider = resolveTextProvider(config.provider, null, {
 						allowDeterministic: env.NODE_ENV !== "production",
+						model: config.model,
 					});
 					if (!provider) {
 						throw new FactLockError(

@@ -1448,8 +1448,7 @@ export async function getScriptGenerationContext(
 		projectRecord.contentType === "ORGANIC" &&
 		projectRecord.creationPath === "SCRIPTED" &&
 		projectRecord.contentFormatKey === "SCRIPTED_STANDARD" &&
-		projectRecord.contentFormatVersion === 1 &&
-		projectRecord.projectProductId === null
+		projectRecord.contentFormatVersion === 1
 	) {
 		source = { kind: "organic" };
 	} else if (

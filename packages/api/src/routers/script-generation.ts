@@ -68,7 +68,7 @@ function toScriptGenerationOrpcError(error: unknown): never {
 }
 
 function resolveProvider(
-	config: { provider: string },
+	config: { provider: string; model?: string | null },
 	snapshot: Parameters<typeof resolveTextProvider>[1],
 ) {
 	if (config.provider === "apikeyfun" && !env.APIKEY_FUN_API_KEY) {
@@ -79,6 +79,7 @@ function resolveProvider(
 	}
 	const provider = resolveTextProvider(config.provider, snapshot, {
 		allowDeterministic: env.NODE_ENV !== "production",
+		model: config.model ?? undefined,
 	});
 	if (!provider)
 		throw new ScriptGenerationError(

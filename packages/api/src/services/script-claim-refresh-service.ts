@@ -533,7 +533,8 @@ function resolveProvider(
 	if (dependencies.provider) return dependencies.provider;
 	if (dependencies.resolveProvider) return dependencies.resolveProvider(config);
 	return resolveTextProvider(config.provider, null, {
-		allowDeterministic: false,
+		allowDeterministic: process.env.AFFICHANNEL_ISOLATED_TEST_ENV === "1",
+		model: config.model,
 	});
 }
 

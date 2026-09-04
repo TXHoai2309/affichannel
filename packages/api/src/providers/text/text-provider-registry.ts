@@ -8,13 +8,17 @@ import {
 	type ApikeyFunTextProviderOptions,
 	DEFAULT_APIKEY_FUN_BASE_URL,
 } from "./apikeyfun-text-provider";
-import { DeterministicTextProvider } from "./deterministic-text-provider";
+import {
+	DeterministicTextProvider,
+	resolveDeterministicScenario,
+} from "./deterministic-text-provider";
 import type { TextProvider } from "./text-provider";
 
 export type TextProviderResolutionOptions = {
 	allowDeterministic: boolean;
 	apikeyfun?: ApikeyFunTextProviderOptions;
 	factLockSnapshot?: FactLockInputSnapshot;
+	model?: string;
 };
 
 function resolveApikeyFunPricing(): ApikeyFunPricing | null {
@@ -65,6 +69,7 @@ export function resolveTextProvider(
 		return new DeterministicTextProvider({
 			snapshot: snapshot ?? undefined,
 			factLockSnapshot: options.factLockSnapshot,
+			scenario: resolveDeterministicScenario(options.model),
 		});
 	}
 	if (providerName === "apikeyfun") {

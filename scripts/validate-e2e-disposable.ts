@@ -21,6 +21,7 @@ const PLAYWRIGHT_ARGS = [
 	"playwright",
 	"test",
 	"tests/e2e/script-studio.spec.ts",
+	"tests/e2e/organic-scripted-acceptance.spec.ts",
 ] as const;
 
 type MigrationJournal = {

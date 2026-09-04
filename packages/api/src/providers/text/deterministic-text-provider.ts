@@ -24,6 +24,21 @@ export type DeterministicTextProviderOptions = {
 	factLockSnapshot?: FactLockInputSnapshot;
 };
 
+export function resolveDeterministicScenario(
+	model: string | undefined,
+): TextProviderScenario {
+	if (
+		process.env.AFFICHANNEL_ISOLATED_TEST_ENV !== "1" ||
+		process.env.NODE_ENV === "production"
+	)
+		return "valid";
+	const normalized = model?.trim().toLocaleLowerCase("en-US") ?? "";
+	if (normalized.includes("organic-product")) return "organic_product_proposal";
+	if (normalized.includes("organic-general")) return "organic_general_proposal";
+	if (normalized.includes("organic-zero")) return "organic_zero_claims";
+	return "valid";
+}
+
 type FactLockOccurrence = {
 	occurrence: ClaimOccurrence;
 	text: string;
@@ -268,6 +283,45 @@ function createDraft(snapshot: ScriptGenerationInputSnapshot) {
 	return draft;
 }
 
+function parseRefreshSnapshot(request: TextProviderRequest) {
+	const userMessage = request.messages.find(
+		(message) => message.role === "user",
+	);
+	if (!userMessage) return null;
+	const separator = userMessage.content.lastIndexOf("\n");
+	if (separator < 0) return null;
+	try {
+		return JSON.parse(userMessage.content.slice(separator + 1)) as {
+			source?: {
+				voiceover?: Array<{ key: string; text: string }>;
+				selectedHook?: { key: string; text: string };
+			};
+		};
+	} catch {
+		return null;
+	}
+}
+
+function deterministicClaimRefreshOutput(
+	request: TextProviderRequest,
+	scenario: TextProviderScenario,
+) {
+	if (scenario === "organic_zero_claims") return { claims: [] };
+	const snapshot = parseRefreshSnapshot(request);
+	const voiceover = snapshot?.source?.voiceover?.[0];
+	if (!voiceover) return { claims: [] };
+	return {
+		claims: [
+			{
+				text: voiceover.text,
+				occurrence: { section: "voiceover", segmentKey: voiceover.key },
+				proposedSubject:
+					scenario === "organic_product_proposal" ? "PRODUCT" : "GENERAL",
+			},
+		],
+	};
+}
+
 export class DeterministicTextProvider implements TextProvider {
 	readonly name = "deterministic";
 	private readonly scenario: TextProviderScenario;
@@ -327,6 +381,21 @@ export class DeterministicTextProvider implements TextProvider {
 				providerRequestId: `det-${request.idempotencyKey}`,
 				inputTokens: 10,
 				outputTokens: 2,
+				estimatedCostMicros: BigInt(0),
+				actualCostMicros: BigInt(0),
+				currency: "VND",
+			};
+		}
+		if (request.operation === "script-claim-refresh") {
+			const content = deterministicClaimRefreshOutput(request, this.scenario);
+			return {
+				content,
+				providerRequestId: `det-refresh-${request.idempotencyKey}`,
+				inputTokens: request.messages.reduce(
+					(total, message) => total + message.content.length,
+					0,
+				),
+				outputTokens: JSON.stringify(content).length,
 				estimatedCostMicros: BigInt(0),
 				actualCostMicros: BigInt(0),
 				currency: "VND",
