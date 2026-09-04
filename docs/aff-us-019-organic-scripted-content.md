@@ -2,7 +2,7 @@
 
 ## Phase 19C.3B — Product-subset Fact Lock v2
 
-- Trạng thái: **19C.3B PRODUCT-SUBSET FACT LOCK V2 IMPLEMENTED — DB ACCEPTANCE BLOCKED**
+- Trạng thái: **19C.3B PRODUCT-SUBSET FACT LOCK V2 = PASS**
 - Cập nhật: 2026-09-04
 - Phạm vi: Organic Scripted Product-subset Fact Lock v2 execution
 - Organic dùng source mode `ORGANIC_NO_PRODUCT`, Claim Refresh input v1 và
@@ -30,10 +30,9 @@ deferred to 19D. Version-aware read, gate, restart, idempotency, mismatch,
 uncertainty, currentness, and manual-review paths recognize the v2 snapshot
 without adding a schema, migration, `MANIFEST_V2` mode, or output-version bump.
 
-Unit, web, type, and Biome checks pass. Disposable PostgreSQL acceptance is
-blocked in this environment because no approved `AFFICHANNEL_M1_TEST_DATABASE_URL`
-or local PostgreSQL/Docker runtime is available; no remote, development, or
-production database was contacted.
+Unit, web, type, Biome, and disposable loopback PostgreSQL acceptance pass. The
+clean-room matrix used only deterministic/mock providers, contacted no remote,
+development, or production database, and required no schema or migration change.
 
 ## 19C.3A acceptance
 
@@ -579,18 +578,22 @@ following decision remains locked:
 ## 9. Current acceptance boundary
 
 ```text
-AFF-US-019 Phase 19C.3B: PRODUCT-SUBSET FACT LOCK V2 IMPLEMENTED / DB ACCEPTANCE BLOCKED
+AFF-US-019 Phase 19C.3B: PRODUCT-SUBSET FACT LOCK V2 = PASS
 19C.3A status: COMPLETE (Organic ClaimManifest builder v2 + persistence)
-19C.3B status: IMPLEMENTED; disposable PostgreSQL matrix pending
+19C.3 status: COMPLETE
+19C status: COMPLETE
 19D status: NOT STARTED
 19E status: NOT STARTED
 Runtime changed: Organic Claim Refresh v2, protected confirmation, Organic ClaimManifest v2, and Product-subset Fact Lock v2
 Schema changed: NO
 Migration created: NO
-Provider calls: 0
+Live AI/TTS/provider calls: 0
 Production DB touched: NO
 Development manual DB touched: NO
+Organic Manifest keeps the full claim inventory; Fact Lock verifies confirmed PRODUCT subset only
+FactLockRun.inputMode: MANIFEST_V1
+Fact Lock semantic input: fact-lock.manifest.v2
+Affiliate v1 unchanged; claimless/general-only Fact Lock: NOT_REQUIRED
 ```
 
-Required next action is to run the disposable PostgreSQL 19C.3B acceptance matrix.
-Voice TOCTOU remains phase-gated for 19D, and no UI was added in 19C.3B.
+Voice TOCTOU is the next phase-gated step for 19D, and no UI was added in 19C.3B.

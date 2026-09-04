@@ -10,7 +10,7 @@ Cập nhật lần cuối: 2026-09-04.
 
 ## Chưa phát hành
 
-### AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 implementation
+### AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 PASS
 
 - Organic Scripted Standard v1 now uses a server-derived Product-subset Fact
   Lock strategy. The complete ordered subject-aware `claim-manifest.v1`
@@ -22,10 +22,10 @@ Cập nhật lần cuối: 2026-09-04.
   mismatch/uncertainty, and manual-review flows are version-aware without any
   schema or migration change.
 - Claimless/general-only Organic remains `NOT_REQUIRED` with zero provider
-  calls; Voice paid authorization remains deferred to 19D. Unit, web, type, and
-  Biome checks pass. Disposable PostgreSQL acceptance is blocked because no
-  approved local test database is available; no remote, development, or
-  production database was touched.
+  calls; Voice paid authorization remains deferred to 19D. The disposable
+  loopback PostgreSQL acceptance matrix, unit, web, type, and Biome checks pass;
+  no schema or migration was added and no remote, development, or production
+  database was touched. Phase 19C is complete.
 
 ### AFF-US-019 Phase 19C.3A Subject-aware ClaimManifest Builder v2 PASS
 
