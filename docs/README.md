@@ -15,8 +15,9 @@ writes là Manifest-first, còn legacy `inputMode=NULL` chỉ được đọc t�
 AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS; 19B Organic ScriptGeneration,
 19C claim applicability/Fact Lock, 19D Voice applicability/TOCTOU, 19E.1
 Organic UX activation và 19E.2 E2E/manual final acceptance đã PASS;
-AFF-US-019 DONE/ACCEPTED. Quick Image/Media First vẫn chưa active. M5 không
-activate các identity đó.
+AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library đã
+CONTRACT LOCKED theo DEC-036; 20B–20E chưa triển khai. Quick Image/Media First
+vẫn chưa active. M5 không activate các identity đó.
 
 ## Thứ tự đọc
 
@@ -24,16 +25,17 @@ activate các identity đó.
 2. [Đặc tả sản phẩm v0.8](./product-spec.md)
 3. [Kiến trúc hệ thống](./architecture.md)
 4. [Lộ trình triển khai](./roadmap.md)
-5. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
-6. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
-7. [AFF-US-017 / ClaimManifest Foundation Contract](./aff-us-017-claim-manifest-foundation.md)
-8. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
-9. [AFF-US-014 / M4 Resolver Shadow Contract](./aff-us-014-m4-applicability-resolver-shadow.md)
-10. [AFF-US-015 / Adaptive Workflow UI Contract](./aff-us-015-adaptive-workflow-ui.md)
-11. [Domain Evolution M5 Enforcement Contract](./domain-evolution-m5-enforcement-contract.md)
-12. [Hệ thống thiết kế](./design-system.md)
-13. [Tiến trình AI agent](./ai-progress.md)
-14. [Nhật ký thay đổi](./changelog.md)
+5. [AFF-US-020 / Shared Media Library contract](./aff-us-020-shared-media-library.md)
+6. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
+7. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
+8. [AFF-US-017 / ClaimManifest Foundation Contract](./aff-us-017-claim-manifest-foundation.md)
+9. [Acceptance Plan Domain Evolution v0.8](./domain-evolution-acceptance.md)
+10. [AFF-US-014 / M4 Resolver Shadow Contract](./aff-us-014-m4-applicability-resolver-shadow.md)
+11. [AFF-US-015 / Adaptive Workflow UI Contract](./aff-us-015-adaptive-workflow-ui.md)
+12. [Domain Evolution M5 Enforcement Contract](./domain-evolution-m5-enforcement-contract.md)
+13. [Hệ thống thiết kế](./design-system.md)
+14. [Tiến trình AI agent](./ai-progress.md)
+15. [Nhật ký thay đổi](./changelog.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 

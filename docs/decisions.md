@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-09-02
+- Cập nhật lần cuối: 2026-09-04
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -10,6 +10,64 @@ DEC-025 là canonical direction hiện tại cho Channel-first v0.8. Các ADR c�
 Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ làm lịch sử;
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
+
+## DEC-036 — Workspace-owned Shared MediaAsset boundary của AFF-US-020 Phase 20A
+
+- Trạng thái: **Đã chấp nhận ở cấp tài liệu; runtime/schema chưa triển khai**
+- Ngày: 2026-09-04
+- Mở rộng: DEC-007 và các contract VoiceSegment của DEC-023/DEC-024
+- Contract chi tiết: `docs/aff-us-020-shared-media-library.md`
+
+### Bối cảnh
+
+AFF-US-020 cần một Media Library dùng chung cho Organic, Affiliate và các
+CreationPath tương lai. Audit cho thấy `media_metadata` (migration `0010`) là
+metadata project-scoped bắt buộc `project_id`, được ScriptGeneration dùng để tạo
+snapshot; nó không có object key, storage provider, checksum, MIME hoặc decoded
+metadata. `VoiceAudioStorage` đã chứng minh local/private-R2 boundary nhưng bị
+khóa vào audio/mpeg và lifecycle của VoiceSegmentArtifact.
+
+### Quyết định
+
+- Tạo mới aggregate workspace-owned `MediaAsset`; một asset đại diện cho một bộ
+  bytes bất biến và metadata server-authoritative. Asset không có `projectId`,
+  `creationPath` hoặc Content Type trong identity.
+- Biểu diễn reuse bằng `MediaAssetLink` N:N giữa Project và MediaAsset, có
+  `workspaceId` và composite tenant checks. Mọi operation vẫn phải authorize qua
+  `WorkspaceActor`; client không cung cấp authority `workspaceId`.
+- Dùng cùng vocabulary persisted/API lower-case `image | video | audio`; không
+  thêm AI media type. `origin` chỉ là audit field, v1 nhận `user_upload`; các
+  origin tương lai không được coi là capability đã active.
+- Giữ `media_metadata` và toàn bộ consumer/snapshot history không đổi trong 20A;
+  không rename, backfill, đổi nullable `projectId` hoặc evolve table thành
+  storage owner.
+- Chọn `MediaAssetStorage` riêng qua private-object adapter. Local deterministic
+  và private Cloudflare R2 cùng một server-owned interface; không tái sử dụng
+  trực tiếp `VoiceAudioStorage` hoặc các `VOICE_AUDIO_*` env names.
+- Chọn flow prepare → signed/opaque upload grant → finalize. Chỉ finalize sau
+  HEAD/stat, magic/container và decoded metadata validation mới chuyển asset sang
+  `ready`; lifecycle mới là `pending_upload`, `validating`, `ready`, `failed`,
+  `archived`.
+- SHA-256 lower-case exact-byte là integrity/audit/dedupe hint, không phải content
+  identity; duplicate checksums được phép. Bytes và detected metadata immutable;
+  display name, tags, rights và archive state mutable.
+- v1 MIME allowlist là JPEG/PNG/WebP, MP4 và MP3. SVG và arbitrary remote URL
+  import bị từ chối. MP4 basic container validation được phép khi chưa có
+  ffprobe; dimensions/duration bị thiếu phải khiến consumer cần chúng fail closed.
+- Archive là removal mặc định và không phá references. Hard purge chưa public,
+  chỉ được xem xét khi không còn active links và storage deletion đã xác nhận.
+- VoiceSegment, Product media, AI Visual và render output giữ domain riêng; không
+  auto-import/duplicate. US021 sẽ pin READY image bằng asset ID/checksum/object
+  identity để render reproducibility.
+
+### Hệ quả
+
+Chi tiết proposed tables/checks/indexes, typed storage interface, upload failure
+semantics, API/list contract, security boundary, phase breakdown và acceptance
+matrix nằm trong `docs/aff-us-020-shared-media-library.md`. Phase 20A chỉ cập
+nhật tài liệu; migration, schema, endpoint, UI, storage object, R2 call và
+provider call đều bị cấm. 20B sẽ là persistence/storage foundation sau khi
+contract này được review.
 
 ## DEC-034 — Durable Script Claim Refresh boundary sau AFF-US-018
 

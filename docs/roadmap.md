@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-03
+- Cập nhật lần cuối: 2026-09-04
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -14,11 +14,12 @@ pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã 
 1. Freeze US12 baseline.
 2. Domain Evolution.
 3. ClaimManifest / Fact Lock evolution.
-4. Quick Image.
-5. Channel-first UI.
-6. Library / Calendar.
-7. Analytics.
-8. AI Visual.
+4. Shared Media Library (AFF-US-020).
+5. Quick Image (AFF-US-021).
+6. Channel-first UI / Video Studio.
+7. Content Library / Calendar.
+8. Analytics.
+9. AI Visual.
 
 Current pointer: US12 baseline frozen/completed. Domain Evolution M1–M5 đã DONE;
 migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều PASS.
@@ -29,8 +30,14 @@ AFF-US-018 Manifest-First Fact Lock đã hoàn tất Phase 18A–18F và DONE; n
 dùng Manifest-first, legacy `inputMode=NULL` chỉ còn read compatibility. Canonical
 AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS, Phase 19B Organic ScriptGeneration,
 19C claim applicability/Fact Lock, 19D Voice applicability/TOCTOU, 19E.1 Organic
-UX activation và 19E.2 E2E/manual final acceptance đều đã PASS; AFF-US-019 đã
-DONE/ACCEPTED. Quick Image/Media First vẫn chưa active.
+ UX activation và 19E.2 E2E/manual final acceptance đều đã PASS; AFF-US-019 đã
+ DONE/ACCEPTED. Quick Image/Media First vẫn chưa active.
+
+AFF-US-020 Phase 20A Architecture Audit + Contract Lock đang là current checkpoint
+và đã được khóa ở cấp tài liệu theo DEC-036. `MediaAsset` workspace-owned và
+`MediaAssetLink` Project reuse là direction canonical; `/media` vẫn là skeleton.
+20B–20E (persistence/storage, protected API, UI và project reuse/E2E) chưa bắt
+đầu. Quick Image/AFF-US-021 phụ thuộc vào READY image asset contract của 20A.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.
@@ -89,6 +96,12 @@ Ranh giới tránh overlap:
   internal service; không sửa FactLockRun hoặc current execution.
 - Shared composition pipeline là technical enabler của Video Studio/Quick Image,
   không phải ContentFormat hoặc một User Story thay thế.
+- `AFF-US-020` sở hữu reusable private MediaAsset metadata/storage contract và
+  explicit Project links; Product thumbnails, VoiceSegment artifacts, AI Visual
+  output và render output không tự động nhập vào Library.
+- `AFF-US-021`/Video Studio chỉ consume READY assets và phải pin asset identity,
+  checksum và immutable object metadata; chúng không thay đổi ownership contract
+  của AFF-US-020.
 - `AFF-US-029` sở hữu provider governance/cost guardrails; `AFF-US-030` sở hữu
   operational monitoring/recovery. Mọi story gọi paid provider phải đạt safety
   acceptance liên quan trước khi bật provider.

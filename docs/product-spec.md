@@ -55,6 +55,8 @@ creation path phù hợp, xử lý policy gate khi áp dụng, ghép media, xu�
 
 - Xây dựng kênh bằng content mix, pillar, series và format có thể tái sử dụng.
 - Tạo Organic content không cần Product và Affiliate content có Product evidence.
+- Lưu ảnh, video và audio trong một Shared Media Library workspace-owned để
+  Organic/Affiliate và các CreationPath có thể tái sử dụng cùng một asset private.
 - Hỗ trợ Quick Image, Scripted và Media First trên một render pipeline dùng chung.
 - Lưu thông tin sản phẩm và bằng chứng hỗ trợ để tái sử dụng khi có Product claim.
 - Chuyển Content Brief thành script có cấu trúc khi path yêu cầu.
@@ -150,6 +152,10 @@ Product Facts CRUD, R2 hay media upload đầy đủ.
 Product Library hỗ trợ tìm kiếm, lọc và tải thêm theo cursor khi còn dữ liệu. Thumbnail chỉ nhận
 URL HTTPS hợp lệ; source URL và affiliate URL nhận HTTP hoặc HTTPS hợp lệ. Giá trị URL rỗng sau
 trim được coi là chưa khai báo.
+
+Product media (thumbnail/source) và Shared Media Library là hai domain riêng.
+AFF-US-020 chỉ quản lý asset private do người dùng upload và quan hệ reuse tường
+minh; không tự động import Product thumbnail, VoiceSegment audio hoặc AI output.
 
 Sản phẩm affiliate tái sử dụng, gồm danh tính, link affiliate, trạng thái, media
 và tham chiếu hiệu suất.
@@ -534,6 +540,7 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
+| **20A CONTRACT LOCKED — DEC-036** | Shared Media Library dùng `MediaAsset` workspace-owned và `MediaAssetLink` N:N với Project; private local/R2 upload và READY validation là contract tài liệu. | AFF-US-020 20B–20E triển khai persistence, API, UI và reuse/E2E; `/media` vẫn placeholder trong 20A. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate

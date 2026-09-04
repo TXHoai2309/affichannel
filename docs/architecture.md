@@ -263,6 +263,23 @@ metadata; không lưu binary audio. Protected audio route resolve adapter từ
 Implementation này chỉ hoàn thành storage cho VoiceSegment. Nó không đồng nghĩa
 Media Library, render asset hoặc output-video storage đã hoàn thành.
 
+### AFF-US-020 Shared Media Library contract (20A accepted)
+
+DEC-036 và `docs/aff-us-020-shared-media-library.md` khóa `MediaAsset` là
+aggregate sở hữu bởi Workspace, với `MediaAssetLink` là quan hệ N:N tường minh
+đến Project. Asset identity không chứa `projectId`, `creationPath` hoặc Content
+Type; mọi read/download/link/archive vẫn phải authorize theo `WorkspaceActor`.
+`media_metadata` hiện tại tiếp tục là project-scoped ScriptGeneration input và
+không bị rename/backfill/evolve trong 20A. VoiceSegment/VoiceAudioStorage tiếp
+tục là domain riêng.
+
+V1 sẽ dùng `MediaAssetStorage` riêng, local deterministic và private R2 qua một
+server-owned interface, flow prepare → signed/opaque upload → finalize, và
+status `pending_upload/validating/ready/failed/archived`. Không lưu binary trong
+database, không public permanent URL, không nhận SVG hoặc arbitrary URL import.
+Đây là contract tài liệu; persistence, env mới, endpoint và UI vẫn deferred sang
+20B–20E.
+
 ### Kiến trúc đích cho media và render
 
 Database chỉ lưu metadata và object key, không lưu binary media/video.

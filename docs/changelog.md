@@ -10,6 +10,17 @@ Cập nhật lần cuối: 2026-09-04.
 
 ## Chưa phát hành
 
+### AFF-US-020 Phase 20A Shared Media Library contract locked
+
+- Locked the workspace-owned `MediaAsset` plus explicit `MediaAssetLink` reuse
+  model, private local/R2 storage boundary, prepare/upload/finalize lifecycle,
+  validation/MIME/checksum rules, and workspace authorization contract in
+  `docs/aff-us-020-shared-media-library.md` and DEC-036.
+- This is documentation/design only: no schema, migration, runtime endpoint,
+  upload UI, storage object, R2 call, or provider call was added. `/media` remains
+  a truthful placeholder; `media_metadata` and VoiceSegment artifacts remain
+  compatible historical domains.
+
 ### AFF-US-019 Phase 19E.2 Organic Scripted final acceptance PASS
 
 - Guarded disposable browser acceptance passes 19/19: Organic claimless,

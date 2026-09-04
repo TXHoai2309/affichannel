@@ -10,8 +10,29 @@
   19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B Product-subset
   Fact Lock v2 PASS; Phase 19C COMPLETE; 19D Voice applicability/TOCTOU PASS;
   19E.1 Organic UX activation PASS; 19E.2 E2E/manual final acceptance PASS;
-  AFF-US-019 DONE/ACCEPTED.
+  AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library
+  architecture audit and contract lock PASS/ACCEPTED at documentation level;
+  20B–20E not started.
 - Cập nhật lần cuối: 2026-09-04
+
+## 2026-09-04 — AFF-US-020 Phase 20A Shared Media Library contract lock
+
+Repository audit completed from starting HEAD `3881269` on branch `TXH`.
+`media_metadata` is retained as project-scoped historical ScriptGeneration input,
+not promoted to storage identity. The locked target is workspace-owned
+`MediaAsset` plus explicit `MediaAssetLink` N:N Project reuse, lower-case
+`image/video/audio` vocabulary, immutable validated bytes, and server-owned
+workspace authorization. The selected upload flow is prepare → signed/opaque
+upload → finalize with `pending_upload/validating/ready/failed/archived` states.
+Local deterministic storage and private R2 remain behind a dedicated media
+adapter; VoiceSegment storage is not merged and no Voice/Product/AI auto-import
+occurs. SVG and arbitrary URL import are deferred/rejected, and MP4 full probing
+is deferred because the current dependencies include MP3 `music-metadata` but no
+image parser or FFmpeg/ffprobe.
+
+No schema, migration, runtime, endpoint, UI activation, storage object, R2 call,
+or provider call was made. Canonical details are in
+`docs/aff-us-020-shared-media-library.md`; DEC-036 records the accepted boundary.
 
 Current canonical status: AFF-US-018 DONE; AFF-US-019 Phase 19D VOICE
 APPLICABILITY / TOCTOU, 19E.1 ORGANIC UX ACTIVATION and 19E.2 E2E/manual final
