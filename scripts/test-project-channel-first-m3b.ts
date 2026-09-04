@@ -13,20 +13,14 @@ const {
 	workspace,
 } = await import("@affichannel/db");
 const { and, eq } = await import("drizzle-orm");
-const {
-	createProject,
-	ProjectServiceError,
-	updateProject,
-} = await import("@affichannel/core/project/project-service");
-const {
-	createProjectInputSchema,
-	updateProjectInputSchema,
-} = await import("@affichannel/core/project/project-validation");
-const {
-	createProjectRepository,
-	getProjectDetails,
-	listProjectItems,
-} = await import("../packages/api/src/services/project-repository.ts");
+const { createProject, ProjectServiceError, updateProject } = await import(
+	"@affichannel/core/project/project-service"
+);
+const { createProjectInputSchema, updateProjectInputSchema } = await import(
+	"@affichannel/core/project/project-validation"
+);
+const { createProjectRepository, getProjectDetails, listProjectItems } =
+	await import("../packages/api/src/services/project-repository.ts");
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -146,13 +140,14 @@ async function expectUpdateRejected(
 	} catch (error) {
 		assert(
 			error instanceof ProjectServiceError &&
-			error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
-			error.metadata.reasonCode === reasonCode,
+				error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
+				error.metadata.reasonCode === reasonCode,
 			`Expected typed M3B update rejection ${reasonCode}.`,
 		);
 	}
 	assert(
-		JSON.stringify(await rawProject(input.id)) === JSON.stringify(beforeProject) &&
+		JSON.stringify(await rawProject(input.id)) ===
+			JSON.stringify(beforeProject) &&
 			JSON.stringify(await getProjectDetails(workspaceId, input.id)) ===
 				JSON.stringify(beforeDetail),
 		`Rejected ${reasonCode} update mutated Project or ContentBrief state.`,
@@ -182,9 +177,9 @@ try {
 	const legacyRow = await rawProject(legacyProject.id);
 	assert(
 		legacyRow?.contentType === "AFFILIATE" &&
-		legacyRow.creationPath === "SCRIPTED" &&
-		legacyRow.contentFormatKey === "SCRIPTED_STANDARD" &&
-		legacyRow.contentFormatVersion === 1,
+			legacyRow.creationPath === "SCRIPTED" &&
+			legacyRow.contentFormatKey === "SCRIPTED_STANDARD" &&
+			legacyRow.contentFormatVersion === 1,
 		"Legacy create must persist the server-owned canonical identity.",
 	);
 	assert(
@@ -206,9 +201,9 @@ try {
 	const canonicalRow = await rawProject(canonicalProject.id);
 	assert(
 		canonicalRow?.contentType === "AFFILIATE" &&
-		canonicalRow.creationPath === "SCRIPTED" &&
-		canonicalRow.contentFormatKey === "SCRIPTED_STANDARD" &&
-		canonicalRow.contentFormatVersion === 1,
+			canonicalRow.creationPath === "SCRIPTED" &&
+			canonicalRow.contentFormatKey === "SCRIPTED_STANDARD" &&
+			canonicalRow.contentFormatVersion === 1,
 		"Explicit canonical create must persist the exact identity.",
 	);
 	const canonicalDetail = await getProjectDetails(
@@ -220,7 +215,7 @@ try {
 	);
 	assert(
 		canonicalDetail?.isLegacyProjection === false &&
-		canonicalListItem?.isLegacyProjection === false,
+			canonicalListItem?.isLegacyProjection === false,
 		"Persisted canonical detail and list must not report legacy provenance.",
 	);
 
@@ -230,14 +225,24 @@ try {
 	});
 	assert(!productless.success, "Product must remain required in M3B.");
 
-	await expectRejected(
-		createProjectInputSchema.parse({
-			...baseFields,
-			contentType: "ORGANIC",
-			creationPath: "SCRIPTED",
-			contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
-		}),
-		"CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
+	const organicCreate = createProjectInputSchema.parse({
+		...baseFields,
+		name: "M3B Organic scripted project",
+		productId: null,
+		contentType: "ORGANIC",
+		creationPath: "SCRIPTED",
+		contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
+	});
+	const organicProject = await createProject(repository, actor, organicCreate);
+	projectIds.push(organicProject.id);
+	const organicRow = await rawProject(organicProject.id);
+	assert(
+		organicRow?.contentType === "ORGANIC" &&
+			organicRow.creationPath === "SCRIPTED" &&
+			organicRow.contentFormatKey === "SCRIPTED_STANDARD" &&
+			organicRow.contentFormatVersion === 1 &&
+			organicRow.productId === null,
+		"Organic Scripted create must persist the exact identity without Product.",
 	);
 	await expectRejected(
 		createProjectInputSchema.parse({
@@ -281,9 +286,9 @@ try {
 	const explicitUpdated = await rawProject(canonicalProject.id);
 	assert(
 		explicitUpdated?.contentType === "AFFILIATE" &&
-		explicitUpdated.creationPath === "SCRIPTED" &&
-		explicitUpdated.contentFormatKey === "SCRIPTED_STANDARD" &&
-		explicitUpdated.contentFormatVersion === 1,
+			explicitUpdated.creationPath === "SCRIPTED" &&
+			explicitUpdated.contentFormatKey === "SCRIPTED_STANDARD" &&
+			explicitUpdated.contentFormatVersion === 1,
 		"Explicit canonical update must persist the exact identity.",
 	);
 
@@ -304,48 +309,34 @@ try {
 	} catch (error) {
 		assert(
 			error instanceof ProjectServiceError &&
-			error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
-			error.metadata.reasonCode === "PARTIAL_CHANNEL_FIRST_IDENTITY",
+				error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
+				error.metadata.reasonCode === "PARTIAL_CHANNEL_FIRST_IDENTITY",
 			"Partial update must expose its typed identity reason.",
 		);
 	}
 	assert(
 		JSON.stringify(await rawProject(canonicalProject.id)) ===
 			JSON.stringify(beforeRejectedUpdate) &&
-			JSON.stringify(await getProjectDetails(workspaceId, canonicalProject.id)) ===
-				JSON.stringify(beforeRejectedUpdateDetail),
+			JSON.stringify(
+				await getProjectDetails(workspaceId, canonicalProject.id),
+			) === JSON.stringify(beforeRejectedUpdateDetail),
 		"Rejected update must not mutate Project or ContentBrief.",
 	);
 
-	const beforeInactiveUpdate = await rawProject(canonicalProject.id);
-	const inactiveUpdateDetail = await getProjectDetails(
-		workspaceId,
-		canonicalProject.id,
-	);
-	const inactiveUpdate = updateProjectInputSchema.parse({
+	const organicUpdate = updateProjectInputSchema.parse({
 		...baseFields,
 		id: canonicalProject.id,
+		productId: null,
 		contentType: "ORGANIC",
 		creationPath: "SCRIPTED",
 		contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
 	});
-	try {
-		await updateProject(repository, actor, inactiveUpdate);
-		throw new Error("Expected inactive M3B update to be rejected.");
-	} catch (error) {
-		assert(
-			error instanceof ProjectServiceError &&
-			error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
-			error.metadata.reasonCode === "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
-			"Inactive update must expose its typed identity reason.",
-		);
-	}
+	await updateProject(repository, actor, organicUpdate);
+	const organicUpdated = await rawProject(canonicalProject.id);
 	assert(
-		JSON.stringify(await rawProject(canonicalProject.id)) ===
-			JSON.stringify(beforeInactiveUpdate) &&
-			JSON.stringify(await getProjectDetails(workspaceId, canonicalProject.id)) ===
-				JSON.stringify(inactiveUpdateDetail),
-		"Inactive update must not mutate Project or ContentBrief.",
+		organicUpdated?.contentType === "ORGANIC" &&
+			organicUpdated.productId === null,
+		"Organic Scripted update must persist the exact identity and optional Product.",
 	);
 
 	const remainingLegacyId = randomUUID();
@@ -359,9 +350,9 @@ try {
 	const canonicalizedLegacy = await rawProject(remainingLegacyId);
 	assert(
 		canonicalizedLegacy?.contentType === "AFFILIATE" &&
-		canonicalizedLegacy.creationPath === "SCRIPTED" &&
-		canonicalizedLegacy.contentFormatKey === "SCRIPTED_STANDARD" &&
-		canonicalizedLegacy.contentFormatVersion === 1,
+			canonicalizedLegacy.creationPath === "SCRIPTED" &&
+			canonicalizedLegacy.contentFormatKey === "SCRIPTED_STANDARD" &&
+			canonicalizedLegacy.contentFormatVersion === 1,
 		"Legacy update must deterministically canonicalize an all-null row.",
 	);
 
@@ -463,9 +454,8 @@ try {
 	} catch (error) {
 		assert(
 			error instanceof ProjectServiceError &&
-			error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
-			error.metadata.reasonCode ===
-				"PROJECT_IDENTITY_CHANGED_DURING_UPDATE",
+				error.code === "INVALID_PROJECT_WRITE_IDENTITY" &&
+				error.metadata.reasonCode === "PROJECT_IDENTITY_CHANGED_DURING_UPDATE",
 			"Stale identity CAS must expose its typed concurrency reason.",
 		);
 	}
@@ -479,8 +469,8 @@ try {
 		.where(eq(contentBrief.projectId, casProjectId));
 	assert(
 		afterCasProject?.contentFormatKey === "UNKNOWN_FORMAT" &&
-		afterCasProject.contentFormatVersion === 1 &&
-		JSON.stringify(afterCasBrief) === JSON.stringify(beforeCasBrief),
+			afterCasProject.contentFormatVersion === 1 &&
+			JSON.stringify(afterCasBrief) === JSON.stringify(beforeCasBrief),
 		"Stale identity CAS must not overwrite identity or update ContentBrief.",
 	);
 
@@ -491,17 +481,26 @@ try {
 	const listItem = (await listProjectItems(workspaceId)).find(
 		(item) => item.id === projectedLegacyId,
 	);
-	assert(detail !== undefined && listItem !== undefined, "Legacy read fixture must be visible.");
+	assert(
+		detail !== undefined && listItem !== undefined,
+		"Legacy read fixture must be visible.",
+	);
 	for (const [label, readModel] of [
 		["detail", detail],
 		["list", listItem],
 	] as const) {
-		assert(readModel.contentType === "AFFILIATE", `${label} must project ContentType.`);
-		assert(readModel.creationPath === "SCRIPTED", `${label} must project CreationPath.`);
+		assert(
+			readModel.contentType === "AFFILIATE",
+			`${label} must project ContentType.`,
+		);
+		assert(
+			readModel.creationPath === "SCRIPTED",
+			`${label} must project CreationPath.`,
+		);
 		assert(
 			readModel.contentFormat?.resolution === "resolved" &&
-			readModel.contentFormat.ref.key === "SCRIPTED_STANDARD" &&
-			readModel.contentFormat.ref.version === 1,
+				readModel.contentFormat.ref.key === "SCRIPTED_STANDARD" &&
+				readModel.contentFormat.ref.version === 1,
 			`${label} must project the resolved legacy format.`,
 		);
 		assert(readModel.isLegacyProjection, `${label} must mark provenance.`);
@@ -537,7 +536,7 @@ try {
 	const unknownRead = await getProjectDetails(workspaceId, unknownId);
 	assert(
 		unknownRead?.contentFormat?.resolution === "unsupported" &&
-		!unknownRead.isLegacyProjection,
+			!unknownRead.isLegacyProjection,
 		"Unknown complete format must remain unsupported, not legacy-projected.",
 	);
 
@@ -552,7 +551,9 @@ try {
 	}
 	await db
 		.delete(product)
-		.where(and(eq(product.id, productId), eq(product.workspaceId, workspaceId)));
+		.where(
+			and(eq(product.id, productId), eq(product.workspaceId, workspaceId)),
+		);
 	await db.delete(user).where(eq(user.id, userId));
 	await db.delete(workspace).where(eq(workspace.id, workspaceId));
 }

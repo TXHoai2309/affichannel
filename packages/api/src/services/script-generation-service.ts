@@ -1682,7 +1682,7 @@ export async function getScriptGenerationContext(
 				contentFormatVersion: 1 as const,
 			},
 			sourceMode: "ORGANIC_NO_PRODUCT" as const,
-			product: { id: "", name: "", category: null },
+			product: null,
 			facts: [],
 		} as ScriptGenerationContext;
 	}

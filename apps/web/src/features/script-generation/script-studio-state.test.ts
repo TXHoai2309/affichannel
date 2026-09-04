@@ -167,6 +167,19 @@ describe("Script Studio state", () => {
 		});
 	});
 
+	it("allows Organic no-Product generation with complete Channel Settings", () => {
+		const organic = makeModel({
+			context: {
+				...context,
+				product: null,
+				facts: [],
+				sourceMode: "ORGANIC_NO_PRODUCT",
+			},
+		});
+		expect(hasUsableFacts(organic)).toBe(false);
+		expect(isGenerationContextReady(organic)).toBe(true);
+	});
+
 	it("keeps the latest usable artifact visible when a newer request is pending", () => {
 		const usable = makeArtifact();
 		const model = makeModel({

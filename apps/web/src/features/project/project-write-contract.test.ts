@@ -171,7 +171,6 @@ describe("AFF-US-016 M3A Project write contract", () => {
 	});
 
 	it.each([
-		["ORGANIC", "SCRIPTED", "SCRIPTED_STANDARD"],
 		["AFFILIATE", "QUICK_IMAGE", "QUICK_IMAGE_STANDARD"],
 		["AFFILIATE", "MEDIA_FIRST", "MEDIA_FIRST_STANDARD"],
 	])("keeps %s/%s inactive during M3", (contentType, creationPath, key) => {
@@ -187,22 +186,38 @@ describe("AFF-US-016 M3A Project write contract", () => {
 		});
 	});
 
-	it("keeps Product required on both legacy and canonical schemas", () => {
+	it("allows Organic Scripted creation without a Product", () => {
+		const parsed = channelFirstCompatibleCreateProjectInputSchema.safeParse({
+			...canonicalAffiliateIdentity,
+			...legacyPayload,
+			contentType: "ORGANIC",
+			productId: null,
+		});
+		expect(parsed.success).toBe(true);
+		if (parsed.success) {
+			expect(classifyProjectWriteIdentity(parsed.data)).toMatchObject({
+				kind: "canonical",
+				identity: { contentType: "ORGANIC", creationPath: "SCRIPTED" },
+			});
+		}
+	});
+
+	it("keeps Affiliate Product validation explicit", () => {
 		expect(
 			channelFirstCompatibleCreateProjectInputSchema.safeParse({
 				...canonicalAffiliateIdentity,
 				...legacyPayload,
-				productId: undefined,
+				productId: null,
 			}).success,
-		).toBe(false);
+		).toBe(true);
 		expect(
 			channelFirstCompatibleUpdateProjectInputSchema.safeParse({
 				...canonicalAffiliateIdentity,
 				...legacyPayload,
-				productId: undefined,
+				productId: null,
 				id: "00000000-0000-4000-8000-000000000002",
 			}).success,
-		).toBe(false);
+		).toBe(true);
 	});
 
 	it("does not accept read-model-only ContentFormat fields as write input", () => {

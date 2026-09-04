@@ -11,7 +11,9 @@ import {
 	CardTitle,
 } from "@affichannel/ui/components/card";
 import { LockKeyhole, RefreshCw } from "lucide-react";
-
+import ClaimSubjectConfirmationPanel, {
+	type ClaimSubjectDecision,
+} from "./claim-subject-confirmation-panel";
 import {
 	formatOccurrence,
 	getCurrentScriptPrimarySnapshot,
@@ -22,6 +24,9 @@ type ScriptVersionCurrentViewProps = {
 	onRefreshClaims?: () => void;
 	refreshPending?: boolean;
 	refreshNotice?: string | null;
+	onConfirmClaimSubjects?: (decisions: ClaimSubjectDecision[]) => void;
+	confirmPending?: boolean;
+	confirmationNotice?: string | null;
 };
 
 export default function ScriptVersionCurrentView({
@@ -29,6 +34,9 @@ export default function ScriptVersionCurrentView({
 	onRefreshClaims,
 	refreshPending = false,
 	refreshNotice = null,
+	onConfirmClaimSubjects,
+	confirmPending = false,
+	confirmationNotice = null,
 }: ScriptVersionCurrentViewProps) {
 	const snapshot = getCurrentScriptPrimarySnapshot(scriptVersion);
 	const selectedHook = snapshot.hookVariants.find(
@@ -166,6 +174,15 @@ export default function ScriptVersionCurrentView({
 							</p>
 						) : null}
 					</section>
+
+					{onConfirmClaimSubjects ? (
+						<ClaimSubjectConfirmationPanel
+							confirmPending={confirmPending}
+							notice={confirmationNotice}
+							onConfirm={onConfirmClaimSubjects}
+							scriptVersion={scriptVersion}
+						/>
+					) : null}
 
 					<CurrentSection title="Candidate Claims">
 						{snapshot.claims.length === 0 ? (

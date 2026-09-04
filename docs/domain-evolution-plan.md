@@ -1,11 +1,11 @@
 # Kế hoạch Domain Evolution v0.8
 
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016/AFF-US-017 DONE;
-  M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 Phase 19A
-  audit và 19A.2 claim subject contract đã PASS; 19A.3 claim subject foundation
-  đã PASS; 19B chưa bắt đầu
+  M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 Phase
+  19A–19D và 19E.1 Organic UX activation đã PASS; 19E.2 E2E/manual final
+  acceptance là bước tiếp theo
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-03
+- Cập nhật lần cuối: 2026-09-04
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030, DEC-035
 
 ## 1. Mục tiêu
@@ -53,8 +53,8 @@ không được thêm vào enum `project_step_status.status`.
 Server chọn một trong hai input source mode:
 
 - `PRODUCT_BACKED`: đọc Product, Product Facts và dependency hiện hữu.
-- `ORGANIC_NO_PRODUCT`: target future mode, không lookup Product/Facts và không được
-  invent Product claim. Mode này chưa active; DEC-035 đã khóa claim subject
+- `ORGANIC_NO_PRODUCT`: server-derived mode, không lookup Product/Facts và không được
+  invent Product claim. Mode này đã active cho Organic Scripted Standard v1; DEC-035 đã khóa claim subject
   `GENERAL | PRODUCT(PROJECT_PRODUCT)`, confirmation authority và fail-closed
   currentness cho Product/Fact Lock/Voice.
 
@@ -66,8 +66,9 @@ ScriptDraft, versioning, repair, idempotency và audit hiện hữu được gi�
 Phase 19A là contract/architecture audit; Phase 19A.2 đã khóa discriminator
 Product/general, confirmation authority, currentness, Product binding, Manifest
 full-inventory strategy và Fact Lock Product subset tại DEC-035. 19A.3 pure
-foundation/frozen vectors đã PASS; Organic runtime vẫn chưa active và 19B chưa
-bắt đầu. Không được dùng keyword, Product name hoặc AI output làm authority.
+foundation/frozen vectors, 19B–19D runtime, và 19E.1 UX activation đã PASS.
+19E.2 E2E/manual final acceptance chưa bắt đầu. Không được dùng keyword, Product
+name hoặc AI output làm authority.
 
 Audit đầy đủ, target matrix và phase boundary nằm tại
 `docs/aff-us-019-organic-scripted-content.md`. Các bullet Organic bên dưới là

@@ -82,6 +82,80 @@ describe("project domain contract", () => {
 		).rejects.toBeInstanceOf(ProjectServiceError);
 	});
 
+	it("allows Organic Scripted creation without Product linkage", async () => {
+		let productLookupCount = 0;
+		const repository: ProjectRepository<{ id: string }> = {
+			findAccessibleProduct: async () => {
+				productLookupCount += 1;
+				return undefined;
+			},
+			createProjectBundle: async ({ input, identity }) => ({
+				id: "organic-project",
+				contentType: identity.contentType,
+				productId: input.productId,
+			}),
+			findProject: async () => undefined,
+			findProjectIdentity: async () => undefined,
+			listProjects: async () => [],
+			updateProjectBundle: async () => undefined,
+			archiveProject: async () => undefined,
+		};
+
+		const result = await createProject(
+			repository,
+			{ workspaceId: "internal", userId: "user-1" },
+			{
+				name: "Organic không sản phẩm",
+				productId: null,
+				contentType: "ORGANIC",
+				creationPath: "SCRIPTED",
+				contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
+				platform: "tiktok",
+				goal: "Tăng nhận biết",
+				durationSeconds: 30,
+				description: undefined,
+				angle: "Chia sẻ trải nghiệm",
+			},
+		);
+
+		expect(result).toMatchObject({
+			contentType: "ORGANIC",
+			productId: null,
+		});
+		expect(productLookupCount).toBe(0);
+	});
+
+	it("still rejects Affiliate creation without Product linkage", async () => {
+		const repository: ProjectRepository<{ id: string }> = {
+			findAccessibleProduct: async () => ({ id: productId }),
+			createProjectBundle: async () => ({ id: "should-not-create" }),
+			findProject: async () => undefined,
+			findProjectIdentity: async () => undefined,
+			listProjects: async () => [],
+			updateProjectBundle: async () => undefined,
+			archiveProject: async () => undefined,
+		};
+
+		await expect(
+			createProject(
+				repository,
+				{ workspaceId: "internal", userId: "user-1" },
+				{
+					name: "Affiliate thiếu sản phẩm",
+					productId: null,
+					contentType: "AFFILIATE",
+					creationPath: "SCRIPTED",
+					contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
+					platform: "tiktok",
+					goal: "Tạo đơn",
+					durationSeconds: 30,
+					description: undefined,
+					angle: "Review thật",
+				},
+			),
+		).rejects.toMatchObject({ code: "PRODUCT_NOT_FOUND" });
+	});
+
 	it("allows duplicate project names while keeping project records distinct", async () => {
 		const createdProjects: Array<{ id: string; name: string }> = [];
 		const repository: ProjectRepository<{ id: string; name: string }> = {

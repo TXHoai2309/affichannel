@@ -52,6 +52,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { orpc } from "@/utils/orpc";
+import type { ClaimSubjectDecision } from "./claim-subject-confirmation-panel";
 import ScriptEditor from "./script-editor";
 import {
 	getScriptVersionErrorCode,
@@ -76,6 +77,7 @@ import {
 	hasWarningFacts,
 	isGenerationContextReady,
 	isLatestUsableArtifactInvalidated,
+	isOrganicScriptedContext,
 	isSectionValid,
 	SCRIPT_SECTION_LABELS,
 	SCRIPT_STATUS_LABELS,
@@ -181,6 +183,7 @@ function StudioSkeleton() {
 
 function ContextPanel({ model }: { model: ScriptGenerationReadModel }) {
 	const { context } = model;
+	const organic = isOrganicScriptedContext(model);
 	const usableFacts = context.facts.filter(
 		(fact) =>
 			fact.generationUsability === "allowed" ||
@@ -209,7 +212,7 @@ function ContextPanel({ model }: { model: ScriptGenerationReadModel }) {
 							<div className="min-w-0">
 								<p className="font-semibold text-sm">{context.project.name}</p>
 								<p className="mt-1 text-muted-foreground text-xs">
-									{context.product.name} · TikTok ·{" "}
+									{context.product?.name ?? "Không gắn sản phẩm"} · TikTok ·{" "}
 									{context.contentBrief.durationSeconds} giây
 								</p>
 							</div>
@@ -240,91 +243,111 @@ function ContextPanel({ model }: { model: ScriptGenerationReadModel }) {
 						</dl>
 					</ContextGroup>
 
-					<ContextGroup icon={Sparkles} title="Product">
-						<dl className="grid gap-4 sm:grid-cols-2">
-							<ContextItem label="Tên sản phẩm">
-								{context.product.name}
-							</ContextItem>
-							<ContextItem label="Danh mục">
-								{context.product.category || "Chưa khai báo"}
-							</ContextItem>
-						</dl>
-					</ContextGroup>
+					{context.product ? (
+						<ContextGroup icon={Sparkles} title="Sản phẩm">
+							<dl className="grid gap-4 sm:grid-cols-2">
+								<ContextItem label="Tên sản phẩm">
+									{context.product.name}
+								</ContextItem>
+								<ContextItem label="Danh mục">
+									{context.product.category || "Chưa khai báo"}
+								</ContextItem>
+							</dl>
+						</ContextGroup>
+					) : (
+						<ContextGroup icon={Sparkles} title="Sản phẩm">
+							<p className="text-muted-foreground text-sm">
+								Nội dung Organic có thể tạo mà không cần gắn sản phẩm.
+							</p>
+						</ContextGroup>
+					)}
 
 					<ContextGroup icon={LockKeyhole} title="Product Facts">
-						{context.facts.length === 0 ? (
+						{organic ? (
 							<p className="text-muted-foreground text-sm">
-								Chưa có Product Fact.
+								Không bắt buộc cho nội dung Organic không gắn sản phẩm.
 							</p>
 						) : (
-							<div className="space-y-3">
-								<div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
-									<span>{usableFacts.length} Fact có thể dùng</span>
-									<span aria-hidden="true">·</span>
-									<span>{context.facts.length} Fact tổng cộng</span>
-								</div>
-								<div className="space-y-3">
-									{context.facts.map((fact) => (
-										<div
-											className="rounded-xl border bg-background p-3"
-											key={fact.id}
-										>
-											<div className="flex flex-wrap items-center gap-2">
-												<Badge
-													variant={
-														fact.generationUsability === "blocked"
-															? "destructive"
-															: fact.generationUsability ===
-																	"allowed_with_warning"
-																? "warning"
-																: "success"
-													}
-												>
-													{FACT_USABILITY_LABELS[fact.generationUsability]}
-												</Badge>
-												<Badge variant="outline">
-													{FACT_FRESHNESS_LABELS[fact.assessment.freshness]}
-												</Badge>
-											</div>
-											<p className="mt-2 text-sm">{fact.content}</p>
-											<p className="mt-1 text-muted-foreground text-xs">
-												{fact.source.label ||
-													fact.source.url ||
-													"Chưa có nguồn/evidence"}
-												{fact.source.confirmedAt
-													? ` · Xác nhận ${fact.source.confirmedAt}`
-													: ""}
-											</p>
+							<>
+								{context.facts.length === 0 ? (
+									<p className="text-muted-foreground text-sm">
+										Chưa có Product Fact.
+									</p>
+								) : (
+									<div className="space-y-3">
+										<div className="flex flex-wrap items-center gap-2 text-muted-foreground text-xs">
+											<span>{usableFacts.length} Fact có thể dùng</span>
+											<span aria-hidden="true">·</span>
+											<span>{context.facts.length} Fact tổng cộng</span>
 										</div>
-									))}
-								</div>
-								{warningFacts.length > 0 ? (
-									<div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-xs">
-										<AlertTriangle
-											aria-hidden="true"
-											className="mt-0.5 size-4 shrink-0"
-										/>
-										<span>
-											Một số Product Facts sắp cần cập nhật. Kịch bản vẫn có thể
-											được tạo từ dữ liệu hiện tại.
-										</span>
+										<div className="space-y-3">
+											{context.facts.map((fact) => (
+												<div
+													className="rounded-xl border bg-background p-3"
+													key={fact.id}
+												>
+													<div className="flex flex-wrap items-center gap-2">
+														<Badge
+															variant={
+																fact.generationUsability === "blocked"
+																	? "destructive"
+																	: fact.generationUsability ===
+																			"allowed_with_warning"
+																		? "warning"
+																		: "success"
+															}
+														>
+															{FACT_USABILITY_LABELS[fact.generationUsability]}
+														</Badge>
+														<Badge variant="outline">
+															{FACT_FRESHNESS_LABELS[fact.assessment.freshness]}
+														</Badge>
+													</div>
+													<p className="mt-2 text-sm">{fact.content}</p>
+													<p className="mt-1 text-muted-foreground text-xs">
+														{fact.source.label ||
+															fact.source.url ||
+															"Chưa có nguồn/evidence"}
+														{fact.source.confirmedAt
+															? ` · Xác nhận ${fact.source.confirmedAt}`
+															: ""}
+													</p>
+												</div>
+											))}
+										</div>
+										{warningFacts.length > 0 ? (
+											<div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-xs">
+												<AlertTriangle
+													aria-hidden="true"
+													className="mt-0.5 size-4 shrink-0"
+												/>
+												<span>
+													Một số Product Facts sắp cần cập nhật. Kịch bản vẫn có
+													thể được tạo từ dữ liệu hiện tại.
+												</span>
+											</div>
+										) : null}
+									</div>
+								)}
+								{!hasUsableFacts(model) ? (
+									<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
+										<p className="font-medium">
+											Chưa có Product Facts đủ điều kiện để tạo kịch bản.
+										</p>
+										{context.product ? (
+											<Link
+												className="mt-2 inline-flex font-medium underline underline-offset-4"
+												href={
+													`/products/${context.product.id}?tab=facts` as Route
+												}
+											>
+												Cập nhật Product Facts
+											</Link>
+										) : null}
 									</div>
 								) : null}
-							</div>
+							</>
 						)}
-						{!hasUsableFacts(model) ? (
-							<div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-900 text-sm">
-								<p className="font-medium">
-									Chưa có Product Facts đủ điều kiện để tạo kịch bản.
-								</p>
-								<Link
-									className="mt-2 inline-flex font-medium underline underline-offset-4"
-									href={`/products/${context.product.id}?tab=facts` as Route}
-								>
-									Cập nhật Product Facts
-								</Link>
-							</div>
-						) : null}
 					</ContextGroup>
 
 					<ContextGroup icon={Image} title="Media usable">
@@ -487,7 +510,9 @@ function EstimatePanel({
 					<p className="text-muted-foreground text-sm">
 						{hasUsableFacts(model)
 							? "Hoàn thiện Channel Settings để có thể ước tính và tạo kịch bản."
-							: "Thêm Product Fact đủ điều kiện để có thể ước tính và tạo kịch bản."}
+							: isOrganicScriptedContext(model)
+								? "Hoàn thiện Channel Settings để có thể ước tính và tạo nội dung."
+								: "Thêm Product Fact đủ điều kiện để có thể ước tính và tạo kịch bản."}
 					</p>
 				) : estimateState === "loading" ? (
 					<div
@@ -1039,6 +1064,9 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	const [claimRefreshNotice, setClaimRefreshNotice] = useState<string | null>(
 		null,
 	);
+	const [confirmationNotice, setConfirmationNotice] = useState<string | null>(
+		null,
+	);
 	const [editorOpen, setEditorOpen] = useState(false);
 	const [historyOpenedFromReadOnly, setHistoryOpenedFromReadOnly] =
 		useState(false);
@@ -1101,6 +1129,9 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 	);
 	const claimRefreshMutation = useMutation(
 		orpc.scriptVersion.refreshClaims.mutationOptions(),
+	);
+	const confirmClaimSubjectsMutation = useMutation(
+		orpc.scriptVersion.confirmClaimSubjects.mutationOptions(),
 	);
 
 	if (stateQuery.isPending || scriptVersionQuery.isPending)
@@ -1200,6 +1231,37 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		}
 	}
 
+	async function confirmClaimSubjects(decisions: ClaimSubjectDecision[]) {
+		if (!currentDraft || confirmClaimSubjectsMutation.isPending) return;
+		setConfirmationNotice(null);
+		try {
+			await confirmClaimSubjectsMutation.mutateAsync({
+				scriptVersionId: currentDraft.id,
+				expectedScriptVersionRevision: currentDraft.revision,
+				decisions,
+			});
+			await scriptVersionQuery.refetch();
+			await stateQuery.refetch();
+			toast.success("Đã lưu phạm vi claim");
+			router.refresh();
+		} catch (error) {
+			const code = getScriptVersionErrorCode(error);
+			if (code === "SCRIPT_VERSION_CONFLICT") {
+				await Promise.all([scriptVersionQuery.refetch(), stateQuery.refetch()]);
+				router.refresh();
+				setConfirmationNotice(
+					"Bản nháp đã thay đổi. AffiChannel đã tải lại bản mới nhất; hãy xác nhận lại các claim.",
+				);
+				return;
+			}
+			setConfirmationNotice(
+				code === "CLAIM_SUBJECT_CONFIRMATION_REQUIRED"
+					? "Hãy chọn phạm vi cho tất cả claim trước khi tiếp tục."
+					: "Không thể lưu lựa chọn phạm vi claim. Hãy thử lại.",
+			);
+		}
+	}
+
 	async function initializeEditor() {
 		if (currentDraft) {
 			setHistoryOpenedFromReadOnly(false);
@@ -1292,7 +1354,7 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 						<StatusBadge status={status} />
 					</div>
 					<p className="max-w-2xl text-muted-foreground text-sm">
-						Tạo kịch bản affiliate từ Product Facts đã xác nhận.
+						Tạo nội dung theo brief và các nguồn dữ liệu phù hợp của project.
 					</p>
 				</div>
 				<div className="flex flex-wrap items-center gap-2">
@@ -1372,6 +1434,11 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 				<section aria-labelledby="script-output-title" className="space-y-4">
 					{currentDraft ? (
 						<ScriptVersionCurrentView
+							confirmPending={confirmClaimSubjectsMutation.isPending}
+							confirmationNotice={confirmationNotice}
+							onConfirmClaimSubjects={(decisions) =>
+								void confirmClaimSubjects(decisions)
+							}
 							onRefreshClaims={() => void refreshClaimsFromStudio()}
 							refreshNotice={claimRefreshNotice}
 							refreshPending={claimRefreshMutation.isPending}

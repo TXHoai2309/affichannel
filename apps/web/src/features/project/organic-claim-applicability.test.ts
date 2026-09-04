@@ -157,6 +157,24 @@ function readDeps(snapshot: unknown): ProjectWorkflowReadDependencies {
 }
 
 describe("AFF-US-019 Organic claim applicability", () => {
+	it("keeps Product and Fact Lock out of the initial Organic creation route", () => {
+		const input = organicInput(false, {
+			status: "UNKNOWN",
+			subjectResolution: "UNKNOWN",
+			productClaimState: "UNKNOWN",
+			productClaimCount: null,
+			generalClaimCount: null,
+		});
+		input.script.currentVersionPresent = false;
+		input.script.generationStatus = "NONE";
+		input.script.usableGenerationPresent = false;
+		expect(capability(input, "PRODUCT").state).toBe("NOT_REQUIRED");
+		expect(capability(input, "FACT_LOCK").state).toBe("NOT_REQUIRED");
+		expect(resolveProjectApplicability(input).nextApplicableStep).toBe(
+			"SCRIPT",
+		);
+	});
+
 	it("derives the canonical zero-claim summary and skips Product/Fact Lock", () => {
 		const input = organicInput();
 		expect(input.claimSummary).toEqual(summary());

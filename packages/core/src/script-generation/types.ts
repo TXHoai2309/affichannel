@@ -131,7 +131,7 @@ type ScriptGenerationSnapshotBase = {
 		id: string;
 		name: string;
 		category: string | null;
-	};
+	} | null;
 	channelSettings: ChannelSettings;
 	mediaMetadata: MediaMetadataSnapshot[];
 	outputRules: OutputRules;
@@ -176,7 +176,7 @@ export type ScriptGenerationInputSnapshot = ScriptGenerationSnapshotBase & {
 			contentFormat: string;
 			contentFormatVersion: number;
 		}>;
-	product?: { id: string; name: string; category: string | null };
+	product?: { id: string; name: string; category: string | null } | null;
 	facts?: ScriptGenerationFactSnapshot[];
 };
 
@@ -216,8 +216,9 @@ export type ScriptGenerationContext = Omit<
 	"snapshotVersion" | "request" | "channelSettings" | "product" | "facts"
 > & {
 	channelSettings: ChannelSettings | null;
-	product: { id: string; name: string; category: string | null };
+	product: { id: string; name: string; category: string | null } | null;
 	facts: ScriptGenerationFactSnapshot[];
+	sourceMode?: ScriptGenerationSourceMode;
 };
 
 export type ScriptGenerationDependencyState = {

@@ -1,10 +1,10 @@
 # Đặc tả sản phẩm AffiChannel Personal
 
-- Trạng thái: Canonical; Affiliate baseline, Adaptive UI và M5 identity enforcement
-  active; AFF-US-019 19A.2 contract locked và 19A.3 foundation PASS; future
-  runtime identities vẫn gated
+- Trạng thái: Canonical; Affiliate baseline, Adaptive UI, M5 identity enforcement,
+  AFF-US-019 19B–19D và 19E.1 Organic UX activation active; 19E.2 E2E/manual
+  final acceptance next
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-03
+- Cập nhật lần cuối: 2026-09-04
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -539,9 +539,10 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
 baseline. AFF-US-013/AFF-US-016/AFF-US-017/AFF-US-018 đã DONE qua các phase đã
 chấp nhận; Fact Lock new writes hiện Manifest-first và legacy rows vẫn đọc được.
-AFF-US-019 19A.2 đã lock claim subject contract; 19A.3 foundation đã PASS,
-19B/runtime chưa bắt đầu.
-Organic, Quick Image và Media First vẫn chưa active.
+AFF-US-019 19A.2 đã lock claim subject contract; 19A.3 foundation, 19B Organic
+ScriptGeneration, 19C applicability/Fact Lock, 19D Voice applicability/TOCTOU
+và 19E.1 Organic UX activation đã PASS. 19E.2 E2E/manual final acceptance là
+bước tiếp theo. Quick Image và Media First vẫn chưa active.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

@@ -178,7 +178,7 @@ async function findProjectDetails(
 			description: contentBrief.description,
 		})
 		.from(project)
-		.innerJoin(product, eq(project.productId, product.id))
+		.leftJoin(product, eq(project.productId, product.id))
 		.innerJoin(contentBrief, eq(contentBrief.projectId, project.id))
 		.where(and(...conditions))
 		.limit(1);
@@ -207,8 +207,8 @@ async function findProjectDetails(
 		name: record.name,
 		...identity,
 		product: {
-			id: record.productId,
-			name: record.productName,
+			id: record.productId ?? "",
+			name: record.productName ?? "Chưa liên kết sản phẩm",
 		},
 		currentStepKey: record.currentStepKey as ProjectStepKey,
 		brief: {
@@ -243,7 +243,7 @@ export async function listProjectItems(
 			productName: product.name,
 		})
 		.from(project)
-		.innerJoin(product, eq(project.productId, product.id))
+		.leftJoin(product, eq(project.productId, product.id))
 		.where(
 			and(eq(project.workspaceId, workspaceId), isNull(project.archivedAt)),
 		)
@@ -254,7 +254,10 @@ export async function listProjectItems(
 				name: record.name,
 				...projectIdentityReadModel(record),
 				updatedAt: record.updatedAt,
-				product: { id: record.productId, name: record.productName },
+				product: {
+					id: record.productId ?? "",
+					name: record.productName ?? "Chưa liên kết sản phẩm",
+				},
 			})),
 		);
 }
@@ -304,21 +307,23 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 			const projectId = randomUUID();
 
 			await db.transaction(async (transaction) => {
-				const [availableProduct] = await transaction
-					.select({ id: product.id })
-					.from(product)
-					.where(
-						and(
-							eq(product.id, input.productId),
-							eq(product.workspaceId, actor.workspaceId),
-							eq(product.status, "active"),
-							isNull(product.archivedAt),
-						),
-					)
-					.limit(1);
+				if (input.productId !== null) {
+					const [availableProduct] = await transaction
+						.select({ id: product.id })
+						.from(product)
+						.where(
+							and(
+								eq(product.id, input.productId),
+								eq(product.workspaceId, actor.workspaceId),
+								eq(product.status, "active"),
+								isNull(product.archivedAt),
+							),
+						)
+						.limit(1);
 
-				if (!availableProduct) {
-					throw new ProjectServiceError("PRODUCT_NOT_FOUND");
+					if (!availableProduct) {
+						throw new ProjectServiceError("PRODUCT_NOT_FOUND");
+					}
 				}
 
 				await transaction.insert(project).values({

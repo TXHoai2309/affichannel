@@ -180,12 +180,16 @@ export async function createProject<TProject>(
 			? classification.effectiveIdentity
 			: classification.identity;
 
-	const product = await repository.findAccessibleProduct({
-		workspaceId: actor.workspaceId,
-		productId: input.productId,
-	});
+	if (input.productId !== null) {
+		const product = await repository.findAccessibleProduct({
+			workspaceId: actor.workspaceId,
+			productId: input.productId,
+		});
 
-	if (!product) {
+		if (!product) {
+			throw new ProjectServiceError("PRODUCT_NOT_FOUND");
+		}
+	} else if (identity.contentType !== "ORGANIC") {
 		throw new ProjectServiceError("PRODUCT_NOT_FOUND");
 	}
 
@@ -218,14 +222,24 @@ export async function updateProject<TProject>(
 		throw new ProjectServiceError("PROJECT_NOT_FOUND");
 	}
 
-	const product = await repository.findAccessibleProduct({
-		workspaceId: actor.workspaceId,
-		productId: input.productId,
-		projectId: input.id,
-	});
+	if (input.productId !== null) {
+		const product = await repository.findAccessibleProduct({
+			workspaceId: actor.workspaceId,
+			productId: input.productId,
+			projectId: input.id,
+		});
 
-	if (!product) {
-		throw new ProjectServiceError("PRODUCT_NOT_FOUND");
+		if (!product) {
+			throw new ProjectServiceError("PRODUCT_NOT_FOUND");
+		}
+	} else {
+		const requestedIdentity =
+			classification.kind === "legacy"
+				? classification.effectiveIdentity
+				: classification.identity;
+		if (requestedIdentity.contentType !== "ORGANIC") {
+			throw new ProjectServiceError("PRODUCT_NOT_FOUND");
+		}
 	}
 
 	const persistedIdentity = await repository.findProjectIdentity({

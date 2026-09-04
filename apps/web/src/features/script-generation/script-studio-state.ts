@@ -93,7 +93,14 @@ export function hasWarningFacts(model: ScriptGenerationReadModel) {
 }
 
 export function isGenerationContextReady(model: ScriptGenerationReadModel) {
+	if (model.context.sourceMode === "ORGANIC_NO_PRODUCT") {
+		return model.context.channelSettings !== null;
+	}
 	return hasUsableFacts(model) && model.context.channelSettings !== null;
+}
+
+export function isOrganicScriptedContext(model: ScriptGenerationReadModel) {
+	return model.context.sourceMode === "ORGANIC_NO_PRODUCT";
 }
 
 export function isLatestUsableArtifactInvalidated(

@@ -1,3 +1,4 @@
+import ProductLinkPanel from "@/features/project/product-link-panel";
 import ProjectStepPage from "@/features/project-navigation/project-step-page";
 
 export default async function ProductStepPage({
@@ -6,5 +7,11 @@ export default async function ProductStepPage({
 	params: Promise<{ projectId: string }>;
 }) {
 	const { projectId } = await params;
-	return <ProjectStepPage projectId={projectId} stepKey="product" />;
+	return (
+		<ProjectStepPage
+			content={<ProductLinkPanel projectId={projectId} />}
+			projectId={projectId}
+			stepKey="product"
+		/>
+	);
 }

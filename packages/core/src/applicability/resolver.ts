@@ -138,6 +138,15 @@ function deriveOrganicProduct(
 	input: ProjectApplicabilityInput,
 ): ApplicabilityCapabilityResult {
 	const summary = claimSummary(input);
+	if (!input.script.currentVersionPresent) {
+		return result(
+			"PRODUCT",
+			"NOT_REQUIRED",
+			"NOT_STARTED",
+			"PRODUCT_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
+			[{ dependency: "PRODUCT_LINK", status: "NOT_STARTED" }],
+		);
+	}
 	if (summary.status === "STALE") {
 		return result(
 			"PRODUCT",
@@ -482,6 +491,15 @@ function deriveOrganicFactLock(
 	input: ProjectApplicabilityInput,
 ): ApplicabilityCapabilityResult {
 	const summary = claimSummary(input);
+	if (!input.script.currentVersionPresent) {
+		return result(
+			"FACT_LOCK",
+			"NOT_REQUIRED",
+			"NOT_STARTED",
+			"FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+			[{ dependency: "FACT_LOCK_GATE", status: "NOT_STARTED" }],
+		);
+	}
 	if (summary.status === "STALE") {
 		return result(
 			"FACT_LOCK",

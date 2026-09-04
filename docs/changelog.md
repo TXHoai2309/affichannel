@@ -10,6 +10,21 @@ Cập nhật lần cuối: 2026-09-04.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19E.1 Organic UX activation PASS
+
+- Activated the exact Organic + Scripted + `SCRIPTED_STANDARD` v1 creation
+  identity while keeping Affiliate Product selection required; Organic creation
+  can start with no Product.
+- Reused generic Script Studio for server-derived `ORGANIC_NO_PRODUCT` context,
+  no Product Facts prerequisite, claim confirmation, stale-claim refresh, and
+  Product escalation/linking through the existing Project update contract.
+- Added accessible Vietnamese claim-subject confirmation with distinct AI
+  suggestions, alternate radio choices, one batched server mutation, disabled
+  partial state, conflict refresh, and adaptive workflow propagation.
+- Focused/full web, type, Biome, and disposable loopback PostgreSQL checks pass;
+  live AI/TTS calls are 0 and no schema/migration changed. 19E.2 E2E/manual
+  final acceptance is next; AFF-US-019 remains open.
+
 ### AFF-US-019 Phase 19D Voice applicability / paid-call TOCTOU PASS
 
 - Added one canonical server-side `resolveVoicePaidExecutionAuthorization`

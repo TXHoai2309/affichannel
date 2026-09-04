@@ -233,7 +233,7 @@ export function classifyProjectWriteIdentity(
 		contentFormat: { key, version },
 	};
 	if (
-		contentType === "AFFILIATE" &&
+		(contentType === "AFFILIATE" || contentType === "ORGANIC") &&
 		creationPath === "SCRIPTED" &&
 		key === LEGACY_AFFILIATE_IDENTITY.contentFormat.key &&
 		version === LEGACY_AFFILIATE_IDENTITY.contentFormat.version

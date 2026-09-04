@@ -1,5 +1,41 @@
 # AFF-US-019 — Organic Scripted Content
 
+## Phase 19E.1 — Organic UX activation + claim confirmation UI
+
+- Trạng thái: **19E.1 ORGANIC UX ACTIVATION = PASS**
+- Cập nhật: 2026-09-04
+- Exact exposed creation identity is `ORGANIC + SCRIPTED + SCRIPTED_STANDARD v1`.
+  Organic Quick Image and Media First remain unavailable; unsupported format
+  versions are not selectable or writable.
+- `/projects/new` presents Organic and Affiliate choices. Organic creates with
+  `productId = null` and does not require Product; Affiliate keeps Product
+  selection/creation required. The server remains authoritative for identity,
+  Product access, and workflow decisions.
+- Organic reuses the generic Script Studio. Its server-derived
+  `ORGANIC_NO_PRODUCT` context enables generation without Product Facts or a
+  Product selector. Claimless generation proceeds to Voice; Product and Fact
+  Lock are not required. No client source-mode or version override was added.
+- Current unresolved Organic claims render a dedicated accessible confirmation
+  panel with `Thông tin chung` and `Thông tin về sản phẩm`, a separate AI
+  suggestion, alternate override radios, one batched
+  `scriptVersion.confirmClaimSubjects` call, and a CTA disabled until every
+  unresolved claim is decided. Conflicts reload current ScriptVersion/workflow;
+  stale claims retain `Cập nhật Claims`, while current unresolved claims do not
+  encourage a refresh.
+- Confirmed GENERAL-only claims keep Product and Fact Lock `NOT_REQUIRED` and
+  allow Voice. Confirmed PRODUCT claims escalate Product/Fact Lock; a missing
+  Product is `PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS` and Fact Lock remains blocked.
+  Product linking reuses the authenticated Project update contract. Fact Lock
+  continues to render backend Product-subset counts only, and Voice uses the
+  accepted 19D Resolver gate with refresh propagation.
+- Focused project-domain, creation-form, Organic applicability, Script Studio,
+  claim-confirmation, full web, type, and Biome checks pass. Organic
+  ScriptGeneration, Claim Refresh, and Claim Subject Confirmation integration
+  checks pass on a fresh disposable loopback PostgreSQL database; live AI/TTS
+  calls remain disabled.
+
+19E.2 E2E / manual final acceptance is next and has not started.
+
 ## Phase 19D — Voice applicability + paid-call TOCTOU
 
 - Trạng thái: **19D VOICE APPLICABILITY / TOCTOU = PASS**
@@ -603,8 +639,9 @@ AFF-US-019 Phase 19C.3B: PRODUCT-SUBSET FACT LOCK V2 = PASS
 19C.3A status: COMPLETE (Organic ClaimManifest builder v2 + persistence)
 19C.3 status: COMPLETE
 19C status: COMPLETE
-19D status: NOT STARTED
-19E status: NOT STARTED
+19D status: PASS (Voice applicability + paid-call TOCTOU)
+19E.1 status: PASS (Organic UX activation + claim confirmation UI)
+19E.2 status: NEXT (E2E / manual final acceptance; not started)
 Runtime changed: Organic Claim Refresh v2, protected confirmation, Organic ClaimManifest v2, and Product-subset Fact Lock v2
 Schema changed: NO
 Migration created: NO
@@ -617,4 +654,5 @@ Fact Lock semantic input: fact-lock.manifest.v2
 Affiliate v1 unchanged; claimless/general-only Fact Lock: NOT_REQUIRED
 ```
 
-Voice TOCTOU is the next phase-gated step for 19D, and no UI was added in 19C.3B.
+19E.1 is accepted without marking AFF-US-019 complete. 19E.2 owns broad E2E
+and manual final acceptance.

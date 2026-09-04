@@ -27,10 +27,10 @@ parity gate; AFF-US-015 Adaptive Workflow UI đã DONE qua Phase 15D. Canonical
 dependency AFF-US-017 ClaimManifest Foundation đã PASS Phase 17A–17E và DONE.
 AFF-US-018 Manifest-First Fact Lock đã hoàn tất Phase 18A–18F và DONE; new writes
 dùng Manifest-first, legacy `inputMode=NULL` chỉ còn read compatibility. Canonical
-AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS và Phase 19B Organic ScriptGeneration
-đã PASS đúng source mode `ORGANIC_NO_PRODUCT` (input/prompt/output v3); Affiliate
-v2 không đổi. Full Affiliate Scripted checkpoint và clean-room regressions đều
-PASS. 19C claim applicability là bước kế tiếp; Quick Image/Media First vẫn chưa active.
+AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS, Phase 19B Organic ScriptGeneration,
+19C claim applicability/Fact Lock và 19D Voice applicability/TOCTOU đã PASS;
+19E.1 Organic UX activation đã PASS và 19E.2 E2E/manual final acceptance là
+bước kế tiếp. Quick Image/Media First vẫn chưa active.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.

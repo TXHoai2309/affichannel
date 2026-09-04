@@ -8,11 +8,13 @@
   19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS; 19C.2A
   Organic Claim Refresh v2 PASS; 19C.2B Claim Subject Confirmation API PASS;
   19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B Product-subset
-  Fact Lock v2 PASS; Phase 19C COMPLETE; 19D Voice applicability/TOCTOU PASS.
+  Fact Lock v2 PASS; Phase 19C COMPLETE; 19D Voice applicability/TOCTOU PASS;
+  19E.1 Organic UX activation PASS; 19E.2 E2E/manual final acceptance NEXT.
 - Cập nhật lần cuối: 2026-09-04
 
 Current canonical status: AFF-US-018 DONE; AFF-US-019 Phase 19D VOICE
-APPLICABILITY / TOCTOU PASS, ready for 19E UI/E2E/manual flow. Public Fact Lock
+APPLICABILITY / TOCTOU PASS; 19E.1 ORGANIC UX ACTIVATION PASS, ready for 19E.2
+E2E/manual final flow. Public Fact Lock
 tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
@@ -49,6 +51,24 @@ reads/writes remain available without paid Fact Lock. Focused Resolver/authoriza
 Voice runtime, Organic integration, full web, type, Biome, and disposable
 loopback PostgreSQL checks pass with live AI/TTS disabled. No schema or migration
 changed. 19E UI/E2E/manual flow is next; AFF-US-019 remains open.
+
+## 2026-09-04 — AFF-US-019 Phase 19E.1 Organic UX activation acceptance
+
+19E.1 activates the exact Organic Scripted Standard v1 creation identity in the
+existing Channel-First Project form while preserving the Affiliate Product
+requirement. Organic creation is Product-optional, the generic Script Studio
+uses server-derived `ORGANIC_NO_PRODUCT` context without Product Facts, and the
+initial workflow routes directly to Content. Current unresolved claims now have
+an accessible Vietnamese subject confirmation panel with a single batched server
+mutation; conflicts reload ScriptVersion/workflow, stale claims use the existing
+refresh endpoint, and claimless/general-only/Product escalation paths follow the
+accepted Resolver/Fact Lock/Voice policy. Product linking reuses the authenticated
+Project update contract, and Fact Lock Product-subset counts stay backend-derived.
+Focused tests, full web unit tests (534 passing), type and Biome checks pass;
+Organic ScriptGeneration, Claim Refresh, and Claim Subject Confirmation pass on
+fresh disposable loopback PostgreSQL with live AI/TTS 0. No schema/migration
+changed, no remote/development/production database was used, and 19E.2
+E2E/manual final acceptance is next and not started.
 
 ## 2026-09-04 — AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 acceptance
 

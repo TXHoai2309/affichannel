@@ -12,10 +12,10 @@ DEC-030/M5 persisted identity enforcement đã DONE qua production migration 001
 postflight và final regression. AFF-US-013/AFF-US-016 đã DONE; AFF-US-017 đã PASS
 Phase 17A–17E và DONE. AFF-US-018 Phase 18A–18F đã PASS và DONE: Fact Lock new
 writes là Manifest-first, còn legacy `inputMode=NULL` chỉ được đọc tương thích.
-AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS; 19B Organic ScriptGeneration đã
-PASS với source mode `ORGANIC_NO_PRODUCT`, input/prompt/output v3 và Affiliate v2
-không đổi. Claim applicability 19C, Fact Lock/Voice và các creation path khác
-chưa active. M5 không activate future identities.
+AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS; 19B Organic ScriptGeneration,
+19C claim applicability/Fact Lock, 19D Voice applicability/TOCTOU và 19E.1
+Organic UX activation đã PASS. 19E.2 E2E/manual final acceptance là bước tiếp
+theo; Quick Image/Media First vẫn chưa active. M5 không activate các identity đó.
 
 ## Thứ tự đọc
 

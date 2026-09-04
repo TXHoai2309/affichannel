@@ -19,6 +19,7 @@ import { ProductSelector } from "./product-selector";
 import { getProjectErrorMessage } from "./project-errors";
 
 type ProjectFormValues = {
+	contentType: "AFFILIATE" | "ORGANIC";
 	name: string;
 	productId: string;
 	goal: string;
@@ -28,6 +29,7 @@ type ProjectFormValues = {
 };
 
 const INITIAL_VALUES: ProjectFormValues = {
+	contentType: "AFFILIATE",
 	name: "",
 	productId: "",
 	goal: "",
@@ -48,9 +50,16 @@ const FIELD_ERROR_FALLBACKS: Partial<Record<FieldName, string>> = {
 };
 
 function parseProjectForm(values: ProjectFormValues) {
+	const productId = values.productId.trim() || null;
+	if (values.contentType === "AFFILIATE" && productId === null) {
+		return { errors: { productId: "Chọn hoặc tạo một sản phẩm." } };
+	}
 	const result = createProjectInputSchema.safeParse({
+		contentType: values.contentType,
+		creationPath: "SCRIPTED",
+		contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
 		name: values.name,
-		productId: values.productId,
+		productId,
 		platform: "tiktok",
 		goal: values.goal,
 		durationSeconds: Number(values.durationSeconds),
@@ -88,6 +97,7 @@ export function ProjectForm() {
 	const products = useQuery(
 		orpc.product.listMinimal.queryOptions({
 			input: { selectableOnly: true },
+			enabled: values.contentType === "AFFILIATE",
 		}),
 	);
 	const createProduct = useMutation(
@@ -100,6 +110,19 @@ export function ProjectForm() {
 		setErrors((current) => ({
 			...current,
 			[field]: undefined,
+			form: undefined,
+		}));
+	}
+
+	function updateContentType(contentType: ProjectFormValues["contentType"]) {
+		setValues((current) => ({
+			...current,
+			contentType,
+			productId: contentType === "ORGANIC" ? "" : current.productId,
+		}));
+		setErrors((current) => ({
+			...current,
+			productId: undefined,
 			form: undefined,
 		}));
 	}
@@ -136,10 +159,60 @@ export function ProjectForm() {
 
 	const isSubmitting = createProject.isPending || createProduct.isPending;
 	const productOptions = products.data ?? [];
+	const organic = values.contentType === "ORGANIC";
 
 	return (
 		<form className="space-y-6" noValidate onSubmit={submit}>
 			<div className="grid gap-5 md:grid-cols-2">
+				<fieldset className="space-y-3 md:col-span-2" disabled={isSubmitting}>
+					<legend className="font-medium text-sm">Loại nội dung</legend>
+					<div
+						className="grid gap-3 sm:grid-cols-2"
+						role="radiogroup"
+						aria-label="Loại nội dung"
+					>
+						{(
+							[
+								{
+									value: "AFFILIATE" as const,
+									label: "Affiliate",
+									description: "Nội dung gắn với một sản phẩm đã chọn.",
+								},
+								{
+									value: "ORGANIC" as const,
+									label: "Organic",
+									description:
+										"Nội dung tự nhiên, có thể bắt đầu không cần sản phẩm.",
+								},
+							] as const
+						).map((option) => (
+							<label
+								className="flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors hover:bg-muted has-[:checked]:border-primary has-[:checked]:bg-primary/5 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring"
+								key={option.value}
+							>
+								<input
+									checked={values.contentType === option.value}
+									className="mt-1"
+									name="contentType"
+									type="radio"
+									value={option.value}
+									onChange={() => updateContentType(option.value)}
+								/>
+								<span>
+									<span className="block font-medium text-sm">
+										{option.label}
+									</span>
+									<span className="mt-1 block text-muted-foreground text-xs">
+										{option.description}
+									</span>
+								</span>
+							</label>
+						))}
+					</div>
+					<p className="text-muted-foreground text-xs">
+						Kiểu nội dung hiện dùng kịch bản video ngắn trên TikTok.
+					</p>
+				</fieldset>
 				<div className="space-y-2 md:col-span-2">
 					<Label htmlFor="name">Tên dự án</Label>
 					<Input
@@ -148,7 +221,11 @@ export function ProjectForm() {
 						disabled={isSubmitting}
 						id="name"
 						maxLength={160}
-						placeholder="Ví dụ: Video review Tai nghe X1"
+						placeholder={
+							organic
+								? "Ví dụ: Chia sẻ thói quen buổi sáng"
+								: "Ví dụ: Video review Tai nghe X1"
+						}
 						value={values.name}
 						onChange={(event) => updateField("name", event.target.value)}
 					/>
@@ -159,14 +236,24 @@ export function ProjectForm() {
 					) : null}
 				</div>
 
-				<ProductSelector
-					disabled={isSubmitting || products.isLoading}
-					error={errors.productId}
-					products={productOptions}
-					value={values.productId}
-					onChange={(productId) => updateField("productId", productId)}
-					onCreate={createProductFromSelector}
-				/>
+				{organic ? (
+					<div className="rounded-xl border border-dashed bg-muted/30 p-4 text-sm md:col-span-2">
+						<p className="font-medium">Sản phẩm (không bắt buộc)</p>
+						<p className="mt-1 text-muted-foreground text-xs">
+							Bạn có thể bắt đầu tạo nội dung ngay và liên kết sản phẩm sau nếu
+							cần.
+						</p>
+					</div>
+				) : (
+					<ProductSelector
+						disabled={isSubmitting || products.isLoading}
+						error={errors.productId}
+						products={productOptions}
+						value={values.productId}
+						onChange={(productId) => updateField("productId", productId)}
+						onCreate={createProductFromSelector}
+					/>
+				)}
 
 				<div className="space-y-2">
 					<Label htmlFor="platform">Nền tảng</Label>
@@ -184,7 +271,11 @@ export function ProjectForm() {
 						disabled={isSubmitting}
 						id="goal"
 						maxLength={240}
-						placeholder="Ví dụ: Tạo đơn hàng qua link affiliate"
+						placeholder={
+							organic
+								? "Ví dụ: Tăng nhận biết về một thói quen hữu ích"
+								: "Ví dụ: Tạo đơn hàng qua link affiliate"
+						}
 						value={values.goal}
 						onChange={(event) => updateField("goal", event.target.value)}
 					/>
@@ -228,7 +319,11 @@ export function ProjectForm() {
 						disabled={isSubmitting}
 						id="angle"
 						maxLength={240}
-						placeholder="Ví dụ: So sánh trải nghiệm trước và sau khi dùng"
+						placeholder={
+							organic
+								? "Ví dụ: Kể một trải nghiệm ngắn, chân thật"
+								: "Ví dụ: So sánh trải nghiệm trước và sau khi dùng"
+						}
 						value={values.angle}
 						onChange={(event) => updateField("angle", event.target.value)}
 					/>

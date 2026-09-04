@@ -203,6 +203,7 @@ const resolverInputs: readonly ProjectApplicabilityInput[] = [
 		value.render.inputsStale = true;
 	}),
 	input((value) => {
+		currentScript(value);
 		value.projectIdentity.contentType = "ORGANIC";
 		value.projectIdentity.hasProduct = false;
 		value.product.accessible = false;
@@ -215,6 +216,7 @@ const resolverInputs: readonly ProjectApplicabilityInput[] = [
 		};
 	}),
 	input((value) => {
+		currentScript(value);
 		value.projectIdentity.contentType = "ORGANIC";
 		value.projectIdentity.hasProduct = false;
 		value.product.accessible = false;
@@ -227,6 +229,7 @@ const resolverInputs: readonly ProjectApplicabilityInput[] = [
 		};
 	}),
 	input((value) => {
+		currentScript(value);
 		value.projectIdentity.contentType = "ORGANIC";
 		value.claimSummary = {
 			status: "CURRENT",
@@ -237,6 +240,7 @@ const resolverInputs: readonly ProjectApplicabilityInput[] = [
 		};
 	}),
 	input((value) => {
+		currentScript(value);
 		value.projectIdentity.contentType = "ORGANIC";
 		value.claimSummary = {
 			status: "STALE",
@@ -247,6 +251,7 @@ const resolverInputs: readonly ProjectApplicabilityInput[] = [
 		};
 	}),
 	input((value) => {
+		currentScript(value);
 		value.projectIdentity.contentType = "ORGANIC";
 		value.claimSummary = {
 			status: "UNKNOWN",

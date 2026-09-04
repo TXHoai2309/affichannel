@@ -11,7 +11,7 @@ export const projectNameSchema = z
 	.max(160, "Tên dự án tối đa 160 ký tự.");
 
 const projectIdSchema = z.string().uuid("Project không hợp lệ.");
-const productIdSchema = z.string().uuid("Sản phẩm không hợp lệ.");
+const productIdSchema = z.string().uuid("Sản phẩm không hợp lệ.").nullable();
 
 export const projectContentBriefFieldsSchema = z.object({
 	name: projectNameSchema,
