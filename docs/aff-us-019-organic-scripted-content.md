@@ -1,5 +1,26 @@
 # AFF-US-019 — Organic Scripted Content
 
+## Phase 19D — Voice applicability + paid-call TOCTOU
+
+- Trạng thái: **19D VOICE APPLICABILITY / TOCTOU = PASS**
+- Cập nhật: 2026-09-04
+- Organic claimless/general-only Voice now bypasses Fact Lock only when the
+  current Resolver returns `FACT_LOCK = NOT_REQUIRED`; no client flag or
+  historical run can authorize the call.
+- Organic confirmed Product claims use the current FactLockGate, while
+  Affiliate paid Voice behavior is unchanged. Preview and Segment preparation,
+  first generation, and regeneration re-read workspace Project identity,
+  current ScriptVersion/claims, Resolver, and the required FactLockGate
+  immediately before provider invocation; changed Script/VoiceConfig state
+  fails closed with zero provider calls.
+- VoiceConfig setup read/write is not a paid execution and does not require a
+  current Fact Lock. No schema or migration changed. Focused Resolver,
+  authorization, Voice runtime, Organic integration, type, web, Biome, and
+  disposable loopback PostgreSQL checks pass with live providers disabled.
+
+19D is accepted and ready for **19E UI / E2E / manual flow**. AFF-US-019 is not
+complete.
+
 ## Phase 19C.3B — Product-subset Fact Lock v2
 
 - Trạng thái: **19C.3B PRODUCT-SUBSET FACT LOCK V2 = PASS**

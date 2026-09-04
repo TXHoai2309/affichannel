@@ -8,11 +8,12 @@
   19B Organic ScriptGeneration PASS; 19C.1 Claim Applicability PASS; 19C.2A
   Organic Claim Refresh v2 PASS; 19C.2B Claim Subject Confirmation API PASS;
   19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B Product-subset
-  Fact Lock v2 PASS; Phase 19C COMPLETE.
+  Fact Lock v2 PASS; Phase 19C COMPLETE; 19D Voice applicability/TOCTOU PASS.
 - Cập nhật lần cuối: 2026-09-04
 
-Current canonical status: AFF-US-018 DONE; AFF-US-019 Phase 19C COMPLETE, with
-19D Voice applicability/TOCTOU next. Public Fact Lock tạo/reuse ClaimManifest
+Current canonical status: AFF-US-018 DONE; AFF-US-019 Phase 19D VOICE
+APPLICABILITY / TOCTOU PASS, ready for 19E UI/E2E/manual flow. Public Fact Lock
+tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
 0020 giữ nguyên; migration 0021 là persistence foundation của CR-A và CR-B đã
@@ -26,7 +27,28 @@ Lock v2 has passed the disposable loopback PostgreSQL acceptance matrix. Organic
 keeps the full Manifest inventory while Fact Lock verifies only confirmed
 PRODUCT claims; `FactLockRun.inputMode` remains `MANIFEST_V1`, with semantic input
 `fact-lock.manifest.v2`. Affiliate v1 and frozen vectors remain unchanged;
-claimless/general-only Organic remains `NOT_REQUIRED` with zero provider calls.
+claimless/general-only Organic remains `NOT_REQUIRED` with zero Fact Lock
+provider calls; Voice paid bypass is allowed only through the Resolver's
+`NOT_REQUIRED` result. Organic Product Voice uses the current FactLockGate,
+Affiliate Voice remains unchanged, and every paid Preview/Segment path performs
+a final Resolver-backed recheck immediately before TTS. VoiceConfig setup does
+not require paid Fact Lock. No schema or migration changed; blocked/stale/
+malformed/confirmation-required states fail closed with zero TTS calls.
+
+## 2026-09-04 — AFF-US-019 Phase 19D Voice applicability / TOCTOU acceptance
+
+The server now has one canonical `resolveVoicePaidExecutionAuthorization`
+boundary over the exact authenticated Project, current ScriptVersion and claim
+summary, Applicability Resolver, and FactLockGate. Organic claimless/general-only
+content returns `FACT_LOCK = NOT_REQUIRED` and may call TTS without a
+FactLockRun; Organic confirmed Product claims require a satisfied current gate;
+Affiliate behavior is preserved. Preview, Segment first generation, and
+regeneration perform a final re-read before provider invocation, and current
+Script/VoiceConfig changes block with zero provider calls. VoiceConfig setup
+reads/writes remain available without paid Fact Lock. Focused Resolver/authorization,
+Voice runtime, Organic integration, full web, type, Biome, and disposable
+loopback PostgreSQL checks pass with live AI/TTS disabled. No schema or migration
+changed. 19E UI/E2E/manual flow is next; AFF-US-019 remains open.
 
 ## 2026-09-04 — AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 acceptance
 
