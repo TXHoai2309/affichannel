@@ -15,6 +15,7 @@ import { resolveTtsProvider } from "../providers/tts/tts-provider-registry";
 import { FactLockGate } from "./fact-lock-gate-service";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { getVoiceConfig } from "./voice-config-service";
+import { assertVoicePaidExecutionAuthorized } from "./voice-paid-authorization-service";
 import type { WorkspaceActor } from "./workspace";
 
 export const VOICE_PREVIEW_FALLBACK_TEXT =
@@ -29,6 +30,7 @@ export type VoicePreviewResult = TtsPreviewResult & {
 export type VoicePreviewDependencies = {
 	provider?: TtsProvider;
 	maxChars?: number;
+	authorizePaidExecution?: typeof assertVoicePaidExecutionAuthorized;
 };
 
 function normalizedText(value: string) {
@@ -84,7 +86,10 @@ export async function previewVoice(
 	dependencies: VoicePreviewDependencies = {},
 ): Promise<VoicePreviewResult> {
 	const preparedScript = await findCurrentScriptVersion(actor, projectId);
-	const preparedGate = await FactLockGate.assertPassed(actor, projectId);
+	const preparedGate = await FactLockGate.evaluate(actor, projectId);
+	const authorizePaidExecution =
+		dependencies.authorizePaidExecution ?? assertVoicePaidExecutionAuthorized;
+	await authorizePaidExecution(actor, projectId);
 	if (
 		!preparedScript ||
 		preparedGate.currentScriptVersionId !== preparedScript.id ||
@@ -106,17 +111,8 @@ export async function previewVoice(
 		language: preparedConfig.language,
 		speed: preparedConfig.speed,
 	});
-	const provider =
-		dependencies.provider ?? resolveTtsProvider(preparedConfig.provider);
-	if (!provider) {
-		throw new VoiceConfigError(
-			"TTS_PROVIDER_UNAVAILABLE",
-			"TTS provider mặc định không khả dụng.",
-		);
-	}
-
 	const currentScript = await findCurrentScriptVersion(actor, projectId);
-	const finalGate = await FactLockGate.assertPassed(actor, projectId);
+	const finalGate = await FactLockGate.evaluate(actor, projectId);
 	if (
 		!currentScript ||
 		currentScript.id !== preparedScript.id ||
@@ -139,6 +135,16 @@ export async function previewVoice(
 			"VOICE_CONFIG_CONFLICT",
 			"VoiceConfig đã thay đổi; vui lòng tải lại cấu hình.",
 			{ latestRevision: finalConfig.revision },
+		);
+	}
+
+	await authorizePaidExecution(actor, projectId);
+	const provider =
+		dependencies.provider ?? resolveTtsProvider(finalConfig.provider);
+	if (!provider) {
+		throw new VoiceConfigError(
+			"TTS_PROVIDER_UNAVAILABLE",
+			"TTS provider mặc định không khả dụng.",
 		);
 	}
 

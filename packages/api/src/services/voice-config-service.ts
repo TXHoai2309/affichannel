@@ -11,7 +11,6 @@ import { db, project, voiceConfig } from "@affichannel/db";
 import { env } from "@affichannel/env/server";
 import { and, eq, isNull, sql } from "drizzle-orm";
 
-import { FactLockGate } from "./fact-lock-gate-service";
 import { reconcileVoiceStepBestEffort } from "./voice-step-workflow-service";
 import type { WorkspaceActor } from "./workspace";
 
@@ -116,7 +115,6 @@ export function listServerVoicePresets() {
 }
 
 export async function getVoiceConfig(actor: WorkspaceActor, projectId: string) {
-	await FactLockGate.assertPassed(actor, projectId);
 	return findVoiceConfig(actor, projectId);
 }
 
@@ -144,7 +142,6 @@ export async function saveVoiceConfig(
 		speed: number;
 	},
 ) {
-	await FactLockGate.assertPassed(actor, input.projectId);
 	const fields = validateVoiceConfigFields({
 		voiceId: input.voiceId,
 		language: input.language,

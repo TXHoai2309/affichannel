@@ -583,11 +583,13 @@ function deriveVoice(
 		{
 			dependency: "FACT_LOCK_GATE",
 			status:
-				factLockResult.completion === "COMPLETE"
-					? "COMPLETE"
-					: factLockResult.state === "STALE"
-						? "STALE"
-						: "INCOMPLETE",
+				factLockResult.state === "NOT_REQUIRED"
+					? "NOT_STARTED"
+					: factLockResult.completion === "COMPLETE"
+						? "COMPLETE"
+						: factLockResult.state === "STALE"
+							? "STALE"
+							: "INCOMPLETE",
 		},
 		{
 			dependency: "VOICE_CONFIG",
@@ -614,7 +616,10 @@ function deriveVoice(
 			dependencies,
 		);
 	}
-	if (factLockResult.completion !== "COMPLETE") {
+	if (
+		factLockResult.state !== "NOT_REQUIRED" &&
+		factLockResult.completion !== "COMPLETE"
+	) {
 		const concreteBlock =
 			factLockResult.state === "BLOCKED" || factLockResult.state === "STALE";
 		return result(

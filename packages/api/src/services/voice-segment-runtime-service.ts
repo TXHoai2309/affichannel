@@ -22,9 +22,9 @@ import { resolveTtsProvider } from "../providers/tts/tts-provider-registry";
 import type { VoiceAudioStorage } from "../storage/voice-audio-storage";
 import { createDefaultVoiceAudioStorageKey } from "../storage/voice-audio-storage";
 import { createVoiceAudioStorage } from "../storage/voice-audio-storage-factory";
-import { FactLockGate } from "./fact-lock-gate-service";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { findVoiceConfig } from "./voice-config-service";
+import { assertVoicePaidExecutionAuthorized } from "./voice-paid-authorization-service";
 import {
 	hashVoiceSegmentRequest,
 	hashVoiceSegmentText,
@@ -184,7 +184,7 @@ export async function prepareVoiceSegmentRequest(
 	projectId: string,
 	segmentKey: string,
 ) {
-	await FactLockGate.assertPassed(actor, projectId);
+	await assertVoicePaidExecutionAuthorized(actor, projectId);
 	return readCurrentVoiceSegmentContext(actor, projectId, segmentKey);
 }
 
@@ -438,9 +438,20 @@ export async function generateVoiceSegment(
 	try {
 		await dependencies.afterPending?.(pending);
 		const assertFactLockPassed =
-			dependencies.assertFactLockPassed ??
-			((gateActor: WorkspaceActor, gateProjectId: string) =>
-				FactLockGate.assertPassed(gateActor, gateProjectId));
+			dependencies.assertFactLockPassed ?? assertVoicePaidExecutionAuthorized;
+		const currentContext = dependencies.readCurrent
+			? await dependencies.readCurrent(actor, input.projectId, input.segmentKey)
+			: await readCurrentVoiceSegmentContext(
+					actor,
+					input.projectId,
+					input.segmentKey,
+				);
+		if (hashVoiceSegmentRequest(currentContext.fingerprint) !== requestHash) {
+			throw new VoiceSegmentError(
+				"VOICE_SEGMENT_CONTEXT_STALE",
+				"ScriptVersion hoặc VoiceConfig đã thay đổi trước khi gọi TTS.",
+			);
+		}
 		await assertFactLockPassed(actor, input.projectId);
 	} catch (error) {
 		await markArtifactFailure(

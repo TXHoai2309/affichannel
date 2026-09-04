@@ -538,6 +538,36 @@ describe("voice segment runtime", () => {
 		});
 	});
 
+	it("rechecks the current VoiceConfig and segment fingerprint before TTS", async () => {
+		const h = harness();
+		h.dependencies.afterPending = async () => {
+			h.dependencies.readCurrent = async () => ({
+				...prepared,
+				fingerprint: {
+					...prepared.fingerprint,
+					voiceConfigRevision: prepared.fingerprint.voiceConfigRevision + 1,
+				},
+			});
+		};
+
+		await expect(
+			generateVoiceSegment(
+				actor,
+				{
+					projectId: prepared.projectId,
+					segmentKey: prepared.segmentKey,
+					idempotencyKey: "config-stale-boundary-1",
+				},
+				h.dependencies,
+			),
+		).rejects.toMatchObject({ code: "VOICE_SEGMENT_CONTEXT_STALE" });
+		expect(h.provider.generateSegment).not.toHaveBeenCalled();
+		expect(h.rows[0]).toMatchObject({
+			status: "failed",
+			errorCode: "VOICE_SEGMENT_CONTEXT_STALE",
+		});
+	});
+
 	it("marks timeout uncertainty and invalid MP3 as non-retryable artifact states", async () => {
 		const timeout = harness({
 			providerError: new TtsProviderError("TTS_TIMEOUT_UNCERTAIN", "timeout", {

@@ -461,7 +461,7 @@ try {
 
 	await expectCode(
 		() => getVoiceConfig(actorA, fixtureB.projectId),
-		"FACT_LOCK_NOT_FOUND",
+		"VOICE_CONFIG_NOT_FOUND",
 	);
 	await expectCode(
 		() =>
@@ -472,7 +472,7 @@ try {
 				language: "vi",
 				speed: 1,
 			}),
-		"FACT_LOCK_NOT_FOUND",
+		"VOICE_CONFIG_NOT_FOUND",
 	);
 
 	await db
@@ -488,21 +488,23 @@ try {
 		staleGate.reason === "FACT_LOCK_STALE_SCRIPT",
 		"Script edit did not stale the Fact Lock gate.",
 	);
-	await expectCode(
-		() => getVoiceConfig(actorA, fixtureA.projectId),
-		"FACT_LOCK_REQUIRED",
+	const staleLoaded = await getVoiceConfig(actorA, fixtureA.projectId);
+	assert(
+		staleLoaded?.revision === revision,
+		"VoiceConfig read was blocked by a stale Fact Lock during setup.",
 	);
-	await expectCode(
-		() =>
-			saveVoiceConfig(actorA, {
-				projectId: fixtureA.projectId,
-				baseRevision: revision,
-				voiceId: "ara",
-				language: "vi",
-				speed: 1,
-			}),
-		"FACT_LOCK_REQUIRED",
+	const staleSaved = await saveVoiceConfig(actorA, {
+		projectId: fixtureA.projectId,
+		baseRevision: revision,
+		voiceId: "ara",
+		language: "vi",
+		speed: 1,
+	});
+	assert(
+		staleSaved.revision === revision + 1,
+		"VoiceConfig setup write was blocked by a stale Fact Lock.",
 	);
+	revision = staleSaved.revision;
 	const persistedWhileStale = await db
 		.select({ id: voiceConfig.id, revision: voiceConfig.revision })
 		.from(voiceConfig)

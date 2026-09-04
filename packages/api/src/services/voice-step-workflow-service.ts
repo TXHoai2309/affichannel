@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
 	deriveVoiceSegmentReadModel,
 	evaluateVoiceStepReadiness,
+	resolveProjectApplicability,
+	summarizeCurrentScriptVersionClaims,
 	type VoiceSegmentArtifact,
 	type VoiceSegmentReadTemporalContext,
 	type VoiceStepSegmentEvaluation,
@@ -14,6 +16,7 @@ import { env } from "@affichannel/env/server";
 import { and, eq, isNull } from "drizzle-orm";
 
 import { FactLockGate } from "./fact-lock-gate-service";
+import { getProjectWorkflowSubject } from "./project-repository";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { hashVoiceSegmentText } from "./voice-segment-hashing";
 import {
@@ -30,6 +33,7 @@ export type VoiceStepWorkflowEvaluation = {
 export type VoiceStepWorkflowReadSources = {
 	factLockGate: Awaited<ReturnType<typeof FactLockGate.evaluate>>;
 	currentScriptVersion: Awaited<ReturnType<typeof findCurrentScriptVersion>>;
+	factLockNotRequired?: boolean;
 };
 
 function sortArtifacts(
@@ -69,6 +73,7 @@ export type VoiceStepWorkflowReadInput = {
 	workspaceId: string;
 	projectId: string;
 	factLockGate: VoiceStepWorkflowReadSources["factLockGate"];
+	factLockNotRequired?: boolean;
 	currentScriptVersion: VoiceStepWorkflowReadSources["currentScriptVersion"];
 	currentVoiceConfig: {
 		provider: string;
@@ -90,6 +95,7 @@ export function evaluateVoiceStepWorkflowReadInput(
 		projectId,
 		factLockGate,
 		currentScriptVersion,
+		factLockNotRequired,
 		currentVoiceConfig,
 		artifacts,
 		temporalContext,
@@ -142,7 +148,7 @@ export function evaluateVoiceStepWorkflowReadInput(
 	return {
 		segments,
 		summary: evaluateVoiceStepReadiness({
-			factLockPassed: factLockGate.allowed,
+			factLockPassed: factLockGate.allowed || factLockNotRequired === true,
 			voiceConfigPresent: currentVoiceConfig !== null,
 			currentScriptVersionPresent: currentScriptVersion !== null,
 			segments,
@@ -165,10 +171,58 @@ async function loadEvaluation(
 			: Promise.all([
 					FactLockGate.evaluate(actor, projectId),
 					findCurrentScriptVersion(actor, projectId),
-				]).then(([factLockGate, currentScriptVersion]) => ({
-					factLockGate,
-					currentScriptVersion,
-				})),
+					getProjectWorkflowSubject(actor.workspaceId, projectId),
+				]).then(([factLockGate, currentScriptVersion, subject]) => {
+					const summary = summarizeCurrentScriptVersionClaims({
+						contentType: subject?.contentType ?? null,
+						creationPath: subject?.creationPath ?? null,
+						currentScriptVersion,
+					});
+					const preliminary = subject
+						? resolveProjectApplicability({
+								projectIdentity: {
+									contentType: subject.contentType,
+									creationPath: subject.creationPath,
+									contentFormatKey: subject.contentFormatKey,
+									contentFormatVersion: subject.contentFormatVersion,
+									hasProduct: subject.productId !== null,
+								},
+								product: { accessible: subject.productAccessible },
+								script: {
+									generationStatus: "NONE",
+									usableGenerationPresent: false,
+									sourceDependencyCurrent: true,
+									currentVersionPresent: currentScriptVersion !== undefined,
+									currentVersionFactLockReady: true,
+									channelSettingsComplete: true,
+									productFactsUsable: true,
+									claimSummary: summary,
+								},
+								claimSummary: summary,
+								factLock: { gateReason: factLockGate.reason },
+								voice: {
+									configPresent: false,
+									previewPresent: false,
+									totalSegments: 0,
+									attemptedSegments: 0,
+									usableSegments: 0,
+									pendingSegments: 0,
+									failedSegments: 0,
+									indeterminateSegments: 0,
+									staleSegments: 0,
+								},
+								render: { featureImplemented: false, inputsStale: false },
+							})
+						: undefined;
+					const factLock = preliminary?.capabilities.find(
+						(capability) => capability.capability === "FACT_LOCK",
+					);
+					return {
+						factLockGate,
+						currentScriptVersion,
+						factLockNotRequired: factLock?.state === "NOT_REQUIRED",
+					};
+				}),
 		findCurrentVoiceConfig(actor, projectId),
 		listVoiceSegmentArtifacts(actor, projectId),
 	]);
@@ -176,6 +230,10 @@ async function loadEvaluation(
 		workspaceId: actor.workspaceId,
 		projectId,
 		factLockGate: sources.factLockGate,
+		factLockNotRequired:
+			"factLockNotRequired" in sources
+				? sources.factLockNotRequired === true
+				: false,
 		currentScriptVersion: sources.currentScriptVersion,
 		currentVoiceConfig,
 		artifacts,

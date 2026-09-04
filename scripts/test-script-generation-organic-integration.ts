@@ -16,6 +16,7 @@ const {
 	scriptGeneration,
 	scriptVersion,
 	user,
+	voiceConfig,
 	workspace,
 	workspaceMember,
 } = await import("@affichannel/db");
@@ -31,9 +32,28 @@ const {
 const { initializeScriptVersion, autosaveScriptVersion } = await import(
 	"../packages/api/src/services/script-version-service.ts"
 );
+const { saveVoiceConfig } = await import(
+	"../packages/api/src/services/voice-config-service.ts"
+);
+const { previewVoice } = await import(
+	"../packages/api/src/services/voice-preview-service.ts"
+);
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
+}
+
+class OrganicPreviewProvider {
+	readonly providerId = "deterministic-organic-preview";
+	callCount = 0;
+	async preview() {
+		this.callCount += 1;
+		return {
+			audio: new Uint8Array([1, 2, 3]),
+			contentType: "audio/mpeg" as const,
+			providerRequestId: null,
+		};
+	}
 }
 
 async function expectCode(action: () => Promise<unknown>, code: string) {
@@ -206,6 +226,21 @@ try {
 		storyVersion.editableSnapshot.schemaVersion === "script-draft.v3" &&
 			storyVersion.editableSnapshot.claimsStatus === "current",
 		"Organic ScriptVersion was not initialized as v3/current.",
+	);
+	const organicPreviewProvider = new OrganicPreviewProvider();
+	await saveVoiceConfig(actor, {
+		projectId: storyProjectId,
+		baseRevision: null,
+		voiceId: "ara",
+		language: "vi",
+		speed: 1,
+	});
+	await previewVoice(actor, storyProjectId, {
+		provider: organicPreviewProvider,
+	});
+	assert(
+		organicPreviewProvider.callCount === 1,
+		"Organic claimless Voice preview was blocked or called more than once.",
 	);
 
 	const tips = await prepareScriptGeneration(
@@ -386,6 +421,9 @@ try {
 		await db
 			.delete(contentBrief)
 			.where(inArray(contentBrief.projectId, projectIds));
+		await db
+			.delete(voiceConfig)
+			.where(inArray(voiceConfig.projectId, projectIds));
 		await db.delete(project).where(inArray(project.id, projectIds));
 		await db.delete(product).where(eq(product.id, productId));
 		await db.delete(aiSettings).where(eq(aiSettings.workspaceId, workspaceId));

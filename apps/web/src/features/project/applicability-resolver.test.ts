@@ -662,6 +662,34 @@ describe("AFF-US-014 resolver safety and precedence", () => {
 		expect(capability(input, "VOICE").reasonCode).toBe("VOICE_CONFIG_REQUIRED");
 	});
 
+	it("allows Organic claimless/general-only Voice without Fact Lock", () => {
+		const input = baseInput();
+		Object.assign(input.projectIdentity, {
+			contentType: "ORGANIC",
+			hasProduct: false,
+		});
+		withCurrentScript(input);
+		input.factLock.gateReason = "FACT_LOCK_NOT_RUN";
+		input.claimSummary = {
+			status: "CURRENT",
+			subjectResolution: "CONFIRMED",
+			productClaimState: "NONE",
+			productClaimCount: 0,
+			generalClaimCount: 1,
+		};
+
+		expectCapability(input, "FACT_LOCK", {
+			state: "NOT_REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+		});
+		expectCapability(input, "VOICE", {
+			state: "READY",
+			completion: "NOT_STARTED",
+			reasonCode: "VOICE_CONFIG_REQUIRED",
+		});
+	});
+
 	it("does not activate valid future Organic identity", () => {
 		const input = baseInput();
 		Object.assign(input.projectIdentity, {

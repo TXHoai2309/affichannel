@@ -150,18 +150,63 @@ export async function gatherProjectApplicabilityInput(
 			dependencies.readCurrentScriptVersion(actor, subject.id),
 			dependencies.evaluateFactLock(actor, subject.id),
 		]);
-	const voice = await dependencies.readVoice(actor, subject.id, {
-		factLockGate,
-		currentScriptVersion,
-	});
-	const effectiveStatuses = voice.segments.map(
-		(segment) => segment.readModel.effectiveStatus,
-	);
 	const currentClaimSummary = summarizeCurrentScriptVersionClaims({
 		contentType: subject.contentType,
 		creationPath: subject.creationPath,
 		currentScriptVersion,
 	});
+	const scriptInput: ProjectApplicabilityInput["script"] = {
+		generationStatus: generationStatus(scriptReadModel),
+		usableGenerationPresent: scriptReadModel.latestUsableArtifact !== null,
+		sourceDependencyCurrent:
+			scriptReadModel.dependencyState?.state !== "invalidated",
+		currentVersionPresent: currentScriptVersion !== undefined,
+		currentVersionFactLockReady: currentScriptVersion
+			? validateScriptVersionForFactLock(currentScriptVersion.editableSnapshot)
+					.success
+			: false,
+		channelSettingsComplete: scriptReadModel.context.channelSettings !== null,
+		productFactsUsable: (scriptReadModel.context.facts ?? []).some(
+			(fact) => fact.generationUsability !== "blocked",
+		),
+		claimSummary: currentClaimSummary,
+	};
+	const preliminaryResult = resolveProjectApplicability({
+		projectIdentity: {
+			contentType: subject.contentType,
+			creationPath: subject.creationPath,
+			contentFormatKey: subject.contentFormatKey,
+			contentFormatVersion: subject.contentFormatVersion,
+			hasProduct: subject.productId !== null,
+		},
+		product: { accessible: subject.productAccessible },
+		script: scriptInput,
+		claimSummary: currentClaimSummary,
+		factLock: { gateReason: factLockGate.reason },
+		voice: {
+			configPresent: false,
+			previewPresent: false,
+			totalSegments: 0,
+			attemptedSegments: 0,
+			usableSegments: 0,
+			pendingSegments: 0,
+			failedSegments: 0,
+			indeterminateSegments: 0,
+			staleSegments: 0,
+		},
+		render: { featureImplemented: false, inputsStale: false },
+	});
+	const factLockApplicability = preliminaryResult.capabilities.find(
+		(capability) => capability.capability === "FACT_LOCK",
+	);
+	const voice = await dependencies.readVoice(actor, subject.id, {
+		factLockGate,
+		currentScriptVersion,
+		factLockNotRequired: factLockApplicability?.state === "NOT_REQUIRED",
+	});
+	const effectiveStatuses = voice.segments.map(
+		(segment) => segment.readModel.effectiveStatus,
+	);
 
 	return {
 		projectIdentity: {
