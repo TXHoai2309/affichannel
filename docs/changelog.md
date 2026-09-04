@@ -6,9 +6,25 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-04.
+Cập nhật lần cuối: 2026-09-05.
 
 ## Chưa phát hành
+
+### AFF-US-020 Phase 20B MediaAsset persistence/storage foundation PASS
+
+- Added additive migration `0022_furry_sharon_carter.sql` for workspace-owned
+  `media_asset` and explicit `media_asset_link` project reuse. Legacy
+  `media_metadata`, Product, ScriptGeneration, VoiceSegment, and VoiceAudioStorage
+  contracts remain unchanged.
+- Added typed MediaAsset domain/lifecycle contracts, repository CAS transitions,
+  WorkspaceActor link validation, immutable READY binary metadata, mutable display
+  metadata, safe object keys, exact-byte SHA-256, allow-listed magic/MIME checks,
+  image dimensions, MP3 duration, and MP4 container validation.
+- Added dedicated private `MediaAssetStorage` local and injected R2 adapters with
+  opaque/presigned upload/download grant hooks and server-owned `MEDIA_*` limits.
+  No public API, UI, picker, automatic import, Quick Image, Media First, Video
+  Studio/render, or live R2 call is active. Focused and loopback disposable DB
+  acceptance tests PASSed.
 
 ### AFF-US-020 Phase 20A Shared Media Library contract locked
 

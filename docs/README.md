@@ -16,8 +16,9 @@ AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS; 19B Organic ScriptGeneration,
 19C claim applicability/Fact Lock, 19D Voice applicability/TOCTOU, 19E.1
 Organic UX activation và 19E.2 E2E/manual final acceptance đã PASS;
 AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library đã
-CONTRACT LOCKED theo DEC-036; 20B–20E chưa triển khai. Quick Image/Media First
-vẫn chưa active. M5 không activate các identity đó.
+CONTRACT LOCKED theo DEC-036 và 20B MediaAsset persistence/storage foundation đã
+PASS; 20C–20E chưa triển khai. Quick Image/Media First vẫn chưa active. M5 không
+activate các identity đó.
 
 ## Thứ tự đọc
 

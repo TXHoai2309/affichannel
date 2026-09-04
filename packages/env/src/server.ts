@@ -106,6 +106,42 @@ export const env = createEnv({
 			.positive()
 			.max(86_400_000)
 			.default(5 * 60_000),
+		MEDIA_STORAGE_PROVIDER: z.enum(["local", "r2"]).default("local"),
+		MEDIA_LOCAL_ROOT: z.string().trim().min(1).default(".data/media-library"),
+		MEDIA_R2_ENDPOINT: z.url().optional(),
+		MEDIA_R2_BUCKET: z.string().trim().min(1).optional(),
+		MEDIA_R2_ACCESS_KEY_ID: z.string().trim().min(1).optional(),
+		MEDIA_R2_SECRET_ACCESS_KEY: z.string().trim().min(1).optional(),
+		MEDIA_UPLOAD_TTL_MS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(86_400_000)
+			.default(15 * 60_000),
+		MEDIA_DOWNLOAD_TTL_MS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(3_600_000)
+			.default(5 * 60_000),
+		MEDIA_IMAGE_MAX_BYTES: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(500 * 1024 * 1024)
+			.default(10 * 1024 * 1024),
+		MEDIA_VIDEO_MAX_BYTES: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(2 * 1024 * 1024 * 1024)
+			.default(100 * 1024 * 1024),
+		MEDIA_AUDIO_MAX_BYTES: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(500 * 1024 * 1024)
+			.default(10 * 1024 * 1024),
 		R2_ENDPOINT: z.url().optional(),
 		R2_BUCKET: z.string().trim().min(1).optional(),
 		R2_ACCESS_KEY_ID: z.string().trim().min(1).optional(),

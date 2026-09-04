@@ -540,7 +540,7 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
-| **20A CONTRACT LOCKED — DEC-036** | Shared Media Library dùng `MediaAsset` workspace-owned và `MediaAssetLink` N:N với Project; private local/R2 upload và READY validation là contract tài liệu. | AFF-US-020 20B–20E triển khai persistence, API, UI và reuse/E2E; `/media` vẫn placeholder trong 20A. |
+| **20B PASS — DEC-036** | Shared Media Library dùng `MediaAsset` workspace-owned và `MediaAssetLink` N:N với Project; additive persistence, lifecycle repository, private local/R2 adapters, and READY validation are implemented. | AFF-US-020 20C–20E triển khai protected API, UI và reuse/E2E; `/media` vẫn placeholder và chưa có public cutover. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate

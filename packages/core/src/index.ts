@@ -4,6 +4,7 @@ export * from "./claim-manifest";
 export * from "./claim-subject";
 export * from "./content-format";
 export * from "./fact-lock";
+export * from "./media";
 export * from "./product/product-errors";
 export * from "./product/product-types";
 export * from "./product/validation";

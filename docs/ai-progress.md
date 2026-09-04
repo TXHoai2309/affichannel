@@ -12,8 +12,27 @@
   19E.1 Organic UX activation PASS; 19E.2 E2E/manual final acceptance PASS;
   AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
-  20B–20E not started.
-- Cập nhật lần cuối: 2026-09-04
+  20B MediaAsset persistence/storage foundation PASS; 20C–20E not started.
+- Cập nhật lần cuối: 2026-09-05
+
+## 2026-09-05 — AFF-US-020 Phase 20B MediaAsset persistence/storage foundation
+
+Starting from the accepted 20A commit `6f27fd838f5c2795047664998d558cbbab3b2373`
+on `TXH`, additive migration `0022_furry_sharon_carter.sql` adds only
+`media_asset` and `media_asset_link`. The workspace-owned MediaAsset repository
+enforces the pending/validating/ready/failed/archived lifecycle, WorkspaceActor
+scope, READY-only project links, immutable binary metadata, mutable display
+metadata, and same-asset reuse across Organic and Affiliate projects. A dedicated
+MediaAssetStorage interface now has deterministic private local storage and an
+injected private R2 adapter with presigned-grant hooks. Server validation covers
+safe keys, lowercase exact-byte SHA-256, MIME/magic allowlists, image dimensions,
+MP3 duration, MP4 ftyp validation, and per-type byte limits; no binary column,
+public endpoint, UI activation, automatic import, or live R2 call was added.
+
+Focused domain/storage tests and the 0021→0022 migration/repository acceptance
+script PASSed on a newly created loopback disposable PostgreSQL database, with
+legacy ScriptGeneration/media and Voice/Product domains left untouched. 20C
+protected media APIs is the next gate.
 
 ## 2026-09-04 — AFF-US-020 Phase 20A Shared Media Library contract lock
 

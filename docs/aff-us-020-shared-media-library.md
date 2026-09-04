@@ -1,15 +1,46 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20A CONTRACT LOCKED — documentation/design only**
-- Updated: 2026-09-04 (Asia/Saigon)
+- Status: **20B PASS — persistence/storage foundation accepted**
+- Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
-- Starting HEAD: `3881269`
-- Scope: architecture audit and implementation contract
-- Explicitly not implemented: runtime, schema, migration, upload UI, storage object, R2 call
+- Starting HEAD: `6f27fd838f5c2795047664998d558cbbab3b2373`
+- Scope: architecture contract plus additive persistence/storage foundation
+- Explicitly not implemented: public media APIs, upload UI, picker, project import/cutover, Quick Image, Media First, Video Studio/render, live R2
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions required before the persistence/storage slice. It does
-not authorize a code or database cutover.
+not authorize public API or UI activation; Phase 20B implements only the additive
+metadata schema, repository lifecycle, validation, and private storage adapters.
+
+## Phase 20B acceptance — persistence and storage foundation
+
+Phase 20B is accepted on branch `TXH` from starting HEAD
+`6f27fd838f5c2795047664998d558cbbab3b2373`.
+
+- Migration `0022_furry_sharon_carter.sql` is additive and creates only
+  `media_asset` and `media_asset_link`; legacy `media_metadata`, Product, Project,
+  ScriptGeneration, VoiceSegment, and VoiceAudioStorage schemas are untouched.
+- `MediaAsset` is workspace-owned with explicit `MediaAssetLink` Project N:N reuse;
+  repository reads and writes require `WorkspaceActor`, validate same-workspace
+  links transactionally, and permit one READY asset to link to Organic and
+  Affiliate projects.
+- Lifecycle CAS operations enforce `pending_upload → validating → ready|failed`
+  and `ready|failed → archived`. Binary metadata is immutable after READY;
+  display name, tags, rights, and archive state are the only mutable metadata.
+- `MediaAssetStorage` is private and server-owned. Local storage is deterministic
+  under the configured root; R2 is an injected S3-compatible adapter with private
+  presigned-grant support. No live R2 call or public URL was made.
+- Server validation enforces safe object keys, exact-byte lowercase SHA-256,
+  allow-listed MIME/magic (JPEG/PNG/WebP, MP4, MP3), decoded image dimensions,
+  MP3 duration via `music-metadata`, and bounded per-type size limits. SVG/WAV
+  and arbitrary URL imports remain rejected/deferred; MP4 dimensions/duration are
+  intentionally nullable until a future bounded probe dependency is approved.
+- Focused domain/storage tests and the migration/repository acceptance script pass
+  against a newly created loopback disposable PostgreSQL database only. The
+  acceptance script verifies 20A→20B additivity and no binary database column.
+
+Phase 20C remains responsible for protected prepare/upload/finalize/download/purge
+APIs and their authorization/expiry boundaries; no public media endpoint is active.
 
 ## 1. Decision summary
 
@@ -174,8 +205,9 @@ fetch arbitrary URLs or import remote content.
 
 ## 5. Proposed schema target (NOT IMPLEMENTED)
 
-The following is a design target for the 20B migration. It is deliberately not a
-Drizzle schema or migration.
+The following was the design target for the 20B migration and is now implemented
+by the additive Drizzle schema/migration described in the Phase 20B acceptance
+section above.
 
 ### 5.1 `media_asset`
 
@@ -438,7 +470,7 @@ Initial allowlist is intentionally narrow:
 | audio | `audio/mpeg` | Magic/decoder check and `music-metadata` duration; positive duration is required for READY. WAV is deferred until a parser/storage test proves support. |
 
 The current dependency audit found `music-metadata` but no image metadata parser,
-`file-type`, or FFmpeg/ffprobe. 20B must add or implement a bounded JPEG/PNG/WebP
+`file-type`, or FFmpeg/ffprobe. 20B adds bounded JPEG/PNG/WebP
 metadata validator; it must not invent dimensions. Full video codec probing is
 deferred to a future worker/parser slice and is not a prerequisite for basic
 private MP4 library storage. No render worker is pulled into upload validation.

@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-04
+- Cập nhật lần cuối: 2026-09-05
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -33,11 +33,12 @@ AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS, Phase 19B Organic ScriptGeneratio
  UX activation và 19E.2 E2E/manual final acceptance đều đã PASS; AFF-US-019 đã
  DONE/ACCEPTED. Quick Image/Media First vẫn chưa active.
 
-AFF-US-020 Phase 20A Architecture Audit + Contract Lock đang là current checkpoint
-và đã được khóa ở cấp tài liệu theo DEC-036. `MediaAsset` workspace-owned và
-`MediaAssetLink` Project reuse là direction canonical; `/media` vẫn là skeleton.
-20B–20E (persistence/storage, protected API, UI và project reuse/E2E) chưa bắt
-đầu. Quick Image/AFF-US-021 phụ thuộc vào READY image asset contract của 20A.
+AFF-US-020 Phase 20B MediaAsset Persistence + Storage Foundation đã PASS trên
+branch `TXH`. Migration `0022` là additive, `MediaAsset` workspace-owned và
+`MediaAssetLink` Project reuse đã có repository lifecycle cùng local/private-R2
+adapters; `/media` vẫn là skeleton và chưa có public media API. 20C–20E
+(protected API, UI và project reuse/E2E) chưa bắt đầu. Quick Image/AFF-US-021
+phụ thuộc vào READY image asset contract của 20B.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.
