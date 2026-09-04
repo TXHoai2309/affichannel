@@ -1,5 +1,41 @@
 # AFF-US-019 — Organic Scripted Content
 
+## Phase 19E.2 — Browser E2E + manual final acceptance
+
+- Trạng thái: **19E.2 E2E / MANUAL FINAL ACCEPTANCE = PASS**; **AFF-US-019 = DONE / ACCEPTED**
+- Cập nhật: 2026-09-04
+- Browser plugin không khả dụng trong môi trường này; repository Playwright được
+  dùng làm fallback dưới guarded disposable loopback PostgreSQL harness.
+- Guarded Playwright PASS: `organic-scripted-acceptance.spec.ts` 9/9 và
+  `script-studio.spec.ts` 10/10 (19/19). Claimless, GENERAL, PRODUCT→GENERAL
+  override, PRODUCT escalation/link, mixed G/P/G/P batch, stale/refresh,
+  Product-subset Fact Lock, F5 persistence, workflow refresh không F5, Voice
+  preview/segment và Affiliate regression đều đã được kiểm chứng.
+- Batch confirmation chỉ tạo một `confirmClaimSubjects` mutation và một revision
+  increment; CTA bị disable khi còn quyết định thiếu. Mixed manifest giữ đủ 4
+  claim và Fact Lock chỉ kiểm tra 2 claim PRODUCT.
+- TOCTOU Voice dùng canonical server state và trả `FACT_LOCK_REQUIRED` trước
+  provider; deterministic local TTS/AI và mọi live provider call = 0. Product,
+  Fact Lock và Voice stepper cập nhật ngay sau mutation; F5 khôi phục trạng thái
+  server canonical.
+- Rendered QA PASS ở desktop và mobile (claim confirmation); application shell
+  không blank/overlay và không có browser console error/page error. Screenshot
+  evidence nằm ngoài repository tại `C:/Users/User/.codex/visualizations/2026/09/04/aff-us-019/`.
+- DB safety PASS: chỉ dùng `affichannel-19e2-db` PostgreSQL 16 loopback,
+  tmpfs/database `affichannel_e2e_19e2`; migrations 22/22; existing dev/live/
+  remote databases không bị chạm. Không có schema/migration thay đổi.
+- M3B classification: `scripts/test-project-channel-first-m3b.ts` vẫn dừng ở
+  historical migration-0018 fixture insert vì `project.content_type` hiện
+  `NOT NULL`; đây là mismatch của fixture với enforced schema, tái hiện độc lập
+  và không liên quan Organic 19E.2. Migration history không được sửa.
+
+### 19E.2 final capability boundary
+
+Exposed identity remains exactly `ORGANIC + SCRIPTED + SCRIPTED_STANDARD v1`.
+Organic Quick Image and Media First are not active; video/render remain outside
+AFF-US-019 and are deferred to their owning stories. Affiliate continues using
+the frozen v1 path and its FactLockGate.
+
 ## Phase 19E.1 — Organic UX activation + claim confirmation UI
 
 - Trạng thái: **19E.1 ORGANIC UX ACTIVATION = PASS**
@@ -34,7 +70,7 @@
   checks pass on a fresh disposable loopback PostgreSQL database; live AI/TTS
   calls remain disabled.
 
-19E.2 E2E / manual final acceptance is next and has not started.
+19E.2 is accepted above; 19E.1 remains the preceding UX activation checkpoint.
 
 ## Phase 19D — Voice applicability + paid-call TOCTOU
 
@@ -641,7 +677,8 @@ AFF-US-019 Phase 19C.3B: PRODUCT-SUBSET FACT LOCK V2 = PASS
 19C status: COMPLETE
 19D status: PASS (Voice applicability + paid-call TOCTOU)
 19E.1 status: PASS (Organic UX activation + claim confirmation UI)
-19E.2 status: NEXT (E2E / manual final acceptance; not started)
+19E.2 status: PASS (E2E + manual/rendered final acceptance)
+AFF-US-019 status: DONE / ACCEPTED
 Runtime changed: Organic Claim Refresh v2, protected confirmation, Organic ClaimManifest v2, and Product-subset Fact Lock v2
 Schema changed: NO
 Migration created: NO
@@ -654,5 +691,5 @@ Fact Lock semantic input: fact-lock.manifest.v2
 Affiliate v1 unchanged; claimless/general-only Fact Lock: NOT_REQUIRED
 ```
 
-19E.1 is accepted without marking AFF-US-019 complete. 19E.2 owns broad E2E
-and manual final acceptance.
+AFF-US-019 is complete; AFF-US-020 Shared Media Library is the next authorized
+story.

@@ -9,12 +9,13 @@
   Organic Claim Refresh v2 PASS; 19C.2B Claim Subject Confirmation API PASS;
   19C.3A Subject-aware ClaimManifest Builder v2 PASS; 19C.3B Product-subset
   Fact Lock v2 PASS; Phase 19C COMPLETE; 19D Voice applicability/TOCTOU PASS;
-  19E.1 Organic UX activation PASS; 19E.2 E2E/manual final acceptance NEXT.
+  19E.1 Organic UX activation PASS; 19E.2 E2E/manual final acceptance PASS;
+  AFF-US-019 DONE/ACCEPTED.
 - Cập nhật lần cuối: 2026-09-04
 
 Current canonical status: AFF-US-018 DONE; AFF-US-019 Phase 19D VOICE
-APPLICABILITY / TOCTOU PASS; 19E.1 ORGANIC UX ACTIVATION PASS, ready for 19E.2
-E2E/manual final flow. Public Fact Lock
+APPLICABILITY / TOCTOU, 19E.1 ORGANIC UX ACTIVATION and 19E.2 E2E/manual final
+flow PASS; AFF-US-019 DONE/ACCEPTED. Public Fact Lock
 tạo/reuse ClaimManifest
 trước rồi chạy explicit `claimManifestId` với `inputMode=MANIFEST_V1`; legacy
 `inputMode=NULL` vẫn đọc được nhưng không còn là public new-write path. Migration
@@ -50,7 +51,7 @@ Script/VoiceConfig changes block with zero provider calls. VoiceConfig setup
 reads/writes remain available without paid Fact Lock. Focused Resolver/authorization,
 Voice runtime, Organic integration, full web, type, Biome, and disposable
 loopback PostgreSQL checks pass with live AI/TTS disabled. No schema or migration
-changed. 19E UI/E2E/manual flow is next; AFF-US-019 remains open.
+changed. 19E.2 final acceptance is recorded above.
 
 ## 2026-09-04 — AFF-US-019 Phase 19E.1 Organic UX activation acceptance
 

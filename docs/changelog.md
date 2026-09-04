@@ -10,6 +10,21 @@ Cập nhật lần cuối: 2026-09-04.
 
 ## Chưa phát hành
 
+### AFF-US-019 Phase 19E.2 Organic Scripted final acceptance PASS
+
+- Guarded disposable browser acceptance passes 19/19: Organic claimless,
+  GENERAL, PRODUCT→GENERAL override, Product escalation/link, mixed G/P/G/P
+  batch, stale/refresh, Product-subset Fact Lock, Voice and Affiliate
+  regression. Browser evidence covers desktop/mobile rendering, F5 persistence,
+  immediate workflow propagation, single batch mutation/revision and a stale
+  Voice TOCTOU rejection before provider invocation.
+- Browser plugin was unavailable; repository Playwright ran against exact
+  loopback disposable PostgreSQL `affichannel-19e2-db`. AI/TTS live calls = 0;
+  no schema/migration changed. M3B's known migration-0018 null-fixture mismatch
+  remains separately classified and was not repaired.
+- AFF-US-019 is DONE/ACCEPTED. Quick Image/Media First and video/render remain
+  outside this story; AFF-US-020 Shared Media Library is next.
+
 ### AFF-US-019 Phase 19E.1 Organic UX activation PASS
 
 - Activated the exact Organic + Scripted + `SCRIPTED_STANDARD` v1 creation
@@ -22,8 +37,8 @@ Cập nhật lần cuối: 2026-09-04.
   suggestions, alternate radio choices, one batched server mutation, disabled
   partial state, conflict refresh, and adaptive workflow propagation.
 - Focused/full web, type, Biome, and disposable loopback PostgreSQL checks pass;
-  live AI/TTS calls are 0 and no schema/migration changed. 19E.2 E2E/manual
-  final acceptance is next; AFF-US-019 remains open.
+  live AI/TTS calls are 0 and no schema/migration changed. 19E.2 final
+  acceptance is recorded above.
 
 ### AFF-US-019 Phase 19D Voice applicability / paid-call TOCTOU PASS
 
@@ -41,7 +56,7 @@ Cập nhật lần cuối: 2026-09-04.
 - Focused Resolver/authorization and runtime tests, Organic integration,
   existing Voice regressions, type, web, Biome, and disposable loopback
   PostgreSQL acceptance pass with live AI/TTS disabled. No schema or migration
-  changed. 19E UI/E2E/manual flow is next; AFF-US-019 remains open.
+  changed. 19E.2 final acceptance is recorded above.
 
 ### AFF-US-019 Phase 19C.3B Product-subset Fact Lock v2 PASS
 

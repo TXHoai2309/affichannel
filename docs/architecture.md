@@ -1,7 +1,7 @@
 # Kiến trúc AffiChannel
 
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
-  AFF-US-019 19D and 19E.1 accepted; 19E.2 E2E/manual final acceptance next
+  AFF-US-019 19D, 19E.1 and 19E.2 accepted; AFF-US-019 DONE
 - Phiên bản: 0.8.0
 - Cập nhật lần cuối: 2026-09-04
 
@@ -236,8 +236,8 @@ stale/unknown fail-closed, Manifest full inventory và Fact Lock Product subset.
 AI/provider chỉ là proposal; `SUPPORTED`/`UNSUPPORTED` của Fact Lock vẫn là
 verification result, không phải claim kind. Contract đã lock, 19A.3 pure
 foundation/frozen vectors, Organic runtime 19B, applicability/Fact Lock 19C,
-Voice 19D và Organic UX 19E.1 đã PASS; 19E.2 E2E/manual final acceptance là
-bước tiếp theo. Xem
+Voice 19D, Organic UX 19E.1 và 19E.2 E2E/manual final acceptance đã PASS;
+AFF-US-019 đã DONE/ACCEPTED. Xem
 `docs/aff-us-019-organic-scripted-content.md`.
 
 ## 8. Transaction và Neon
