@@ -609,7 +609,9 @@ chỉ current completed usable artifact mới được tính completed hoặc c�
 Application services gọi reconcile sau mutation; reconcile khóa project row, đọc
 lại snapshot server và upsert các dòng `voice`/`video` trong `project_step_status`.
 `currentStepKey` chỉ tiến `voice → video` khi Voice ready và không tự rollback khi
-input trở nên stale. Direct Video route vẫn fail closed qua server gate.
+input trở nên stale. Direct Video route vẫn ổn định ở placeholder presentation;
+prerequisite chưa hoàn tất vẫn fail closed qua shared route gate, còn khi
+upstream đã hoàn tất thì Video hiển thị coming-soon và không có execution CTA.
 
 Pending artifact quá lease được đổi sang `indeterminate` với uncertainty code,
 không tự retry provider. Protected audio resolve storage adapter từ

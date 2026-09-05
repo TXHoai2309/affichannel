@@ -62,6 +62,52 @@ function factLockPassed(input: ProjectApplicabilityInput) {
 	input.factLock.gateReason = "FACT_LOCK_PASSED";
 }
 
+function organicClaimlessInput(
+	voiceComplete: boolean,
+): ProjectApplicabilityInput {
+	const claimSummary = {
+		status: "CURRENT" as const,
+		subjectResolution: "CONFIRMED" as const,
+		productClaimState: "NONE" as const,
+		productClaimCount: 0,
+		generalClaimCount: 0,
+	};
+	return {
+		projectIdentity: {
+			contentType: "ORGANIC",
+			creationPath: "SCRIPTED",
+			contentFormatKey: "SCRIPTED_STANDARD",
+			contentFormatVersion: 1,
+			hasProduct: false,
+		},
+		product: { accessible: false },
+		script: {
+			generationStatus: "USABLE",
+			usableGenerationPresent: true,
+			sourceDependencyCurrent: true,
+			currentVersionPresent: true,
+			currentVersionFactLockReady: true,
+			channelSettingsComplete: true,
+			productFactsUsable: false,
+			claimSummary,
+		},
+		claimSummary,
+		factLock: { gateReason: "FACT_LOCK_NOT_RUN" },
+		voice: {
+			configPresent: true,
+			previewPresent: false,
+			totalSegments: 2,
+			attemptedSegments: voiceComplete ? 2 : 1,
+			usableSegments: voiceComplete ? 2 : 1,
+			pendingSegments: 0,
+			failedSegments: 0,
+			indeterminateSegments: 0,
+			staleSegments: 0,
+		},
+		render: { featureImplemented: false, inputsStale: false },
+	};
+}
+
 function model(input: ProjectApplicabilityInput) {
 	return mapAdaptiveWorkflowReadModel(resolveProjectApplicability(input));
 }
@@ -224,6 +270,53 @@ describe("AFF-US-015/15C shared Adaptive route gate", () => {
 		expect(gatedMarkup).not.toContain("Generate voice");
 		expect(gatedMarkup).toContain("<h1>");
 	});
+
+	it("keeps /video prerequisite-blocked while Organic Voice is incomplete", () => {
+		const gate = getAdaptiveRouteGatePresentation(
+			model(organicClaimlessInput(false)),
+			"video",
+			"organic-project",
+		);
+
+		expect(gate).toMatchObject({
+			mode: "gated",
+			statusLabel: "Cần hoàn tất bước trước",
+			helperText: "Cần hoàn tất các bước trước khi dựng video.",
+			action: { href: "/projects/organic-project/voice" },
+		});
+	});
+
+	it("renders a stable Organic /video coming-soon placeholder without a dead CTA", () => {
+		const workflow = model(organicClaimlessInput(true));
+		const gate = getAdaptiveRouteGatePresentation(
+			workflow,
+			"video",
+			"organic-project",
+		);
+		const markup = renderToStaticMarkup(
+			ProjectStepPage({
+				content: createElement("button", { type: "button" }, "Generate video"),
+				projectId: "organic-project",
+				stepKey: "video",
+				workflow,
+			}),
+		);
+
+		expect(gate).toMatchObject({
+			mode: "gated",
+			title: "Sắp có",
+			statusLabel: "Sắp có",
+			helperText: "Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.",
+			action: null,
+		});
+		expect(markup).toContain("Sắp có");
+		expect(markup).toContain(
+			"Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.",
+		);
+		expect(markup).not.toContain("Cần hoàn tất bước trước");
+		expect(markup).not.toContain("Mở Dựng video");
+		expect(markup).not.toContain("Generate video");
+	});
 });
 
 describe("AFF-US-015/15C Affiliate A-J direct-route matrix", () => {
@@ -367,7 +460,7 @@ describe("AFF-US-015/15C Affiliate A-J direct-route matrix", () => {
 		expect(video).toMatchObject({
 			mode: "gated",
 			title: "Sắp có",
-			helperText: "Tính năng dựng và render chưa được triển khai.",
+			helperText: "Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.",
 			action: null,
 		});
 	});

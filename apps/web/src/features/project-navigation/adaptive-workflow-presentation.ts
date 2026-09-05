@@ -208,7 +208,7 @@ const REASON_PRESENTATION = {
 		helperText: "Đầu vào dựng video đã thay đổi.",
 	},
 	RENDER_FEATURE_NOT_IMPLEMENTED: {
-		helperText: "Tính năng dựng và render chưa được triển khai.",
+		helperText: "Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.",
 	},
 } as const satisfies Record<ApplicabilityReasonCode, ReasonPresentation>;
 
@@ -247,7 +247,40 @@ function isValidPresentationStep(step: AdaptiveWorkflowStep) {
 	return !comingSoon;
 }
 
-function statePresentation(step: AdaptiveWorkflowStep): {
+function hasCompletedApplicableUpstream(
+	workflow: AdaptiveWorkflowReadModel | undefined,
+	step: AdaptiveWorkflowStep,
+) {
+	if (!workflow || step.capability !== "RENDER") return false;
+	return workflow.steps
+		.filter((candidate) => candidate.capability !== step.capability)
+		.every(
+			(candidate) =>
+				candidate.applicabilityState === "NOT_REQUIRED" ||
+				(candidate.applicabilityState === "OPTIONAL" &&
+					(candidate.optionalSelection !== "SELECTED" ||
+						candidate.completion === "COMPLETE")) ||
+				(candidate.applicabilityState === "READY" &&
+					candidate.completion === "COMPLETE"),
+		);
+}
+
+function isRenderComingSoon(
+	step: AdaptiveWorkflowStep,
+	workflow?: AdaptiveWorkflowReadModel,
+) {
+	return (
+		step.capability === "RENDER" &&
+		(step.reasonCode === "RENDER_FEATURE_NOT_IMPLEMENTED" ||
+			(step.reasonCode === "RENDER_REQUIRES_UPSTREAM_CAPABILITIES" &&
+				hasCompletedApplicableUpstream(workflow, step)))
+	);
+}
+
+function statePresentation(
+	step: AdaptiveWorkflowStep,
+	workflow?: AdaptiveWorkflowReadModel,
+): {
 	statusLabel: string;
 	semantic: AdaptiveWorkflowSemantic;
 	badgeVariant: AdaptiveWorkflowBadgeVariant;
@@ -259,7 +292,7 @@ function statePresentation(step: AdaptiveWorkflowStep): {
 			badgeVariant: "destructive",
 		};
 	}
-	if (step.reasonCode === "RENDER_FEATURE_NOT_IMPLEMENTED") {
+	if (isRenderComingSoon(step, workflow)) {
 		return {
 			statusLabel: "Sắp có",
 			semantic: "coming_soon",
@@ -449,7 +482,7 @@ export function getAdaptiveRouteGatePresentation(
 		};
 	}
 
-	const presentation = getAdaptiveStepPresentation(step);
+	const presentation = getAdaptiveStepPresentation(step, workflow);
 	if (!presentation.valid) {
 		return {
 			capability,
@@ -463,7 +496,7 @@ export function getAdaptiveRouteGatePresentation(
 		};
 	}
 
-	if (step.reasonCode === "RENDER_FEATURE_NOT_IMPLEMENTED") {
+	if (presentation.semantic === "coming_soon") {
 		return {
 			capability,
 			mode: "gated" as const,
@@ -527,12 +560,16 @@ export function getAdaptiveRouteGatePresentation(
 	};
 }
 
-export function getAdaptiveStepPresentation(step: AdaptiveWorkflowStep) {
-	const state = statePresentation(step);
+export function getAdaptiveStepPresentation(
+	step: AdaptiveWorkflowStep,
+	workflow?: AdaptiveWorkflowReadModel,
+) {
+	const state = statePresentation(step, workflow);
 	const valid = state.semantic !== "attention";
 	const reason: ReasonPresentation = REASON_PRESENTATION[step.reasonCode];
 	const actionAvailable =
 		valid &&
+		state.semantic !== "coming_soon" &&
 		step.navigable &&
 		step.primaryAction !== null &&
 		step.primaryAction.kind !== "COMING_SOON";
@@ -541,7 +578,9 @@ export function getAdaptiveStepPresentation(step: AdaptiveWorkflowStep) {
 		label: ADAPTIVE_CAPABILITY_LABELS[step.capability],
 		statusLabel: state.statusLabel,
 		helperText: valid
-			? reason.helperText
+			? state.semantic === "coming_soon"
+				? REASON_PRESENTATION.RENDER_FEATURE_NOT_IMPLEMENTED.helperText
+				: reason.helperText
 			: "Trạng thái workflow không hợp lệ và cần được kiểm tra.",
 		semantic: state.semantic,
 		badgeVariant: state.badgeVariant,
@@ -584,13 +623,16 @@ export function buildAdaptiveStepperItems(
 	);
 	return workflow.steps
 		.filter((step) => step.visible)
-		.map((step) => ({
-			step,
-			presentation: getAdaptiveStepPresentation(step),
-			active: step.capability === activeCapability,
-			next: step.capability === workflow.nextApplicableStep,
-			href: adaptiveWorkflowHref(projectId, step.primaryRoute.key),
-		}));
+		.map((step) => {
+			const presentation = getAdaptiveStepPresentation(step, workflow);
+			return {
+				step,
+				presentation,
+				active: step.capability === activeCapability,
+				next: step.capability === workflow.nextApplicableStep,
+				href: adaptiveWorkflowHref(projectId, step.primaryRoute.key),
+			};
+		});
 }
 
 export function getAdaptiveWorkflowOverviewPresentation(
@@ -625,7 +667,7 @@ export function getAdaptiveWorkflowOverviewPresentation(
 		};
 	}
 
-	const presentation = getAdaptiveStepPresentation(nextStep);
+	const presentation = getAdaptiveStepPresentation(nextStep, workflow);
 	if (!presentation.valid) {
 		return {
 			needsAttention: true,

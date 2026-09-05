@@ -10,6 +10,18 @@ Cập nhật lần cuối: 2026-09-05.
 
 ## Chưa phát hành
 
+### Owner UAT fix-forward — Video placeholder coming-soon
+
+- Corrected Project stepper and direct `/video` presentation for valid Projects
+  whose prior applicable steps are complete while Video/render is not
+  implemented: the state is now `Sắp có`, not a prerequisite failure.
+- Removed the enabled `Mở Dựng video` dead CTA and replaced it with a stable
+  coming-soon placeholder explaining that Video will arrive in a later version.
+  Incomplete upstream prerequisites still retain the blocked state and their
+  remediation action; Organic and Affiliate behavior are covered by focused
+  regressions. No schema, migration, API, Resolver semantics, Voice, or Fact
+  Lock change was made.
+
 ### Manual UAT fix-forward — Organic Script presentation
 
 - Corrected the shared Script Studio presentation for Organic + Scripted +

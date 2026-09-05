@@ -18,6 +18,21 @@
   PROGRESS (fix-forward recorded below).
 - Cập nhật lần cuối: 2026-09-05
 
+## 2026-09-05 — Owner UAT fix-forward: Video placeholder coming-soon
+
+Owner UAT found that a valid Organic claimless Project with complete Content
+and Voice still showed the Video step as `Cần hoàn tất bước trước` and exposed a
+dead `Mở Dựng video` action. The Resolver contract remains unchanged: the
+presentation layer now recognizes `RENDER_REQUIRES_UPSTREAM_CAPABILITIES` as
+coming-soon only when every prior applicable capability is complete or
+`NOT_REQUIRED`; genuinely incomplete prerequisites remain blocked.
+
+The `/video` route and Project stepper now render `Sắp có` with the copy
+`Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.`, with no enabled
+Video CTA or stepper next-step link. Organic and Affiliate regressions are
+covered. No schema, migration, API, Resolver semantics, Voice, or Fact Lock
+change was made. Owner Manual UAT remains **IN PROGRESS**; do not start US021.
+
 ## 2026-09-05 — Manual UAT fix-forward: Organic Script presentation
 
 Owner UAT found misleading presentation for Organic + Scripted +

@@ -91,7 +91,7 @@ export default function ProjectStepper({
 								<span className="mt-1 text-muted-foreground text-xs">
 									{presentation.helperText}
 								</span>
-								{next ? (
+								{next && presentation.semantic !== "coming_soon" ? (
 									<span className="mt-2 font-medium text-primary text-xs">
 										Bước tiếp theo
 									</span>
@@ -101,7 +101,9 @@ export default function ProjectStepper({
 
 						return (
 							<li key={step.capability}>
-								{step.navigable && presentation.valid ? (
+								{step.navigable &&
+								presentation.valid &&
+								presentation.semantic !== "coming_soon" ? (
 									<Link
 										aria-current={active ? "step" : undefined}
 										className={cn(

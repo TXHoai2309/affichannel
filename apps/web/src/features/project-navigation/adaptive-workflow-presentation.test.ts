@@ -102,6 +102,50 @@ function factLockPassed(input: ProjectApplicabilityInput) {
 	input.factLock.gateReason = "FACT_LOCK_PASSED";
 }
 
+function organicClaimlessCompleteInput(): ProjectApplicabilityInput {
+	const claimSummary = {
+		status: "CURRENT" as const,
+		subjectResolution: "CONFIRMED" as const,
+		productClaimState: "NONE" as const,
+		productClaimCount: 0,
+		generalClaimCount: 0,
+	};
+	return {
+		projectIdentity: {
+			contentType: "ORGANIC",
+			creationPath: "SCRIPTED",
+			contentFormatKey: "SCRIPTED_STANDARD",
+			contentFormatVersion: 1,
+			hasProduct: false,
+		},
+		product: { accessible: false },
+		script: {
+			generationStatus: "USABLE",
+			usableGenerationPresent: true,
+			sourceDependencyCurrent: true,
+			currentVersionPresent: true,
+			currentVersionFactLockReady: true,
+			channelSettingsComplete: true,
+			productFactsUsable: false,
+			claimSummary,
+		},
+		claimSummary,
+		factLock: { gateReason: "FACT_LOCK_NOT_RUN" },
+		voice: {
+			configPresent: true,
+			previewPresent: false,
+			totalSegments: 2,
+			attemptedSegments: 2,
+			usableSegments: 2,
+			pendingSegments: 0,
+			failedSegments: 0,
+			indeterminateSegments: 0,
+			staleSegments: 0,
+		},
+		render: { featureImplemented: false, inputsStale: false },
+	};
+}
+
 describe("AFF-US-015 adaptive presentation mapper", () => {
 	it.each([
 		[
@@ -265,6 +309,29 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			actionAvailable: false,
 			actionLabel: null,
 		});
+	});
+
+	it("maps claimless Organic with completed Voice to coming-soon Render", () => {
+		const workflow = mapAdaptiveWorkflowReadModel(
+			resolveProjectApplicability(organicClaimlessCompleteInput()),
+		);
+		const render = workflow.steps.find((step) => step.capability === "RENDER");
+		expect(render).toBeDefined();
+		if (!render) return;
+
+		const presentation = getAdaptiveStepPresentation(render, workflow);
+		expect(presentation).toMatchObject({
+			statusLabel: "Sắp có",
+			semantic: "coming_soon",
+			actionAvailable: false,
+			helperText: "Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.",
+		});
+		const renderItem = buildAdaptiveStepperItems(
+			workflow,
+			"/projects/organic-project/voice",
+			"organic-project",
+		).find((item) => item.step.capability === "RENDER");
+		expect(renderItem?.presentation.statusLabel).toBe("Sắp có");
 	});
 
 	it("renders a controlled unsupported Overview with no normal CTA", () => {

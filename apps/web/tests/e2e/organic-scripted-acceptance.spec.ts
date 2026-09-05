@@ -352,6 +352,25 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 				.getByText("2 / 2 đoạn đã tạo", { exact: true })
 				.scrollIntoViewIfNeeded();
 			await captureEvidence(page, "organic-claimless-voice-complete");
+			await page.goto(`/projects/${projectId}/video`);
+			await expect(page.getByRole("heading", { name: "Sắp có" })).toBeVisible();
+			await expect(
+				page
+					.getByText(
+						"Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.",
+					)
+					.first(),
+			).toBeVisible();
+			expect(
+				page.locator(`a[href="/projects/${projectId}/video"]`),
+			).toHaveCount(0);
+			await expect(
+				page.getByRole("button", { name: "Mở Dựng video" }),
+			).toHaveCount(0);
+			await expect(
+				page.getByText("Cần hoàn tất bước trước", { exact: true }),
+			).toHaveCount(0);
+			await captureEvidence(page, "organic-claimless-video-coming-soon");
 			assertNoBrowserErrors(page);
 		} finally {
 			if (projectId) await cleanupFixture(projectId, fixture.productId);
