@@ -13,9 +13,23 @@
   AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
   20B MediaAsset persistence/storage foundation PASS; 20C protected API
-  implementation complete, acceptance blocked;
+  acceptance PASS (27/27 disposable cases);
   20D–20E not started.
 - Cập nhật lần cuối: 2026-09-05
+
+## 2026-09-05 — AFF-US-020 Phase 20C Protected Media APIs acceptance PASS
+
+Starting from HEAD `a8c366a828496393038441a6e5d556d0ad6923bb` on `TXH`, the
+guarded protected-media acceptance harness passed 27/27 cases on a fresh
+PostgreSQL 16 disposable container bound only to `127.0.0.1:55432`. The harness
+migrated through `0022`, reset its disposable journal/schema, used a temporary
+local media root, exercised real Better Auth session cookies and protected local
+upload/download routes, and injected/mocked R2 so live provider/object calls
+remained zero. Remote/development/production database URLs were not used.
+
+Post-acceptance regressions also passed: web Vitest 58 files/544 tests, full
+workspace type-check, production build, Biome, and `git diff --check`. No 20D UI
+or public media activation was started.
 
 ## 2026-09-05 — AFF-US-020 Phase 20B MediaAsset persistence/storage foundation
 
@@ -2104,7 +2118,7 @@ Trạng thái: **AFF-US-012 Phase 2 hardening đã triển khai, chờ review/ac
 
 Trạng thái: **AFF-US-012 Phase 3 đã triển khai, chờ review/acceptance; Phase 4 chưa bắt đầu.**
 
-### 2026-09-05 — AFF-US-020 Phase 20C Protected Media APIs (implementation complete; acceptance blocked)
+### 2026-09-05 — AFF-US-020 Phase 20C Protected Media APIs (acceptance PASS)
 
 - Added protected workspace-scoped MediaAsset procedures for prepare/upload,
   finalize, list/get, metadata, archive, private download, and Project links.
@@ -2114,6 +2128,7 @@ Trạng thái: **AFF-US-012 Phase 3 đã triển khai, chờ review/acceptance; 
   typed failures, expiry, replay/concurrency semantics, and best-effort cleanup.
 - No migration/schema change, public delete/purge, arbitrary URL import, UI,
   picker, AI, Voice, Product, or render activation.
-- Verification: web Vitest 58 files/544 tests, full check-types, build, Biome,
-  and diff-check pass. The guarded disposable DB acceptance harness is present,
-  but the mandatory matrix has not passed; it has not run against remote/dev/prod.
+- Verification: guarded disposable DB acceptance matrix 27/27 PASS on a fresh
+  loopback PostgreSQL container through migration 0022; web Vitest 58 files/544
+  tests, full check-types, build, Biome, and diff-check also pass. It did not run
+  against remote/dev/prod, and live R2/provider/AI/TTS/external URL calls were 0.

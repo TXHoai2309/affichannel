@@ -1,13 +1,13 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20C IMPLEMENTATION COMPLETE — ACCEPTANCE BLOCKED; UI remains deferred**
+- Status: **20C PROTECTED MEDIA APIs PASS; UI remains deferred**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
-- Starting HEAD: `e0ea2f16b3d3f00244752b7a0d00d07652f0e87c`
+- Starting HEAD: `a8c366a828496393038441a6e5d556d0ad6923bb`
 - Scope: architecture contract, persistence/storage foundation, and protected API layer
 - Explicitly not implemented: public media APIs, upload UI, picker, project import/cutover, Quick Image, Media First, Video Studio/render, live R2
 
-## Phase 20C acceptance — blocked pending disposable PostgreSQL matrix
+## Phase 20C acceptance — PASS
 
 Phase 20C adds the protected server API layer on top of the accepted 20B
 foundation. `appRouter.media` now exposes workspace-scoped `list`, `get`,
@@ -42,10 +42,13 @@ Implementation verification for this slice: full workspace type-check, Next
 production build, Biome check, and the complete web Vitest suite (58 files / 544
 tests) pass. The mandatory disposable PostgreSQL acceptance matrix is guarded by
 `AFFICHANNEL_MEDIA_TEST_DATABASE_URL` plus its explicit disposable confirmation
-and is implemented in `scripts/test-media-protected-api.ts`, but it has not yet
-passed; no remote, development, or production database was touched and no
-migration was created in 20C. Phase 20D remains blocked until that matrix and
-the post-acceptance regression gate pass.
+and is implemented in `scripts/test-media-protected-api.ts`. On 2026-09-05 it
+passed 27/27 cases against a fresh PostgreSQL 16 container bound only to
+`127.0.0.1:55432`, with migrations through `0022`, a temporary local media root,
+and an injected/mocked R2 seam. No remote, development, or production database
+was touched; live R2/provider/AI/TTS/external URL calls were zero; and the
+disposable container was removed after verification. Phase 20D remains not
+started and UI activation is still deferred.
 
 No UI, picker, render, AI, Voice, Product, or URL-import flow is activated by
 20C.
