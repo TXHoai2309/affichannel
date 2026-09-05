@@ -44,6 +44,9 @@ process.env.AFFICHANNEL_M1_TEST_DATABASE_CONFIRM = "DISPOSABLE_DB_CONFIRMED";
 process.env.MEDIA_STORAGE_PROVIDER = "local";
 process.env.MEDIA_GRANT_SIGNING_SECRET =
 	"media-protected-api-test-secret-0123456789";
+const betterAuthTestSecret =
+	"media-protected-api-better-auth-secret-0123456789";
+process.env.BETTER_AUTH_SECRET = betterAuthTestSecret;
 process.env.BETTER_AUTH_URL = "http://127.0.0.1";
 process.env.CORS_ORIGIN = "http://127.0.0.1";
 process.env.MEDIA_IMAGE_MAX_BYTES = "1048576";
@@ -70,7 +73,7 @@ const { createNodePostgresPool } = await import(
 );
 const { drizzle } = await import("drizzle-orm/node-postgres");
 const { migrate } = await import("drizzle-orm/node-postgres/migrator");
-const { db, mediaAsset, project, user, workspace, workspaceMember } =
+const { db, mediaAsset, project, session, user, workspace, workspaceMember } =
 	await import("../packages/db/src/index.ts");
 const { eq } = await import("drizzle-orm");
 const { call } = await import(
@@ -98,8 +101,10 @@ const { createLocalMediaAssetGrant, verifyLocalMediaAssetGrant } = await import(
 const { sha256Bytes } = await import(
 	"../packages/api/src/media/media-asset-checksum.ts"
 );
-const { auth } = await import("@affichannel/auth");
 const { env } = await import("@affichannel/env/server");
+const { serializeSignedCookie } = await import(
+	"../node_modules/.pnpm/better-call@1.3.7_zod@4.4.3/node_modules/better-call/dist/cookies.mjs"
+);
 Object.assign(env as unknown as Record<string, unknown>, {
 	MEDIA_UPLOAD_TTL_MS: 900_000,
 	MEDIA_DOWNLOAD_TTL_MS: 300_000,
@@ -167,7 +172,6 @@ function mp4Fixture() {
 }
 
 const pool = createNodePostgresPool(authority.value);
-let restoreAuthSession: (() => void) | undefined;
 try {
 	await pool.query("drop schema public cascade");
 	await pool.query("drop schema if exists drizzle cascade");
@@ -201,6 +205,22 @@ try {
 			emailVerified: true,
 		},
 	]);
+	const sessionToken = `media-api-session-token-${randomUUID()}`;
+	await db.insert(session).values({
+		id: `media-api-session-${randomUUID()}`,
+		token: sessionToken,
+		userId: userA,
+		expiresAt: new Date(Date.now() + 60 * 60_000),
+		createdAt: new Date(),
+		updatedAt: new Date(),
+	});
+	const signedSessionCookie = await serializeSignedCookie(
+		"better-auth.session_token",
+		sessionToken,
+		betterAuthTestSecret,
+		{},
+	);
+	const routeHeaders = { cookie: signedSessionCookie };
 	await db.insert(workspaceMember).values([
 		{ id: randomUUID(), workspaceId: workspaceA, userId: userA },
 		{ id: randomUUID(), workspaceId: workspaceB, userId: userB },
@@ -245,34 +265,6 @@ try {
 	]);
 	const actorA = { workspaceId: workspaceA, userId: userA };
 	const actorB = { workspaceId: workspaceB, userId: userB };
-	const previousGetSession = auth.api.getSession;
-	(
-		auth.api as unknown as {
-			getSession: (options: unknown) => Promise<unknown>;
-		}
-	).getSession = async () => ({
-		user: {
-			id: userA,
-			name: "Media API A",
-			email: `${userA}@example.test`,
-			emailVerified: true,
-		},
-		session: {
-			id: `media-api-session-${randomUUID()}`,
-			token: `media-api-session-token-${randomUUID()}`,
-			userId: userA,
-			expiresAt: new Date(Date.now() + 60 * 60_000),
-			createdAt: new Date(),
-			updatedAt: new Date(),
-		},
-	});
-	restoreAuthSession = () => {
-		(
-			auth.api as unknown as {
-				getSession: typeof previousGetSession;
-			}
-		).getSession = previousGetSession;
-	};
 	const bytes = pngFixture();
 	const intent = {
 		mediaType: "image" as const,
@@ -367,19 +359,20 @@ try {
 	const uploaded = await mediaUploadPut(
 		new Request("http://127.0.0.1/api/media/upload/test", {
 			method: "PUT",
-			headers: { "content-type": "image/png" },
+			headers: { ...routeHeaders, "content-type": "image/png" },
 			body: bytes,
 		}),
 		{ params: Promise.resolve({ token: uploadToken }) },
 	);
+	const uploadedFailure = uploaded.status === 201 ? "" : await uploaded.text();
 	assert(
 		uploaded.status === 201,
-		"authenticated local upload PUT must succeed",
+		`authenticated local upload PUT must succeed (status=${uploaded.status}; body=${uploadedFailure})`,
 	);
 	const uploadReplay = await mediaUploadPut(
 		new Request("http://127.0.0.1/api/media/upload/test", {
 			method: "PUT",
-			headers: { "content-type": "image/png" },
+			headers: { ...routeHeaders, "content-type": "image/png" },
 			body: bytes,
 		}),
 		{ params: Promise.resolve({ token: uploadToken }) },
@@ -478,7 +471,9 @@ try {
 		"local download route must require an authenticated session",
 	);
 	const downloaded = await mediaDownloadGet(
-		new Request("http://127.0.0.1/api/media/download/test"),
+		new Request("http://127.0.0.1/api/media/download/test", {
+			headers: routeHeaders,
+		}),
 		{ params: Promise.resolve({ token: download.urlOrToken }) },
 	);
 	assert(
@@ -940,7 +935,6 @@ try {
 		"Protected Media API/service matrix (prepare, local flow, finalize, list/get, download, links, rights, isolation, token security): PASS",
 	);
 } finally {
-	restoreAuthSession?.();
 	await pool.end();
 	await rm(localRoot, { recursive: true, force: true });
 }
