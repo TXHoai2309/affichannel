@@ -162,6 +162,7 @@ const pool = createNodePostgresPool(authority.value);
 let restoreAuthSession: (() => void) | undefined;
 try {
 	await pool.query("drop schema public cascade");
+	await pool.query("drop schema if exists drizzle cascade");
 	await pool.query("create schema public");
 	await migrate(drizzle(pool), {
 		migrationsFolder: resolve("packages/db/src/migrations"),
