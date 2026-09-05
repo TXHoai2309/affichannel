@@ -99,6 +99,14 @@ const { sha256Bytes } = await import(
 	"../packages/api/src/media/media-asset-checksum.ts"
 );
 const { auth } = await import("@affichannel/auth");
+const { env } = await import("@affichannel/env/server");
+Object.assign(env as unknown as Record<string, unknown>, {
+	MEDIA_UPLOAD_TTL_MS: 900_000,
+	MEDIA_DOWNLOAD_TTL_MS: 300_000,
+	MEDIA_IMAGE_MAX_BYTES: 1_048_576,
+	MEDIA_VIDEO_MAX_BYTES: 1_048_576,
+	MEDIA_AUDIO_MAX_BYTES: 1_048_576,
+});
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
