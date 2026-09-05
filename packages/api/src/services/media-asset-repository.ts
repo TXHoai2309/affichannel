@@ -21,6 +21,7 @@ import {
 	and,
 	desc,
 	eq,
+	exists,
 	ilike,
 	inArray,
 	isNotNull,
@@ -218,6 +219,7 @@ export async function listMediaAssets(
 	input: {
 		cursor?: string;
 		limit: number;
+		projectId?: string;
 		mediaType?: MediaType;
 		status?: MediaAsset["status"];
 		archiveScope: "activeOnly" | "archivedOnly" | "all";
@@ -226,6 +228,22 @@ export async function listMediaAssets(
 	},
 ) {
 	const conditions = [eq(mediaAsset.workspaceId, actor.workspaceId)];
+	if (input.projectId) {
+		conditions.push(
+			exists(
+				db
+					.select({ id: mediaAssetLink.id })
+					.from(mediaAssetLink)
+					.where(
+						and(
+							eq(mediaAssetLink.workspaceId, actor.workspaceId),
+							eq(mediaAssetLink.projectId, input.projectId),
+							eq(mediaAssetLink.mediaAssetId, mediaAsset.id),
+						),
+					),
+			),
+		);
+	}
 	if (input.archiveScope === "activeOnly")
 		conditions.push(isNull(mediaAsset.archivedAt));
 	if (input.archiveScope === "archivedOnly")

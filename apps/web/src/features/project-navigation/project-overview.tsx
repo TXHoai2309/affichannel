@@ -13,6 +13,8 @@ import { ArrowRight, CircleAlert } from "lucide-react";
 import type { Route } from "next";
 import Link from "next/link";
 
+import { ProjectMediaPanel } from "@/features/media/project-media-panel";
+
 import { getAdaptiveWorkflowOverviewPresentation } from "./adaptive-workflow-presentation";
 
 type ProjectOverviewProps = {
@@ -20,6 +22,7 @@ type ProjectOverviewProps = {
 	project: {
 		name: string;
 		productName: string;
+		contentType?: "ORGANIC" | "AFFILIATE";
 		brief: {
 			platform: "tiktok";
 			goal: string;
@@ -128,6 +131,11 @@ export default function ProjectOverview({
 					</CardContent>
 				</Card>
 			</div>
+
+			<ProjectMediaPanel
+				contentType={project.contentType ?? "ORGANIC"}
+				projectId={projectId}
+			/>
 		</section>
 	);
 }

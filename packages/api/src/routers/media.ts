@@ -43,6 +43,7 @@ const finalizeSchema = z.object({
 const listSchema = z.object({
 	cursor: z.string().optional(),
 	limit: z.number().int().min(1).max(100).default(30),
+	projectId: idSchema.optional(),
 	mediaType: z.enum(mediaAssetMediaTypes).optional(),
 	status: mediaAssetStatusSchema.optional(),
 	archiveScope: z

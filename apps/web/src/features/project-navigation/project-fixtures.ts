@@ -9,6 +9,7 @@ export type DemoProject = {
 	id: string;
 	name: string;
 	productName: string;
+	contentType: "ORGANIC" | "AFFILIATE";
 	workflow: AdaptiveWorkflowReadModel;
 	brief: {
 		platform: "tiktok";
@@ -59,6 +60,7 @@ export const DEMO_PROJECT: DemoProject = {
 	id: "demo",
 	name: "Video Affiliate Tai nghe",
 	productName: "Tai nghe không dây",
+	contentType: "AFFILIATE",
 	workflow: createDemoWorkflow(),
 	brief: {
 		platform: "tiktok",

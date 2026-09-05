@@ -183,6 +183,11 @@ export function getMediaErrorMessage(
 			return "Kho lưu trữ hiện không sẵn sàng. Hãy thử lại sau.";
 		case "MEDIA_ASSET_UPLOAD_NOT_ALLOWED":
 			return "Phiên tải lên không còn hợp lệ. Hãy bắt đầu lại.";
+		case "MEDIA_ASSET_RIGHTS_NOT_ELIGIBLE":
+			return "Không đủ quyền sử dụng cho nội dung Affiliate.";
+		case "MEDIA_ASSET_NOT_FOUND":
+		case "MEDIA_ASSET_WORKSPACE_MISMATCH":
+			return "Media không còn khả dụng trong workspace này.";
 		case "MEDIA_ASSET_NOT_READY":
 			return "Media chưa sẵn sàng cho thao tác này.";
 		case "MEDIA_ASSET_DOWNLOAD_NOT_ALLOWED":

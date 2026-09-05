@@ -45,6 +45,8 @@ export default async function ProjectOverviewPage({
 		<ProjectOverview
 			projectId={project.id}
 			project={{
+				contentType:
+					project.contentType === "AFFILIATE" ? "AFFILIATE" : "ORGANIC",
 				name: project.name,
 				productName: project.product.name,
 				brief: project.brief,
