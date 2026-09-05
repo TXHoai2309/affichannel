@@ -49,6 +49,8 @@ process.env.CORS_ORIGIN = "http://127.0.0.1";
 process.env.MEDIA_IMAGE_MAX_BYTES = "1048576";
 process.env.MEDIA_VIDEO_MAX_BYTES = "1048576";
 process.env.MEDIA_AUDIO_MAX_BYTES = "1048576";
+process.env.MEDIA_UPLOAD_TTL_MS = "900000";
+process.env.MEDIA_DOWNLOAD_TTL_MS = "300000";
 for (const key of [
 	"DATABASE_URL",
 	"DATABASE_URL_DIRECT",
