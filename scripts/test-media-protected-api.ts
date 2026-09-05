@@ -44,6 +44,8 @@ process.env.AFFICHANNEL_M1_TEST_DATABASE_CONFIRM = "DISPOSABLE_DB_CONFIRMED";
 process.env.MEDIA_STORAGE_PROVIDER = "local";
 process.env.MEDIA_GRANT_SIGNING_SECRET =
 	"media-protected-api-test-secret-0123456789";
+process.env.BETTER_AUTH_URL = "http://127.0.0.1";
+process.env.CORS_ORIGIN = "http://127.0.0.1";
 for (const key of [
 	"DATABASE_URL",
 	"DATABASE_URL_DIRECT",
@@ -53,6 +55,10 @@ for (const key of [
 	"R2_SECRET_ACCESS_KEY",
 ])
 	delete process.env[key];
+const localRoot = await mkdtemp(
+	join(tmpdir(), "affichannel-media-protected-api-"),
+);
+process.env.MEDIA_LOCAL_ROOT = localRoot;
 
 const { createNodePostgresPool } = await import(
 	"../packages/db/src/node-postgres-test-adapter.ts"
@@ -62,7 +68,9 @@ const { migrate } = await import("drizzle-orm/node-postgres/migrator");
 const { db, mediaAsset, project, user, workspace, workspaceMember } =
 	await import("../packages/db/src/index.ts");
 const { eq } = await import("drizzle-orm");
-const { call } = await import("@orpc/server");
+const { call } = await import(
+	"../packages/api/node_modules/@orpc/server/dist/index.mjs"
+);
 const { appRouter } = await import("../packages/api/src/routers/index.ts");
 const { PUT: mediaUploadPut } = await import(
 	"../apps/web/src/app/api/media/upload/[token]/route.ts"
@@ -85,6 +93,7 @@ const { verifyLocalMediaAssetGrant } = await import(
 const { sha256Bytes } = await import(
 	"../packages/api/src/media/media-asset-checksum.ts"
 );
+const { auth } = await import("@affichannel/auth");
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -145,10 +154,7 @@ function mp4Fixture() {
 }
 
 const pool = createNodePostgresPool(authority.value);
-const localRoot = await mkdtemp(
-	join(tmpdir(), "affichannel-media-protected-api-"),
-);
-process.env.MEDIA_LOCAL_ROOT = localRoot;
+let restoreAuthSession: (() => void) | undefined;
 try {
 	await pool.query("drop schema public cascade");
 	await pool.query("create schema public");
@@ -225,6 +231,34 @@ try {
 	]);
 	const actorA = { workspaceId: workspaceA, userId: userA };
 	const actorB = { workspaceId: workspaceB, userId: userB };
+	const previousGetSession = auth.api.getSession;
+	(
+		auth.api as unknown as {
+			getSession: (options: unknown) => Promise<unknown>;
+		}
+	).getSession = async () => ({
+		user: {
+			id: userA,
+			name: "Media API A",
+			email: `${userA}@example.test`,
+			emailVerified: true,
+		},
+		session: {
+			id: `media-api-session-${randomUUID()}`,
+			token: `media-api-session-token-${randomUUID()}`,
+			userId: userA,
+			expiresAt: new Date(Date.now() + 60 * 60_000),
+			createdAt: new Date(),
+			updatedAt: new Date(),
+		},
+	});
+	restoreAuthSession = () => {
+		(
+			auth.api as unknown as {
+				getSession: typeof previousGetSession;
+			}
+		).getSession = previousGetSession;
+	};
 	const bytes = pngFixture();
 	const intent = {
 		mediaType: "image" as const,
@@ -316,12 +350,30 @@ try {
 		"local upload route must require an authenticated session",
 	);
 	const storage = createMediaAssetStorage("local");
-	await storage.put({
-		storageKey: payload.storageKey,
-		body: bytes,
-		contentType: "image/png",
-		checksumSha256: sha256Bytes(bytes),
-	});
+	const uploaded = await mediaUploadPut(
+		new Request("http://127.0.0.1/api/media/upload/test", {
+			method: "PUT",
+			headers: { "content-type": "image/png" },
+			body: bytes,
+		}),
+		{ params: Promise.resolve({ token: uploadToken }) },
+	);
+	assert(
+		uploaded.status === 201,
+		"authenticated local upload PUT must succeed",
+	);
+	const uploadReplay = await mediaUploadPut(
+		new Request("http://127.0.0.1/api/media/upload/test", {
+			method: "PUT",
+			headers: { "content-type": "image/png" },
+			body: bytes,
+		}),
+		{ params: Promise.resolve({ token: uploadToken }) },
+	);
+	assert(
+		uploadReplay.status === 409,
+		"local upload PUT replay must be rejected",
+	);
 	const finalized = await service.finalizeMediaAssetUpload(actorA, {
 		assetId: prepared.assetId,
 		uploadSessionId: prepared.uploadSessionId,
@@ -410,6 +462,18 @@ try {
 	assert(
 		unauthenticatedDownload.status === 401,
 		"local download route must require an authenticated session",
+	);
+	const downloaded = await mediaDownloadGet(
+		new Request("http://127.0.0.1/api/media/download/test"),
+		{ params: Promise.resolve({ token: download.urlOrToken }) },
+	);
+	assert(
+		downloaded.status === 200,
+		"authenticated local download GET must succeed",
+	);
+	assert(
+		Buffer.from(await downloaded.arrayBuffer()).equals(Buffer.from(bytes)),
+		"local download GET bytes must equal upload PUT bytes",
 	);
 	assert(
 		await storage
@@ -748,6 +812,7 @@ try {
 		"Protected Media API/service matrix (prepare, local flow, finalize, list/get, download, links, rights, isolation, token security): PASS",
 	);
 } finally {
+	restoreAuthSession?.();
 	await pool.end();
 	await rm(localRoot, { recursive: true, force: true });
 }
