@@ -6,7 +6,7 @@ import { join, resolve } from "node:path";
 const URL_ENV = "AFFICHANNEL_MEDIA_TEST_DATABASE_URL";
 const CONFIRM_ENV = "AFFICHANNEL_MEDIA_TEST_DATABASE_CONFIRM";
 const CONFIRM_VALUE = "DISPOSABLE_MEDIA_TEST_DB_CONFIRMED";
-const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost"]);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1"]);
 
 function requireAuthority() {
 	const value = process.env[URL_ENV]?.trim();

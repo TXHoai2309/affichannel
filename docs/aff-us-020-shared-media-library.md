@@ -41,10 +41,11 @@ metadata as authority.
 Implementation verification for this slice: full workspace type-check, Next
 production build, Biome check, and the complete web Vitest suite (58 files / 544
 tests) pass. The mandatory disposable PostgreSQL acceptance matrix is guarded by
-`AFFICHANNEL_MEDIA_TEST_DATABASE_URL` plus its explicit disposable confirmation,
-and has not yet passed; no remote, development, or production database was
-touched and no migration was created in 20C. Phase 20D remains blocked until
-that matrix and the post-acceptance regression gate pass.
+`AFFICHANNEL_MEDIA_TEST_DATABASE_URL` plus its explicit disposable confirmation
+and is implemented in `scripts/test-media-protected-api.ts`, but it has not yet
+passed; no remote, development, or production database was touched and no
+migration was created in 20C. Phase 20D remains blocked until that matrix and
+the post-acceptance regression gate pass.
 
 No UI, picker, render, AI, Voice, Product, or URL-import flow is activated by
 20C.
