@@ -90,7 +90,7 @@ const { createMediaAssetStorage } = await import(
 const { R2MediaAssetStorage } = await import(
 	"../packages/api/src/media/media-asset-storage.ts"
 );
-const { verifyLocalMediaAssetGrant } = await import(
+const { createLocalMediaAssetGrant, verifyLocalMediaAssetGrant } = await import(
 	"../packages/api/src/media/media-asset-grants.ts"
 );
 const { sha256Bytes } = await import(
@@ -864,6 +864,20 @@ try {
 	);
 	await expectRejected("Wrong-purpose token", async () =>
 		verifyLocalMediaAssetGrant(uploadToken, "download"),
+	);
+	const expiredToken = createLocalMediaAssetGrant({
+		purpose: "upload",
+		workspaceId: workspaceA,
+		assetId: prepared.assetId,
+		storageKey: payload.storageKey,
+		uploadSessionId: prepared.uploadSessionId,
+		contentType: "image/png",
+		byteSize: bytes.byteLength,
+		strictByteSize: true,
+		expiresAt: Date.now() - 1,
+	});
+	await expectRejected("Expired token", async () =>
+		verifyLocalMediaAssetGrant(expiredToken, "upload"),
 	);
 	let mockedR2PresignCalls = 0;
 	const mockedR2 = new R2MediaAssetStorage({
