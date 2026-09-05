@@ -1,13 +1,13 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20C PASS — protected media APIs accepted; UI remains deferred**
+- Status: **20C IMPLEMENTATION COMPLETE — ACCEPTANCE BLOCKED; UI remains deferred**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
 - Starting HEAD: `e0ea2f16b3d3f00244752b7a0d00d07652f0e87c`
 - Scope: architecture contract, persistence/storage foundation, and protected API layer
 - Explicitly not implemented: public media APIs, upload UI, picker, project import/cutover, Quick Image, Media First, Video Studio/render, live R2
 
-## Phase 20C acceptance — protected media APIs
+## Phase 20C acceptance — blocked pending disposable PostgreSQL matrix
 
 Phase 20C adds the protected server API layer on top of the accepted 20B
 foundation. `appRouter.media` now exposes workspace-scoped `list`, `get`,
@@ -38,14 +38,16 @@ metadata as authority.
 - Project links are same-workspace and READY-only. Affiliate links require
   `owned` or `licensed` rights; Organic links have no additional rights gate.
 
-Verification for this slice: full workspace type-check, Next production build,
-Biome check, and the complete web Vitest suite (58 files / 544 tests) pass. The
-dedicated disposable PostgreSQL acceptance script remains guarded by its
-required `AFFICHANNEL_MEDIA_TEST_DATABASE_URL`; no remote, development, or
-production database was touched and no migration was created in 20C.
+Implementation verification for this slice: full workspace type-check, Next
+production build, Biome check, and the complete web Vitest suite (58 files / 544
+tests) pass. The mandatory disposable PostgreSQL acceptance matrix is guarded by
+`AFFICHANNEL_MEDIA_TEST_DATABASE_URL` plus its explicit disposable confirmation,
+and has not yet passed; no remote, development, or production database was
+touched and no migration was created in 20C. Phase 20D remains blocked until
+that matrix and the post-acceptance regression gate pass.
 
-Phase 20D may now activate the Media Library UI; no UI, picker, render, AI,
-Voice, Product, or URL-import flow is activated by 20C.
+No UI, picker, render, AI, Voice, Product, or URL-import flow is activated by
+20C.
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions for the persistence/storage and protected API slices.

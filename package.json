@@ -74,6 +74,7 @@
 		"test:integration:voice-preview": "tsx scripts/test-voice-preview.ts",
 		"test:integration:voice-segment": "tsx scripts/test-voice-segment-foundation.ts",
 		"test:integration:media-asset": "tsx scripts/test-media-asset-foundation.ts",
+		"test:integration:media-protected-api": "tsx scripts/test-media-protected-api.ts",
 		"test:integration:voice-segment-runtime": "tsx scripts/test-voice-segment-runtime.ts",
 		"test:live:tts": "tsx scripts/test-voice-preview-live.ts",
 		"deploy:setup": "vercel link",

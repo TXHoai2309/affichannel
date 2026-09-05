@@ -12,7 +12,8 @@
   19E.1 Organic UX activation PASS; 19E.2 E2E/manual final acceptance PASS;
   AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
-  20B MediaAsset persistence/storage foundation PASS; 20C protected APIs PASS;
+  20B MediaAsset persistence/storage foundation PASS; 20C protected API
+  implementation complete, acceptance blocked;
   20D–20E not started.
 - Cập nhật lần cuối: 2026-09-05
 
@@ -2103,7 +2104,7 @@ Trạng thái: **AFF-US-012 Phase 2 hardening đã triển khai, chờ review/ac
 
 Trạng thái: **AFF-US-012 Phase 3 đã triển khai, chờ review/acceptance; Phase 4 chưa bắt đầu.**
 
-### 2026-09-05 — AFF-US-020 Phase 20C Protected Media APIs
+### 2026-09-05 — AFF-US-020 Phase 20C Protected Media APIs (implementation complete; acceptance blocked)
 
 - Added protected workspace-scoped MediaAsset procedures for prepare/upload,
   finalize, list/get, metadata, archive, private download, and Project links.
@@ -2114,5 +2115,5 @@ Trạng thái: **AFF-US-012 Phase 3 đã triển khai, chờ review/acceptance; 
 - No migration/schema change, public delete/purge, arbitrary URL import, UI,
   picker, AI, Voice, Product, or render activation.
 - Verification: web Vitest 58 files/544 tests, full check-types, build, Biome,
-  and diff-check pass. Disposable DB acceptance requires the guarded media test
-  database environment and was not run against remote/dev/prod.
+  and diff-check pass. The guarded disposable DB acceptance harness is present,
+  but the mandatory matrix has not passed; it has not run against remote/dev/prod.

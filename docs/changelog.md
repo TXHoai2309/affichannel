@@ -891,7 +891,7 @@ Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.
 - Bổ sung core, integration và authenticated Playwright proof. Không tạo migration,
   không thêm TTS/render artifact, không gọi paid AI và không triển khai US sau.
 
-### 2026-09-05 — AFF-US-020 Phase 20C
+### 2026-09-05 — AFF-US-020 Phase 20C implementation complete; acceptance blocked
 
 - Protected MediaAsset API surface is implemented: prepare/finalize, library
   reads, metadata/archive, private download, and Project link/unlink.
@@ -901,3 +901,5 @@ Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.
   idempotency, cursor/filter/search support, expiry and typed cleanup paths.
 - No schema/migration, UI, public purge/delete, URL import, AI, Voice, Product,
   or render flow activation.
+- The guarded disposable PostgreSQL protected-API matrix is required for
+  acceptance and remains pending; Phase 20D is not authorized.
