@@ -13,9 +13,30 @@
   AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
   20B MediaAsset persistence/storage foundation PASS; 20C protected API
-  acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS;
-  20E Project Reuse / E2E / Manual Acceptance is next.
+  acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
+  Project Reuse / Final Technical Acceptance PASS; user manual UAT pending.
 - Cập nhật lần cuối: 2026-09-05
+
+## 2026-09-05 — AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
+
+Starting from exact HEAD `f439406a111ca25b608b12700611997b48850568` on `TXH`,
+the existing Project Overview now exposes a protected Project media reuse
+panel. The picker uses server-scoped `media.list` search/type/cursor results;
+link and unlink send only `{ assetId, projectId }`; READY is required for new
+links; Affiliate unknown/restricted rights are visible-disabled; and archived
+historical links remain visible. The same READY asset was reused by Organic and
+Affiliate Projects, then unlinked from one without deleting the asset.
+
+Verification passed: 61 web test files / 559 tests, full type-check, production
+build, scoped Biome, diff check, and the guarded 20C protected-media matrix
+27/27 on a fresh loopback PostgreSQL container. Playwright fallback (Browser
+plugin unavailable) passed desktop/mobile Project Overview rendering, protected
+preview, F5 persistence, archive/reference protection, search-empty behavior,
+request-intent checks, console health, and mobile overflow checks. No
+`media_metadata` bridge, workflow applicability change, remote/dev/prod DB,
+live R2, AI/TTS, or external URL call was used. Disposable DB and local media
+objects were removed after verification. User manual UAT remains pending; do
+not start US021.
 
 ## 2026-09-05 — AFF-US-020 Phase 20D Media Library UI acceptance PASS
 

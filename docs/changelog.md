@@ -10,6 +10,26 @@ Cập nhật lần cuối: 2026-09-05.
 
 ## Chưa phát hành
 
+### AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
+
+- Added the Project Overview “Tài nguyên media” reuse panel and picker using
+  protected `media.list` search/type/cursor results. Existing READY assets can
+  be linked with `media.linkToProject` and unlinked with
+  `media.unlinkFromProject`; the same asset can serve Organic and Affiliate
+  Projects without duplication.
+- Enforced client-visible eligibility guidance while keeping the server as
+  authority: new links require READY, Affiliate requires owned/licensed rights,
+  unknown/restricted rows are visible-disabled, and archived historical links
+  remain readable. Protected preview/download grants are requested on demand;
+  no upload, archive, delete, purge, URL import, or workflow applicability
+  change was added to the Project surface.
+- Acceptance passed: 61 web test files / 559 tests, type-check, build, Biome,
+  diff check, and the guarded 20C matrix 27/27. Playwright desktop/mobile
+  E2E proved two-Project reuse, unlink isolation, F5 persistence, archive
+  reference protection, intent-only payloads, and clean console. No
+  `media_metadata` bridge or external/provider call was used; user manual UAT
+  remains pending and US021 must not start.
+
 ### AFF-US-020 Phase 20B MediaAsset persistence/storage foundation PASS
 
 - Added additive migration `0022_furry_sharon_carter.sql` for workspace-owned

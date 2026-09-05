@@ -1,11 +1,11 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20D MEDIA LIBRARY UI = PASS; 20E PROJECT REUSE / E2E / MANUAL ACCEPTANCE = NEXT**
+- Status: **20E PROJECT REUSE / FINAL TECHNICAL ACCEPTANCE = PASS; USER MANUAL UAT = PENDING**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
-- Starting HEAD: `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df`
-- Scope: architecture contract, persistence/storage foundation, protected APIs, and the Media Library UI
-- Explicitly not implemented: Project picker/reuse UX, Script Studio media integration, Quick Image, Media First, Video Studio/render, Product/Voice automatic imports, AI media generation, hard delete/purge, URL import, live R2
+- Starting HEAD: `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df` (20A snapshot); 20E acceptance HEAD: `f439406a111ca25b608b12700611997b48850568`
+- Scope: architecture contract, persistence/storage foundation, protected APIs, Media Library UI, and Project-level media reuse
+- Explicitly not implemented: Script Studio media integration, Quick Image, Media First, Video Studio/render, Product/Voice automatic imports, AI media generation, hard delete/purge, URL import, live R2
 
 ## Phase 20C acceptance — PASS
 
@@ -112,7 +112,62 @@ READY. Console and page-error checks were clean; evidence remains outside the
 repository at `D:\Temp\media-20d-rendered-qa\media-upload-in-progress.png` and
 `D:\Temp\media-20d-rendered-qa\media-upload-in-progress-ready.png`.
 
-20D is accepted. Next scope is 20E Project Reuse / E2E / Manual Acceptance.
+20D is accepted; 20E final technical acceptance is recorded below.
+
+## Phase 20E acceptance — Project Reuse / Final Technical Acceptance PASS
+
+Phase 20E adds the smallest Project-level reuse surface: a protected “Tài
+nguyên media” panel on the existing Project Overview. It links existing READY
+`MediaAsset` rows; it does not add Project creation, a new workflow step, or a
+second upload pipeline.
+
+- The picker calls `media.list` with the current `projectId`, search, media-type
+  filter, and opaque cursor pagination. It shows already-linked assets as
+  disabled and offers “Tải thêm” without duplicating rows.
+- Link and unlink use only `media.linkToProject({ assetId, projectId })` and
+  `media.unlinkFromProject({ assetId, projectId })`. Unlink removes only the
+  relationship; the asset, bytes, metadata, and links from other Projects stay
+  intact. There is no archive, delete, purge, upload, URL import, or AI action
+  in the Project panel.
+- New links are limited to active READY assets. Affiliate rows are enabled only
+  for server-confirmed `owned` or `licensed` rights; unknown/restricted rows
+  remain visible but disabled and the server remains the final authority.
+  Archived/non-READY assets cannot be newly linked, while an existing archived
+  relationship remains visible as historical reference.
+- Preview/download uses the protected `media.getDownload` grant on demand. No
+  storage key, credential, public URL, or authority field is sent from the
+  client. Query refresh follows every link/unlink/archive mutation, and F5
+  reload returns the persisted server state.
+- The same READY asset was linked to both an Organic and an Affiliate Project,
+  then unlinked from only one Project. The browser run proved one asset ID,
+  two link intents, one unlink intent, and one upload prepare (no duplicate
+  upload or `media_metadata` bridge).
+
+Owner manual UAT checklist (pending):
+
+- US019: confirm Organic Scripted Standard still supports claimless/general
+  creation, Product escalation, and Voice applicability without changing its
+  existing workflow rules.
+- US020: upload one image, video, and audio in Media Library; verify protected
+  preview/download, metadata edit, archive, and READY/failed states.
+- US020 reuse: add the same READY asset to Organic and Affiliate Projects,
+  verify Affiliate owned/licensed gating, unlink one Project, reload with F5,
+  and confirm the other Project and archived historical relation remain intact.
+
+Technical verification on 2026-09-05: `pnpm --filter web test` passed 61 files /
+559 tests; workspace type-check, production build, scoped Biome, and diff check
+passed. Because the backend list query gained only the optional project filter,
+the guarded protected-media matrix was rerun and passed 27/27 on a fresh
+loopback PostgreSQL container. Playwright rendered QA (Browser plugin
+unavailable) passed desktop 1440×1000 and mobile 375×812 Project Overview
+reuse, protected preview, F5 persistence, same-asset two-Project reuse,
+archive/reference protection, search-empty behavior, request-intent checks,
+console health, and no-horizontal-overflow. The disposable DB/container and
+temporary uploaded objects were removed after the run; no remote/dev/prod DB,
+live R2, AI/TTS, or external URL call was used.
+
+User manual UAT is intentionally still pending. The owner must run the final
+US019 + US020 checklist before starting US021.
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions for the persistence/storage and protected API slices.
@@ -665,8 +720,8 @@ At the 20A snapshot, `/media` could remain the current placeholder. The planned
 grid/list with upload CTA, image/video/audio filters, display-name/tag search,
 asset detail, archive action, and a reuse picker. It must distinguish pending,
 failed, ready, and archived states and must not expose storage keys or credentials.
-No visual redesign or activation occurred in 20A; the later 20D acceptance is
-documented above, while the reuse picker remains deferred to 20E.
+No visual redesign or activation occurred in 20A; the later 20D and 20E
+acceptances are documented above.
 
 ## 15. Implementation phases after 20A
 
@@ -675,7 +730,7 @@ documented above, while the reuse picker remains deferred to 20E.
 | 20B | `MediaAsset`/`MediaAssetLink` persistence, checks/indexes, core vocabulary, media storage adapter, local/R2 config, bounded validators. | Migration reviewed; adapter/validator contract tests; no public UI cutover. |
 | 20C | Prepare/finalize/download/list/get/update/archive APIs, idempotency, typed failure/cleanup semantics, cursor/search. | Protected API integration matrix against disposable DB + local adapter; R2 client injected/mocked. |
 | 20D | Activate `/media` library UI: grid/list, filters/search, upload state, details/archive. | Browser/manual UX and persistence checks; keys/credentials absent from client. |
-| 20E | Project linking/reuse picker, Organic/Affiliate handoff, US021-ready image selection, E2E/manual acceptance. | Workspace isolation, two-project reuse, archive/reference protection, F5 and local/R2 adapter proof. |
+| 20E | Project linking/reuse picker, Organic/Affiliate handoff, US021-ready image selection, E2E/manual acceptance. | **Accepted:** workspace isolation, two-project reuse, archive/reference protection, F5, protected grants, and local adapter proof. |
 
 Quick Image/Video Studio/render worker and US028 AI Visual remain outside 20A.
 
