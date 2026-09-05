@@ -276,6 +276,13 @@ async function cleanupMediaAsset(asset: MediaAsset) {
 	}
 }
 
+function postgresErrorCode(error: unknown): string | undefined {
+	if (!error || typeof error !== "object") return undefined;
+	const candidate = error as { code?: unknown; cause?: unknown };
+	if (typeof candidate.code === "string") return candidate.code;
+	return postgresErrorCode(candidate.cause);
+}
+
 export async function prepareMediaAssetUpload(
 	actor: WorkspaceActor,
 	rawInput: {
@@ -373,7 +380,7 @@ export async function prepareMediaAssetUpload(
 			tags,
 		});
 	} catch (error) {
-		const pgCode = (error as { code?: string }).code;
+		const pgCode = postgresErrorCode(error);
 		if (pgCode === "23505") {
 			const raced = await findMediaAssetByPrepareIdempotencyKey(
 				actor,
