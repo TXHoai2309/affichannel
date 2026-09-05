@@ -1,6 +1,6 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20E PROJECT REUSE / FINAL TECHNICAL ACCEPTANCE = PASS; USER MANUAL UAT = PENDING**
+- Status: **20E PROJECT REUSE / FINAL TECHNICAL ACCEPTANCE = PASS; OWNER MANUAL UAT = IN PROGRESS**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
 - Starting HEAD: `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df` (20A snapshot); 20E acceptance HEAD: `f439406a111ca25b608b12700611997b48850568`
@@ -170,8 +170,27 @@ this run additionally proved upload → READY before reuse. The disposable
 DB/container and temporary uploaded objects were removed after the run; no
 remote/dev/prod DB, live R2, AI/TTS, or external URL call was used.
 
-User manual UAT is intentionally still pending. The owner must run the final
-US019 + US020 checklist before starting US021.
+Owner manual UAT is intentionally not auto-completed. The owner must run the
+final US019 + US020 checklist before starting US021.
+
+## Manual UAT fix-forward — Organic Script presentation
+
+Owner UAT found two presentation-only defects in Organic + Scripted +
+`SCRIPTED_STANDARD` v1 with no Product after successful claimless generation.
+The shared renderer always showed the candidate-claim Fact Lock warning, and it
+treated the contract-valid empty Organic disclosure string as an invalid section.
+
+The fix now derives presentation from the canonical project identity and current
+claim inventory: claimless/GENERAL-only Organic shows
+“Không có claim cần kiểm tra.” with no Fact Lock warning, while confirmed
+PRODUCT claims retain the real Fact Lock presentation. Affiliate disclosure and
+Fact Lock behavior remain unchanged; genuinely applicable malformed sections
+still use the repair message. No schema, migration, API, resolver, Fact Lock
+runtime, or provider behavior changed.
+
+Owner Manual UAT: **IN PROGRESS**. Technical acceptance for US019 and US020
+remains valid; this fix-forward is ready for the owner to resume the manual
+check from the Organic Script result.
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions for the persistence/storage and protected API slices.

@@ -1,3 +1,4 @@
+import { summarizeClaimInventory } from "@affichannel/core";
 import type {
 	PartialScriptDraft,
 	ScriptGenerationArtifact,
@@ -101,6 +102,63 @@ export function isGenerationContextReady(model: ScriptGenerationReadModel) {
 
 export function isOrganicScriptedContext(model: ScriptGenerationReadModel) {
 	return model.context.sourceMode === "ORGANIC_NO_PRODUCT";
+}
+
+export type ScriptPresentationIdentity = Readonly<{
+	contentType: string | null;
+	creationPath: string | null;
+}>;
+
+export function getScriptPresentationIdentity(input: {
+	project?: {
+		contentType?: string;
+		creationPath?: string;
+	};
+	sourceMode?: string;
+}): ScriptPresentationIdentity {
+	const organicNoProduct = input.sourceMode === "ORGANIC_NO_PRODUCT";
+	return {
+		contentType:
+			input.project?.contentType ?? (organicNoProduct ? "ORGANIC" : null),
+		creationPath:
+			input.project?.creationPath ?? (organicNoProduct ? "SCRIPTED" : null),
+	};
+}
+
+export type ScriptPresentationState = Readonly<{
+	factLock: "NOT_REQUIRED" | "REQUIRED" | "UNKNOWN";
+	disclosure: "NOT_REQUIRED" | "REQUIRED";
+}>;
+
+/**
+ * Maps canonical project identity plus the current claim inventory to copy
+ * decisions. This is presentation-only: the Applicability Resolver remains
+ * authoritative for workflow gating and Fact Lock execution.
+ */
+export function getScriptPresentationState(input: {
+	identity: ScriptPresentationIdentity;
+	claimsStatus: string;
+	claims: unknown;
+}): ScriptPresentationState {
+	const contentType = input.identity.contentType;
+	const creationPath = input.identity.creationPath;
+	if (contentType !== "ORGANIC" || creationPath !== "SCRIPTED") {
+		return { factLock: "REQUIRED", disclosure: "REQUIRED" };
+	}
+
+	const summary = summarizeClaimInventory({
+		contentType,
+		creationPath,
+		claimsStatus: input.claimsStatus,
+		claims: input.claims,
+	});
+	const factLock =
+		summary.status === "CURRENT" && summary.productClaimState === "NONE"
+			? "NOT_REQUIRED"
+			: summary.status === "CURRENT" && summary.productClaimState === "PRESENT"
+				? "REQUIRED"
+				: "UNKNOWN";
+	return { factLock, disclosure: "NOT_REQUIRED" };
 }
 
 export function isLatestUsableArtifactInvalidated(

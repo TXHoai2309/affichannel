@@ -70,6 +70,8 @@ import {
 	getScriptClaimRefreshErrorMessage,
 	getScriptClaimRefreshResultMessage,
 	getScriptGenerationErrorMessage,
+	getScriptPresentationIdentity,
+	getScriptPresentationState,
 	getScriptStudioCtaState,
 	getStudioStatus,
 	hasNewerScriptGeneration,
@@ -739,6 +741,14 @@ function ScriptOutput({
 	repairPending: boolean;
 }) {
 	const output = artifact.output;
+	const presentation = getScriptPresentationState({
+		identity: getScriptPresentationIdentity({
+			project: artifact.inputSnapshot.project,
+			sourceMode: artifact.inputSnapshot.sourceMode,
+		}),
+		claims: output?.claims,
+		claimsStatus: "current",
+	});
 	const repair = (section: ScriptGenerationSection) =>
 		canRepair(section) && artifact.invalidSections.includes(section)
 			? () => onRepair(section)
@@ -889,21 +899,23 @@ function ScriptOutput({
 				)}
 			</OutputCard>
 
-			<OutputCard
-				artifact={artifact}
-				section="disclosure"
-				onRepair={repair("disclosure")}
-				repairPending={repairPending}
-			>
-				{output?.disclosure ? (
-					<CopyableText
-						label="Disclosure affiliate"
-						value={output.disclosure}
-					/>
-				) : (
-					<InvalidSectionMessage />
-				)}
-			</OutputCard>
+			{presentation.disclosure === "REQUIRED" ? (
+				<OutputCard
+					artifact={artifact}
+					section="disclosure"
+					onRepair={repair("disclosure")}
+					repairPending={repairPending}
+				>
+					{output?.disclosure ? (
+						<CopyableText
+							label="Disclosure affiliate"
+							value={output.disclosure}
+						/>
+					) : (
+						<InvalidSectionMessage />
+					)}
+				</OutputCard>
+			) : null}
 
 			<OutputCard
 				artifact={artifact}
@@ -913,10 +925,12 @@ function ScriptOutput({
 			>
 				{output?.claims ? (
 					<div className="space-y-3">
-						<div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 text-xs">
-							<LockKeyhole aria-hidden="true" className="size-4 shrink-0" />
-							<span>Candidate claims · Chưa qua Fact Lock</span>
-						</div>
+						{presentation.factLock !== "NOT_REQUIRED" ? (
+							<div className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-950 text-xs">
+								<LockKeyhole aria-hidden="true" className="size-4 shrink-0" />
+								<span>Candidate claims · Chưa qua Fact Lock</span>
+							</div>
+						) : null}
 						{output.claims.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
 								Không có claim cần kiểm tra.
@@ -1146,6 +1160,10 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 		);
 
 	const latestUsableArtifact = getLatestUsableArtifact(model);
+	const presentationIdentity = getScriptPresentationIdentity({
+		project: latestUsableArtifact?.inputSnapshot.project,
+		sourceMode: model.context.sourceMode,
+	});
 	const status = getStudioStatus(model);
 	const hasPendingRequest = model.latestRequest?.status === "pending";
 	const canGenerate =
@@ -1442,6 +1460,7 @@ export default function ScriptStudio({ projectId }: { projectId: string }) {
 							onRefreshClaims={() => void refreshClaimsFromStudio()}
 							refreshNotice={claimRefreshNotice}
 							refreshPending={claimRefreshMutation.isPending}
+							presentationIdentity={presentationIdentity}
 							scriptVersion={currentDraft}
 						/>
 					) : (

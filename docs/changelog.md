@@ -10,6 +10,20 @@ Cập nhật lần cuối: 2026-09-05.
 
 ## Chưa phát hành
 
+### Manual UAT fix-forward — Organic Script presentation
+
+- Corrected the shared Script Studio presentation for Organic + Scripted +
+  `SCRIPTED_STANDARD` v1 without a Product: claimless/GENERAL-only current
+  claims no longer show a misleading Fact Lock-pending warning, and the
+  non-applicable Affiliate disclosure section is hidden instead of mapped to an
+  invalid/repair state.
+- Confirmed Organic PRODUCT claims still retain truthful Fact Lock presentation;
+  Affiliate behavior and genuinely applicable malformed-section repair UX are
+  unchanged. No schema, migration, API, resolver, Fact Lock runtime, provider,
+  or workflow applicability change was made.
+- Owner Manual UAT remains **IN PROGRESS**. US019/US020 technical acceptance
+  remains valid; do not start US021.
+
 ### AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 - Added the Project Overview “Tài nguyên media” reuse panel and picker using

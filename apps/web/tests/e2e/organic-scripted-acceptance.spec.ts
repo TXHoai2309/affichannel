@@ -60,7 +60,7 @@ async function captureEvidence(page: Page, name: string) {
 	});
 	await page.screenshot({
 		path: `${evidenceRoot}/${name}.png`,
-		fullPage: false,
+		fullPage: name === "organic-claimless-script-fixed",
 	});
 }
 
@@ -167,6 +167,19 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 			await expect(
 				page.getByRole("heading", { name: "Generated Script" }),
 			).toBeVisible();
+			await expect(page.getByText("Hoàn thành", { exact: true })).toBeVisible();
+			await expect(
+				page.getByText("Không có claim cần kiểm tra.", { exact: true }),
+			).toBeVisible();
+			await expect(
+				page.getByText("Candidate claims · Chưa qua Fact Lock", {
+					exact: true,
+				}),
+			).toHaveCount(0);
+			await expect(
+				page.getByText("Disclosure affiliate", { exact: true }),
+			).toHaveCount(0);
+			await captureEvidence(page, "organic-claimless-script-fixed");
 			await expect(page.getByTestId("claim-subject-confirmation")).toHaveCount(
 				0,
 			);
@@ -261,10 +274,20 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 				0,
 			);
 			await expect(page.getByText("Đã lưu phạm vi claim")).toBeVisible();
+			await expect(
+				page.getByText("Không cần Fact Lock cho các claim hiện tại.", {
+					exact: true,
+				}),
+			).toBeVisible();
 			await page.reload();
 			await expect(page.getByTestId("claim-subject-confirmation")).toHaveCount(
 				0,
 			);
+			await expect(
+				page.getByText("Không cần Fact Lock cho các claim hiện tại.", {
+					exact: true,
+				}),
+			).toBeVisible();
 			const workflow = await getWorkflow(page, fixture.projectId);
 			expect(step(workflow, "PRODUCT").applicabilityState).toBe("NOT_REQUIRED");
 			expect(step(workflow, "FACT_LOCK").applicabilityState).toBe(
@@ -333,6 +356,11 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 			await expect(page.getByTestId("claim-subject-confirmation")).toHaveCount(
 				0,
 			);
+			await expect(
+				page.getByText("Claims hiện tại đã sẵn sàng cho bước Fact Lock.", {
+					exact: true,
+				}),
+			).toBeVisible();
 			await expect
 				.poll(
 					async () =>

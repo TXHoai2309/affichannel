@@ -17,6 +17,8 @@ import ClaimSubjectConfirmationPanel, {
 import {
 	formatOccurrence,
 	getCurrentScriptPrimarySnapshot,
+	getScriptPresentationState,
+	type ScriptPresentationIdentity,
 } from "./script-studio-state";
 
 type ScriptVersionCurrentViewProps = {
@@ -27,6 +29,7 @@ type ScriptVersionCurrentViewProps = {
 	onConfirmClaimSubjects?: (decisions: ClaimSubjectDecision[]) => void;
 	confirmPending?: boolean;
 	confirmationNotice?: string | null;
+	presentationIdentity?: ScriptPresentationIdentity;
 };
 
 export default function ScriptVersionCurrentView({
@@ -37,12 +40,18 @@ export default function ScriptVersionCurrentView({
 	onConfirmClaimSubjects,
 	confirmPending = false,
 	confirmationNotice = null,
+	presentationIdentity = { contentType: null, creationPath: null },
 }: ScriptVersionCurrentViewProps) {
 	const snapshot = getCurrentScriptPrimarySnapshot(scriptVersion);
 	const selectedHook = snapshot.hookVariants.find(
 		(hook) => hook.key === snapshot.selectedHookKey,
 	);
 	const claimsCurrent = snapshot.claimsStatus === "current";
+	const presentation = getScriptPresentationState({
+		identity: presentationIdentity,
+		claimsStatus: snapshot.claimsStatus,
+		claims: snapshot.claims,
+	});
 
 	return (
 		<div className="space-y-4" data-testid="current-script-view">
@@ -129,9 +138,11 @@ export default function ScriptVersionCurrentView({
 							))}
 						</div>
 					</CurrentSection>
-					<CurrentSection title="Disclosure">
-						<CurrentText value={snapshot.disclosure} />
-					</CurrentSection>
+					{presentation.disclosure === "REQUIRED" ? (
+						<CurrentSection title="Disclosure">
+							<CurrentText value={snapshot.disclosure} />
+						</CurrentSection>
+					) : null}
 
 					<section
 						aria-live="polite"
@@ -164,9 +175,11 @@ export default function ScriptVersionCurrentView({
 							) : null}
 						</div>
 						<p className="mt-2 text-xs">
-							{claimsCurrent
-								? "Claims hiện tại đã sẵn sàng cho bước Fact Lock."
-								: "Nội dung Script đã thay đổi; hãy cập nhật Claims trước Fact Lock."}
+							{presentation.factLock === "NOT_REQUIRED"
+								? "Không cần Fact Lock cho các claim hiện tại."
+								: claimsCurrent
+									? "Claims hiện tại đã sẵn sàng cho bước Fact Lock."
+									: "Nội dung Script đã thay đổi; hãy cập nhật Claims trước Fact Lock."}
 						</p>
 						{refreshNotice ? (
 							<p className="mt-2 font-medium text-xs" role="status">
@@ -187,7 +200,7 @@ export default function ScriptVersionCurrentView({
 					<CurrentSection title="Candidate Claims">
 						{snapshot.claims.length === 0 ? (
 							<p className="text-muted-foreground text-sm">
-								Không có claim trong bản nháp.
+								Không có claim cần kiểm tra.
 							</p>
 						) : (
 							<div className="space-y-3">

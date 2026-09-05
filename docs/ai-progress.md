@@ -14,8 +14,24 @@
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
   20B MediaAsset persistence/storage foundation PASS; 20C protected API
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
-  Project Reuse / Final Technical Acceptance PASS; user manual UAT pending.
+  Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT IN
+  PROGRESS (fix-forward recorded below).
 - Cập nhật lần cuối: 2026-09-05
+
+## 2026-09-05 — Manual UAT fix-forward: Organic Script presentation
+
+Owner UAT found misleading presentation for Organic + Scripted +
+`SCRIPTED_STANDARD` v1 without a Product after claimless generation. The shared
+Script renderer no longer presents “Chưa qua Fact Lock” when the canonical
+current claim inventory is claimless or GENERAL-only, and it hides the
+non-applicable Affiliate disclosure section instead of showing an invalid/repair
+warning. Confirmed PRODUCT claims still show the real Fact Lock state; Affiliate
+behavior and genuinely invalid applicable sections remain unchanged.
+
+This is a presentation-only fix: no schema, migration, API, resolver, Fact Lock
+runtime, ScriptGeneration provider, or workflow applicability changed. US019 and
+US020 technical acceptance remain valid. Owner Manual UAT is **IN PROGRESS**;
+resume from the Organic Script result and do not start US021.
 
 ## 2026-09-05 — AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
