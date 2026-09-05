@@ -1,6 +1,6 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20C PROTECTED MEDIA APIs PASS; UI remains deferred**
+- Status: **20C PROTECTED MEDIA APIs = PASS; UI remains deferred**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
 - Starting HEAD: `a8c366a828496393038441a6e5d556d0ad6923bb`
