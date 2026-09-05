@@ -13,7 +13,7 @@ import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, FileUp, Loader2, UploadCloud } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useState } from "react";
 import { toast } from "sonner";
 
 import { orpc } from "@/utils/orpc";
@@ -28,19 +28,21 @@ import {
 	parseMediaTags,
 } from "./media-library-helpers";
 
-type UploadPhase =
-	| "idle"
-	| "preparing"
-	| "uploading"
-	| "validating"
-	| "complete"
-	| "error";
+import {
+	initialMediaUploadState,
+	isTerminalMediaUploadError,
+	type MediaPreparedUpload,
+	type MediaUploadPhase,
+	mediaUploadReducer,
+} from "./media-upload-state";
 
-const phaseCopy: Record<UploadPhase, string> = {
+const phaseCopy: Record<MediaUploadPhase, string> = {
 	idle: "Chọn một tệp để bắt đầu.",
 	preparing: "Đang chuẩn bị phiên tải lên...",
 	uploading: "Đang tải tệp lên...",
 	validating: "Đang kiểm tra tệp...",
+	validating_wait:
+		"Media vẫn đang được kiểm tra. Hãy kiểm tra lại khi sẵn sàng.",
 	complete: "Media đã sẵn sàng trong thư viện.",
 	error: "Tải lên chưa hoàn tất.",
 };
@@ -60,17 +62,21 @@ export function MediaUploadDialog({
 	const [usageRights, setUsageRights] = useState<
 		"owned" | "licensed" | "unknown" | "restricted"
 	>("unknown");
-	const [phase, setPhase] = useState<UploadPhase>("idle");
+	const [uploadState, dispatch] = useReducer(
+		mediaUploadReducer,
+		initialMediaUploadState,
+	);
 	const [error, setError] = useState<string | null>(null);
-	const attemptKey = useRef<string | null>(null);
 	const prepareUpload = useMutation(
 		orpc.media.prepareUpload.mutationOptions({ retry: false }),
 	);
 	const finalizeUpload = useMutation(
 		orpc.media.finalizeUpload.mutationOptions({ retry: false }),
 	);
-	const isBusy =
+	const { phase } = uploadState;
+	const isProcessing =
 		phase === "preparing" || phase === "uploading" || phase === "validating";
+	const isFormLocked = isProcessing || phase === "validating_wait";
 
 	useEffect(() => {
 		if (!open) return;
@@ -78,21 +84,19 @@ export function MediaUploadDialog({
 		setDisplayName("");
 		setTagsInput("");
 		setUsageRights("unknown");
-		setPhase("idle");
+		dispatch({ type: "reset" });
 		setError(null);
-		attemptKey.current = null;
 	}, [open]);
 
 	function handleOpenChange(nextOpen: boolean) {
-		if (!nextOpen && isBusy) return;
+		if (!nextOpen && isProcessing) return;
 		onOpenChange(nextOpen);
 	}
 
 	function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
 		const nextFile = event.target.files?.[0] ?? null;
 		setError(null);
-		setPhase("idle");
-		attemptKey.current = null;
+		dispatch({ type: "reset" });
 		if (!nextFile) {
 			setFile(null);
 			return;
@@ -109,7 +113,79 @@ export function MediaUploadDialog({
 		setDisplayName(getMediaFilenameWithoutExtension(nextFile.name));
 	}
 
+	function createAttemptKey() {
+		return typeof crypto !== "undefined" && "randomUUID" in crypto
+			? crypto.randomUUID()
+			: `media-upload-${Date.now()}-${Math.random().toString(36)}`;
+	}
+
+	function ensureAttemptKey() {
+		if (uploadState.attemptKey) return uploadState.attemptKey;
+		const nextKey = createAttemptKey();
+		dispatch({ type: "set_attempt_key", attemptKey: nextKey });
+		return nextKey;
+	}
+
+	function handleUploadError(uploadError: unknown, fallback: string) {
+		dispatch({
+			type: "put_failed",
+			terminal: isTerminalMediaUploadError(uploadError),
+		});
+		setError(getMediaErrorMessage(uploadError, fallback));
+	}
+
+	async function requireUploadResponse(response: Response) {
+		if (response.ok) return;
+		let code: string | undefined;
+		try {
+			const payload: unknown = await response.clone().json();
+			if (payload && typeof payload === "object") {
+				const candidate = payload as { code?: unknown };
+				if (typeof candidate.code === "string") code = candidate.code;
+			}
+		} catch {
+			// Providers may return an empty/non-JSON error body.
+		}
+		if (!code) {
+			code =
+				response.status === 413
+					? "MEDIA_ASSET_SIZE_LIMIT_EXCEEDED"
+					: response.status === 400
+						? "MEDIA_ASSET_UPLOAD_EXPIRED"
+						: response.status === 401 ||
+								response.status === 403 ||
+								response.status === 409
+							? "MEDIA_ASSET_UPLOAD_NOT_ALLOWED"
+							: "MEDIA_ASSET_STORAGE_ERROR";
+		}
+		throw new Error(code);
+	}
+
+	async function finalizePreparedUpload(identity: MediaPreparedUpload) {
+		dispatch({ type: "set_phase", phase: "validating" });
+		const finalized = await finalizeUpload.mutateAsync(identity);
+		if (finalized.outcome === "in_progress") {
+			dispatch({ type: "finalize_in_progress" });
+			setError(null);
+			return;
+		}
+		if (finalized.asset.status !== "ready") {
+			dispatch({ type: "finalize_failed" });
+			setError(getMediaFailureMessage(finalized.asset));
+			return;
+		}
+		dispatch({ type: "finalize_ready" });
+		setError(null);
+		try {
+			await onCompleted();
+			toast.success("Đã thêm media vào thư viện");
+		} catch {
+			toast.error("Media đã sẵn sàng nhưng danh sách chưa kịp cập nhật.");
+		}
+	}
+
 	async function startUpload() {
+		if (phase === "validating_wait" || phase === "complete") return;
 		if (!file) {
 			setError("Hãy chọn một tệp media trước.");
 			return;
@@ -125,14 +201,9 @@ export function MediaUploadDialog({
 			setError("Hãy đặt tên cho media.");
 			return;
 		}
-		if (!attemptKey.current) {
-			attemptKey.current =
-				typeof crypto !== "undefined" && "randomUUID" in crypto
-					? crypto.randomUUID()
-					: `media-upload-${Date.now()}-${Math.random().toString(36)}`;
-		}
+		const idempotencyKey = ensureAttemptKey();
 		setError(null);
-		setPhase("preparing");
+		dispatch({ type: "set_phase", phase: "preparing" });
 		try {
 			const prepared = await prepareUpload.mutateAsync({
 				mediaType: details.mediaType,
@@ -142,13 +213,17 @@ export function MediaUploadDialog({
 				declaredByteSize: file.size,
 				usageRights,
 				tags: parseMediaTags(tagsInput),
-				idempotencyKey: attemptKey.current,
+				idempotencyKey,
 			});
 			const grant = prepared.uploadGrant;
 			if (!grant) {
 				throw new Error("MEDIA_ASSET_UPLOAD_NOT_ALLOWED");
 			}
-			setPhase("uploading");
+			const identity: MediaPreparedUpload = {
+				assetId: prepared.assetId,
+				uploadSessionId: prepared.uploadSessionId,
+			};
+			dispatch({ type: "prepared", prepared: identity });
 			const uploadResponse = await fetch(mediaAssetUploadUrl(grant), {
 				method: "PUT",
 				headers: grant.contentType
@@ -157,40 +232,22 @@ export function MediaUploadDialog({
 				body: file,
 				credentials: grant.provider === "r2" ? "omit" : "include",
 			});
-			if (!uploadResponse.ok) {
-				throw new Error(
-					uploadResponse.status === 413
-						? "MEDIA_ASSET_SIZE_LIMIT_EXCEEDED"
-						: uploadResponse.status === 401
-							? "MEDIA_ASSET_UPLOAD_NOT_ALLOWED"
-							: "MEDIA_ASSET_STORAGE_ERROR",
-				);
-			}
-			setPhase("validating");
-			const finalized = await finalizeUpload.mutateAsync({
-				assetId: prepared.assetId,
-				uploadSessionId: prepared.uploadSessionId,
-			});
-			if (finalized.outcome === "in_progress") {
-				setError("Media đang được kiểm tra. Hãy mở lại thư viện sau giây lát.");
-				setPhase("error");
-				return;
-			}
-			if (finalized.asset.status !== "ready") {
-				setError(getMediaFailureMessage(finalized.asset));
-				setPhase("error");
-				return;
-			}
-			setPhase("complete");
-			await onCompleted();
-			toast.success("Đã thêm media vào thư viện");
+			await requireUploadResponse(uploadResponse);
+			await finalizePreparedUpload(identity);
 		} catch (uploadError) {
-			setPhase("error");
-			setError(
-				getMediaErrorMessage(
-					uploadError,
-					"Tải lên không thành công. Hãy thử lại.",
-				),
+			handleUploadError(uploadError, "Tải lên không thành công. Hãy thử lại.");
+		}
+	}
+
+	async function recheckFinalize() {
+		if (!uploadState.prepared || isProcessing) return;
+		setError(null);
+		try {
+			await finalizePreparedUpload(uploadState.prepared);
+		} catch (finalizeError) {
+			handleUploadError(
+				finalizeError,
+				"Không thể kiểm tra trạng thái media. Hãy thử lại.",
 			);
 		}
 	}
@@ -218,7 +275,7 @@ export function MediaUploadDialog({
 							<Label htmlFor="media-file">Tệp media</Label>
 							<Input
 								accept={MEDIA_FILE_ACCEPT}
-								disabled={isBusy}
+								disabled={isFormLocked}
 								id="media-file"
 								onChange={handleFileChange}
 								type="file"
@@ -244,7 +301,7 @@ export function MediaUploadDialog({
 						<div className="space-y-2">
 							<Label htmlFor="media-display-name">Tên hiển thị</Label>
 							<Input
-								disabled={isBusy}
+								disabled={isFormLocked}
 								id="media-display-name"
 								maxLength={240}
 								onChange={(event) => setDisplayName(event.target.value)}
@@ -258,7 +315,7 @@ export function MediaUploadDialog({
 								<Label htmlFor="media-rights">Quyền sử dụng</Label>
 								<select
 									className="h-8 w-full rounded-lg border border-input bg-background px-2.5 text-xs outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
-									disabled={isBusy}
+									disabled={isFormLocked}
 									id="media-rights"
 									onChange={(event) =>
 										setUsageRights(
@@ -280,7 +337,7 @@ export function MediaUploadDialog({
 							<div className="space-y-2">
 								<Label htmlFor="media-tags">Tags</Label>
 								<Input
-									disabled={isBusy}
+									disabled={isFormLocked}
 									id="media-tags"
 									onChange={(event) => setTagsInput(event.target.value)}
 									placeholder="campaign, launch"
@@ -303,7 +360,7 @@ export function MediaUploadDialog({
 						role={error ? "alert" : "status"}
 					>
 						<div className="flex items-center gap-2">
-							{isBusy ? (
+							{isProcessing ? (
 								<Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
 							) : null}
 							{phase === "complete" ? (
@@ -315,21 +372,27 @@ export function MediaUploadDialog({
 
 					<div className="mt-6 flex flex-col-reverse justify-end gap-2 sm:flex-row">
 						<Button
-							disabled={isBusy}
+							disabled={isProcessing}
 							onClick={() => handleOpenChange(false)}
 							variant="outline"
 						>
 							{phase === "complete" ? "Đóng" : "Hủy"}
 						</Button>
 						<Button
-							disabled={isBusy || phase === "complete" || !file}
-							onClick={() => void startUpload()}
+							disabled={isProcessing || phase === "complete" || !file}
+							onClick={() =>
+								void (phase === "validating_wait"
+									? recheckFinalize()
+									: startUpload())
+							}
 						>
-							{isBusy
-								? "Đang xử lý..."
-								: phase === "error"
-									? "Thử lại"
-									: "Tải lên"}
+							{phase === "validating_wait"
+								? "Kiểm tra lại"
+								: isProcessing
+									? "Đang xử lý..."
+									: phase === "error"
+										? "Thử lại"
+										: "Tải lên"}
 						</Button>
 					</div>
 				</DialogPopup>
