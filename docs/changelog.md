@@ -24,6 +24,24 @@ Cập nhật lần cuối: 2026-09-05.
 - Owner Manual UAT remains **IN PROGRESS**. US019/US020 technical acceptance
   remains valid; do not start US021.
 
+### Owner UAT fix-forward — Organic claimless Voice authorization
+
+- Fixed the protected Voice read/runtime path so Organic + Scripted +
+  `SCRIPTED_STANDARD` v1 claimless or confirmed GENERAL-only content is
+  resolved as `FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS` before any historical
+  Fact Lock read. Segment list/read, VoiceConfig save, Preview, retry, and
+  generation now share the current Resolver decision; Product claims still
+  require a current passed Fact Lock and Affiliate behavior is unchanged.
+- Preserved applicability reasons through the Preview API/client and mapped
+  claim refresh, subject confirmation, and Product-link requirements to their
+  own actionable messages. The Voice lock screen and “Mở Fact Lock” CTA now
+  appear only for an actual Fact Lock requirement.
+- Added focused authorization/presentation/client/route coverage plus a
+  GENERAL-only browser path proving config save, segment loading, Preview, and
+  zero FactLockRun. Web tests (62/566), type-check, and disposable browser
+  acceptance (19/19) passed with deterministic local providers; Owner Manual
+  UAT remains **IN PROGRESS**.
+
 ### AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 - Added the Project Overview “Tài nguyên media” reuse panel and picker using

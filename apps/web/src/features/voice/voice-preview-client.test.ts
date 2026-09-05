@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import {
-	requestVoicePreview,
-	VoicePreviewClientError,
-} from "./voice-preview-client";
+import { requestVoicePreview } from "./voice-preview-client";
 
 describe("voice preview binary client", () => {
 	it("requests the protected endpoint and accepts audio/mpeg", async () => {
@@ -33,15 +30,24 @@ describe("voice preview binary client", () => {
 
 	it("surfaces the server code for non-2xx JSON responses", async () => {
 		const fetchImplementation = vi.fn<typeof fetch>().mockResolvedValue(
-			new Response(JSON.stringify({ code: "FACT_LOCK_REQUIRED" }), {
-				status: 409,
-				headers: { "content-type": "application/json" },
-			}),
+			new Response(
+				JSON.stringify({
+					code: "FACT_LOCK_REQUIRED",
+					reason: "SCRIPT_CLAIMS_NOT_CURRENT",
+				}),
+				{
+					status: 409,
+					headers: { "content-type": "application/json" },
+				},
+			),
 		);
 
 		await expect(
 			requestVoicePreview("project-1", fetchImplementation),
-		).rejects.toEqual(new VoicePreviewClientError("FACT_LOCK_REQUIRED"));
+		).rejects.toMatchObject({
+			code: "FACT_LOCK_REQUIRED",
+			reason: "SCRIPT_CLAIMS_NOT_CURRENT",
+		});
 	});
 
 	it.each([

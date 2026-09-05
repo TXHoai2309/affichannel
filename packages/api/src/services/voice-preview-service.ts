@@ -12,7 +12,6 @@ import type {
 	TtsProvider,
 } from "../providers/tts/tts-provider";
 import { resolveTtsProvider } from "../providers/tts/tts-provider-registry";
-import { FactLockGate } from "./fact-lock-gate-service";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { getVoiceConfig } from "./voice-config-service";
 import { assertVoicePaidExecutionAuthorized } from "./voice-paid-authorization-service";
@@ -54,15 +53,15 @@ export function deriveVoicePreviewText(
 
 function staleFactLock(
 	reason: string,
-	gate: Awaited<ReturnType<typeof FactLockGate.assertPassed>>,
+	currentScriptVersion?: Awaited<ReturnType<typeof findCurrentScriptVersion>>,
 ) {
 	return new FactLockError(
 		"FACT_LOCK_REQUIRED",
 		"Fact Lock hoặc ScriptVersion đã thay đổi; cần chạy lại Fact Lock.",
 		{
 			reason,
-			currentScriptVersionId: gate.currentScriptVersionId,
-			currentScriptRevision: gate.currentScriptRevision,
+			currentScriptVersionId: currentScriptVersion?.id ?? null,
+			currentScriptRevision: currentScriptVersion?.revision ?? null,
 		},
 	);
 }
@@ -86,17 +85,10 @@ export async function previewVoice(
 	dependencies: VoicePreviewDependencies = {},
 ): Promise<VoicePreviewResult> {
 	const preparedScript = await findCurrentScriptVersion(actor, projectId);
-	const preparedGate = await FactLockGate.evaluate(actor, projectId);
 	const authorizePaidExecution =
 		dependencies.authorizePaidExecution ?? assertVoicePaidExecutionAuthorized;
 	await authorizePaidExecution(actor, projectId);
-	if (
-		!preparedScript ||
-		preparedGate.currentScriptVersionId !== preparedScript.id ||
-		preparedGate.currentScriptRevision !== preparedScript.revision
-	) {
-		throw staleFactLock(preparedGate.reason, preparedGate);
-	}
+	if (!preparedScript) throw staleFactLock("NO_SCRIPT_VERSION");
 
 	const text = deriveVoicePreviewText(
 		preparedScript.editableSnapshot,
@@ -112,15 +104,22 @@ export async function previewVoice(
 		speed: preparedConfig.speed,
 	});
 	const currentScript = await findCurrentScriptVersion(actor, projectId);
-	const finalGate = await FactLockGate.evaluate(actor, projectId);
 	if (
 		!currentScript ||
 		currentScript.id !== preparedScript.id ||
-		currentScript.revision !== preparedScript.revision ||
-		finalGate.currentScriptVersionId !== preparedScript.id ||
-		finalGate.currentScriptRevision !== preparedScript.revision
+		currentScript.revision !== preparedScript.revision
 	) {
-		throw staleFactLock(finalGate.reason, finalGate);
+		let reason = "SCRIPT_CLAIMS_NOT_CURRENT";
+		try {
+			// Resolve the newly observed Script before reporting the TOCTOU error so
+			// Product-link, subject-confirmation, and Fact Lock reasons stay truthful.
+			await authorizePaidExecution(actor, projectId);
+		} catch (error) {
+			if (!(error instanceof FactLockError)) throw error;
+			const currentReason = error.metadata?.reason;
+			if (typeof currentReason === "string") reason = currentReason;
+		}
+		throw staleFactLock(reason, currentScript);
 	}
 
 	const finalConfig = await getVoiceConfig(actor, projectId);

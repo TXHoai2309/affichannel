@@ -34,7 +34,13 @@ export function voiceStudioDraftEquals(
 
 export function isVoiceStudioFactLockError(error: unknown) {
 	const code = getVoiceStudioErrorCode(error);
-	return Boolean(code?.startsWith("FACT_LOCK_"));
+	if (!code?.startsWith("FACT_LOCK_")) return false;
+	const reason = getVoiceStudioErrorReason(error);
+	return !(
+		code === "FACT_LOCK_REQUIRED" &&
+		reason !== undefined &&
+		NON_FACT_LOCK_AUTHORIZATION_REASONS.has(reason)
+	);
 }
 
 export function getVoiceStudioErrorCode(error: unknown) {
@@ -48,6 +54,31 @@ export function getVoiceStudioErrorCode(error: unknown) {
 	}
 	return typeof record.message === "string" ? record.message : undefined;
 }
+
+export function getVoiceStudioErrorReason(error: unknown) {
+	if (!error || typeof error !== "object") return undefined;
+	const record = error as Record<string, unknown>;
+	for (const candidate of [record.reason, record.reasonCode]) {
+		if (typeof candidate === "string") return candidate;
+	}
+	const data = record.data;
+	if (data && typeof data === "object") {
+		const dataRecord = data as Record<string, unknown>;
+		for (const candidate of [dataRecord.reason, dataRecord.reasonCode]) {
+			if (typeof candidate === "string") return candidate;
+		}
+	}
+	return undefined;
+}
+
+const NON_FACT_LOCK_AUTHORIZATION_REASONS = new Set([
+	"SCRIPT_CLAIMS_NOT_CURRENT",
+	"CLAIM_SUBJECT_CONFIRMATION_REQUIRED",
+	"CLAIM_SUBJECT_INVALID",
+	"PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+	"PRODUCT_NOT_ACCESSIBLE",
+	"FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+]);
 
 const VOICE_STUDIO_ERROR_MESSAGES: Record<string, string> = {
 	TTS_VOICE_NOT_FOUND: "Giọng đọc này không còn khả dụng.",
@@ -68,6 +99,16 @@ const VOICE_STUDIO_ERROR_MESSAGES: Record<string, string> = {
 	FACT_LOCK_STALE_FACTS:
 		"Product Facts đã thay đổi. Hãy chạy lại Fact Lock trước khi tiếp tục.",
 	FACT_LOCK_NOT_FOUND: "Không tìm thấy Fact Lock hoặc project hiện tại.",
+	SCRIPT_CLAIMS_NOT_CURRENT:
+		"Claim hiện tại chưa được xác nhận; hãy cập nhật nội dung trước khi tạo giọng đọc.",
+	CLAIM_SUBJECT_CONFIRMATION_REQUIRED:
+		"Cần xác nhận phạm vi claim trong Nội dung trước khi tạo giọng đọc.",
+	CLAIM_SUBJECT_INVALID:
+		"Phạm vi claim không hợp lệ; hãy kiểm tra lại Nội dung.",
+	PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS:
+		"Cần liên kết sản phẩm cho các claim Product trước khi tạo giọng đọc.",
+	PRODUCT_NOT_ACCESSIBLE:
+		"Sản phẩm hiện tại không tồn tại hoặc bạn không có quyền truy cập.",
 };
 
 export function getVoiceStudioErrorMessage(
@@ -75,7 +116,12 @@ export function getVoiceStudioErrorMessage(
 	fallback = "Không thể hoàn tất thao tác Voice Studio. Hãy thử lại.",
 ) {
 	const code = getVoiceStudioErrorCode(error);
-	return (code && VOICE_STUDIO_ERROR_MESSAGES[code]) ?? fallback;
+	const reason = getVoiceStudioErrorReason(error);
+	return (
+		(reason && VOICE_STUDIO_ERROR_MESSAGES[reason]) ??
+		(code && VOICE_STUDIO_ERROR_MESSAGES[code]) ??
+		fallback
+	);
 }
 
 export function releaseVoicePreviewUrl(

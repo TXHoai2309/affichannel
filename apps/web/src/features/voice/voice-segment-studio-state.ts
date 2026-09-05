@@ -3,7 +3,10 @@ import type {
 	VoiceSegmentEffectiveStatus,
 } from "@affichannel/core";
 
-import { getVoiceStudioErrorCode } from "./voice-studio-state";
+import {
+	getVoiceStudioErrorCode,
+	getVoiceStudioErrorMessage,
+} from "./voice-studio-state";
 
 export const VOICE_SEGMENT_WAVEFORM_BAR_COUNT = 48;
 
@@ -36,7 +39,7 @@ const VOICE_SEGMENT_ERROR_MESSAGES: Record<string, string> = {
 	VOICE_SEGMENT_IDEMPOTENCY_CONFLICT:
 		"Yêu cầu này đã dùng cho một nội dung khác. Hãy thử lại từ thao tác mới.",
 	VOICE_SEGMENT_CONTEXT_STALE:
-		"Script hoặc cấu hình voice đã thay đổi. Hãy chạy lại Fact Lock và tải lại trang.",
+		"Script hoặc cấu hình voice đã thay đổi. Hãy tải lại trước khi thử lại.",
 	VOICE_SEGMENT_NOT_FOUND: "Không tìm thấy đoạn voice hiện tại.",
 	TTS_PROVIDER_FAILED: "Nhà cung cấp TTS từ chối tạo audio. Hãy thử lại sau.",
 	TTS_PROVIDER_UNAVAILABLE:
@@ -100,6 +103,8 @@ export function getVoiceSegmentErrorMessage(
 	fallback = "Không thể tạo voiceover cho đoạn này. Hãy thử lại.",
 ) {
 	const code = getVoiceStudioErrorCode(error);
+	if (code?.startsWith("FACT_LOCK_"))
+		return getVoiceStudioErrorMessage(error, fallback);
 	return (code && VOICE_SEGMENT_ERROR_MESSAGES[code]) ?? fallback;
 }
 

@@ -68,6 +68,9 @@ describe("Voice paid execution authorization", () => {
 
 	it("allows Organic claimless/general-only content without a Fact Lock run", async () => {
 		findSubject.mockResolvedValue(subject("ORGANIC"));
+		evaluateGate.mockRejectedValue(
+			new Error("historical Fact Lock row must not be read"),
+		);
 
 		await expect(
 			resolveVoicePaidExecutionAuthorization(actor, projectId),
@@ -76,6 +79,79 @@ describe("Voice paid execution authorization", () => {
 			factLockRequirement: "NOT_REQUIRED",
 			reasonCode: "FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
 		});
+		expect(evaluateGate).not.toHaveBeenCalled();
+	});
+
+	it("does not read Fact Lock history for confirmed Organic GENERAL claims", async () => {
+		findSubject.mockResolvedValue(subject("ORGANIC"));
+		findScript.mockResolvedValue(
+			script([
+				{
+					text: "Một thói quen hữu ích.",
+					occurrence: { section: "caption" },
+					subject: { kind: "GENERAL" },
+					subjectStatus: "CONFIRMED",
+					subjectSource: "USER",
+				},
+			]),
+		);
+		evaluateGate.mockRejectedValue(new Error("historical Fact Lock row"));
+
+		await expect(
+			resolveVoicePaidExecutionAuthorization(actor, projectId),
+		).resolves.toMatchObject({
+			allowed: true,
+			factLockRequirement: "NOT_REQUIRED",
+		});
+		expect(evaluateGate).not.toHaveBeenCalled();
+	});
+
+	it("returns the Product path for an unbound Organic Product claim", async () => {
+		findSubject.mockResolvedValue(subject("ORGANIC"));
+		findScript.mockResolvedValue(
+			script([
+				{
+					text: "Sản phẩm bền hơn",
+					occurrence: { section: "caption" },
+					subject: { kind: "PRODUCT", binding: "PROJECT_PRODUCT" },
+					subjectStatus: "CONFIRMED",
+					subjectSource: "USER",
+				},
+			]),
+		);
+		evaluateGate.mockRejectedValue(new Error("historical Fact Lock row"));
+
+		await expect(
+			resolveVoicePaidExecutionAuthorization(actor, projectId),
+		).resolves.toMatchObject({
+			allowed: false,
+			reasonCode: "PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+			state: "BLOCKED",
+		});
+		expect(evaluateGate).not.toHaveBeenCalled();
+	});
+
+	it("returns the claims-refresh path before any Fact Lock history read", async () => {
+		findSubject.mockResolvedValue(subject("ORGANIC"));
+		const current = script();
+		if (!current) throw new Error("Expected a current ScriptVersion fixture.");
+		findScript.mockResolvedValue({
+			...current,
+			editableSnapshot: {
+				...current.editableSnapshot,
+				claimsStatus: "stale",
+			},
+		} as NonNullable<Awaited<ReturnType<typeof findCurrentScriptVersion>>>);
+		evaluateGate.mockRejectedValue(new Error("historical Fact Lock row"));
+
+		await expect(
+			resolveVoicePaidExecutionAuthorization(actor, projectId),
+		).resolves.toMatchObject({
+			allowed: false,
+			reasonCode: "SCRIPT_CLAIMS_NOT_CURRENT",
+			state: "STALE",
+		});
+		expect(evaluateGate).not.toHaveBeenCalled();
 	});
 
 	it("blocks Organic Product claims until the current Fact Lock passes", async () => {

@@ -294,6 +294,37 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 				"NOT_REQUIRED",
 			);
 			expect(step(workflow, "VOICE").navigable).toBe(true);
+			await page.getByRole("link", { name: "Giọng đọc" }).click();
+			await expect(page).toHaveURL(
+				new RegExp(`/projects/${fixture.projectId}/voice$`),
+			);
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
+			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
+			await expect(
+				page.getByText("Đã lưu", { exact: true }).first(),
+			).toBeVisible();
+			const previewResponse = page.waitForResponse(
+				(response) =>
+					response
+						.url()
+						.includes(`/projects/${fixture.projectId}/voice/preview`) &&
+					response.request().method() === "POST",
+			);
+			await page.getByRole("button", { name: "Nghe thử" }).click();
+			expect((await previewResponse).status()).toBe(200);
+			await expect(
+				page.locator('audio[aria-label="Bản nghe thử giọng đọc"]'),
+			).toBeVisible();
+			await expect(page.getByTestId("voice-segment-intro")).toBeVisible();
+			const factLockRuns = await db
+				.select({ id: factLockRun.id })
+				.from(factLockRun)
+				.where(eq(factLockRun.projectId, fixture.projectId));
+			expect(factLockRuns).toHaveLength(0);
+			await page.reload();
+			await expect(page.getByTestId("voice-segment-intro")).toBeVisible();
 		} finally {
 			await cleanupFixture(fixture.projectId, fixture.productId);
 		}
@@ -677,7 +708,6 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 								subject: { kind: "PRODUCT", binding: "PROJECT_PRODUCT" },
 								subjectStatus: "CONFIRMED",
 								subjectSource: "USER",
-								proposedSubject: null,
 							},
 						],
 						claimsSourceRevision: nextRevision,
@@ -689,7 +719,11 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 				`/api/projects/${fixture.projectId}/voice/preview`,
 			);
 			expect(preview.status()).toBe(409);
-			expect((await preview.json()).code).toBe("FACT_LOCK_REQUIRED");
+			expect(await preview.json()).toEqual({
+				code: "FACT_LOCK_REQUIRED",
+				message: "FACT_LOCK_REQUIRED",
+				reason: "FACT_LOCK_RUN_REQUIRED",
+			});
 			const artifacts = await db
 				.select({ id: voiceSegmentArtifact.id })
 				.from(voiceSegmentArtifact)

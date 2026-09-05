@@ -5,9 +5,13 @@ import { requireWorkspaceActor } from "@affichannel/api/services/workspace";
 import { FactLockError, VoiceConfigError } from "@affichannel/core";
 import { ORPCError } from "@orpc/server";
 
-function jsonError(code: string, status: number) {
+function jsonError(
+	code: string,
+	status: number,
+	details?: { reason?: string },
+) {
 	return Response.json(
-		{ code, message: code },
+		{ code, message: code, ...details },
 		{
 			status,
 			headers: { "Cache-Control": "no-store" },
@@ -17,9 +21,14 @@ function jsonError(code: string, status: number) {
 
 function mapPreviewError(error: unknown) {
 	if (error instanceof FactLockError) {
+		const reason = error.metadata?.reason;
 		return error.code === "FACT_LOCK_NOT_FOUND"
 			? jsonError(error.code, 404)
-			: jsonError(error.code, 409);
+			: jsonError(
+					error.code,
+					409,
+					typeof reason === "string" ? { reason } : undefined,
+				);
 	}
 	if (error instanceof VoiceConfigError) {
 		switch (error.code) {

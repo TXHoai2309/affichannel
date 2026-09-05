@@ -33,6 +33,27 @@ runtime, ScriptGeneration provider, or workflow applicability changed. US019 and
 US020 technical acceptance remain valid. Owner Manual UAT is **IN PROGRESS**;
 resume from the Organic Script result and do not start US021.
 
+## 2026-09-05 — Owner UAT fix-forward: Organic claimless Voice authorization
+
+Owner UAT reproduced a real AFF-US-019 bug for Organic + Scripted +
+`SCRIPTED_STANDARD` v1 with no Product and a current claimless/GENERAL-only
+Script: VoiceConfig could save, but segment reads or Preview could consult a
+historical Fact Lock row first and collapse every `FACT_LOCK_REQUIRED` reason
+into the Voice lock screen. The fix evaluates the current canonical Resolver
+before Fact Lock history, bypasses the gate read for `NOT_REQUIRED` and other
+current Organic applicability outcomes, and keeps the established Affiliate and
+Organic Product-claim gate paths intact. Preview and segment generation now
+re-read the current Project/Script/claims authority immediately before any
+provider call; error mapping preserves the applicability reason so only a real
+Fact Lock requirement shows a Fact Lock CTA.
+
+No schema, migration, Claim Subject, Resolver semantics, Fact Lock v1/v2,
+Manifest, VoiceConfig, storage, or provider contract changed. Verification in
+this fix-forward: web Vitest 62 files / 566 tests, full type-check, and the
+canonical disposable Playwright harness 19/19 on loopback PostgreSQL with
+deterministic local voice and zero live AI/TTS calls. Owner Manual UAT remains
+**IN PROGRESS**; resume from Voice Studio after this fix and do not start US021.
+
 ## 2026-09-05 — AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 Starting from exact HEAD `f439406a111ca25b608b12700611997b48850568` on `TXH`,

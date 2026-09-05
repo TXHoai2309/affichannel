@@ -1,10 +1,12 @@
 export class VoicePreviewClientError extends Error {
 	readonly code: string;
+	readonly reason: string | undefined;
 
-	constructor(code: string) {
+	constructor(code: string, reason?: string) {
 		super(code);
 		this.name = "VoicePreviewClientError";
 		this.code = code;
+		this.reason = reason;
 	}
 }
 
@@ -12,7 +14,7 @@ function normalizeContentType(value: string | null) {
 	return value?.split(";", 1)[0]?.trim().toLowerCase() ?? "";
 }
 
-async function responseCode(response: Response) {
+async function responseError(response: Response) {
 	try {
 		const payload: unknown = await response.json();
 		if (
@@ -21,12 +23,21 @@ async function responseCode(response: Response) {
 			"code" in payload &&
 			typeof payload.code === "string"
 		) {
-			return payload.code;
+			return {
+				code: payload.code,
+				reason:
+					"reason" in payload && typeof payload.reason === "string"
+						? payload.reason
+						: undefined,
+			};
 		}
 	} catch {
 		// The client only needs a safe generic code when the response is not JSON.
 	}
-	return response.status >= 500 ? "TTS_PREVIEW_FAILED" : "BAD_REQUEST";
+	return {
+		code: response.status >= 500 ? "TTS_PREVIEW_FAILED" : "BAD_REQUEST",
+		reason: undefined,
+	};
 }
 
 export async function requestVoicePreview(
@@ -44,7 +55,8 @@ export async function requestVoicePreview(
 		},
 	);
 	if (!response.ok) {
-		throw new VoicePreviewClientError(await responseCode(response));
+		const error = await responseError(response);
+		throw new VoicePreviewClientError(error.code, error.reason);
 	}
 	if (
 		normalizeContentType(response.headers.get("content-type")) !== "audio/mpeg"

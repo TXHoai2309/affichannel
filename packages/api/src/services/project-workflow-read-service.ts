@@ -68,6 +68,19 @@ function isOrganicScriptedSubject(subject: ProjectWorkflowSubject) {
 	);
 }
 
+function unevaluatedFactLockGate(
+	currentScriptVersion: Awaited<ReturnType<typeof findCurrentScriptVersion>>,
+): Awaited<ReturnType<typeof FactLockGate.evaluate>> {
+	return {
+		allowed: false,
+		reason: currentScriptVersion ? "FACT_LOCK_NOT_RUN" : "NO_SCRIPT_VERSION",
+		currentScriptVersionId: currentScriptVersion?.id ?? null,
+		currentScriptRevision: currentScriptVersion?.revision ?? null,
+		factLockRunId: null,
+		blockingRunStatus: null,
+	};
+}
+
 function emptyInput(
 	subject: ProjectWorkflowSubject,
 ): ProjectApplicabilityInput {
@@ -144,12 +157,26 @@ export async function gatherProjectApplicabilityInput(
 	if (!subject.productAccessible && !organicScripted)
 		return emptyInput(subject);
 
-	const [scriptReadModel, currentScriptVersion, factLockGate] =
-		await Promise.all([
+	let scriptReadModel: Awaited<ReturnType<typeof getScriptGenerationReadModel>>;
+	let currentScriptVersion: Awaited<
+		ReturnType<typeof findCurrentScriptVersion>
+	>;
+	let initialFactLockGate:
+		| Awaited<ReturnType<typeof FactLockGate.evaluate>>
+		| undefined;
+	if (organicScripted) {
+		[scriptReadModel, currentScriptVersion] = await Promise.all([
 			dependencies.readScript(actor, subject.id),
 			dependencies.readCurrentScriptVersion(actor, subject.id),
-			dependencies.evaluateFactLock(actor, subject.id),
 		]);
+	} else {
+		[scriptReadModel, currentScriptVersion, initialFactLockGate] =
+			await Promise.all([
+				dependencies.readScript(actor, subject.id),
+				dependencies.readCurrentScriptVersion(actor, subject.id),
+				dependencies.evaluateFactLock(actor, subject.id),
+			]);
+	}
 	const currentClaimSummary = summarizeCurrentScriptVersionClaims({
 		contentType: subject.contentType,
 		creationPath: subject.creationPath,
@@ -182,7 +209,11 @@ export async function gatherProjectApplicabilityInput(
 		product: { accessible: subject.productAccessible },
 		script: scriptInput,
 		claimSummary: currentClaimSummary,
-		factLock: { gateReason: factLockGate.reason },
+		factLock: {
+			gateReason: currentScriptVersion
+				? "FACT_LOCK_NOT_RUN"
+				: "NO_SCRIPT_VERSION",
+		},
 		voice: {
 			configPresent: false,
 			previewPresent: false,
@@ -199,6 +230,12 @@ export async function gatherProjectApplicabilityInput(
 	const factLockApplicability = preliminaryResult.capabilities.find(
 		(capability) => capability.capability === "FACT_LOCK",
 	);
+	const factLockGate = organicScripted
+		? factLockApplicability?.state === "READY" &&
+			factLockApplicability.completion === "NOT_STARTED"
+			? await dependencies.evaluateFactLock(actor, subject.id)
+			: unevaluatedFactLockGate(currentScriptVersion)
+		: (initialFactLockGate ?? unevaluatedFactLockGate(currentScriptVersion));
 	const voice = await dependencies.readVoice(actor, subject.id, {
 		factLockGate,
 		currentScriptVersion,

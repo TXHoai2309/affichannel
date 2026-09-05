@@ -2,8 +2,6 @@ import { randomUUID } from "node:crypto";
 import {
 	deriveVoiceSegmentReadModel,
 	evaluateVoiceStepReadiness,
-	resolveProjectApplicability,
-	summarizeCurrentScriptVersionClaims,
 	type VoiceSegmentArtifact,
 	type VoiceSegmentReadTemporalContext,
 	type VoiceStepSegmentEvaluation,
@@ -18,6 +16,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import { FactLockGate } from "./fact-lock-gate-service";
 import { getProjectWorkflowSubject } from "./project-repository";
 import { findCurrentScriptVersion } from "./script-version-repository";
+import { resolveVoiceFactLockApplicability } from "./voice-paid-authorization-service";
 import { hashVoiceSegmentText } from "./voice-segment-hashing";
 import {
 	listVoiceSegmentArtifacts,
@@ -44,6 +43,19 @@ function sortArtifacts(
 		right.createdAt.getTime() - left.createdAt.getTime() ||
 		right.id.localeCompare(left.id)
 	);
+}
+
+function unevaluatedFactLockGate(
+	currentScriptVersion: Awaited<ReturnType<typeof findCurrentScriptVersion>>,
+): VoiceStepWorkflowReadSources["factLockGate"] {
+	return {
+		allowed: false,
+		reason: currentScriptVersion ? "FACT_LOCK_NOT_RUN" : "NO_SCRIPT_VERSION",
+		currentScriptVersionId: currentScriptVersion?.id ?? null,
+		currentScriptRevision: currentScriptVersion?.revision ?? null,
+		factLockRunId: null,
+		blockingRunStatus: null,
+	};
 }
 
 async function findCurrentVoiceConfig(
@@ -169,58 +181,36 @@ async function loadEvaluation(
 		readSources
 			? Promise.resolve(readSources)
 			: Promise.all([
-					FactLockGate.evaluate(actor, projectId),
 					findCurrentScriptVersion(actor, projectId),
 					getProjectWorkflowSubject(actor.workspaceId, projectId),
-				]).then(([factLockGate, currentScriptVersion, subject]) => {
-					const summary = summarizeCurrentScriptVersionClaims({
-						contentType: subject?.contentType ?? null,
-						creationPath: subject?.creationPath ?? null,
+				]).then(async ([currentScriptVersion, subject]) => {
+					if (!subject) {
+						return {
+							factLockGate: unevaluatedFactLockGate(currentScriptVersion),
+							currentScriptVersion,
+							factLockNotRequired: false,
+						};
+					}
+					const preliminaryFactLock = resolveVoiceFactLockApplicability(
+						subject,
 						currentScriptVersion,
-					});
-					const preliminary = subject
-						? resolveProjectApplicability({
-								projectIdentity: {
-									contentType: subject.contentType,
-									creationPath: subject.creationPath,
-									contentFormatKey: subject.contentFormatKey,
-									contentFormatVersion: subject.contentFormatVersion,
-									hasProduct: subject.productId !== null,
-								},
-								product: { accessible: subject.productAccessible },
-								script: {
-									generationStatus: "NONE",
-									usableGenerationPresent: false,
-									sourceDependencyCurrent: true,
-									currentVersionPresent: currentScriptVersion !== undefined,
-									currentVersionFactLockReady: true,
-									channelSettingsComplete: true,
-									productFactsUsable: true,
-									claimSummary: summary,
-								},
-								claimSummary: summary,
-								factLock: { gateReason: factLockGate.reason },
-								voice: {
-									configPresent: false,
-									previewPresent: false,
-									totalSegments: 0,
-									attemptedSegments: 0,
-									usableSegments: 0,
-									pendingSegments: 0,
-									failedSegments: 0,
-									indeterminateSegments: 0,
-									staleSegments: 0,
-								},
-								render: { featureImplemented: false, inputsStale: false },
-							})
-						: undefined;
-					const factLock = preliminary?.capabilities.find(
-						(capability) => capability.capability === "FACT_LOCK",
+						currentScriptVersion ? "FACT_LOCK_NOT_RUN" : "NO_SCRIPT_VERSION",
 					);
+					if (
+						preliminaryFactLock?.state === "READY" &&
+						preliminaryFactLock.completion === "NOT_STARTED"
+					) {
+						const factLockGate = await FactLockGate.evaluate(actor, projectId);
+						return {
+							factLockGate,
+							currentScriptVersion,
+							factLockNotRequired: false,
+						};
+					}
 					return {
-						factLockGate,
+						factLockGate: unevaluatedFactLockGate(currentScriptVersion),
 						currentScriptVersion,
-						factLockNotRequired: factLock?.state === "NOT_REQUIRED",
+						factLockNotRequired: preliminaryFactLock?.state === "NOT_REQUIRED",
 					};
 				}),
 		findCurrentVoiceConfig(actor, projectId),

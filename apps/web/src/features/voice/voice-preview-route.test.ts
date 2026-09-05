@@ -91,13 +91,16 @@ describe("protected voice preview binary route", () => {
 		});
 
 		mocks.previewVoice.mockRejectedValue(
-			new FactLockError("FACT_LOCK_REQUIRED", "internal gate detail"),
+			new FactLockError("FACT_LOCK_REQUIRED", "internal gate detail", {
+				reason: "PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+			}),
 		);
 		const blocked = await POST(new Request("http://localhost"), { params });
 		expect(blocked.status).toBe(409);
 		expect(await blocked.json()).toEqual({
 			code: "FACT_LOCK_REQUIRED",
 			message: "FACT_LOCK_REQUIRED",
+			reason: "PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
 		});
 	});
 

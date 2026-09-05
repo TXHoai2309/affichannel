@@ -33,33 +33,17 @@ function factLockCapability(
 	);
 }
 
-/**
- * Canonical server-side policy boundary for every paid Voice provider call.
- * All identity, current ScriptVersion, claim summary, and Fact Lock inputs are
- * re-read from the authenticated workspace before this decision is returned.
- */
-export async function resolveVoicePaidExecutionAuthorization(
-	actor: WorkspaceActor,
-	projectId: string,
-): Promise<VoicePaidExecutionAuthorization> {
-	const subject = await getProjectWorkflowSubject(actor.workspaceId, projectId);
-	if (!subject) {
-		throw new FactLockError(
-			"FACT_LOCK_NOT_FOUND",
-			"Project không tồn tại hoặc không thuộc workspace hiện tại.",
-		);
-	}
-
-	const [currentScriptVersion, factLockGate] = await Promise.all([
-		findCurrentScriptVersion(actor, projectId),
-		FactLockGate.evaluate(actor, projectId),
-	]);
+function buildApplicabilityInput(
+	subject: NonNullable<Awaited<ReturnType<typeof getProjectWorkflowSubject>>>,
+	currentScriptVersion: Awaited<ReturnType<typeof findCurrentScriptVersion>>,
+	factLockReason: ProjectApplicabilityInput["factLock"]["gateReason"],
+): ProjectApplicabilityInput {
 	const claimSummary = summarizeCurrentScriptVersionClaims({
 		contentType: subject.contentType,
 		creationPath: subject.creationPath,
 		currentScriptVersion,
 	});
-	const input: ProjectApplicabilityInput = {
+	return {
 		projectIdentity: {
 			contentType: subject.contentType,
 			creationPath: subject.creationPath,
@@ -85,7 +69,7 @@ export async function resolveVoicePaidExecutionAuthorization(
 			claimSummary,
 		},
 		claimSummary,
-		factLock: { gateReason: factLockGate.reason },
+		factLock: { gateReason: factLockReason },
 		voice: {
 			configPresent: false,
 			previewPresent: false,
@@ -99,8 +83,104 @@ export async function resolveVoicePaidExecutionAuthorization(
 		},
 		render: { featureImplemented: false, inputsStale: false },
 	};
-	const result = resolveProjectApplicability(input);
-	const factLock = factLockCapability(result.capabilities);
+}
+
+export function resolveVoiceFactLockApplicability(
+	subject: NonNullable<Awaited<ReturnType<typeof getProjectWorkflowSubject>>>,
+	currentScriptVersion: Awaited<ReturnType<typeof findCurrentScriptVersion>>,
+	factLockReason: ProjectApplicabilityInput["factLock"]["gateReason"],
+) {
+	const input = buildApplicabilityInput(
+		subject,
+		currentScriptVersion,
+		factLockReason,
+	);
+	return factLockCapability(resolveProjectApplicability(input).capabilities);
+}
+
+/**
+ * Canonical server-side policy boundary for every paid Voice provider call.
+ * All identity, current ScriptVersion, claim summary, and Fact Lock inputs are
+ * re-read from the authenticated workspace before this decision is returned.
+ */
+export async function resolveVoicePaidExecutionAuthorization(
+	actor: WorkspaceActor,
+	projectId: string,
+): Promise<VoicePaidExecutionAuthorization> {
+	const subject = await getProjectWorkflowSubject(actor.workspaceId, projectId);
+	if (!subject) {
+		throw new FactLockError(
+			"FACT_LOCK_NOT_FOUND",
+			"Project không tồn tại hoặc không thuộc workspace hiện tại.",
+		);
+	}
+
+	const currentScriptVersion = await findCurrentScriptVersion(actor, projectId);
+	// Resolver authority is evaluated before reading Fact Lock history. A stale
+	// or malformed historical run must not turn an Organic claimless/general-only
+	// project into a paid-action Fact Lock lock.
+	const preliminaryFactLock = resolveVoiceFactLockApplicability(
+		subject,
+		currentScriptVersion,
+		currentScriptVersion ? "FACT_LOCK_NOT_RUN" : "NO_SCRIPT_VERSION",
+	);
+	if (!preliminaryFactLock) {
+		throw new FactLockError(
+			"FACT_LOCK_REQUIRED",
+			"Không xác định được trạng thái Fact Lock hiện tại.",
+		);
+	}
+	if (preliminaryFactLock.state === "NOT_REQUIRED") {
+		return {
+			allowed: true,
+			factLockRequirement: "NOT_REQUIRED",
+			reasonCode: preliminaryFactLock.reasonCode,
+		};
+	}
+	if (
+		preliminaryFactLock.state !== "READY" ||
+		preliminaryFactLock.completion !== "NOT_STARTED"
+	) {
+		// Affiliate keeps its established gate-first contract. Organic states
+		// already classified as stale/blocked by the Resolver do not need a
+		// historical Fact Lock read to explain their canonical remediation.
+		if (subject.contentType === "AFFILIATE") {
+			const factLockGate = await FactLockGate.evaluate(actor, projectId);
+			const factLock = resolveVoiceFactLockApplicability(
+				subject,
+				currentScriptVersion,
+				factLockGate.reason,
+			);
+			if (factLock?.state === "READY" && factLock.completion === "COMPLETE") {
+				return {
+					allowed: true,
+					factLockRequirement: "SATISFIED",
+					reasonCode: factLock.reasonCode,
+				};
+			}
+			if (factLock) {
+				return {
+					allowed: false,
+					factLockRequirement: "REQUIRED",
+					reasonCode: factLock.reasonCode,
+					state: factLock.state,
+				};
+			}
+		}
+		return {
+			allowed: false,
+			factLockRequirement: "REQUIRED",
+			reasonCode: preliminaryFactLock.reasonCode,
+			state: preliminaryFactLock.state,
+		};
+	}
+
+	const factLockGate = await FactLockGate.evaluate(actor, projectId);
+	const factLock = resolveVoiceFactLockApplicability(
+		subject,
+		currentScriptVersion,
+		factLockGate.reason,
+	);
 	if (!factLock) {
 		throw new FactLockError(
 			"FACT_LOCK_REQUIRED",

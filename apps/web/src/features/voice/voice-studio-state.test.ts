@@ -5,6 +5,7 @@ import {
 	createVoiceStudioDraft,
 	getVoiceStudioErrorCode,
 	getVoiceStudioErrorMessage,
+	getVoiceStudioErrorReason,
 	isVoiceStudioFactLockError,
 	releaseVoicePreviewUrl,
 	voiceStudioDraftEquals,
@@ -92,6 +93,20 @@ describe("Voice Studio state", () => {
 		);
 		expect(isVoiceStudioFactLockError({ code: "FACT_LOCK_STALE_SCRIPT" })).toBe(
 			true,
+		);
+		const productRequired = {
+			code: "FACT_LOCK_REQUIRED",
+			data: {
+				code: "FACT_LOCK_REQUIRED",
+				reason: "PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+			},
+		};
+		expect(getVoiceStudioErrorReason(productRequired)).toBe(
+			"PRODUCT_REQUIRED_FOR_PRODUCT_CLAIMS",
+		);
+		expect(isVoiceStudioFactLockError(productRequired)).toBe(false);
+		expect(getVoiceStudioErrorMessage(productRequired)).toContain(
+			"liên kết sản phẩm",
 		);
 	});
 
