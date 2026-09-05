@@ -343,7 +343,8 @@ export default function VoiceSegmentStudio({
 	} | null>(null);
 	const lastConfigRevisionRef = useRef<number | null>(null);
 
-	const segments = (listQuery.data ?? []) as VoiceSegmentListItem[];
+	const segments = (listQuery.data?.sourceSegments ??
+		[]) as VoiceSegmentListItem[];
 	const hasPending = segments.some(
 		(segment) => segment.readModel.effectiveStatus === "pending",
 	);

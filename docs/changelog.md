@@ -54,6 +54,22 @@ Cập nhật lần cuối: 2026-09-05.
   F5. No schema, migration, Resolver policy, VoiceConfig contract, Product, or
   Affiliate behavior changed. Owner Manual UAT remains **IN PROGRESS**.
 
+### Owner UAT fix-forward — Voice segment empty collection
+
+- Changed `voiceSegment.list` to return a structured collection with
+  `segments: []` for a valid Project/ScriptVersion that has no persisted Voice
+  artifact attempts, while `sourceSegments` keeps the canonical current Script
+  sources required to render `0 / N` and generation actions.
+- The list builds every source state from one current Script/VoiceConfig
+  snapshot instead of routing collection initialization through repeated
+  specific-segment reads. Invalid Project/Script and cross-workspace parents
+  still return `VOICE_SEGMENT_NOT_FOUND`; Product/Affiliate paid generation
+  gates and missing-artifact behavior are unchanged.
+- Added disposable integration/browser coverage for empty, first-generated,
+  fully-generated, reload, summary agreement, invalid parent, and workspace
+  isolation. No schema, migration, Resolver, Fact Lock, or VoiceConfig contract
+  change was made; Owner Manual UAT remains **IN PROGRESS**.
+
 ### AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 - Added the Project Overview “Tài nguyên media” reuse panel and picker using

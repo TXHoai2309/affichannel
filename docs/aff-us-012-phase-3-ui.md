@@ -11,7 +11,13 @@ của toàn US12.
 ## Server state và composition
 
 `VoiceSegmentStudio` dùng server read model từ `voiceSegment.list` và refresh
-segment cụ thể qua `voiceSegment.getState`. Generate chỉ gửi:
+segment cụ thể qua `voiceSegment.getState`. Collection response tách
+`segments` (current Script sources đã có ít nhất một persisted artifact attempt)
+khỏi `sourceSegments` (toàn bộ canonical current Script sources dùng để render
+generation CTA). Vì vậy valid Project/ScriptVersion với chưa có artifact trả
+`segments: []` qua HTTP 200, trong khi UI vẫn render `0 / N` và các source card;
+404 chỉ dành cho parent/specific resource thực sự không tồn tại hoặc ngoài scope.
+Generate chỉ gửi:
 
 ```text
 projectId

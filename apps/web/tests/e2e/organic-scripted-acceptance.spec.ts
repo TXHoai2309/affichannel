@@ -44,6 +44,17 @@ const evidenceRoot =
 	"C:/Users/User/.codex/visualizations/2026/09/04/aff-us-019";
 const consoleIssuesByPage = new WeakMap<Page, string[]>();
 
+type VoiceSegmentListPayload = {
+	segments: Array<{
+		segmentKey: string;
+		readModel: { effectiveStatus: string };
+	}>;
+	sourceSegments: Array<{
+		segmentKey: string;
+		readModel: { effectiveStatus: string };
+	}>;
+};
+
 function attachConsoleAudit(page: Page) {
 	const issues: string[] = [];
 	consoleIssuesByPage.set(page, issues);
@@ -114,6 +125,16 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 		let projectId: string | undefined;
 		try {
 			await signIn(page);
+			const missingProjectListResponse = await page.request.post(
+				"/api/rpc/voiceSegment/list",
+				{
+					data: { json: { projectId: randomUUID() } },
+				},
+			);
+			expect(missingProjectListResponse.status()).toBe(404);
+			expect((await missingProjectListResponse.json()).json.data.code).toBe(
+				"VOICE_SEGMENT_NOT_FOUND",
+			);
 			await page.goto("/projects/new");
 			await page.getByRole("radio", { name: "Organic" }).check();
 			await page.getByLabel("Tên dự án").fill(fixture.projectName);
@@ -218,11 +239,54 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 			await expect(
 				page.getByText("Đã lưu", { exact: true }).first(),
 			).toBeVisible();
-			expect((await segmentListResponse).status()).toBe(200);
+			const initialListResponse = await segmentListResponse;
+			expect(initialListResponse.status()).toBe(200);
+			const initialList = (await initialListResponse.json())
+				.json as VoiceSegmentListPayload;
+			expect(initialList.segments).toEqual([]);
+			expect(initialList.sourceSegments).toHaveLength(2);
+			expect(
+				initialList.sourceSegments.every(
+					(segment) => segment.readModel.effectiveStatus === "not_generated",
+				),
+			).toBe(true);
+			const initialSummaryResponse = await page.request.post(
+				"/api/rpc/voiceSegment/getSummary",
+				{ data: { json: { projectId } } },
+			);
+			expect(initialSummaryResponse.status()).toBe(200);
+			expect((await initialSummaryResponse.json()).json).toMatchObject({
+				totalSegments: 2,
+				completedSegments: 0,
+			});
 			await expect(page.getByTestId("voice-segment-intro")).toBeVisible();
 			await expect(
 				page.getByText("0 / 2 đoạn đã tạo", { exact: true }),
 			).toBeVisible();
+			const emptyReloadListResponse = page.waitForResponse(
+				(response) =>
+					response.url().includes("/api/rpc/voiceSegment/list") &&
+					response.request().method() === "POST",
+			);
+			await page.reload();
+			const emptyReloadList = await emptyReloadListResponse;
+			expect(emptyReloadList.status()).toBe(200);
+			expect(
+				((await emptyReloadList.json()).json as VoiceSegmentListPayload)
+					.segments,
+			).toEqual([]);
+			await expect(
+				page.getByText("0 / 2 đoạn đã tạo", { exact: true }),
+			).toBeVisible();
+			await expect(
+				page
+					.getByTestId("voice-segment-intro")
+					.getByRole("button", { name: "Tạo giọng đọc" }),
+			).toBeEnabled();
+			await page
+				.getByText("0 / 2 đoạn đã tạo", { exact: true })
+				.scrollIntoViewIfNeeded();
+			await captureEvidence(page, "organic-claimless-voice-empty");
 			const previewResponse = page.waitForResponse(
 				(response) =>
 					response.url().includes(`/projects/${projectId}/voice/preview`) &&
@@ -248,8 +312,46 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 					response.request().method() === "POST",
 			);
 			await page.reload();
-			expect((await reloadSegmentListResponse).status()).toBe(200);
+			const firstReloadList = await reloadSegmentListResponse;
+			expect(firstReloadList.status()).toBe(200);
+			expect(
+				((await firstReloadList.json()).json as VoiceSegmentListPayload)
+					.segments,
+			).toHaveLength(1);
 			await expect(page.getByText(/Đã tạo ·/).first()).toBeVisible();
+			await expect(
+				page.getByText("1 / 2 đoạn đã tạo", { exact: true }),
+			).toBeVisible();
+
+			const secondSegment = page.getByTestId("voice-segment-tip");
+			await secondSegment
+				.getByRole("button", { name: "Tạo giọng đọc" })
+				.click();
+			await expect(secondSegment.getByText(/Đã tạo ·/)).toBeVisible({
+				timeout: 30_000,
+			});
+			await expect(
+				page.getByText("2 / 2 đoạn đã tạo", { exact: true }),
+			).toBeVisible();
+			const fullReloadListResponse = page.waitForResponse(
+				(response) =>
+					response.url().includes("/api/rpc/voiceSegment/list") &&
+					response.request().method() === "POST",
+			);
+			await page.reload();
+			const fullReloadList = await fullReloadListResponse;
+			expect(fullReloadList.status()).toBe(200);
+			expect(
+				((await fullReloadList.json()).json as VoiceSegmentListPayload)
+					.segments,
+			).toHaveLength(2);
+			await expect(
+				page.getByText("2 / 2 đoạn đã tạo", { exact: true }),
+			).toBeVisible();
+			await page
+				.getByText("2 / 2 đoạn đã tạo", { exact: true })
+				.scrollIntoViewIfNeeded();
+			await captureEvidence(page, "organic-claimless-voice-complete");
 			assertNoBrowserErrors(page);
 		} finally {
 			if (projectId) await cleanupFixture(projectId, fixture.productId);

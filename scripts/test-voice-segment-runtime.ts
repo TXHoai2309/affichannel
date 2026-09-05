@@ -18,8 +18,10 @@ const {
 	voiceSegmentArtifact,
 	workspace,
 } = await import("@affichannel/db");
-const { SCRIPT_OUTPUT_SCHEMA_VERSION } = await import("@affichannel/core");
-const { generateVoiceSegment } = await import(
+const { SCRIPT_OUTPUT_SCHEMA_VERSION, VoiceSegmentError } = await import(
+	"@affichannel/core"
+);
+const { generateVoiceSegment, listVoiceSegmentStates } = await import(
 	"../packages/api/src/services/voice-segment-runtime-service.ts"
 );
 const { LocalVoiceAudioStorage } = await import(
@@ -214,7 +216,9 @@ try {
 		sourceGenerationId: fixture.generationId,
 		status: "draft",
 		versionNumber: null,
-		editableSnapshotJson: {},
+		editableSnapshotJson: {
+			voiceoverSegments: [{ key: "intro", text: segmentText }],
+		},
 		revision: 1,
 		createdByUserId: actor.userId,
 		createdAt: now,
@@ -233,6 +237,33 @@ try {
 		createdByUserId: actor.userId,
 		updatedByUserId: actor.userId,
 	});
+
+	const emptyList = await listVoiceSegmentStates(actor, fixture.projectId);
+	assert(
+		emptyList.segments.length === 0 &&
+			emptyList.sourceSegments.length === 1 &&
+			emptyList.sourceSegments[0]?.readModel.effectiveStatus ===
+				"not_generated",
+		"Valid Voice parent with zero artifacts did not return an empty list.",
+	);
+	try {
+		await listVoiceSegmentStates(
+			{ workspaceId: randomUUID(), userId: randomUUID() },
+			fixture.projectId,
+		);
+		throw new Error("Expected cross-workspace Voice segment list denial.");
+	} catch (error) {
+		if (
+			error instanceof Error &&
+			error.message === "Expected cross-workspace Voice segment list denial."
+		)
+			throw error;
+		assert(
+			error instanceof VoiceSegmentError &&
+				error.code === "VOICE_SEGMENT_NOT_FOUND",
+			"Cross-workspace Voice segment list did not preserve NOT_FOUND.",
+		);
+	}
 
 	const request = (idempotencyKey: string) =>
 		generateVoiceSegment(
@@ -289,6 +320,15 @@ try {
 		first.artifact.durationMs === 1_045,
 		`Server MP3 duration was not authoritative: ${first.artifact.durationMs}.`,
 	);
+	const firstGeneratedList = await listVoiceSegmentStates(
+		actor,
+		fixture.projectId,
+	);
+	assert(
+		firstGeneratedList.segments.length === 1 &&
+			firstGeneratedList.segments[0]?.readModel.effectiveStatus === "completed",
+		"Voice segment list did not return the first completed segment.",
+	);
 
 	const reused = await request(first.artifact.idempotencyKey);
 	assert(reused.artifact.id === first.artifact.id, "Idempotency reuse failed.");
@@ -329,7 +369,7 @@ try {
 	);
 
 	console.log(
-		"AFF-US-012 Phase 2 runtime integration passed: DB transaction race coalescing, server-owned synthesis input, authoritative duration, idempotency reuse and expired-pending reconciliation.",
+		"AFF-US-012 Phase 2 runtime integration passed: empty-list semantics, cross-workspace denial, first completed list item, DB transaction race coalescing, server-owned synthesis input, authoritative duration, idempotency reuse and expired-pending reconciliation.",
 	);
 } finally {
 	await db

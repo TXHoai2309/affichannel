@@ -59,6 +59,13 @@ export type VoiceSegmentState = {
 	readModel: VoiceSegmentArtifactReadModel;
 };
 
+export type VoiceSegmentListResult = {
+	/** Current Script segments that have at least one persisted artifact attempt. */
+	segments: VoiceSegmentState[];
+	/** Canonical current Script sources used by the UI for generation actions. */
+	sourceSegments: VoiceSegmentState[];
+};
+
 export type VoiceSegmentGenerateResult = {
 	artifact: VoiceSegmentArtifact;
 	readModel: VoiceSegmentArtifactReadModel;
@@ -142,7 +149,26 @@ async function readCurrentVoiceSegmentContext(
 	if (!script) throw segmentNotFound("Project chưa có ScriptVersion hiện tại.");
 	const config = await findVoiceConfig(actor, projectId);
 	if (!config) throw new VoiceConfigError("VOICE_CONFIG_NOT_FOUND");
+	const segment = script.editableSnapshot.voiceoverSegments.find(
+		(candidate) => candidate.key === segmentKey,
+	);
+	if (!segment) throw segmentNotFound();
+	return prepareVoiceSegmentFromCurrent(
+		actor,
+		projectId,
+		script,
+		config,
+		segment,
+	);
+}
 
+function prepareVoiceSegmentFromCurrent(
+	actor: WorkspaceActor,
+	projectId: string,
+	script: NonNullable<Awaited<ReturnType<typeof findCurrentScriptVersion>>>,
+	config: NonNullable<Awaited<ReturnType<typeof findVoiceConfig>>>,
+	segment: { key: string; text: string },
+): PreparedVoiceSegmentRequest {
 	const fields = validateVoiceConfigFields({
 		voiceId: config.voiceId,
 		language: config.language,
@@ -155,20 +181,16 @@ async function readCurrentVoiceSegmentContext(
 		);
 	}
 
-	const segment = script.editableSnapshot.voiceoverSegments.find(
-		(candidate) => candidate.key === segmentKey,
-	);
-	if (!segment) throw segmentNotFound();
 	const text = validateVoiceSegmentText(
 		segment.text,
-		env.VOICE_SEGMENT_MAX_CHARS,
+		Number(env.VOICE_SEGMENT_MAX_CHARS),
 	);
 	const fingerprint: VoiceSegmentFingerprint = {
 		workspaceId: actor.workspaceId,
 		projectId,
 		sourceScriptVersionId: script.id,
 		sourceScriptRevision: script.revision,
-		segmentKey,
+		segmentKey: segment.key,
 		textHash: hashVoiceSegmentText(text),
 		voiceConfigRevision: config.revision,
 		provider: config.provider,
@@ -176,7 +198,7 @@ async function readCurrentVoiceSegmentContext(
 		language: fields.language,
 		speed: fields.speed,
 	};
-	return { projectId, segmentKey, text, fingerprint };
+	return { projectId, segmentKey: segment.key, text, fingerprint };
 }
 
 export async function prepareVoiceSegmentRequest(
@@ -675,7 +697,7 @@ export async function listVoiceSegmentStates(
 	actor: WorkspaceActor,
 	projectId: string,
 	dependencies: VoiceSegmentRuntimeDependencies = {},
-): Promise<VoiceSegmentState[]> {
+): Promise<VoiceSegmentListResult> {
 	const reconcileExpired =
 		dependencies.repository?.reconcileExpired ??
 		reconcileExpiredPendingVoiceSegmentArtifacts;
@@ -686,19 +708,37 @@ export async function listVoiceSegmentStates(
 	if (!config) throw new VoiceConfigError("VOICE_CONFIG_NOT_FOUND");
 	const list = dependencies.repository?.list ?? listVoiceSegmentArtifacts;
 	const artifacts = await list(actor, projectId);
-	return Promise.all(
+	const sourceSegments = await Promise.all(
 		script.editableSnapshot.voiceoverSegments.map(async (segment) => {
-			const current = await (dependencies.readCurrent
-				? dependencies.readCurrent(actor, projectId, segment.key)
-				: readCurrentVoiceSegmentContext(actor, projectId, segment.key));
+			const current = dependencies.readCurrent
+				? await dependencies.readCurrent(actor, projectId, segment.key)
+				: prepareVoiceSegmentFromCurrent(
+						actor,
+						projectId,
+						script,
+						config,
+						segment,
+					);
+			const segmentArtifacts = artifacts.filter(
+				(artifact) => artifact.segmentKey === segment.key,
+			);
 			return {
 				segmentKey: segment.key,
 				text: segment.text,
 				readModel: deriveVoiceSegmentReadModel(
-					artifacts.filter((artifact) => artifact.segmentKey === segment.key),
+					segmentArtifacts,
 					current.fingerprint,
 				),
 			};
 		}),
 	);
+	const generatedSegmentKeys = new Set(
+		artifacts.map((artifact) => artifact.segmentKey),
+	);
+	return {
+		segments: sourceSegments.filter((segment) =>
+			generatedSegmentKeys.has(segment.segmentKey),
+		),
+		sourceSegments,
+	};
 }

@@ -75,6 +75,34 @@ policy, VoiceConfig contract, Product, or Affiliate behavior changed. Owner
 Manual UAT remains **IN PROGRESS**; resume from Voice Studio and do not start
 US021.
 
+## 2026-09-05 — Owner UAT fix-forward: Voice list empty collection contract
+
+Live Owner UAT captured `voiceSegment.list` returning
+`404/VOICE_SEGMENT_NOT_FOUND` while `getSummary` returned 200 for a valid
+claimless Organic Project with two current Script voiceover sources, saved
+VoiceConfig, and zero persisted artifacts. The list implementation mixed the
+persisted child collection with per-source `getState` initialization and
+re-read each specific source; a collection read could therefore surface a
+single-resource 404 before any artifact existed.
+
+The protected collection now returns `{ segments, sourceSegments }` from one
+current Script/VoiceConfig snapshot. `segments` contains current source keys
+that have persisted artifact attempts, so the pre-generation response is
+HTTP 200 with `segments: []`; `sourceSegments` retains the canonical text,
+fingerprint read model, and generation actions needed for `0 / N`. A missing
+Project/Script or cross-workspace parent still returns
+`VOICE_SEGMENT_NOT_FOUND`; specific missing artifact behavior is unchanged.
+No Fact Lock/Resolver/VoiceConfig/schema/migration contract changed.
+
+Disposable integration and Playwright coverage assert zero artifacts, summary
+`0 / 2`, F5 empty-state persistence, one completed item after the first local
+deterministic generation, two after completion, invalid Project, and
+cross-workspace denial. Acceptance passed with web unit tests `62/62` files and
+`566/566` tests, disposable Playwright `19/19`, the focused claimless Voice flow
+`1/1`, runtime/config/preview integration checks, type-check, production build,
+Biome, and `git diff --check`; live provider calls remained `0`. Owner Manual
+UAT remains **IN PROGRESS**; resume from Voice Studio and do not start US021.
+
 ## 2026-09-05 — AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 Starting from exact HEAD `f439406a111ca25b608b12700611997b48850568` on `TXH`,

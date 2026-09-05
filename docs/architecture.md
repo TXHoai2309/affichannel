@@ -585,7 +585,11 @@ sai MIME, rỗng hoặc oversize là `TTS_INVALID_AUDIO`; preview behavior khôn
 
 Route `/projects/{projectId}/voice` giữ nguyên VoiceConfig của US11 và render
 `VoiceSegmentStudio` bên dưới. UI dùng `voiceSegment.list` làm read model theo
-thứ tự current ScriptVersion, `getState` để refresh segment sau mutation và
+thứ tự current ScriptVersion. List collection trả `segments` chỉ cho source đã
+có persisted artifact attempt và trả `sourceSegments` cho toàn bộ source hiện
+tại; valid parent với zero artifacts là HTTP 200 + `segments: []`, không phải
+404. UI dùng `sourceSegments` để giữ trạng thái `0 / N` và generation CTA,
+`getState` để refresh segment sau mutation và
 `generate` chỉ với project/segment/idempotency key. `latestRequest`,
 `latestUsableArtifact` và `effectiveStatus` được hiển thị riêng; stale không
 được coi là failed/current completed.
