@@ -17,12 +17,55 @@ import {
 	sanitizeOriginalFilename,
 } from "@affichannel/core";
 import { db, mediaAsset, mediaAssetLink, project } from "@affichannel/db";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import {
+	and,
+	desc,
+	eq,
+	ilike,
+	inArray,
+	isNotNull,
+	isNull,
+	lt,
+	or,
+	sql,
+} from "drizzle-orm";
 
 import type { WorkspaceActor } from "./workspace";
 
 export type MediaAssetRecord = MediaAsset;
 export type MediaAssetLinkRecord = MediaAssetLink;
+
+export type MediaAssetCursor = { updatedAt: string; id: string };
+
+export function encodeMediaAssetCursor(cursor: MediaAssetCursor) {
+	return Buffer.from(JSON.stringify(cursor), "utf8").toString("base64url");
+}
+
+export function decodeMediaAssetCursor(
+	value: string,
+): MediaAssetCursor | undefined {
+	try {
+		const parsed = JSON.parse(
+			Buffer.from(value, "base64url").toString("utf8"),
+		) as Partial<MediaAssetCursor>;
+		if (
+			typeof parsed.updatedAt !== "string" ||
+			typeof parsed.id !== "string" ||
+			!parsed.id
+		)
+			return undefined;
+		const date = new Date(parsed.updatedAt);
+		return Number.isNaN(date.getTime())
+			? undefined
+			: { updatedAt: date.toISOString(), id: parsed.id };
+	} catch {
+		return undefined;
+	}
+}
+
+function escapeLikePattern(value: string) {
+	return value.replace(/[\\%_]/g, "\\$&");
+}
 
 function toMediaAssetRecord(
 	record: typeof mediaAsset.$inferSelect,
@@ -168,6 +211,107 @@ export async function findMediaAssetByPrepareIdempotencyKey(
 		)
 		.limit(1);
 	return record ? toMediaAssetRecord(record) : undefined;
+}
+
+export async function listMediaAssets(
+	actor: WorkspaceActor,
+	input: {
+		cursor?: string;
+		limit: number;
+		mediaType?: MediaType;
+		status?: MediaAsset["status"];
+		archiveScope: "activeOnly" | "archivedOnly" | "all";
+		search?: string;
+		tag?: string;
+	},
+) {
+	const conditions = [eq(mediaAsset.workspaceId, actor.workspaceId)];
+	if (input.archiveScope === "activeOnly")
+		conditions.push(isNull(mediaAsset.archivedAt));
+	if (input.archiveScope === "archivedOnly")
+		conditions.push(isNotNull(mediaAsset.archivedAt));
+	if (input.mediaType)
+		conditions.push(eq(mediaAsset.mediaType, input.mediaType));
+	if (input.status) conditions.push(eq(mediaAsset.status, input.status));
+	if (input.search) {
+		const pattern = `%${escapeLikePattern(input.search)}%`;
+		const searchCondition = or(
+			ilike(mediaAsset.displayName, pattern),
+			ilike(mediaAsset.originalFilename, pattern),
+		);
+		if (searchCondition) conditions.push(searchCondition);
+	}
+	if (input.tag) {
+		const pattern = `%${escapeLikePattern(input.tag)}%`;
+		conditions.push(
+			sql`EXISTS (SELECT 1 FROM unnest(${mediaAsset.tags}) AS media_tag WHERE media_tag ILIKE ${pattern} ESCAPE '\\')`,
+		);
+	}
+	if (input.cursor) {
+		const cursor = decodeMediaAssetCursor(input.cursor);
+		if (!cursor) return { kind: "invalid_cursor" as const };
+		const cursorCondition = or(
+			lt(mediaAsset.updatedAt, new Date(cursor.updatedAt)),
+			and(
+				eq(mediaAsset.updatedAt, new Date(cursor.updatedAt)),
+				lt(mediaAsset.id, cursor.id),
+			),
+		);
+		if (cursorCondition) conditions.push(cursorCondition);
+	}
+	const records = await db
+		.select()
+		.from(mediaAsset)
+		.where(and(...conditions))
+		.orderBy(desc(mediaAsset.updatedAt), desc(mediaAsset.id))
+		.limit(input.limit + 1);
+	const hasNextPage = records.length > input.limit;
+	const items = records.slice(0, input.limit).map(toMediaAssetRecord);
+	const last = items.at(-1);
+	return {
+		kind: "success" as const,
+		items,
+		nextCursor:
+			hasNextPage && last
+				? encodeMediaAssetCursor({
+						updatedAt: last.updatedAt.toISOString(),
+						id: last.id,
+					})
+				: null,
+	};
+}
+
+export async function listMediaAssetLinks(
+	actor: WorkspaceActor,
+	assetId: string,
+) {
+	const rows = await db
+		.select({
+			id: mediaAssetLink.id,
+			workspaceId: mediaAssetLink.workspaceId,
+			projectId: mediaAssetLink.projectId,
+			mediaAssetId: mediaAssetLink.mediaAssetId,
+			usageType: mediaAssetLink.usageType,
+			createdByUserId: mediaAssetLink.createdByUserId,
+			createdAt: mediaAssetLink.createdAt,
+			projectName: project.name,
+		})
+		.from(mediaAssetLink)
+		.leftJoin(project, eq(project.id, mediaAssetLink.projectId))
+		.where(
+			and(
+				eq(mediaAssetLink.workspaceId, actor.workspaceId),
+				eq(mediaAssetLink.mediaAssetId, assetId),
+			),
+		)
+		.orderBy(desc(mediaAssetLink.createdAt), desc(mediaAssetLink.id));
+	return rows.map((row) => ({
+		id: row.id,
+		projectId: row.projectId,
+		projectName: row.projectName ?? null,
+		usageType: row.usageType as MediaAssetUsageType,
+		createdAt: row.createdAt,
+	}));
 }
 
 export async function markMediaAssetValidating(
@@ -342,6 +486,7 @@ export async function createMediaAssetLink(
 				id: mediaAsset.id,
 				workspaceId: mediaAsset.workspaceId,
 				status: mediaAsset.status,
+				usageRights: mediaAsset.usageRights,
 			})
 			.from(mediaAsset)
 			.where(
@@ -366,7 +511,11 @@ export async function createMediaAssetLink(
 		}
 
 		const [projectRecord] = await transaction
-			.select({ id: project.id, workspaceId: project.workspaceId })
+			.select({
+				id: project.id,
+				workspaceId: project.workspaceId,
+				contentType: project.contentType,
+			})
 			.from(project)
 			.where(
 				and(
@@ -380,6 +529,15 @@ export async function createMediaAssetLink(
 			throw new MediaAssetError(
 				"MEDIA_ASSET_WORKSPACE_MISMATCH",
 				"Project is missing, archived, or outside the actor workspace.",
+			);
+		}
+		if (
+			projectRecord.contentType === "AFFILIATE" &&
+			!["owned", "licensed"].includes(asset.usageRights)
+		) {
+			throw new MediaAssetError(
+				"MEDIA_ASSET_RIGHTS_NOT_ELIGIBLE",
+				"Media asset rights are not eligible for Affiliate projects.",
 			);
 		}
 
@@ -407,8 +565,22 @@ export async function createMediaAssetLink(
 				usageType,
 				createdByUserId: actor.userId,
 			})
+			.onConflictDoNothing()
 			.returning();
-		return created ? toMediaAssetLinkRecord(created) : undefined;
+		if (created) return toMediaAssetLinkRecord(created);
+		const [raced] = await transaction
+			.select()
+			.from(mediaAssetLink)
+			.where(
+				and(
+					eq(mediaAssetLink.workspaceId, actor.workspaceId),
+					eq(mediaAssetLink.projectId, input.projectId),
+					eq(mediaAssetLink.mediaAssetId, input.mediaAssetId),
+					eq(mediaAssetLink.usageType, usageType),
+				),
+			)
+			.limit(1);
+		return raced ? toMediaAssetLinkRecord(raced) : undefined;
 	});
 }
 

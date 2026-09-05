@@ -1,16 +1,56 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20B PASS — persistence/storage foundation accepted**
+- Status: **20C PASS — protected media APIs accepted; UI remains deferred**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
-- Starting HEAD: `6f27fd838f5c2795047664998d558cbbab3b2373`
-- Scope: architecture contract plus additive persistence/storage foundation
+- Starting HEAD: `e0ea2f16b3d3f00244752b7a0d00d07652f0e87c`
+- Scope: architecture contract, persistence/storage foundation, and protected API layer
 - Explicitly not implemented: public media APIs, upload UI, picker, project import/cutover, Quick Image, Media First, Video Studio/render, live R2
 
+## Phase 20C acceptance — protected media APIs
+
+Phase 20C adds the protected server API layer on top of the accepted 20B
+foundation. `appRouter.media` now exposes workspace-scoped `list`, `get`,
+`prepareUpload`, `finalizeUpload`, `updateMetadata`, `archive`, `getDownload`,
+`linkToProject`, and `unlinkFromProject` procedures. Every procedure derives its
+`WorkspaceActor` from the authenticated session; callers cannot submit a
+workspace, storage provider/key, upload session, status, checksum, or detected
+metadata as authority.
+
+- Prepare accepts intent only, validates type/MIME/size/name/tags/rights, creates
+  a server key/session, and returns a short-lived private grant. Prepare
+  idempotency is workspace-scoped, replay-safe, and race-safe.
+- Local grants are encrypted, authenticated, stateless tokens with purpose,
+  workspace, asset, session, key, content type, and expiry binding. The local
+  upload route consumes bounded bytes once and never makes an asset READY.
+  Download grants stream only READY/ARCHIVED assets after a fresh DB ownership
+  check. R2 remains private and uses the injected presigned adapter; no live R2
+  call is made by tests.
+- Finalize claims `pending_upload → validating` with CAS, confirms HEAD and
+  exact bytes, runs authoritative bounded JPEG/PNG/WebP/MP4/MP3 validation and
+  SHA-256, then commits READY or a typed FAILED result with best-effort cleanup.
+  Replays and concurrent finalizers are deterministic; expired sessions cannot
+  refresh or resurrect an asset.
+- Library reads use escaped display-name/tag search, media/status/archive
+  filters, and opaque `(updatedAt,id)` cursors. Metadata updates are strict;
+  archive is idempotent and retains bytes/links. There is no public hard-delete,
+  purge, arbitrary URL import, or public object URL.
+- Project links are same-workspace and READY-only. Affiliate links require
+  `owned` or `licensed` rights; Organic links have no additional rights gate.
+
+Verification for this slice: full workspace type-check, Next production build,
+Biome check, and the complete web Vitest suite (58 files / 544 tests) pass. The
+dedicated disposable PostgreSQL acceptance script remains guarded by its
+required `AFFICHANNEL_MEDIA_TEST_DATABASE_URL`; no remote, development, or
+production database was touched and no migration was created in 20C.
+
+Phase 20D may now activate the Media Library UI; no UI, picker, render, AI,
+Voice, Product, or URL-import flow is activated by 20C.
+
 This document is the canonical contract for AFF-US-020. It records the repository
-evidence and the decisions required before the persistence/storage slice. It does
-not authorize public API or UI activation; Phase 20B implements only the additive
-metadata schema, repository lifecycle, validation, and private storage adapters.
+evidence and the decisions for the persistence/storage and protected API slices.
+It does not authorize public endpoints or UI activation; Phase 20C adds only the
+authenticated API and private grant routes described above.
 
 ## Phase 20B acceptance — persistence and storage foundation
 
@@ -39,8 +79,8 @@ Phase 20B is accepted on branch `TXH` from starting HEAD
   against a newly created loopback disposable PostgreSQL database only. The
   acceptance script verifies 20A→20B additivity and no binary database column.
 
-Phase 20C remains responsible for protected prepare/upload/finalize/download/purge
-APIs and their authorization/expiry boundaries; no public media endpoint is active.
+Phase 20C implements the protected prepare/upload/finalize/download/library APIs
+and their authorization/expiry boundaries; no public media endpoint is active.
 
 ## 1. Decision summary
 

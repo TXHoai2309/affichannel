@@ -143,7 +143,7 @@ export function assertReadyMetadata(input: {
 	if (
 		!input.mimeType ||
 		!Number.isSafeInteger(input.byteSize) ||
-		input.byteSize <= 0
+		(input.byteSize ?? 0) <= 0
 	) {
 		throw new MediaAssetError(
 			"MEDIA_ASSET_INVALID_METADATA",

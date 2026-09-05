@@ -107,6 +107,7 @@ export const env = createEnv({
 			.max(86_400_000)
 			.default(5 * 60_000),
 		MEDIA_STORAGE_PROVIDER: z.enum(["local", "r2"]).default("local"),
+		MEDIA_GRANT_SIGNING_SECRET: z.string().min(32).optional(),
 		MEDIA_LOCAL_ROOT: z.string().trim().min(1).default(".data/media-library"),
 		MEDIA_R2_ENDPOINT: z.url().optional(),
 		MEDIA_R2_BUCKET: z.string().trim().min(1).optional(),
