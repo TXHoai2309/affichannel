@@ -47,14 +47,19 @@ passed 27/27 cases against a fresh PostgreSQL 16 container bound only to
 `127.0.0.1:55432`, with migrations through `0022`, a temporary local media root,
 and an injected/mocked R2 seam. No remote, development, or production database
 was touched; live R2/provider/AI/TTS/external URL calls were zero; and the
-disposable container was removed after verification. Phase 20D remains not
-started and UI activation is still deferred.
+disposable container was removed after verification. At the time of this 20C
+acceptance, the 20D UI was still deferred; the subsequent 20D acceptance is
+recorded below.
 
 No UI, picker, render, AI, Voice, Product, or URL-import flow is activated by
 20C. Phase 20D activates only the authenticated `/media` Library surface; Project
 reuse and downstream creation paths remain deferred to 20E and later.
 
 ## Phase 20D acceptance — Media Library UI PASS
+
+Fix-forward acceptance starts from HEAD
+`794ae393dad1a6f3345efe9693af178560521578` and preserves the existing 20D
+surface and 20C contracts.
 
 Phase 20D replaces the protected `/media` placeholder with the real workspace
 Media Library. The page uses only the accepted 20C procedures (`media.list`,
@@ -77,13 +82,19 @@ authority server-side.
   name/tags/usage rights, and runs the exact prepare → binary PUT (local or direct
   R2 grant) → finalize flow. It reports Preparing/Uploading/Validating/Complete,
   never pretends READY, sanitizes failure copy, keeps one stable idempotency key
-  per attempt, and refreshes canonical list/detail queries after mutation.
+  per attempt, and refreshes canonical list/detail queries after mutation. A
+  terminal finalize/upload failure clears the pending asset/session and key so an
+  explicit retry creates a fresh attempt; a transient PUT failure retains the
+  pending identity for replay. `in_progress` stays in a controlled
+  `validating_wait` state: `Kiểm tra lại` calls only the same finalize identity,
+  with no second prepare or PUT; READY completes, while FAILED resets for the
+  next explicit attempt.
 - Focused helper tests cover type acceptance, formatting, tags, grant URL
   discrimination, and safe error mapping. No schema, migration, public endpoint,
   legacy `media_metadata` read, URL import, AI generation, or provider call was
   added.
 
-Verification for this slice: `pnpm --filter web test` passes 59 files / 548
+Verification for this slice: `pnpm --filter web test` passes 60 files / 555
 tests, full workspace `check-types`, production `build`, scoped Biome, and
 `git diff --check` pass. Browser plugin was unavailable, so rendered QA used
 Playwright against a production bundle with a fresh loopback PostgreSQL/local
@@ -93,12 +104,22 @@ mobile layout, and console/interaction checks all passed. Evidence remains
 outside the repository under `D:\Temp\media-20d-rendered-qa`; no remote/dev/prod
 database, live R2, AI, TTS, or external URL call was used.
 
+Fix-forward rendered QA used the same isolated loopback approach with deterministic
+Playwright interception for `finalizeUpload`: the first response was
+`in_progress`, the dialog exposed `Kiểm tra lại`, and the second request reused
+the same finalize identity without another prepare or PUT before completing
+READY. Console and page-error checks were clean; evidence remains outside the
+repository at `D:\Temp\media-20d-rendered-qa\media-upload-in-progress.png` and
+`D:\Temp\media-20d-rendered-qa\media-upload-in-progress-ready.png`.
+
 20D is accepted. Next scope is 20E Project Reuse / E2E / Manual Acceptance.
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions for the persistence/storage and protected API slices.
-It does not authorize public endpoints or UI activation; Phase 20C adds only the
-authenticated API and private grant routes described above.
+The 20C section above describes only the authenticated API and private grant
+routes that were accepted in that phase; the authenticated `/media` UI activation
+is accepted separately in the 20D section above. Public endpoints remain out of
+scope.
 
 ## Phase 20B acceptance — persistence and storage foundation
 
@@ -637,13 +658,15 @@ replayed session, validation mismatch, storage failure, and persistence
 uncertainty. US030 owns general operational monitoring, retries, and cost
 tracking; 20A does not invent a job-monitoring system or paid-provider ledger.
 
-## 14. 20D UI target (not implemented now)
+## 14. 20D UI target — 20A contract snapshot
 
-`/media` may remain the current placeholder. The later 20D target is a practical
+At the 20A snapshot, `/media` could remain the current placeholder. The planned
+20D target was a practical
 grid/list with upload CTA, image/video/audio filters, display-name/tag search,
 asset detail, archive action, and a reuse picker. It must distinguish pending,
 failed, ready, and archived states and must not expose storage keys or credentials.
-No visual redesign or activation occurs in 20A.
+No visual redesign or activation occurred in 20A; the later 20D acceptance is
+documented above, while the reuse picker remains deferred to 20E.
 
 ## 15. Implementation phases after 20A
 
@@ -681,7 +704,8 @@ These are required tests for the implementation slices, not 20A runtime claims.
   nullable `projectId` change, backfill, or status conversion occurs.
 - ScriptGeneration snapshots, Organic claimless behavior, Affiliate golden
   vectors, Product fixtures, and VoiceSegment storage continue unchanged.
-- `/media` remains a placeholder and `routes.ts` remains a skeleton route.
+- In the 20A snapshot, `/media` remained a placeholder and `routes.ts` remained a
+  skeleton route; the later 20D UI acceptance is recorded above.
 - No new table, Drizzle schema, migration, upload/download endpoint, local object,
   R2 request, provider call, or runtime storage configuration is created in 20A.
 
