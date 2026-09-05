@@ -26,7 +26,9 @@ Cập nhật lần cuối: 2026-09-05.
 - Acceptance passed: 61 web test files / 559 tests, type-check, build, Biome,
   diff check, and the guarded 20C matrix 27/27. Playwright desktop/mobile
   E2E proved two-Project reuse, unlink isolation, F5 persistence, archive
-  reference protection, intent-only payloads, and clean console. No
+  reference protection, intent-only payloads, and clean console. The canonical
+  isolated US019 browser regression passed 19/19 and the 20D upload/fix-forward
+  coverage remained green. No
   `media_metadata` bridge or external/provider call was used; user manual UAT
   remains pending and US021 must not start.
 

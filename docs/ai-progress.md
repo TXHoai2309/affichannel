@@ -32,7 +32,9 @@ build, scoped Biome, diff check, and the guarded 20C protected-media matrix
 27/27 on a fresh loopback PostgreSQL container. Playwright fallback (Browser
 plugin unavailable) passed desktop/mobile Project Overview rendering, protected
 preview, F5 persistence, archive/reference protection, search-empty behavior,
-request-intent checks, console health, and mobile overflow checks. No
+request-intent checks, console health, and mobile overflow checks. The canonical
+isolated US019 Playwright regression passed 19/19, and the existing 20D
+upload/fix-forward coverage remained green. No
 `media_metadata` bridge, workflow applicability change, remote/dev/prod DB,
 live R2, AI/TTS, or external URL call was used. Disposable DB and local media
 objects were removed after verification. User manual UAT remains pending; do

@@ -162,9 +162,13 @@ loopback PostgreSQL container. Playwright rendered QA (Browser plugin
 unavailable) passed desktop 1440×1000 and mobile 375×812 Project Overview
 reuse, protected preview, F5 persistence, same-asset two-Project reuse,
 archive/reference protection, search-empty behavior, request-intent checks,
-console health, and no-horizontal-overflow. The disposable DB/container and
-temporary uploaded objects were removed after the run; no remote/dev/prod DB,
-live R2, AI/TTS, or external URL call was used.
+console health, and no-horizontal-overflow. The canonical isolated US019
+Playwright regression also passed 19/19, including Organic claimless/general,
+Organic Product, PRODUCT→GENERAL override, and legacy Affiliate Product → Fact
+Lock → Voice. The existing 20D upload/fix-forward coverage stayed green, and
+this run additionally proved upload → READY before reuse. The disposable
+DB/container and temporary uploaded objects were removed after the run; no
+remote/dev/prod DB, live R2, AI/TTS, or external URL call was used.
 
 User manual UAT is intentionally still pending. The owner must run the final
 US019 + US020 checklist before starting US021.
