@@ -13,9 +13,31 @@
   AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
   20B MediaAsset persistence/storage foundation PASS; 20C protected API
-  acceptance PASS (27/27 disposable cases);
-  20D–20E not started.
+  acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS;
+  20E Project Reuse / E2E / Manual Acceptance is next.
 - Cập nhật lần cuối: 2026-09-05
+
+## 2026-09-05 — AFF-US-020 Phase 20D Media Library UI acceptance PASS
+
+Starting from exact HEAD `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df` on `TXH`,
+the protected `/media` placeholder is now a real Shared Media Library. The UI
+uses only the accepted 20C media procedures for latest-first active browsing,
+server cursor pagination, search/filtering, protected detail preview/download,
+metadata edit, archive, and one-file prepare → binary PUT → finalize upload.
+READY is shown only after server finalize; client authority fields, storage
+internals, public URLs, delete/purge, URL import, project picker, and AI media
+generation remain out of scope.
+
+Verification passed: web Vitest 59 files / 548 tests, full workspace type-check,
+production build, scoped Biome, and diff check. Browser plugin was unavailable,
+so Playwright rendered QA used a fresh loopback PostgreSQL + local-storage
+fixture and passed desktop/mobile layout, search/type filters, upload-to-READY,
+protected image preview, metadata update, download, archive refresh, interaction,
+and console checks. No remote/dev/prod database, live R2, AI, TTS, or external URL
+call was used; screenshots remain outside the repo at
+`D:\Temp\media-20d-rendered-qa`.
+
+20D is accepted. 20E Project Reuse / E2E / Manual Acceptance is the next phase.
 
 ## 2026-09-05 — AFF-US-020 Phase 20C Protected Media APIs acceptance PASS
 

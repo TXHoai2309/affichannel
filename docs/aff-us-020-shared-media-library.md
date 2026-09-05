@@ -1,11 +1,11 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20C PROTECTED MEDIA APIs = PASS; UI remains deferred**
+- Status: **20D MEDIA LIBRARY UI = PASS; 20E PROJECT REUSE / E2E / MANUAL ACCEPTANCE = NEXT**
 - Updated: 2026-09-05 (Asia/Saigon)
 - Branch: `TXH`
-- Starting HEAD: `a8c366a828496393038441a6e5d556d0ad6923bb`
-- Scope: architecture contract, persistence/storage foundation, and protected API layer
-- Explicitly not implemented: public media APIs, upload UI, picker, project import/cutover, Quick Image, Media First, Video Studio/render, live R2
+- Starting HEAD: `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df`
+- Scope: architecture contract, persistence/storage foundation, protected APIs, and the Media Library UI
+- Explicitly not implemented: Project picker/reuse UX, Script Studio media integration, Quick Image, Media First, Video Studio/render, Product/Voice automatic imports, AI media generation, hard delete/purge, URL import, live R2
 
 ## Phase 20C acceptance — PASS
 
@@ -51,7 +51,49 @@ disposable container was removed after verification. Phase 20D remains not
 started and UI activation is still deferred.
 
 No UI, picker, render, AI, Voice, Product, or URL-import flow is activated by
-20C.
+20C. Phase 20D activates only the authenticated `/media` Library surface; Project
+reuse and downstream creation paths remain deferred to 20E and later.
+
+## Phase 20D acceptance — Media Library UI PASS
+
+Phase 20D replaces the protected `/media` placeholder with the real workspace
+Media Library. The page uses only the accepted 20C procedures (`media.list`,
+`media.get`, `media.prepareUpload`, `media.finalizeUpload`,
+`media.updateMetadata`, `media.archive`, and `media.getDownload`) and keeps all
+workspace, storage, status, checksum, detected metadata, grant, and policy
+authority server-side.
+
+- The default view is latest-first READY media in the active workspace. Server
+  cursor pagination, server-side display-name/tag search, media-type filters,
+  controlled Ready/Failed/Archived status views, loading/error/empty/search-empty
+  states, and deduplicated Load more are implemented with the existing query
+  utilities.
+- Focused cards show protected-media-safe type previews/icons, name, original
+  filename, status, size, dimensions/duration, and rights labels. Detail opens a
+  protected preview/download grant for image/video/audio, displays server-confirmed
+  metadata, edits only display name/tags/rights, shows link count when supplied,
+  and offers archive with confirmation only (no delete/purge or project picker).
+- The one-file upload dialog accepts JPEG/PNG/WebP/MP4/MP3, collects only display
+  name/tags/usage rights, and runs the exact prepare → binary PUT (local or direct
+  R2 grant) → finalize flow. It reports Preparing/Uploading/Validating/Complete,
+  never pretends READY, sanitizes failure copy, keeps one stable idempotency key
+  per attempt, and refreshes canonical list/detail queries after mutation.
+- Focused helper tests cover type acceptance, formatting, tags, grant URL
+  discrimination, and safe error mapping. No schema, migration, public endpoint,
+  legacy `media_metadata` read, URL import, AI generation, or provider call was
+  added.
+
+Verification for this slice: `pnpm --filter web test` passes 59 files / 548
+tests, full workspace `check-types`, production `build`, scoped Biome, and
+`git diff --check` pass. Browser plugin was unavailable, so rendered QA used
+Playwright against a production bundle with a fresh loopback PostgreSQL/local
+storage fixture: `/media` route, upload through READY, protected image preview,
+metadata edit, download, archive refresh, search/type filtering, desktop and
+mobile layout, and console/interaction checks all passed. Evidence remains
+outside the repository under `D:\Temp\media-20d-rendered-qa`; no remote/dev/prod
+database, live R2, AI, TTS, or external URL call was used.
+
+20D is accepted. Next scope is 20E Project Reuse / E2E / Manual Acceptance.
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions for the persistence/storage and protected API slices.

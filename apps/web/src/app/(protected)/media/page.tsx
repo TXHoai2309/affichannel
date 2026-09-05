@@ -1,5 +1,5 @@
-import FeaturePlaceholder from "@/components/feature-placeholder";
+import { MediaLibrary } from "@/features/media/media-library";
 
 export default function MediaPage() {
-	return <FeaturePlaceholder />;
+	return <MediaLibrary />;
 }

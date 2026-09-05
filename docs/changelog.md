@@ -906,3 +906,23 @@ Trạng thái: **AFF-US-010 Phase 2 Review & Resolution is ready for acceptance.
   temporary local media root and injected/mocked R2. Remote/dev/prod databases
   and live R2/provider/AI/TTS/external URL calls were not used; the container was
   removed after verification. Phase 20D remains not started.
+
+### 2026-09-05 — AFF-US-020 Phase 20D Media Library UI accepted
+
+- Activated the authenticated `/media` Shared Media Library with latest-first
+  active browsing, server-side search/type/status filtering, opaque cursor
+  Load more, empty/error/loading states, and responsive accessible cards.
+- Added protected image/video/audio detail preview and download, server-backed
+  metadata editing (display name/tags/usage rights), archive confirmation, and
+  canonical query refresh after mutations.
+- Added one-file upload UX using the accepted prepare → exact binary PUT →
+  finalize flow for local/direct grants, step-based progress, stable prepare
+  idempotency per attempt, and sanitized failure/expiry copy. READY is never
+  inferred client-side.
+- Focused media UI helper tests plus rendered Playwright fallback QA passed on
+  a fresh loopback PostgreSQL/local-storage fixture (desktop/mobile, upload,
+  preview, edit, download, archive, filters, interaction, and console).
+- No schema/migration, public media endpoint, project picker/reuse, Quick Image,
+  Media First, Video Studio/render, Product/Voice import, AI generation, URL
+  import, delete/purge, live R2, provider call, or remote database access was
+  added. 20E Project Reuse / E2E / Manual Acceptance is next.
