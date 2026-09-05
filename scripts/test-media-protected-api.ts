@@ -46,6 +46,9 @@ process.env.MEDIA_GRANT_SIGNING_SECRET =
 	"media-protected-api-test-secret-0123456789";
 process.env.BETTER_AUTH_URL = "http://127.0.0.1";
 process.env.CORS_ORIGIN = "http://127.0.0.1";
+process.env.MEDIA_IMAGE_MAX_BYTES = "1048576";
+process.env.MEDIA_VIDEO_MAX_BYTES = "1048576";
+process.env.MEDIA_AUDIO_MAX_BYTES = "1048576";
 for (const key of [
 	"DATABASE_URL",
 	"DATABASE_URL_DIRECT",
@@ -635,6 +638,33 @@ try {
 		"invalid bytes must fail without READY",
 	);
 
+	const oversized = await service.prepareMediaAssetUpload(actorA, {
+		...intent,
+		displayName: "Oversized stored object",
+		idempotencyKey: `oversized-stored-${randomUUID()}`,
+	});
+	assert(oversized.uploadGrant, "Oversized-object upload grant missing");
+	const oversizedToken = verifyLocalMediaAssetGrant(
+		oversized.uploadGrant.urlOrToken,
+		"upload",
+	);
+	const oversizedBytes = new Uint8Array(1_048_577);
+	await storage.put({
+		storageKey: oversizedToken.storageKey,
+		body: oversizedBytes,
+		contentType: "image/png",
+		checksumSha256: sha256Bytes(oversizedBytes),
+	});
+	const oversizedResult = await service.finalizeMediaAssetUpload(actorA, {
+		assetId: oversized.assetId,
+		uploadSessionId: oversized.uploadSessionId,
+	});
+	assert(
+		oversizedResult.asset.status === "failed" &&
+			oversizedResult.asset.failureCode === "MEDIA_ASSET_SIZE_LIMIT_EXCEEDED",
+		"oversized stored object must fail before byte validation",
+	);
+
 	const linkedOrganic = await service.linkMediaAssetToProject(actorA, {
 		assetId: prepared.assetId,
 		projectId: organicProject,
@@ -646,6 +676,11 @@ try {
 	assert(
 		linkedOrganic.link.mediaAssetId === linkedAffiliate.link.mediaAssetId,
 		"one asset must link to Organic and Affiliate",
+	);
+	const linkedAsset = await service.getMediaAsset(actorA, prepared.assetId);
+	assert(
+		linkedAsset.linkCount === 2,
+		"one asset must retain two project links",
 	);
 	await service.unlinkMediaAssetFromProject(actorA, {
 		assetId: prepared.assetId,
@@ -673,6 +708,9 @@ try {
 			projectId: organicProject,
 		}),
 	);
+	await expectRejected("Pending download", () =>
+		service.getMediaAssetDownload(actorA, pendingForLink.assetId),
+	);
 	const archived = await service.archiveMediaAssetRecord(
 		actorA,
 		prepared.assetId,
@@ -680,6 +718,35 @@ try {
 	assert(
 		archived.asset.status === "archived",
 		"archive must be idempotent and retain links/bytes",
+	);
+	const licensed = await service.prepareMediaAssetUpload(actorA, {
+		...intent,
+		displayName: "Licensed",
+		usageRights: "licensed",
+		idempotencyKey: `licensed-${randomUUID()}`,
+	});
+	assert(licensed.uploadGrant, "Licensed upload grant missing");
+	const licensedToken = verifyLocalMediaAssetGrant(
+		licensed.uploadGrant.urlOrToken,
+		"upload",
+	);
+	await storage.put({
+		storageKey: licensedToken.storageKey,
+		body: bytes,
+		contentType: "image/png",
+		checksumSha256: sha256Bytes(bytes),
+	});
+	await service.finalizeMediaAssetUpload(actorA, {
+		assetId: licensed.assetId,
+		uploadSessionId: licensed.uploadSessionId,
+	});
+	const licensedLink = await service.linkMediaAssetToProject(actorA, {
+		assetId: licensed.assetId,
+		projectId: affiliateProject,
+	});
+	assert(
+		licensedLink.link.mediaAssetId === licensed.assetId,
+		"Affiliate licensed rights must be allowed",
 	);
 	assert(
 		(await service.getMediaAssetDownload(actorA, prepared.assetId)).provider ===
@@ -712,6 +779,32 @@ try {
 		});
 		await service.linkMediaAssetToProject(actorA, {
 			assetId: unknown.assetId,
+			projectId: affiliateProject,
+		});
+	});
+	await expectRejected("Affiliate restricted rights", async () => {
+		const restricted = await service.prepareMediaAssetUpload(actorA, {
+			...intent,
+			usageRights: "restricted",
+			idempotencyKey: `restricted-${randomUUID()}`,
+		});
+		assert(restricted.uploadGrant, "Restricted-rights upload grant missing");
+		const token = verifyLocalMediaAssetGrant(
+			restricted.uploadGrant.urlOrToken,
+			"upload",
+		);
+		await storage.put({
+			storageKey: token.storageKey,
+			body: bytes,
+			contentType: "image/png",
+			checksumSha256: sha256Bytes(bytes),
+		});
+		await service.finalizeMediaAssetUpload(actorA, {
+			assetId: restricted.assetId,
+			uploadSessionId: restricted.uploadSessionId,
+		});
+		await service.linkMediaAssetToProject(actorA, {
+			assetId: restricted.assetId,
 			projectId: affiliateProject,
 		});
 	});
@@ -749,6 +842,16 @@ try {
 	assert(
 		archivedOnly.items.some((item) => item.id === prepared.assetId),
 		"archivedOnly filter must include archived assets",
+	);
+	const audioReady = await service.listMediaAssets(actorA, {
+		limit: 20,
+		archiveScope: "all",
+		mediaType: "audio",
+		status: "ready",
+	});
+	assert(
+		audioReady.items.some((item) => item.mediaType === "audio"),
+		"mediaType/status filters must narrow the library",
 	);
 	await expectRejected("Invalid cursor", () =>
 		service.listMediaAssets(actorA, {
