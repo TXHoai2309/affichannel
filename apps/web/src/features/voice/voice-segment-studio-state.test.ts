@@ -81,6 +81,12 @@ describe("Voice Segment Studio state", () => {
 
 	it("maps conservative server errors without exposing raw provider details", () => {
 		expect(
+			getVoiceSegmentErrorMessage({ code: "VOICE_SEGMENT_NOT_FOUND" }),
+		).toContain("Không tìm thấy đoạn voice hiện tại");
+		expect(
+			getVoiceSegmentErrorMessage({ code: "VOICE_CONFIG_NOT_FOUND" }),
+		).toContain("VoiceConfig");
+		expect(
 			getVoiceSegmentErrorMessage({
 				data: { code: "TTS_TIMEOUT_UNCERTAIN", detail: "provider secret" },
 			}),

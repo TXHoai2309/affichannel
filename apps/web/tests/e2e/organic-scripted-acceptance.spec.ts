@@ -209,9 +209,19 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 			await expect(
 				page.getByRole("heading", { name: "Voice Studio" }),
 			).toBeVisible();
+			const segmentListResponse = page.waitForResponse(
+				(response) =>
+					response.url().includes("/api/rpc/voiceSegment/list") &&
+					response.request().method() === "POST",
+			);
 			await page.getByRole("button", { name: "Lưu cấu hình" }).click();
 			await expect(
 				page.getByText("Đã lưu", { exact: true }).first(),
+			).toBeVisible();
+			expect((await segmentListResponse).status()).toBe(200);
+			await expect(page.getByTestId("voice-segment-intro")).toBeVisible();
+			await expect(
+				page.getByText("0 / 2 đoạn đã tạo", { exact: true }),
 			).toBeVisible();
 			const previewResponse = page.waitForResponse(
 				(response) =>
@@ -232,7 +242,13 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 			await expect(firstSegment.getByText(/Đã tạo ·/)).toBeVisible({
 				timeout: 30_000,
 			});
+			const reloadSegmentListResponse = page.waitForResponse(
+				(response) =>
+					response.url().includes("/api/rpc/voiceSegment/list") &&
+					response.request().method() === "POST",
+			);
 			await page.reload();
+			expect((await reloadSegmentListResponse).status()).toBe(200);
 			await expect(page.getByText(/Đã tạo ·/).first()).toBeVisible();
 			assertNoBrowserErrors(page);
 		} finally {

@@ -54,6 +54,27 @@ canonical disposable Playwright harness 19/19 on loopback PostgreSQL with
 deterministic local voice and zero live AI/TTS calls. Owner Manual UAT remains
 **IN PROGRESS**; resume from Voice Studio after this fix and do not start US021.
 
+## 2026-09-05 — Owner UAT fix-forward: Organic claimless Voice segment reads
+
+Owner UAT reported a generic Voiceover Segments error after F5. The clean-room
+reproduction on the exact Organic + Scripted + `SCRIPTED_STANDARD` v1,
+claimless/no-Product shape returned HTTP 200 for `POST /api/rpc/voiceSegment/list`
+with zero artifacts represented as the normal `0 / N` state, and returned the
+same result after reload and after the first deterministic segment. Code audit
+found that LIST/GET unnecessarily ran workflow reconciliation, coupling a read
+to workflow/Fact Lock history and a project-row write. The fix keeps bounded
+expired-pending cleanup but removes that reconciliation from segment LIST/GET;
+workflow reconciliation remains on mutation paths.
+
+Regression coverage now asserts the real list route, empty-artifact `0 / N`
+render, and post-F5 list response. The canonical isolated Playwright suite is
+19/19 on loopback PostgreSQL with deterministic local voice and zero live
+provider calls; VoiceConfig, Voice preview, Voice segment foundation/runtime,
+type-check, build, and web tests also pass. No schema, migration, Resolver
+policy, VoiceConfig contract, Product, or Affiliate behavior changed. Owner
+Manual UAT remains **IN PROGRESS**; resume from Voice Studio and do not start
+US021.
+
 ## 2026-09-05 — AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 Starting from exact HEAD `f439406a111ca25b608b12700611997b48850568` on `TXH`,

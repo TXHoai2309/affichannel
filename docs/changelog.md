@@ -42,6 +42,18 @@ Cập nhật lần cuối: 2026-09-05.
   acceptance (19/19) passed with deterministic local providers; Owner Manual
   UAT remains **IN PROGRESS**.
 
+### Owner UAT fix-forward — Organic claimless Voiceover Segments read path
+
+- Decoupled protected Voice segment LIST/GET reads from workflow reconciliation,
+  so a read does not traverse historical Fact Lock state or write project step
+  status. Workspace/project authorization and bounded expired-pending cleanup
+  remain enforced; mutation paths still reconcile workflow state.
+- Added browser regression coverage for the actual `voiceSegment/list` route:
+  zero artifacts render as the normal `0 / N` generation-ready state, the first
+  deterministic segment survives reload, and the route returns HTTP 200 after
+  F5. No schema, migration, Resolver policy, VoiceConfig contract, Product, or
+  Affiliate behavior changed. Owner Manual UAT remains **IN PROGRESS**.
+
 ### AFF-US-020 Phase 20E Project Reuse / final technical acceptance PASS
 
 - Added the Project Overview “Tài nguyên media” reuse panel and picker using

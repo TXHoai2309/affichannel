@@ -664,7 +664,10 @@ export async function getVoiceSegmentState(
 		dependencies.repository?.reconcileExpired ??
 		reconcileExpiredPendingVoiceSegmentArtifacts;
 	await reconcileExpired(actor);
-	await reconcileWorkflowAfterMutation(actor, projectId, dependencies);
+	// Reading a segment must not reconcile workflow state (or indirectly inspect
+	// Fact Lock history). Workflow reconciliation belongs to the mutation path;
+	// this read keeps the current ScriptVersion/VoiceConfig and tenant scope as
+	// its only authority.
 	return currentState(actor, projectId, segmentKey, dependencies);
 }
 
@@ -677,7 +680,6 @@ export async function listVoiceSegmentStates(
 		dependencies.repository?.reconcileExpired ??
 		reconcileExpiredPendingVoiceSegmentArtifacts;
 	await reconcileExpired(actor);
-	await reconcileWorkflowAfterMutation(actor, projectId, dependencies);
 	const script = await findCurrentScriptVersion(actor, projectId);
 	if (!script) throw segmentNotFound("Project chưa có ScriptVersion hiện tại.");
 	const config = await findVoiceConfig(actor, projectId);
