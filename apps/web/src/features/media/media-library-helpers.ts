@@ -42,8 +42,9 @@ export function getMediaFileDetails(file: {
 	name?: string | null;
 }) {
 	const mime = file.type?.trim().toLowerCase();
-	if (mime && MIME_TO_MEDIA[mime]) return MIME_TO_MEDIA[mime];
 	const extension = file.name?.split(".").at(-1)?.toLowerCase();
+	if (extension === "svg" || extension === "wav") return undefined;
+	if (mime && MIME_TO_MEDIA[mime]) return MIME_TO_MEDIA[mime];
 	return extension ? EXTENSION_TO_MEDIA[extension] : undefined;
 }
 

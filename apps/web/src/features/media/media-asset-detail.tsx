@@ -89,6 +89,7 @@ function MediaPreview({
 	loading,
 	error,
 	onRetry,
+	onPreviewError,
 }: {
 	mediaType: "image" | "video" | "audio";
 	displayName: string;
@@ -96,6 +97,7 @@ function MediaPreview({
 	loading: boolean;
 	error: string | null;
 	onRetry: () => void;
+	onPreviewError: () => void;
 }) {
 	if (loading) {
 		return <Skeleton className="h-56 w-full rounded-xl" />;
@@ -124,6 +126,7 @@ function MediaPreview({
 				<img
 					alt={`Xem trước ${displayName}`}
 					className="h-full w-full object-contain"
+					onError={onPreviewError}
 					src={url}
 				/>
 			</div>
@@ -134,6 +137,7 @@ function MediaPreview({
 			<video
 				className="h-56 w-full rounded-xl bg-black object-contain"
 				controls
+				onError={onPreviewError}
 				preload="metadata"
 				src={url}
 			>
@@ -153,6 +157,7 @@ function MediaPreview({
 				aria-label={`Phát ${displayName}`}
 				className="w-full"
 				controls
+				onError={onPreviewError}
 				preload="metadata"
 				src={url}
 			>
@@ -366,6 +371,12 @@ export function MediaAssetDetail({
 										loading={getDownload.isPending}
 										mediaType={asset.mediaType}
 										onRetry={() => void loadPreview()}
+										onPreviewError={() => {
+											setPreviewUrl(null);
+											setPreviewError(
+												"Không thể tải bản xem trước. Hãy thử lại.",
+											);
+										}}
 										url={previewUrl}
 									/>
 									<div className="flex flex-wrap gap-2">

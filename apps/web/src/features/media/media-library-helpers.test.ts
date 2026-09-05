@@ -35,6 +35,9 @@ describe("media library UI helpers", () => {
 			getMediaFileDetails({ type: "image/svg+xml", name: "icon.svg" }),
 		).toBeUndefined();
 		expect(
+			getMediaFileDetails({ type: "image/jpeg", name: "icon.svg" }),
+		).toBeUndefined();
+		expect(
 			getMediaFileDetails({ type: "audio/wav", name: "voice.wav" }),
 		).toBeUndefined();
 	});
