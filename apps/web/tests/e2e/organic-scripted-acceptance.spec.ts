@@ -352,7 +352,14 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 				.getByText("2 / 2 đoạn đã tạo", { exact: true })
 				.scrollIntoViewIfNeeded();
 			await captureEvidence(page, "organic-claimless-voice-complete");
-			await page.goto(`/projects/${projectId}/video`);
+			const stepper = page.getByRole("navigation", {
+				name: "Các bước project",
+			});
+			const videoHref = `/projects/${projectId}/video`;
+			const voiceHref = `/projects/${projectId}/voice`;
+			await expect(stepper.locator(`a[href="${videoHref}"]`)).toHaveCount(1);
+			await stepper.locator(`a[href="${videoHref}"]`).click();
+			await expect(page).toHaveURL(new RegExp(`${projectId}/video$`));
 			await expect(page.getByRole("heading", { name: "Sắp có" })).toBeVisible();
 			await expect(
 				page
@@ -361,9 +368,7 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 					)
 					.first(),
 			).toBeVisible();
-			expect(
-				page.locator(`a[href="/projects/${projectId}/video"]`),
-			).toHaveCount(0);
+			expect(page.locator(`a[href="${videoHref}"]`)).toHaveCount(1);
 			await expect(
 				page.getByRole("button", { name: "Mở Dựng video" }),
 			).toHaveCount(0);
@@ -371,6 +376,14 @@ test.describe("AFF-US-019 Phase 19E.2 Organic Scripted acceptance", () => {
 				page.getByText("Cần hoàn tất bước trước", { exact: true }),
 			).toHaveCount(0);
 			await captureEvidence(page, "organic-claimless-video-coming-soon");
+			await page.locator(`a[href="${voiceHref}"]`).click();
+			await expect(page).toHaveURL(new RegExp(`${projectId}/voice$`));
+			await expect(
+				page.getByRole("heading", { name: "Voice Studio" }),
+			).toBeVisible();
+			await page.locator(`a[href="${videoHref}"]`).click();
+			await expect(page).toHaveURL(new RegExp(`${projectId}/video$`));
+			await expect(page.getByRole("heading", { name: "Sắp có" })).toBeVisible();
 			assertNoBrowserErrors(page);
 		} finally {
 			if (projectId) await cleanupFixture(projectId, fixture.productId);

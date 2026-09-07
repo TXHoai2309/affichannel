@@ -332,6 +332,48 @@ describe("AFF-US-015 adaptive presentation mapper", () => {
 			"organic-project",
 		).find((item) => item.step.capability === "RENDER");
 		expect(renderItem?.presentation.statusLabel).toBe("Sắp có");
+		expect(renderItem?.navigable).toBe(true);
+	});
+
+	it("disables blocked Render navigation while keeping coming-soon navigable", () => {
+		const input = organicClaimlessCompleteInput();
+		input.voice.attemptedSegments = 1;
+		input.voice.usableSegments = 1;
+		const workflow = mapAdaptiveWorkflowReadModel(
+			resolveProjectApplicability(input),
+		);
+		const renderItem = buildAdaptiveStepperItems(
+			workflow,
+			"/projects/organic-project/voice",
+			"organic-project",
+		).find((item) => item.step.capability === "RENDER");
+
+		expect(renderItem?.presentation.statusLabel).toBe(
+			"Cần hoàn tất bước trước",
+		);
+		expect(renderItem?.navigable).toBe(false);
+	});
+
+	it("keeps completed Affiliate Render coming-soon navigation enabled", () => {
+		const input = baseInput();
+		factLockPassed(input);
+		Object.assign(input.voice, {
+			configPresent: true,
+			totalSegments: 2,
+			attemptedSegments: 2,
+			usableSegments: 2,
+		});
+		const workflow = mapAdaptiveWorkflowReadModel(
+			resolveProjectApplicability(input),
+		);
+		const renderItem = buildAdaptiveStepperItems(
+			workflow,
+			"/projects/affiliate-project/voice",
+			"affiliate-project",
+		).find((item) => item.step.capability === "RENDER");
+
+		expect(renderItem?.presentation.statusLabel).toBe("Sắp có");
+		expect(renderItem?.navigable).toBe(true);
 	});
 
 	it("renders a controlled unsupported Overview with no normal CTA", () => {

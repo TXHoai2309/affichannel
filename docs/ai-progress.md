@@ -28,10 +28,11 @@ coming-soon only when every prior applicable capability is complete or
 `NOT_REQUIRED`; genuinely incomplete prerequisites remain blocked.
 
 The `/video` route and Project stepper now render `Sắp có` with the copy
-`Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.`, with no enabled
-Video CTA or stepper next-step link. Organic and Affiliate regressions are
-covered. No schema, migration, API, Resolver semantics, Voice, or Fact Lock
-change was made. Owner Manual UAT remains **IN PROGRESS**; do not start US021.
+`Tính năng dựng video sẽ được bổ sung ở phiên bản tiếp theo.`. The informational
+stepper link remains keyboard-navigable, but there is no enabled Video CTA or
+stepper “Bước tiếp theo” action. Organic and Affiliate regressions are covered.
+No schema, migration, API, Resolver semantics, Voice, or Fact Lock change was
+made. Owner Manual UAT remains **IN PROGRESS**; do not start US021.
 
 ## 2026-09-05 — Manual UAT fix-forward: Organic Script presentation
 

@@ -625,9 +625,18 @@ export function buildAdaptiveStepperItems(
 		.filter((step) => step.visible)
 		.map((step) => {
 			const presentation = getAdaptiveStepPresentation(step, workflow);
+			const navigable =
+				step.navigable &&
+				presentation.valid &&
+				presentation.semantic !== "blocked" &&
+				!(
+					step.capability === "RENDER" &&
+					presentation.statusLabel === "Cần hoàn tất bước trước"
+				);
 			return {
 				step,
 				presentation,
+				navigable,
 				active: step.capability === activeCapability,
 				next: step.capability === workflow.nextApplicableStep,
 				href: adaptiveWorkflowHref(projectId, step.primaryRoute.key),

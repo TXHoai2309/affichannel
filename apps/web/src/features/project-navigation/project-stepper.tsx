@@ -72,66 +72,66 @@ export default function ProjectStepper({
 				</div>
 			) : (
 				<ol className="grid grid-cols-[repeat(auto-fit,minmax(10rem,1fr))] gap-2">
-					{items.map(({ step, presentation, active, next, href }) => {
-						const Icon = STATUS_ICONS[presentation.semantic];
-						const content = (
-							<>
-								<span className="flex items-center justify-between gap-2">
-									<span className="font-semibold text-muted-foreground text-xs">
-										{String(step.visibleOrdinal).padStart(2, "0")}
+					{items.map(
+						({ step, presentation, navigable, active, next, href }) => {
+							const Icon = STATUS_ICONS[presentation.semantic];
+							const content = (
+								<>
+									<span className="flex items-center justify-between gap-2">
+										<span className="font-semibold text-muted-foreground text-xs">
+											{String(step.visibleOrdinal).padStart(2, "0")}
+										</span>
+										<Badge variant={presentation.badgeVariant}>
+											<Icon aria-hidden="true" className="size-3" />
+											{presentation.statusLabel}
+										</Badge>
 									</span>
-									<Badge variant={presentation.badgeVariant}>
-										<Icon aria-hidden="true" className="size-3" />
-										{presentation.statusLabel}
-									</Badge>
-								</span>
-								<span className="mt-3 font-medium text-sm">
-									{presentation.label}
-								</span>
-								<span className="mt-1 text-muted-foreground text-xs">
-									{presentation.helperText}
-								</span>
-								{next && presentation.semantic !== "coming_soon" ? (
-									<span className="mt-2 font-medium text-primary text-xs">
-										Bước tiếp theo
+									<span className="mt-3 font-medium text-sm">
+										{presentation.label}
 									</span>
-								) : null}
-							</>
-						);
+									<span className="mt-1 text-muted-foreground text-xs">
+										{presentation.helperText}
+									</span>
+									{next && presentation.semantic !== "coming_soon" ? (
+										<span className="mt-2 font-medium text-primary text-xs">
+											Bước tiếp theo
+										</span>
+									) : null}
+								</>
+							);
 
-						return (
-							<li key={step.capability}>
-								{step.navigable &&
-								presentation.valid &&
-								presentation.semantic !== "coming_soon" ? (
-									<Link
-										aria-current={active ? "step" : undefined}
-										className={cn(
-											"flex min-h-28 flex-col rounded-lg border p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-											next && !active && "border-primary/50",
-											active && "border-primary bg-primary/5",
-										)}
-										data-next={next ? "true" : undefined}
-										href={href as Route}
-									>
-										{content}
-									</Link>
-								) : (
-									<div
-										aria-disabled="true"
-										className={cn(
-											"flex min-h-28 flex-col rounded-lg border bg-muted/30 p-3",
-											next && !active && "border-primary/50",
-											active && "border-primary bg-primary/5",
-										)}
-										data-next={next ? "true" : undefined}
-									>
-										{content}
-									</div>
-								)}
-							</li>
-						);
-					})}
+							return (
+								<li key={step.capability}>
+									{navigable ? (
+										<Link
+											aria-current={active ? "step" : undefined}
+											className={cn(
+												"flex min-h-28 flex-col rounded-lg border p-3 transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+												next && !active && "border-primary/50",
+												active && "border-primary bg-primary/5",
+											)}
+											data-next={next ? "true" : undefined}
+											href={href as Route}
+										>
+											{content}
+										</Link>
+									) : (
+										<div
+											aria-disabled="true"
+											className={cn(
+												"flex min-h-28 flex-col rounded-lg border bg-muted/30 p-3",
+												next && !active && "border-primary/50",
+												active && "border-primary bg-primary/5",
+											)}
+											data-next={next ? "true" : undefined}
+										>
+											{content}
+										</div>
+									)}
+								</li>
+							);
+						},
+					)}
 				</ol>
 			)}
 		</nav>
