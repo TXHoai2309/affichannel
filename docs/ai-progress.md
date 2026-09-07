@@ -14,9 +14,32 @@
   architecture audit and contract lock PASS/ACCEPTED at documentation level;
   20B MediaAsset persistence/storage foundation PASS; 20C protected API
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
-  Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT IN
-  PROGRESS (fix-forward recorded below).
+  Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
+  ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
 - Cập nhật lần cuối: 2026-09-07
+
+## 2026-09-07 — AFF-US-020 Owner Manual UAT finalization
+
+The owner completed and accepted the full Shared Media Library manual UAT on
+branch `TXH`. Upload to READY, owned rights, metadata edit/persistence,
+protected Library preview/download, archive, and archived readability all
+passed. READY-only Project reuse passed for linking, F5 persistence, protected
+Project preview, unlink isolation, re-link without duplication, archive while
+linked, historical link visibility, and blocking new links for archived assets.
+
+No US021 work was started. This finalization changes documentation status only;
+no application code, schema, migration, API contract, Resolver, Fact Lock, or
+Voice behavior was changed.
+
+Canonical final state:
+
+```text
+OWNER MANUAL UAT: PASS / ACCEPTED
+AFF-US-020 SHARED MEDIA LIBRARY:
+TECHNICALLY ACCEPTED
+OWNER MANUAL UAT ACCEPTED
+DONE
+```
 
 ## 2026-09-07 — Owner UAT fix-forward: Project media preview
 

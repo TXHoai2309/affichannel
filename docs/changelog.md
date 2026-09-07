@@ -10,6 +10,16 @@ Cập nhật lần cuối: 2026-09-07.
 
 ## Chưa phát hành
 
+### AFF-US-020 Owner Manual UAT finalization — ACCEPTED
+
+- Owner completed the full Shared Media Library manual UAT: READY upload,
+  owned rights, metadata persistence, protected preview/download, archive,
+  READY-only Project picker, link/unlink/re-link, F5 persistence, archive
+  reference protection, and historical link visibility all passed.
+- AFF-US-020 is now `TECHNICALLY ACCEPTED / OWNER MANUAL UAT ACCEPTED / DONE`.
+  No application code, schema, migration, API, Resolver, Fact Lock, or Voice
+  change was made, and US021 was not started.
+
 ### Owner UAT fix-forward — Project media protected preview
 
 - Project Overview media “Xem” now opens the existing protected

@@ -1,9 +1,9 @@
 # AFF-US-020 — Shared Media Library
 
-- Status: **20E PROJECT REUSE / FINAL TECHNICAL ACCEPTANCE = PASS; OWNER MANUAL UAT = IN PROGRESS**
-- Updated: 2026-09-05 (Asia/Saigon)
+- Status: **AFF-US-020 SHARED MEDIA LIBRARY: TECHNICALLY ACCEPTED; OWNER MANUAL UAT ACCEPTED; DONE**
+- Updated: 2026-09-07 (Asia/Saigon)
 - Branch: `TXH`
-- Starting HEAD: `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df` (20A snapshot); 20E acceptance HEAD: `f439406a111ca25b608b12700611997b48850568`
+- Starting HEAD: `b2e55f6144bbc05aed7fe09f35dd347b88f2c0df` (20A snapshot); 20E acceptance HEAD: `f439406a111ca25b608b12700611997b48850568`; Owner Manual UAT finalization HEAD: `ddbde3b9f2750c390574f4d2b0d21042569cc06b`
 - Scope: architecture contract, persistence/storage foundation, protected APIs, Media Library UI, and Project-level media reuse
 - Explicitly not implemented: Script Studio media integration, Quick Image, Media First, Video Studio/render, Product/Voice automatic imports, AI media generation, hard delete/purge, URL import, live R2
 
@@ -143,17 +143,6 @@ second upload pipeline.
   two link intents, one unlink intent, and one upload prepare (no duplicate
   upload or `media_metadata` bridge).
 
-Owner manual UAT checklist (pending):
-
-- US019: confirm Organic Scripted Standard still supports claimless/general
-  creation, Product escalation, and Voice applicability without changing its
-  existing workflow rules.
-- US020: upload one image, video, and audio in Media Library; verify protected
-  preview/download, metadata edit, archive, and READY/failed states.
-- US020 reuse: add the same READY asset to Organic and Affiliate Projects,
-  verify Affiliate owned/licensed gating, unlink one Project, reload with F5,
-  and confirm the other Project and archived historical relation remain intact.
-
 Technical verification on 2026-09-05: `pnpm --filter web test` passed 61 files /
 559 tests; workspace type-check, production build, scoped Biome, and diff check
 passed. Because the backend list query gained only the optional project filter,
@@ -170,8 +159,31 @@ this run additionally proved upload → READY before reuse. The disposable
 DB/container and temporary uploaded objects were removed after the run; no
 remote/dev/prod DB, live R2, AI/TTS, or external URL call was used.
 
-Owner manual UAT is intentionally not auto-completed. The owner must run the
-final US019 + US020 checklist before starting US021.
+## Owner Manual UAT — PASS / ACCEPTED (2026-09-07)
+
+The owner completed the full AFF-US-020 manual acceptance on branch `TXH`:
+
+- Upload READY media: PASS; usage rights `owned`: PASS.
+- Metadata edit and persistence: PASS.
+- Protected Media Library preview and download: PASS.
+- Archive asset: PASS; archived asset remains readable/downloadable: PASS.
+- READY-only Project picker: PASS.
+- Link READY asset to Project and persistence after F5: PASS.
+- Project protected preview: PASS.
+- Unlink removes only the relationship; the asset remains in the Library: PASS.
+- Re-linking the same existing asset creates no duplicate: PASS.
+- Archiving while linked preserves the historical Project link: PASS.
+- Archived assets are not eligible for new links: PASS.
+- No US021 work was started.
+
+Final acceptance state:
+
+```text
+AFF-US-020 SHARED MEDIA LIBRARY:
+TECHNICALLY ACCEPTED
+OWNER MANUAL UAT ACCEPTED
+DONE
+```
 
 ## Manual UAT fix-forward — Organic Script presentation
 
@@ -188,9 +200,9 @@ Fact Lock behavior remain unchanged; genuinely applicable malformed sections
 still use the repair message. No schema, migration, API, resolver, Fact Lock
 runtime, or provider behavior changed.
 
-Owner Manual UAT: **IN PROGRESS**. Technical acceptance for US019 and US020
-remains valid; this fix-forward is ready for the owner to resume the manual
-check from the Organic Script result.
+Owner Manual UAT for the combined US019/US020 acceptance is now
+**PASS / ACCEPTED**. AFF-US-019 remains **DONE / ACCEPTED**; AFF-US-020 is
+accepted in the 20E section above.
 
 This document is the canonical contract for AFF-US-020. It records the repository
 evidence and the decisions for the persistence/storage and protected API slices.
