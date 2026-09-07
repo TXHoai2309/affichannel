@@ -6,9 +6,19 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-05.
+Cập nhật lần cuối: 2026-09-07.
 
 ## Chưa phát hành
+
+### Owner UAT fix-forward — Project media protected preview
+
+- Project Overview media “Xem” now opens the existing protected
+  `MediaAssetDetail` dialog instead of attempting an inline-only preview.
+- Image, video, and audio previews continue through `media.getDownload` and
+  short-lived protected grants; failures show a safe retryable error state.
+- MediaAsset identity, project link/reuse semantics, and security boundaries
+  are unchanged. No schema, migration, API, Resolver, Fact Lock, or Voice
+  change was made.
 
 ### Owner UAT fix-forward — Video placeholder coming-soon
 

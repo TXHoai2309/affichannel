@@ -16,7 +16,24 @@
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT IN
   PROGRESS (fix-forward recorded below).
-- Cập nhật lần cuối: 2026-09-05
+- Cập nhật lần cuối: 2026-09-07
+
+## 2026-09-07 — Owner UAT fix-forward: Project media preview
+
+Owner UAT found that a READY, rights-eligible media asset linked to a Project
+could call `media.getDownload` from the Project Overview without producing a
+visible preview surface. The Project media panel now opens the existing
+`MediaAssetDetail` protected preview dialog, which loads image/video/audio via
+the short-lived protected grant, supports close/retry, and maps download
+failures to a safe visible error. Project link/unlink/archive semantics and
+asset identity remain unchanged; no public URL, storage key, or provider
+credential is exposed.
+
+Focused disposable browser coverage proves linked image preview, protected
+image bytes, close-and-return behavior, safe download failure, and link
+persistence. No schema, migration, API contract, Resolver, Fact Lock, or
+Voice change was made. Owner Manual UAT remains **IN PROGRESS**; do not start
+US021.
 
 ## 2026-09-05 — Owner UAT fix-forward: Video placeholder coming-soon
 

@@ -36,7 +36,7 @@ import { useDeferredValue, useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { orpc } from "@/utils/orpc";
-
+import { MediaAssetDetail } from "./media-asset-detail";
 import {
 	formatMediaBytes,
 	formatMediaDimensions,
@@ -45,7 +45,6 @@ import {
 	getMediaRightsLabel,
 	getMediaStatusLabel,
 	getMediaTypeLabel,
-	mediaAssetPreviewUrl,
 } from "./media-library-helpers";
 import type { MediaListItem } from "./media-types";
 import {
@@ -91,36 +90,13 @@ function mediaSummary(asset: MediaListItem) {
 
 function ProjectMediaItem({
 	asset,
+	onPreview,
 	onUnlink,
 }: {
 	asset: MediaListItem;
+	onPreview: (assetId: string) => void;
 	onUnlink: (asset: MediaListItem) => void;
 }) {
-	const getDownload = useMutation(
-		orpc.media.getDownload.mutationOptions({ retry: false }),
-	);
-	const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-	async function openPreview() {
-		try {
-			const grant = await getDownload.mutateAsync({ assetId: asset.id });
-			const url = mediaAssetPreviewUrl(grant);
-			if (asset.mediaType === "image") {
-				setPreviewUrl(url);
-				return;
-			}
-			const anchor = document.createElement("a");
-			anchor.href = url;
-			anchor.target = "_blank";
-			anchor.rel = "noreferrer";
-			document.body.appendChild(anchor);
-			anchor.click();
-			anchor.remove();
-		} catch (error) {
-			toast.error(getMediaErrorMessage(error, "Không thể mở bản xem trước."));
-		}
-	}
-
 	return (
 		<div className="flex flex-col gap-3 rounded-xl border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
 			<div className="flex min-w-0 items-start gap-3">
@@ -147,29 +123,12 @@ function ProjectMediaItem({
 							Media chưa sẵn sàng để sử dụng.
 						</p>
 					) : null}
-					{previewUrl ? (
-						<img
-							alt={`Xem trước ${asset.displayName}`}
-							className="mt-3 max-h-28 rounded-lg border object-contain"
-							onError={() => setPreviewUrl(null)}
-							src={previewUrl}
-						/>
-					) : null}
 				</div>
 			</div>
 			<div className="flex shrink-0 flex-wrap items-center gap-2">
 				{asset.status === "ready" || asset.status === "archived" ? (
-					<Button
-						disabled={getDownload.isPending}
-						onClick={() => void openPreview()}
-						size="sm"
-						variant="ghost"
-					>
-						{getDownload.isPending ? (
-							<Loader2 aria-hidden="true" className="animate-spin" />
-						) : (
-							<MediaTypeIcon mediaType={asset.mediaType} />
-						)}
+					<Button onClick={() => onPreview(asset.id)} size="sm" variant="ghost">
+						<MediaTypeIcon mediaType={asset.mediaType} />
 						Xem
 					</Button>
 				) : null}
@@ -204,6 +163,7 @@ export function ProjectMediaPanel({
 	const [pickerNextCursor, setPickerNextCursor] = useState<string | null>(null);
 	const [actionError, setActionError] = useState<string | null>(null);
 	const [unlinkTarget, setUnlinkTarget] = useState<MediaListItem | null>(null);
+	const [previewAssetId, setPreviewAssetId] = useState<string | null>(null);
 
 	const linkedMediaQuery = useQuery(
 		orpc.media.list.queryOptions({
@@ -361,6 +321,7 @@ export function ProjectMediaPanel({
 							<ProjectMediaItem
 								asset={asset}
 								key={asset.id}
+								onPreview={setPreviewAssetId}
 								onUnlink={setUnlinkTarget}
 							/>
 						))
@@ -570,6 +531,15 @@ export function ProjectMediaPanel({
 					</DialogPopup>
 				</DialogPortal>
 			</Dialog>
+
+			<MediaAssetDetail
+				assetId={previewAssetId}
+				onChanged={refreshMediaQueries}
+				onOpenChange={(open) => {
+					if (!open) setPreviewAssetId(null);
+				}}
+				open={Boolean(previewAssetId)}
+			/>
 		</>
 	);
 }
