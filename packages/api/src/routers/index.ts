@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
+import { compositionRouter } from "./composition";
 import { dashboardRouter } from "./dashboard";
 import { factLockRouter } from "./fact-lock";
 import { mediaRouter } from "./media";
@@ -24,6 +25,7 @@ export const appRouter = {
 		};
 	}),
 	dashboard: dashboardRouter,
+	composition: compositionRouter,
 	factLock: factLockRouter,
 	media: mediaRouter,
 	product: productRouter,
