@@ -306,23 +306,25 @@ describe("Composition currentness", () => {
 			mediaChecksums: [HASH],
 			compositionProfileId: "vertical-standard-v1",
 		};
-		expect(
-			evaluateCompositionCurrentness(result.input, {
-				...base,
-				voiceArtifactChecksums: ["b".repeat(64)],
-			}).reason,
-		).toBe("VOICE_SOURCE_CHANGED");
-		expect(
-			evaluateCompositionCurrentness(result.input, {
-				...base,
-				currentConfigSemantic: {
-					...result.input.config.semantic,
-					outputRules: {
-						...result.input.config.semantic.outputRules,
-						claimLimit: 4,
-					},
+		const voiceChanged = evaluateCompositionCurrentness(result.input, {
+			...base,
+			voiceArtifactChecksums: ["b".repeat(64)],
+		});
+		expect(voiceChanged.state).toBe("STALE");
+		if (voiceChanged.state === "STALE")
+			expect(voiceChanged.reason).toBe("VOICE_SOURCE_CHANGED");
+		const configChanged = evaluateCompositionCurrentness(result.input, {
+			...base,
+			currentConfigSemantic: {
+				...result.input.config.semantic,
+				outputRules: {
+					...result.input.config.semantic.outputRules,
+					claimLimit: 4,
 				},
-			}).reason,
-		).toBe("CONFIG_CHANGED");
+			},
+		});
+		expect(configChanged.state).toBe("STALE");
+		if (configChanged.state === "STALE")
+			expect(configChanged.reason).toBe("CONFIG_CHANGED");
 	});
 });
