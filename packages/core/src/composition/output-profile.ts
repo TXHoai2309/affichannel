@@ -86,21 +86,28 @@ export const renderRequestSpecV1Schema = z
 export async function canonicalRequestHash(
 	spec: RenderRequestSpecV1,
 ): Promise<string> {
-	if (!isOutputEncodingProfileComplete(spec.outputEncodingProfile)) {
+	const parsed = renderRequestSpecV1Schema.safeParse(spec);
+	if (!parsed.success) throw new Error("RENDER_REQUEST_PROFILE_INVALID");
+	const validatedSpec = parsed.data;
+	if (!isOutputEncodingProfileComplete(validatedSpec.outputEncodingProfile)) {
 		throw new Error("OUTPUT_ENCODING_PROFILE_INCOMPLETE");
 	}
 	const expectedProfileFingerprint = await fingerprintOutputEncodingProfile(
-		spec.outputEncodingProfile,
+		validatedSpec.outputEncodingProfile,
 	);
-	if (expectedProfileFingerprint !== spec.outputEncodingProfileFingerprint) {
+	if (
+		expectedProfileFingerprint !==
+		validatedSpec.outputEncodingProfileFingerprint
+	) {
 		throw new Error("RENDER_REQUEST_PROFILE_INVALID");
 	}
 	return sha256Hex(
 		canonicalizeCompositionJson({
-			inputVersion: "composition-input.v1",
-			compositionFingerprint: spec.compositionFingerprint,
-			outputEncodingProfileFingerprint: spec.outputEncodingProfileFingerprint,
-			outputContractVersion: spec.outputContractVersion,
+			inputVersion: "render-request.v1",
+			compositionFingerprint: validatedSpec.compositionFingerprint,
+			outputEncodingProfileFingerprint:
+				validatedSpec.outputEncodingProfileFingerprint,
+			outputContractVersion: validatedSpec.outputContractVersion,
 		}),
 	);
 }

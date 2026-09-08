@@ -14,6 +14,7 @@ import { db, mediaAsset, mediaAssetLink } from "@affichannel/db";
 import { and, eq } from "drizzle-orm";
 import { findCompositionVersionRecord } from "./composition-version-repository";
 import { FactLockGate } from "./fact-lock-gate-service";
+import { getOutputRules } from "./output-rules-service";
 import { getProjectWorkflowSubject } from "./project-repository";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { findVoiceConfig } from "./voice-config-service";
@@ -24,21 +25,57 @@ export type CompositionExecutionAuthorization =
 	| {
 			allowed: true;
 			reasonCode: string;
-			factLock: "NOT_REQUIRED" | "SATISFIED";
+			factLockRequirement: "NOT_REQUIRED" | "REQUIRED";
+			factLockOutcome: "NOT_EVALUATED" | "SATISFIED";
 	  }
 	| {
 			allowed: false;
 			reasonCode: string;
-			factLock: "REQUIRED" | "NOT_REQUIRED";
+			factLockRequirement: "NOT_REQUIRED" | "REQUIRED";
+			factLockOutcome: "NOT_EVALUATED" | "SATISFIED" | "BLOCKED";
 	  };
+
+export type CompositionFactLockTruth = {
+	requirement: "NOT_REQUIRED" | "REQUIRED";
+	outcome: "NOT_EVALUATED" | "SATISFIED" | "BLOCKED";
+	evidence: FactLockGateResult | null;
+};
 
 export type CompositionBusinessPreflight = {
 	currentness: CompositionCurrentness;
 	authorization: CompositionExecutionAuthorization;
 	applicability: ApplicabilityCapabilityResult | null;
-	factLock: FactLockGateResult | null;
+	factLock: CompositionFactLockTruth;
 	compositionVersionId: string;
 };
+
+export type CompositionMediaEligibilityAsset = {
+	workspaceId: string;
+	projectId: string;
+	status: string;
+	usageRights: string;
+	checksumSha256: string | null;
+};
+
+/** US020 media reuse policy: Organic has no rights restriction; Affiliate is owned/licensed only. */
+export function isCompositionMediaEligible(input: {
+	contentType: string | null;
+	workspaceId: string;
+	projectId: string;
+	asset: CompositionMediaEligibilityAsset | undefined;
+	checksumSha256: string;
+}) {
+	const { asset } = input;
+	return (
+		asset?.workspaceId === input.workspaceId &&
+		asset.projectId === input.projectId &&
+		asset.status === "ready" &&
+		(input.contentType === "ORGANIC" ||
+			asset.usageRights === "owned" ||
+			asset.usageRights === "licensed") &&
+		asset.checksumSha256 === input.checksumSha256
+	);
+}
 
 /**
  * Pure, server-owned result combiner. Technical object/byte checks are
@@ -48,10 +85,30 @@ export function evaluateCompositionBusinessPreflight(input: {
 	compositionVersionId: string;
 	currentness: CompositionCurrentness;
 	applicability: ApplicabilityCapabilityResult | null;
+	applicabilityCapabilities?: readonly ApplicabilityCapabilityResult[];
 	factLock: FactLockGateResult | null;
 	mediaEligible: boolean;
 	voiceEligible: boolean;
 }): CompositionBusinessPreflight {
+	const factLockRequirement =
+		input.applicability?.state === "NOT_REQUIRED" ? "NOT_REQUIRED" : "REQUIRED";
+	const resolverFactLockSatisfied =
+		input.applicability?.state === "READY" &&
+		input.applicability.completion === "COMPLETE";
+	const factLock: CompositionFactLockTruth = {
+		requirement: factLockRequirement,
+		outcome:
+			factLockRequirement === "NOT_REQUIRED"
+				? "NOT_EVALUATED"
+				: input.factLock?.allowed
+					? "SATISFIED"
+					: resolverFactLockSatisfied
+						? "SATISFIED"
+						: input.factLock
+							? "BLOCKED"
+							: "NOT_EVALUATED",
+		evidence: input.factLock,
+	};
 	if (input.currentness.state === "UNKNOWN")
 		throw new CompositionError("COMPOSITION_CURRENTNESS_UNKNOWN");
 	if (input.currentness.state === "STALE") {
@@ -61,12 +118,50 @@ export function evaluateCompositionBusinessPreflight(input: {
 			authorization: {
 				allowed: false,
 				reasonCode: "COMPOSITION_STALE",
-				factLock: "NOT_REQUIRED",
+				factLockRequirement,
+				factLockOutcome: factLock.outcome,
 			},
 			applicability: input.applicability,
-			factLock: input.factLock,
+			factLock,
 		};
 	}
+	const blockedCapability = (
+		input.applicabilityCapabilities ?? [input.applicability]
+	).find(
+		(capability): capability is ApplicabilityCapabilityResult =>
+			capability !== null &&
+			(capability.state === "BLOCKED" || capability.state === "STALE"),
+	);
+	if (blockedCapability) {
+		return {
+			compositionVersionId: input.compositionVersionId,
+			currentness: input.currentness,
+			authorization: {
+				allowed: false,
+				reasonCode: blockedCapability.reasonCode,
+				factLockRequirement,
+				factLockOutcome: factLock.outcome,
+			},
+			applicability: input.applicability,
+			factLock,
+		};
+	}
+	if (
+		factLock.requirement === "REQUIRED" &&
+		factLock.outcome === "NOT_EVALUATED"
+	)
+		return {
+			compositionVersionId: input.compositionVersionId,
+			currentness: input.currentness,
+			authorization: {
+				allowed: false,
+				reasonCode: "FACT_LOCK_NOT_EVALUATED",
+				factLockRequirement,
+				factLockOutcome: factLock.outcome,
+			},
+			applicability: input.applicability,
+			factLock,
+		};
 	if (!input.mediaEligible)
 		return {
 			compositionVersionId: input.compositionVersionId,
@@ -74,10 +169,11 @@ export function evaluateCompositionBusinessPreflight(input: {
 			authorization: {
 				allowed: false,
 				reasonCode: "MEDIA_NOT_ELIGIBLE",
-				factLock: "NOT_REQUIRED",
+				factLockRequirement,
+				factLockOutcome: factLock.outcome,
 			},
 			applicability: input.applicability,
-			factLock: input.factLock,
+			factLock,
 		};
 	if (!input.voiceEligible)
 		return {
@@ -86,22 +182,28 @@ export function evaluateCompositionBusinessPreflight(input: {
 			authorization: {
 				allowed: false,
 				reasonCode: "VOICE_NOT_ELIGIBLE",
-				factLock: "NOT_REQUIRED",
+				factLockRequirement,
+				factLockOutcome: factLock.outcome,
 			},
 			applicability: input.applicability,
-			factLock: input.factLock,
+			factLock,
 		};
-	if (input.factLock && !input.factLock.allowed)
+	if (
+		factLock.requirement === "REQUIRED" &&
+		input.factLock &&
+		!input.factLock.allowed
+	)
 		return {
 			compositionVersionId: input.compositionVersionId,
 			currentness: input.currentness,
 			authorization: {
 				allowed: false,
 				reasonCode: input.factLock.reason,
-				factLock: "REQUIRED",
+				factLockRequirement,
+				factLockOutcome: factLock.outcome,
 			},
 			applicability: input.applicability,
-			factLock: input.factLock,
+			factLock,
 		};
 	return {
 		compositionVersionId: input.compositionVersionId,
@@ -111,10 +213,12 @@ export function evaluateCompositionBusinessPreflight(input: {
 			reasonCode: input.factLock
 				? "FACT_LOCK_PASSED"
 				: "FACT_LOCK_NOT_REQUIRED",
-			factLock: input.factLock ? "SATISFIED" : "NOT_REQUIRED",
+			factLockRequirement,
+			factLockOutcome:
+				factLock.outcome === "SATISFIED" ? "SATISFIED" : "NOT_EVALUATED",
 		},
 		applicability: input.applicability,
-		factLock: input.factLock,
+		factLock,
 	};
 }
 
@@ -161,19 +265,20 @@ export async function preflightCompositionVersion(
 		const asset = linkedMedia.find(
 			(candidate) => candidate.id === dependency.provenance.mediaAssetId,
 		);
-		return (
-			asset?.workspaceId === actor.workspaceId &&
-			asset.projectId === version.projectId &&
-			asset.status === "ready" &&
-			asset.usageRights === "owned" &&
-			asset.checksumSha256 === dependency.semantic.checksumSha256
-		);
+		return isCompositionMediaEligible({
+			contentType: subject.contentType,
+			workspaceId: actor.workspaceId,
+			projectId: version.projectId,
+			asset,
+			checksumSha256: dependency.semantic.checksumSha256,
+		});
 	});
 	const voiceConfig = await findVoiceConfig(actor, version.projectId);
 	const voiceArtifacts = await listVoiceSegmentArtifacts(
 		actor,
 		version.projectId,
 	);
+	const currentOutputRules = await getOutputRules(actor);
 	const currentness = evaluateCompositionCurrentness(input, {
 		scriptVersionId: script.id,
 		scriptRevision: script.revision,
@@ -191,6 +296,10 @@ export async function preflightCompositionVersion(
 				)?.checksumSha256 ?? "",
 		),
 		compositionProfileId: input.profile.id,
+		currentConfigSemantic: {
+			compositionProfileId: input.profile.id,
+			outputRules: currentOutputRules,
+		},
 	});
 	const voiceEligible =
 		voiceConfig?.revision === input.voice.provenance.configRevision &&
@@ -211,58 +320,76 @@ export async function preflightCompositionVersion(
 		creationPath: subject.creationPath,
 		currentScriptVersion: script,
 	});
-	const applicabilityResult = resolveProjectApplicability({
-		projectIdentity: {
-			contentType: subject.contentType,
-			creationPath: subject.creationPath,
-			contentFormatKey: subject.contentFormatKey,
-			contentFormatVersion: subject.contentFormatVersion,
-			hasProduct: subject.productId !== null,
-		},
-		product: { accessible: subject.productAccessible },
-		script: {
-			generationStatus: "USABLE",
-			usableGenerationPresent: true,
-			sourceDependencyCurrent: true,
-			currentVersionPresent: true,
-			currentVersionFactLockReady: validateScriptVersionForFactLock(
-				script.editableSnapshot,
-			).success,
-			channelSettingsComplete: true,
-			productFactsUsable: true,
+	const buildApplicabilityResult = (
+		factLockReason: Parameters<
+			typeof resolveProjectApplicability
+		>[0]["factLock"]["gateReason"],
+	) =>
+		resolveProjectApplicability({
+			projectIdentity: {
+				contentType: subject.contentType,
+				creationPath: subject.creationPath,
+				contentFormatKey: subject.contentFormatKey,
+				contentFormatVersion: subject.contentFormatVersion,
+				hasProduct: subject.productId !== null,
+			},
+			product: { accessible: subject.productAccessible },
+			script: {
+				generationStatus: "USABLE",
+				usableGenerationPresent: true,
+				sourceDependencyCurrent: true,
+				currentVersionPresent: true,
+				currentVersionFactLockReady: validateScriptVersionForFactLock(
+					script.editableSnapshot,
+				).success,
+				channelSettingsComplete: true,
+				productFactsUsable: true,
+				claimSummary,
+			},
 			claimSummary,
-		},
-		claimSummary,
-		factLock: { gateReason: "FACT_LOCK_NOT_RUN" },
-		voice: {
-			configPresent: voiceConfig !== null,
-			previewPresent: false,
-			totalSegments: input.voice.semantic.segments.length,
-			attemptedSegments: voiceArtifacts.length,
-			usableSegments: voiceEligible ? input.voice.semantic.segments.length : 0,
-			pendingSegments: 0,
-			failedSegments: 0,
-			indeterminateSegments: 0,
-			staleSegments: voiceEligible ? 0 : input.voice.semantic.segments.length,
-		},
-		render: {
-			featureImplemented: false,
-			inputsStale: currentness.state !== "CURRENT",
-		},
-	});
+			factLock: { gateReason: factLockReason },
+			voice: {
+				configPresent: voiceConfig !== null,
+				previewPresent: false,
+				totalSegments: input.voice.semantic.segments.length,
+				attemptedSegments: voiceArtifacts.length,
+				usableSegments: voiceEligible
+					? input.voice.semantic.segments.length
+					: 0,
+				pendingSegments: 0,
+				failedSegments: 0,
+				indeterminateSegments: 0,
+				staleSegments: voiceEligible ? 0 : input.voice.semantic.segments.length,
+			},
+			render: {
+				featureImplemented: false,
+				inputsStale: currentness.state !== "CURRENT",
+			},
+		});
+	let applicabilityResult = buildApplicabilityResult("FACT_LOCK_NOT_RUN");
 	const applicability =
 		applicabilityResult.capabilities.find(
 			(capability) => capability.capability === "FACT_LOCK",
 		) ?? null;
 	// Resolver decides whether FactLockGate is required; no Organic bypass flag is accepted.
-	const factLock =
-		applicability?.state === "NOT_REQUIRED"
-			? null
-			: await FactLockGate.evaluate(actor, version.projectId);
+	let factLock: FactLockGateResult | null = null;
+	if (
+		applicability &&
+		applicability.state === "READY" &&
+		applicability.completion === "NOT_STARTED"
+	) {
+		factLock = await FactLockGate.evaluate(actor, version.projectId);
+		applicabilityResult = buildApplicabilityResult(factLock.reason);
+	}
+	const finalApplicability =
+		applicabilityResult.capabilities.find(
+			(capability) => capability.capability === "FACT_LOCK",
+		) ?? null;
 	return evaluateCompositionBusinessPreflight({
 		compositionVersionId,
 		currentness,
-		applicability,
+		applicability: finalApplicability,
+		applicabilityCapabilities: applicabilityResult.capabilities,
 		factLock,
 		mediaEligible,
 		voiceEligible,
