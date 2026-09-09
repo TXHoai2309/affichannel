@@ -10,6 +10,7 @@ import {
 } from "@affichannel/core";
 
 import { sha256Bytes } from "../services/voice-segment-hashing";
+import { isObjectNotFoundError } from "./object-storage-errors";
 
 export type VoiceAudioStorageProvider = "local" | "r2";
 
@@ -205,6 +206,8 @@ export class R2VoiceAudioStorage implements VoiceAudioStorage {
 			return body;
 		} catch (error) {
 			if (error instanceof VoiceSegmentError) throw error;
+			if (isObjectNotFoundError(error))
+				throw storageNotFound("R2 voice audio was not found.");
 			throw storageFailure("Could not read voice audio from R2.", error);
 		}
 	}
@@ -215,6 +218,7 @@ export class R2VoiceAudioStorage implements VoiceAudioStorage {
 		try {
 			return await this.client.headObject(storageKey);
 		} catch (error) {
+			if (isObjectNotFoundError(error)) return null;
 			throw storageFailure("Could not stat voice audio in R2.", error);
 		}
 	}

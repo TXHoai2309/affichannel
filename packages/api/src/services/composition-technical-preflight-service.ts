@@ -7,6 +7,11 @@ import {
 import { findCompositionVersionTechnicalRecord } from "./composition-version-repository";
 import type { WorkspaceActor } from "./workspace";
 
+export type CompositionTechnicalPreflightDependencies = {
+	findVersion?: typeof findCompositionVersionTechnicalRecord;
+	preflightInput?: typeof technicalPreflightCompositionInput;
+};
+
 function invalidResult(
 	compositionVersionId: string,
 	reasonCode:
@@ -35,13 +40,13 @@ export async function technicalPreflightCompositionVersion(
 	actor: WorkspaceActor,
 	compositionVersionId: string,
 	loader?: CompositionTechnicalLoader,
+	dependencies: CompositionTechnicalPreflightDependencies = {},
 ): Promise<TechnicalPreflightResult> {
 	let record: Awaited<ReturnType<typeof findCompositionVersionTechnicalRecord>>;
 	try {
-		record = await findCompositionVersionTechnicalRecord(
-			actor,
-			compositionVersionId,
-		);
+		record = await (
+			dependencies.findVersion ?? findCompositionVersionTechnicalRecord
+		)(actor, compositionVersionId);
 	} catch {
 		return invalidResult(
 			compositionVersionId,
@@ -64,7 +69,7 @@ export async function technicalPreflightCompositionVersion(
 	const scopedLoader =
 		loader ??
 		new CompositionTechnicalLoader({ actor, projectId: record.projectId });
-	return technicalPreflightCompositionInput(
+	return (dependencies.preflightInput ?? technicalPreflightCompositionInput)(
 		scopedLoader,
 		compositionVersionId,
 		record.compositionInputJson,

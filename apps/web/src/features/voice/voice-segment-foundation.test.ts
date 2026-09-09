@@ -369,4 +369,42 @@ describe("AFF-US-012 VoiceSegment foundation", () => {
 			code: "TTS_AUDIO_METADATA_INVALID",
 		});
 	});
+
+	it("normalizes confirmed R2 object absence without hiding transient failures", async () => {
+		for (const error of [
+			{ name: "NoSuchKey" },
+			{ statusCode: 404 },
+			{ $metadata: { httpStatusCode: 404 } },
+		]) {
+			const storage = new R2VoiceAudioStorage({
+				putObject: async () => undefined,
+				getObject: async () => {
+					throw error;
+				},
+				headObject: async () => {
+					throw error;
+				},
+				deleteObject: async () => undefined,
+			});
+			expect(
+				await storage.head("voice/v1/workspace-a/project-a/artifact-a.mp3"),
+			).toBeNull();
+			await expect(
+				storage.get("voice/v1/workspace-a/project-a/artifact-a.mp3"),
+			).rejects.toMatchObject({ code: "TTS_STORAGE_FAILED" });
+		}
+		const transient = new R2VoiceAudioStorage({
+			putObject: async () => undefined,
+			getObject: async () => {
+				throw { name: "Timeout", statusCode: 503 };
+			},
+			headObject: async () => {
+				throw { name: "Timeout", statusCode: 503 };
+			},
+			deleteObject: async () => undefined,
+		});
+		await expect(
+			transient.get("voice/v1/workspace-a/project-a/artifact-a.mp3"),
+		).rejects.toMatchObject({ code: "TTS_STORAGE_FAILED" });
+	});
 });

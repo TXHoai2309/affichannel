@@ -7,7 +7,7 @@ import {
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
-
+import { isObjectNotFoundError } from "./object-storage-errors";
 import {
 	LocalVoiceAudioStorage,
 	type R2VoiceAudioObjectClient,
@@ -74,7 +74,7 @@ export function createR2VoiceAudioStorage(config: R2VoiceAudioStorageConfig) {
 				);
 				return { byteSize: response.ContentLength ?? 0 };
 			} catch (error) {
-				if ((error as { name?: string }).name === "NotFound") return null;
+				if (isObjectNotFoundError(error)) return null;
 				throw error;
 			}
 		},

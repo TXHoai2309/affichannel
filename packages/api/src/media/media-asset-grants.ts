@@ -1,15 +1,8 @@
 import {
-	createCipheriv,
-	createDecipheriv,
-	createHash,
-	randomBytes,
-	randomUUID,
-} from "node:crypto";
-import {
 	MediaAssetError,
 	type MediaAssetStorageProvider,
 } from "@affichannel/core";
-import { env } from "@affichannel/env/server";
+import { createProtectedGrant, verifyProtectedGrant } from "./protected-grants";
 
 type GrantPurpose = "upload" | "download";
 
@@ -27,35 +20,10 @@ export type MediaAssetGrantPayload = Readonly<{
 	nonce: string;
 }>;
 
-function grantKey() {
-	return createHash("sha256")
-		.update(env.MEDIA_GRANT_SIGNING_SECRET ?? env.BETTER_AUTH_SECRET)
-		.digest();
-}
-
-function encode(value: string | Uint8Array) {
-	return Buffer.from(value).toString("base64url");
-}
-
-function decode(value: string) {
-	return Buffer.from(value, "base64url");
-}
-
 export function createLocalMediaAssetGrant(
 	payload: Omit<MediaAssetGrantPayload, "provider" | "nonce">,
 ) {
-	const fullPayload: MediaAssetGrantPayload = {
-		...payload,
-		provider: "local",
-		nonce: randomUUID(),
-	};
-	const iv = randomBytes(12);
-	const cipher = createCipheriv("aes-256-gcm", grantKey(), iv);
-	const ciphertext = Buffer.concat([
-		cipher.update(JSON.stringify(fullPayload), "utf8"),
-		cipher.final(),
-	]);
-	return `m2.${encode(iv)}.${encode(ciphertext)}.${encode(cipher.getAuthTag())}`;
+	return createProtectedGrant({ ...payload, provider: "local" });
 }
 
 export function verifyLocalMediaAssetGrant(
@@ -85,25 +53,7 @@ export function verifyLocalMediaAssetGrant(
 			"Media grant is invalid.",
 		);
 	}
-	let parsed: unknown;
-	try {
-		const decipher = createDecipheriv(
-			"aes-256-gcm",
-			grantKey(),
-			decode(ivPart),
-		);
-		decipher.setAuthTag(decode(tagPart));
-		const plaintext = Buffer.concat([
-			decipher.update(decode(ciphertextPart)),
-			decipher.final(),
-		]);
-		parsed = JSON.parse(plaintext.toString("utf8"));
-	} catch {
-		throw new MediaAssetError(
-			"MEDIA_ASSET_GRANT_INVALID",
-			"Media grant is invalid.",
-		);
-	}
+	const parsed = verifyProtectedGrant(token);
 	const value = parsed as Partial<MediaAssetGrantPayload>;
 	if (
 		value.purpose !== purpose ||
@@ -126,12 +76,6 @@ export function verifyLocalMediaAssetGrant(
 		throw new MediaAssetError(
 			"MEDIA_ASSET_GRANT_INVALID",
 			"Media grant is invalid.",
-		);
-	}
-	if (value.expiresAt <= Date.now()) {
-		throw new MediaAssetError(
-			"MEDIA_ASSET_GRANT_EXPIRED",
-			"Media grant has expired.",
 		);
 	}
 	return value as MediaAssetGrantPayload;

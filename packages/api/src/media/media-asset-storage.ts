@@ -8,7 +8,7 @@ import {
 	MediaAssetError,
 	type MediaAssetStorageProvider,
 } from "@affichannel/core";
-
+import { isObjectNotFoundError } from "../storage/object-storage-errors";
 import { sha256Bytes } from "./media-asset-checksum";
 
 export type MediaAssetStorageGrant = Readonly<{
@@ -329,6 +329,7 @@ export class R2MediaAssetStorage implements MediaAssetStorage {
 		try {
 			return await this.client.headObject(storageKey);
 		} catch (error) {
+			if (isObjectNotFoundError(error)) return null;
 			throw storageFailure("Could not stat media asset in R2.", error);
 		}
 	}
@@ -341,6 +342,8 @@ export class R2MediaAssetStorage implements MediaAssetStorage {
 			return body;
 		} catch (error) {
 			if (error instanceof MediaAssetError) throw error;
+			if (isObjectNotFoundError(error))
+				throw storageNotFound("R2 media asset was not found.");
 			throw storageFailure("Could not read media asset from R2.", error);
 		}
 	}

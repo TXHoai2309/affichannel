@@ -1,8 +1,10 @@
+import { readFile } from "node:fs/promises";
 import type { MediaAssetStorage } from "@affichannel/api/media/media-asset-storage";
 import {
 	CompositionTechnicalLoader,
 	readFontAssetManifest,
 	technicalPreflightCompositionInput,
+	validateDecodedMp3SampleDomain,
 } from "@affichannel/api/services/composition-technical-loader";
 import { sha256Bytes } from "@affichannel/api/services/voice-segment-hashing";
 import type { VoiceAudioStorage } from "@affichannel/api/storage/voice-audio-storage";
@@ -15,28 +17,26 @@ import {
 	type VoiceSegmentArtifact,
 } from "@affichannel/core";
 import { describe, expect, it } from "vitest";
+import {
+	id3PrefixedMp3Fixture,
+	makeMp3Fixture,
+	malformedFrameCountMp3Fixture,
+	malformedLameMp3Fixture,
+	missingFrameFlagMp3Fixture,
+	monoMp3Fixture,
+	mp3FixtureProvenance,
+	stereoMp3Fixture,
+	validGaplessMp3Fixture,
+} from "./fixtures/mp3-fixtures";
 
 const actor = { workspaceId: "w1", userId: "u1" } as const;
 
 function supportedMp3Fixture(frameCount = 41) {
-	const frame = Uint8Array.from({ length: 417 }, (_, index) =>
-		index === 0
-			? 0xff
-			: index === 1
-				? 0xfb
-				: index === 2
-					? 0x90
-					: index === 3
-						? 0x64
-						: 0,
-	);
-	const fixture = new Uint8Array(frame.length * frameCount);
-	for (let index = 0; index < frameCount; index += 1)
-		fixture.set(frame, index * frame.length);
-	fixture.set(new TextEncoder().encode("Info"), 36);
-	fixture.set(new Uint8Array([0, 0, 0, 0]), 40);
-	fixture.set(new TextEncoder().encode("LAME3.99.5"), 44);
-	return fixture;
+	return makeMp3Fixture({
+		frameCount,
+		encoderDelay: validGaplessMp3Fixture.encoderDelay,
+		endPadding: validGaplessMp3Fixture.endPadding,
+	}).bytes;
 }
 
 function pngFixture() {
@@ -150,7 +150,10 @@ function mediaPin(asset: MediaAsset) {
 	} as CompositionInputV1["media"][number];
 }
 
-function voicePin(artifact: VoiceSegmentArtifact) {
+function voicePin(
+	artifact: VoiceSegmentArtifact,
+	sourceSampleCount = String(validGaplessMp3Fixture.sourceSampleFrames),
+) {
 	return {
 		segmentKey: artifact.segmentKey,
 		semantic: {
@@ -158,7 +161,7 @@ function voicePin(artifact: VoiceSegmentArtifact) {
 			mimeType: "audio/mpeg" as const,
 			byteSize: artifact.byteSize ?? 0,
 			sourceSampleRate: 44100,
-			sourceSampleCount: "47232",
+			sourceSampleCount,
 			durationMs: 999,
 		},
 		provenance: {
@@ -217,6 +220,32 @@ function voiceStorage(bytes: Uint8Array): VoiceAudioStorage {
 	return value as unknown as VoiceAudioStorage;
 }
 
+async function loadVoiceFixture(
+	fixture: {
+		bytes: Uint8Array;
+		sourceSampleRate: number;
+		sourceSampleFrames: number;
+	},
+	expectedSampleFrames = fixture.sourceSampleFrames,
+) {
+	const artifact = voiceArtifact(fixture.bytes);
+	const loader = new CompositionTechnicalLoader({
+		actor,
+		projectId: "p1",
+		findVoiceArtifact: async () => artifact,
+		voiceStorage: () => voiceStorage(fixture.bytes),
+	});
+	return loader.loadVoice({
+		...voicePin(artifact, String(expectedSampleFrames)),
+		semantic: {
+			...voicePin(artifact, String(expectedSampleFrames)).semantic,
+			sourceSampleRate: fixture.sourceSampleRate,
+			sourceSampleCount: String(expectedSampleFrames),
+			durationMs: 1,
+		},
+	});
+}
+
 async function compositionFixture(
 	fontFaces: CompositionInputV1["fonts"]["faces"],
 	media: MediaAsset,
@@ -266,7 +295,9 @@ async function compositionFixture(
 						mimeType: "audio/mpeg",
 						byteSize: voice.byteSize ?? 0,
 						sourceSampleRate: 44100,
-						sourceSampleCount: "47232",
+						sourceSampleCount: String(
+							validGaplessMp3Fixture.sourceSampleFrames,
+						),
 						durationMs: 1000,
 					},
 					provenance: {
@@ -540,7 +571,7 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 				mimeType: "audio/mpeg",
 				byteSize: bytes.byteLength,
 				sourceSampleRate: 44100,
-				sourceSampleCount: "47232",
+				sourceSampleCount: String(validGaplessMp3Fixture.sourceSampleFrames),
 				durationMs: 1,
 			},
 			provenance: {
@@ -560,8 +591,116 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 		});
 		expect(result).toMatchObject({
 			status: "VALID",
-			facts: { sourceSampleRate: 44100, sourceSampleCount: "47232" },
+			facts: {
+				sourceSampleRate: 44100,
+				sourceSampleCount: String(validGaplessMp3Fixture.sourceSampleFrames),
+			},
 		});
+	});
+
+	it.each([
+		["mono", monoMp3Fixture],
+		["stereo", stereoMp3Fixture],
+	] as const)(
+		"derives %s sample frames from the scalar interleaved PCM count",
+		async (_label, fixture) => {
+			const provenance =
+				_label === "mono"
+					? mp3FixtureProvenance.mono
+					: mp3FixtureProvenance.stereo;
+			const result = await loadVoiceFixture(
+				fixture,
+				provenance.expectedUsableMp3SampleFrames,
+			);
+			expect(result).toMatchObject({
+				status: "VALID",
+				facts: {
+					sourceSampleRate: fixture.sourceSampleRate,
+					sourceSampleCount: String(provenance.expectedUsableMp3SampleFrames),
+				},
+			});
+		},
+	);
+
+	it("applies independently documented nonzero gapless fields exactly once", async () => {
+		const result = await loadVoiceFixture(
+			validGaplessMp3Fixture,
+			mp3FixtureProvenance.gapless.expectedUsableMp3SampleFrames,
+		);
+		expect(result).toMatchObject({
+			status: "VALID",
+			facts: {
+				sourceSampleCount: String(
+					mp3FixtureProvenance.gapless.expectedUsableMp3SampleFrames,
+				),
+			},
+		});
+	});
+
+	it("fails closed when decoded scalar samples disagree with proven MPEG frames", () => {
+		expect(
+			validateDecodedMp3SampleDomain(
+				{
+					samplingRate: 44100,
+					numChannels: 2,
+					numSamples: 47230,
+					pcmLength: 47230,
+				},
+				{
+					sampleRate: 44100,
+					channels: 2,
+					encoderDelay: 0,
+					endPadding: 0,
+					frameCount: 41,
+					decodedSampleFrames: 23616,
+				},
+			),
+		).toMatchObject({
+			status: "UNSUPPORTED",
+			reasonCode: "AUDIO_SAMPLE_DOMAIN_UNPROVABLE",
+		});
+	});
+
+	it("accepts a valid ID3v2-prefixed MP3 at the post-tag frame boundary", async () => {
+		expect(
+			await loadVoiceFixture(
+				id3PrefixedMp3Fixture,
+				mp3FixtureProvenance.id3Prefixed.expectedUsableMp3SampleFrames,
+			),
+		).toMatchObject({
+			status: "VALID",
+			facts: {
+				sourceSampleCount: String(
+					mp3FixtureProvenance.id3Prefixed.expectedUsableMp3SampleFrames,
+				),
+			},
+		});
+	});
+
+	it.each([
+		["missing Xing frame flag", missingFrameFlagMp3Fixture],
+		["malformed frame count", malformedFrameCountMp3Fixture],
+		["malformed LAME gapless bytes", malformedLameMp3Fixture],
+	] as const)("rejects %s as unprovable", async (_label, fixture) => {
+		expect(await loadVoiceFixture(fixture)).toMatchObject({
+			status: "UNSUPPORTED",
+			reasonCode: "AUDIO_SAMPLE_DOMAIN_UNPROVABLE",
+		});
+	});
+
+	it("matches checked-in MP3 fixture provenance hashes", () => {
+		expect(sha256Bytes(monoMp3Fixture.bytes)).toBe(
+			mp3FixtureProvenance.mono.encodedFixtureSha256,
+		);
+		expect(sha256Bytes(stereoMp3Fixture.bytes)).toBe(
+			mp3FixtureProvenance.stereo.encodedFixtureSha256,
+		);
+		expect(sha256Bytes(validGaplessMp3Fixture.bytes)).toBe(
+			mp3FixtureProvenance.gapless.encodedFixtureSha256,
+		);
+		expect(sha256Bytes(id3PrefixedMp3Fixture.bytes)).toBe(
+			mp3FixtureProvenance.id3Prefixed.encodedFixtureSha256,
+		);
 	});
 
 	it("classifies voice checksum/MIME, missing, and transient failures", async () => {
@@ -630,7 +769,7 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 				mimeType: "audio/mpeg",
 				byteSize: bytes.byteLength,
 				sourceSampleRate: 44100,
-				sourceSampleCount: "47232",
+				sourceSampleCount: String(validGaplessMp3Fixture.sourceSampleFrames),
 				durationMs: 999,
 			},
 			provenance: {
@@ -741,6 +880,15 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 			reasonCode: "FONT_NOT_AVAILABLE",
 		});
 		const loader = new CompositionTechnicalLoader({ actor, projectId: "p1" });
+		const composed = await loader.loadFont(pin, ["ắ"]);
+		const decomposed = await loader.loadFont(pin, ["ắ".normalize("NFD")]);
+		expect(composed).toMatchObject({ status: "VALID" });
+		expect(decomposed).toMatchObject({ status: "VALID" });
+		if (composed.status === "VALID" && decomposed.status === "VALID") {
+			expect(decomposed.facts.glyphCodePoints).toEqual(
+				composed.facts.glyphCodePoints,
+			);
+		}
 		expect(await loader.loadFont(pin, ["😀"])).toMatchObject({
 			status: "UNSUPPORTED",
 			reasonCode: "FONT_UNSUPPORTED",
@@ -751,6 +899,27 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 			status: "INVALID",
 			reasonCode: "FONT_METADATA_MISMATCH",
 		});
+		const originalFont = new Uint8Array(
+			await readFile(
+				new URL(
+					`../../../../../packages/api/src/render-assets/fonts/affichannel-fonts-v1/${face.fileName}`,
+					import.meta.url,
+				),
+			),
+		);
+		const corruptedFont = new Uint8Array(originalFont);
+		corruptedFont[0] = (corruptedFont[0] ?? 0) ^ 0xff;
+		const corruptedLoader = new CompositionTechnicalLoader({
+			actor,
+			projectId: "p1",
+			fontReadFile: async () => corruptedFont,
+		});
+		expect(await corruptedLoader.loadFont(pin)).toMatchObject({
+			status: "INVALID",
+			reasonCode: "FONT_CHECKSUM_MISMATCH",
+		});
+		const nonBmp = await loader.loadFont(pin, ["𐐷"]);
+		expect(nonBmp.status).toBe("UNSUPPORTED");
 	});
 
 	it("returns a valid ephemeral manifest without mutating the input", async () => {

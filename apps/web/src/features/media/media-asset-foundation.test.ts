@@ -339,4 +339,40 @@ describe("AFF-US-020 MediaAsset domain and validation foundation", () => {
 			expect.objectContaining({ code: "MEDIA_ASSET_CONFIGURATION_INVALID" }),
 		);
 	});
+
+	it("normalizes confirmed R2 object absence without hiding transient failures", async () => {
+		for (const error of [
+			{ name: "NoSuchKey" },
+			{ statusCode: 404 },
+			{ $metadata: { httpStatusCode: 404 } },
+		]) {
+			const storage = new R2MediaAssetStorage({
+				putObject: async () => undefined,
+				getObject: async () => {
+					throw error;
+				},
+				headObject: async () => {
+					throw error;
+				},
+				deleteObject: async () => undefined,
+			});
+			expect(await storage.head("media/v1/ws-a/asset-a/object")).toBeNull();
+			await expect(
+				storage.get("media/v1/ws-a/asset-a/object"),
+			).rejects.toMatchObject({ code: "MEDIA_ASSET_STORAGE_NOT_FOUND" });
+		}
+		const transient = new R2MediaAssetStorage({
+			putObject: async () => undefined,
+			getObject: async () => {
+				throw { name: "Timeout", statusCode: 503 };
+			},
+			headObject: async () => {
+				throw { name: "Timeout", statusCode: 503 };
+			},
+			deleteObject: async () => undefined,
+		});
+		await expect(
+			transient.get("media/v1/ws-a/asset-a/object"),
+		).rejects.toMatchObject({ code: "MEDIA_ASSET_STORAGE_ERROR" });
+	});
 });

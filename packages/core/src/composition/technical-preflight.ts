@@ -97,7 +97,7 @@ export type TechnicalPreflightResult = Readonly<{
 	technicalManifest?: CompositionTechnicalManifestV1;
 }>;
 
-/** Short-lived protected handoff evidence; it contains no storage credential or key. */
+/** Safe preview metadata only; never an authorization grant or storage locator. */
 export type CompositionPreviewDescriptorV1 = Readonly<{
 	schemaVersion: "composition-preview-descriptor.v1";
 	access: "protected";

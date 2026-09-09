@@ -173,61 +173,245 @@ function decodeUint32Be(bytes: Uint8Array, offset: number) {
 	);
 }
 
-function findFirstMpegFrame(bytes: Uint8Array) {
-	for (
-		let offset = 0;
-		offset + 4 <= Math.min(bytes.length, 64 * 1024);
-		offset += 1
-	) {
-		if (bytes[offset] !== 0xff || ((bytes[offset + 1] ?? 0) & 0xe0) !== 0xe0)
-			continue;
-		const second = bytes[offset + 1] ?? 0;
-		const version = (second >> 3) & 0x03;
-		const layer = (second >> 1) & 0x03;
-		const third = bytes[offset + 2] ?? 0;
-		const bitrateIndex = (third >> 4) & 0x0f;
-		const sampleRateIndex = (third >> 2) & 0x03;
-		if (
-			version === 1 ||
-			layer !== 1 ||
-			bitrateIndex === 0 ||
-			bitrateIndex === 15 ||
-			sampleRateIndex === 3
-		)
-			continue;
-		const mode = ((bytes[offset + 3] ?? 0) >> 6) & 0x03;
-		const sideInfoLength =
-			version === 3 ? (mode === 3 ? 17 : 32) : mode === 3 ? 9 : 17;
-		return { offset, sideInfoLength };
-	}
-	return undefined;
+type MpegFrameHeader = Readonly<{
+	offset: number;
+	version: 0 | 2 | 3;
+	layer: 1;
+	channelMode: number;
+	channels: 1 | 2;
+	sampleRate: number;
+	bitrateKbps: number;
+	padding: number;
+	frameLength: number;
+	samplesPerFrame: 576 | 1152;
+	crcLength: 0 | 2;
+	sideInfoLength: number;
+}>;
+
+type ParsedGaplessInfo = Readonly<{
+	encoderDelay: number;
+	endPadding: number;
+	frameCount: number;
+	decodedSampleFrames: number;
+	sampleRate: number;
+	channels: 1 | 2;
+}>;
+
+type DecodedMp3Facts = Readonly<{
+	samplingRate: number;
+	numChannels: number;
+	numSamples: number;
+	pcmLength: number;
+}>;
+
+const MPEG_BITRATES = {
+	3: [0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 0],
+	2: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0],
+	0: [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160, 0],
+} as const;
+
+const MPEG_SAMPLE_RATES = {
+	3: [44100, 48000, 32000],
+	2: [22050, 24000, 16000],
+	0: [11025, 12000, 8000],
+} as const;
+
+function readId3v2End(bytes: Uint8Array) {
+	if (bytes[0] !== 0x49 || bytes[1] !== 0x44 || bytes[2] !== 0x33) return 0;
+	if (bytes.length < 10) return undefined;
+	const majorVersion = bytes[3] ?? 0;
+	const flags = bytes[5] ?? 0;
+	if (majorVersion < 2 || majorVersion > 4 || (flags & 0x0f) !== 0)
+		return undefined;
+	const tagSizeBytes = bytes.slice(6, 10);
+	if (tagSizeBytes.some((value) => (value & 0x80) !== 0)) return undefined;
+	const tagSize =
+		((tagSizeBytes[0] ?? 0) << 21) |
+		((tagSizeBytes[1] ?? 0) << 14) |
+		((tagSizeBytes[2] ?? 0) << 7) |
+		(tagSizeBytes[3] ?? 0);
+	const footerLength = majorVersion === 4 && (flags & 0x10) !== 0 ? 10 : 0;
+	const end = 10 + tagSize + footerLength;
+	return end <= bytes.length ? end : undefined;
 }
 
-function readLameGaplessInfo(bytes: Uint8Array) {
+function parseMpegFrameHeader(
+	bytes: Uint8Array,
+	offset: number,
+): MpegFrameHeader | undefined {
+	if (offset < 0 || offset + 4 > bytes.length) return undefined;
+	const first = bytes[offset] ?? 0;
+	const second = bytes[offset + 1] ?? 0;
+	if (first !== 0xff || (second & 0xe0) !== 0xe0) return undefined;
+	const version = ((second >> 3) & 0x03) as 0 | 1 | 2 | 3;
+	const layer = ((second >> 1) & 0x03) as 0 | 1 | 2 | 3;
+	if (version === 1 || layer !== 1) return undefined;
+	const third = bytes[offset + 2] ?? 0;
+	const bitrateIndex = (third >> 4) & 0x0f;
+	const sampleRateIndex = (third >> 2) & 0x03;
+	const bitrateKbps = MPEG_BITRATES[version as 0 | 2 | 3]?.[bitrateIndex];
+	const sampleRate = MPEG_SAMPLE_RATES[version as 0 | 2 | 3]?.[sampleRateIndex];
+	if (
+		bitrateKbps === undefined ||
+		bitrateKbps === 0 ||
+		sampleRate === undefined
+	)
+		return undefined;
+	const fourth = bytes[offset + 3] ?? 0;
+	if ((fourth & 0x03) === 0x03) return undefined;
+	const channelMode = (fourth >> 6) & 0x03;
+	const channels = channelMode === 3 ? 1 : 2;
+	const padding = (third >> 1) & 0x01;
+	const crcLength = (second & 0x01) === 0 ? 2 : 0;
+	const samplesPerFrame = version === 3 ? 1152 : 576;
+	const frameLength =
+		Math.floor(((version === 3 ? 144000 : 72000) * bitrateKbps) / sampleRate) +
+		padding;
+	const sideInfoLength =
+		version === 3 ? (channels === 1 ? 17 : 32) : channels === 1 ? 9 : 17;
+	if (frameLength < 4 + crcLength + sideInfoLength) return undefined;
+	return {
+		offset,
+		version: version as 0 | 2 | 3,
+		layer: 1,
+		channelMode,
+		channels,
+		sampleRate,
+		bitrateKbps,
+		padding,
+		frameLength,
+		samplesPerFrame,
+		crcLength,
+		sideInfoLength,
+	};
+}
+
+function isAllowedTrailingMetadata(bytes: Uint8Array, offset: number) {
+	if (offset === bytes.length) return true;
+	const remaining = bytes.slice(offset);
+	if (
+		remaining.length >= 128 &&
+		String.fromCharCode(...remaining.slice(0, 3)) === "TAG"
+	)
+		return remaining.length === 128;
+	return (
+		remaining.length >= 32 &&
+		String.fromCharCode(...remaining.slice(0, 8)) === "APETAGEX"
+	);
+}
+
+function walkMpegFrames(bytes: Uint8Array, first: MpegFrameHeader) {
+	let offset = first.offset;
+	let frameCount = 0;
+	while (offset + 4 <= bytes.length) {
+		const header = parseMpegFrameHeader(bytes, offset);
+		if (!header) break;
+		if (
+			header.version !== first.version ||
+			header.layer !== first.layer ||
+			header.sampleRate !== first.sampleRate ||
+			header.channels !== first.channels
+		)
+			return undefined;
+		if (offset + header.frameLength > bytes.length) return undefined;
+		frameCount += 1;
+		offset += header.frameLength;
+	}
+	if (frameCount === 0 || !isAllowedTrailingMetadata(bytes, offset))
+		return undefined;
+	return { frameCount, endOffset: offset };
+}
+
+function findFirstMpegFrame(bytes: Uint8Array) {
+	const firstOffset = readId3v2End(bytes);
+	if (firstOffset === undefined) return undefined;
+	const first = parseMpegFrameHeader(bytes, firstOffset);
+	if (!first || first.offset + first.frameLength > bytes.length)
+		return undefined;
+	return first;
+}
+
+function readLameGaplessInfo(bytes: Uint8Array): ParsedGaplessInfo | undefined {
 	const frame = findFirstMpegFrame(bytes);
 	if (!frame) return undefined;
-	const xingOffset = frame.offset + 4 + frame.sideInfoLength;
+	const frames = walkMpegFrames(bytes, frame);
+	if (!frames) return undefined;
+	const xingOffset = frame.offset + 4 + frame.crcLength + frame.sideInfoLength;
+	if (xingOffset + 12 > frame.offset + frame.frameLength) return undefined;
 	const marker = String.fromCharCode(
 		...bytes.slice(xingOffset, xingOffset + 4),
 	);
 	if (marker !== "Xing" && marker !== "Info") return undefined;
-	let cursor = xingOffset + 8;
 	const flags = decodeUint32Be(bytes, xingOffset + 4);
-	if (flags & 0x80000000) cursor += 4;
-	if (flags & 0x40000000) cursor += 4;
-	if (flags & 0x20000000) cursor += 100;
-	if (flags & 0x10000000) cursor += 4;
-	if (String.fromCharCode(...bytes.slice(cursor, cursor + 4)) !== "LAME")
+	// Xing flags are the low four bits: frames, bytes, TOC, and VBR scale.
+	if ((flags & ~0x0f) !== 0 || (flags & 0x01) === 0) return undefined;
+	let cursor = xingOffset + 8;
+	const frameCount = decodeUint32Be(bytes, cursor);
+	cursor += 4;
+	if ((flags & 0x02) !== 0) cursor += 4;
+	if ((flags & 0x04) !== 0) cursor += 100;
+	if ((flags & 0x08) !== 0) cursor += 4;
+	if (frameCount === 0 || frameCount !== frames.frameCount) return undefined;
+	if (
+		cursor + 24 > frame.offset + frame.frameLength ||
+		String.fromCharCode(...bytes.slice(cursor, cursor + 4)) !== "LAME"
+	)
 		return undefined;
 	const gaplessOffset = cursor + 21;
-	if (gaplessOffset + 3 > bytes.length) return undefined;
 	const encoderDelay =
 		((bytes[gaplessOffset] ?? 0) << 4) | ((bytes[gaplessOffset + 1] ?? 0) >> 4);
 	const endPadding =
 		(((bytes[gaplessOffset + 1] ?? 0) & 0x0f) << 8) |
 		(bytes[gaplessOffset + 2] ?? 0);
-	if (encoderDelay > 3000 || endPadding > 3000) return undefined;
-	return { encoderDelay, endPadding };
+	if (encoderDelay > 4095 || endPadding > 4095) return undefined;
+	const decodedSampleFrames = frameCount * frame.samplesPerFrame;
+	if (
+		!Number.isSafeInteger(decodedSampleFrames) ||
+		encoderDelay + endPadding >= decodedSampleFrames
+	)
+		return undefined;
+	return {
+		encoderDelay,
+		endPadding,
+		frameCount,
+		decodedSampleFrames,
+		sampleRate: frame.sampleRate,
+		channels: frame.channels,
+	};
+}
+
+export function validateDecodedMp3SampleDomain(
+	decoded: DecodedMp3Facts,
+	proof: ParsedGaplessInfo,
+) {
+	if (
+		!Number.isSafeInteger(decoded.samplingRate) ||
+		!Number.isSafeInteger(decoded.numChannels) ||
+		!Number.isSafeInteger(decoded.numSamples) ||
+		decoded.samplingRate <= 0 ||
+		decoded.numChannels <= 0 ||
+		decoded.numSamples <= 0 ||
+		decoded.numSamples % decoded.numChannels !== 0 ||
+		decoded.pcmLength !== decoded.numSamples
+	)
+		return {
+			status: "INVALID" as const,
+			reasonCode: "VOICE_AUDIO_METADATA_INVALID" as const,
+			issue: "Decoded MP3 PCM metadata is invalid.",
+		};
+	const decodedSamplesPerChannel = decoded.numSamples / decoded.numChannels;
+	if (
+		decoded.samplingRate !== proof.sampleRate ||
+		decoded.numChannels !== proof.channels ||
+		decodedSamplesPerChannel !== proof.decodedSampleFrames
+	)
+		return {
+			status: "UNSUPPORTED" as const,
+			reasonCode: "AUDIO_SAMPLE_DOMAIN_UNPROVABLE" as const,
+			issue:
+				"Decoded MP3 sample data is inconsistent with the proven MPEG frame domain.",
+		};
+	return { status: "VALID" as const, decodedSamplesPerChannel };
 }
 
 async function decodeMp3(
@@ -256,19 +440,20 @@ async function decodeMp3(
 		).WebAssembly.instantiate(wasmBytes, {});
 		const decoder = new Decoder(wasm.instance.exports, bytes);
 		const decoded = decoder.decode(Math.max(1, decoder.duration + 1));
-		if (
-			decoded.samplingRate <= 0 ||
-			decoded.numChannels <= 0 ||
-			decoded.numSamples <= 0 ||
-			decoded.numSamples % decoded.numChannels !== 0 ||
-			decoded.pcm.length !== decoded.numSamples
-		)
-			return failure(
-				"INVALID",
-				"VOICE_AUDIO_METADATA_INVALID",
-				"Decoded MP3 PCM metadata is invalid.",
-			);
-		const decodedSamplesPerChannel = decoded.numSamples / decoded.numChannels;
+		const sampleDomain = validateDecodedMp3SampleDomain(
+			{
+				samplingRate: decoded.samplingRate,
+				numChannels: decoded.numChannels,
+				numSamples: decoded.numSamples,
+				pcmLength: decoded.pcm.length,
+			},
+			gapless,
+		);
+		if (sampleDomain.status !== "VALID") return sampleDomain;
+		// The pinned minimp3-wasm build uses the basic minimp3.h decoder: its
+		// numSamples/PCM buffer are the raw interleaved frame domain. Apply the
+		// objectively parsed LAME delay and padding exactly once here.
+		const decodedSamplesPerChannel = sampleDomain.decodedSamplesPerChannel;
 		const usableSampleCount =
 			decodedSamplesPerChannel - gapless.encoderDelay - gapless.endPadding;
 		if (usableSampleCount <= 0 || !Number.isSafeInteger(usableSampleCount))
@@ -834,7 +1019,7 @@ export class CompositionTechnicalLoader {
 			);
 		const glyphCodePoints = new Set<number>();
 		for (const text of requiredText) {
-			for (const character of text) {
+			for (const character of text.normalize("NFC")) {
 				const codePoint = character.codePointAt(0);
 				if (codePoint === undefined) continue;
 				if (!parsedFont.characterSet.includes(codePoint))

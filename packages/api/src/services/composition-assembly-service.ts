@@ -123,13 +123,14 @@ async function readAuthoritativeCompositionAuthorities(
 	};
 }
 
-async function materializeServerOwnedRenderInputs(input: {
+export async function materializeServerOwnedRenderInputs(input: {
 	actor: WorkspaceActor;
 	projectId: string;
 	script: ScriptVersionReadModel | undefined;
 	voiceConfig: VoiceConfig | null;
 	voiceArtifacts: readonly VoiceSegmentArtifact[];
 	media: readonly ServerOwnedMediaDependency[];
+	loader?: CompositionTechnicalLoader;
 }): Promise<ServerOwnedRenderMaterialization> {
 	const empty: ServerOwnedRenderMaterialization = {
 		fonts: null,
@@ -142,10 +143,12 @@ async function materializeServerOwnedRenderInputs(input: {
 		input.script.editableSnapshot,
 	);
 	if (!parsedScript.success) return empty;
-	const loader = new CompositionTechnicalLoader({
-		actor: input.actor,
-		projectId: input.projectId,
-	});
+	const loader =
+		input.loader ??
+		new CompositionTechnicalLoader({
+			actor: input.actor,
+			projectId: input.projectId,
+		});
 	const currentArtifacts = input.voiceArtifacts.filter(
 		(artifact) =>
 			artifact.status === "completed" &&

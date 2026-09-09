@@ -8,7 +8,7 @@ import {
 	S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-
+import { isObjectNotFoundError } from "../storage/object-storage-errors";
 import {
 	LocalMediaAssetStorage,
 	type MediaAssetStorage,
@@ -82,7 +82,7 @@ export function createR2MediaAssetStorage(config: MediaR2StorageConfig) {
 					etag: response.ETag ?? null,
 				};
 			} catch (error) {
-				if ((error as { name?: string }).name === "NotFound") return null;
+				if (isObjectNotFoundError(error)) return null;
 				throw error;
 			}
 		},
