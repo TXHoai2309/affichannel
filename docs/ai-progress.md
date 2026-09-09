@@ -16,7 +16,30 @@
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
-- Cập nhật lần cuối: 2026-09-07
+- Cập nhật lần cuối: 2026-09-09
+
+## 2026-09-09 — AFF-US-021 Phase 21A fix-forward 2
+
+Starting from `TXH` baseline `f59fdc51f83db8b6dec6500bb47c2079ec7d67b3`,
+Phase 21A Round-2 corrections are implemented. Render business preflight now
+ignores only the unimplemented Render placeholder while continuing to block on
+current Product/Script/Fact Lock/Voice prerequisites. Voice CompositionInput v1
+now uses one segment record containing source-audio facts and provenance with
+exact ScriptVersion/revision lineage and VoiceConfig consistency. Placement and
+trim live only on audio tracks, with explicit `endFrame` validation and no
+clipping.
+
+The semantic projection now fingerprints only materialized output semantics and
+canonicalizes non-semantic dependency order. Output Rules generation settings,
+provider/config provenance and audit snapshots do not alter the fingerprint or
+make a materialized composition stale. Font stable IDs and visual z-order are
+validated, builder classification gives INVALID precedence over missing data,
+and the server-owned assembly boundary fails closed when technical pins are
+unavailable. Migration 0023 is unchanged; no public create endpoint,
+startRender, RenderJob, worker, provider, or Phase 21B technical work was added.
+
+Focused composition coverage is 34 tests. Full checks and clean-room DB status
+are recorded in the final handoff after completion.
 
 ## 2026-09-07 — AFF-US-020 Owner Manual UAT finalization
 

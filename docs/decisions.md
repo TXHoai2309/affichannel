@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-09-04
+- Cập nhật lần cuối: 2026-09-09
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -10,6 +10,39 @@ DEC-025 là canonical direction hiện tại cho Channel-first v0.8. Các ADR c�
 Fact Lock/Voice/Product bắt buộc theo golden affiliate flow được giữ làm lịch sử;
 chúng không override conditional applicability và Manifest-first contract của
 DEC-025 cho công việc mới.
+
+## DEC-037 — AFF-US-021 Phase 21A canonical CompositionInput semantics
+
+- Trạng thái: **Đã chấp nhận; Phase 21A implementation complete**
+- Ngày: 2026-09-09
+- Mở rộng: DEC-003, DEC-020, DEC-023, DEC-024 và DEC-036
+
+### Quyết định
+
+- `CompositionInput` v1 lưu một record cho mỗi Voice segment, gồm semantic
+  source-audio facts và provenance/lineage; không duy trì hai mảng semantic và
+  provenance song song.
+- Audio placement là authority duy nhất của `sceneComposition.audioTracks` và
+  luôn materialize `startFrame`, `durationFrames`, `endFrame` với
+  `endFrame = startFrame + durationFrames`, không clipping hoặc tự mở rộng
+  composition.
+- Semantic fingerprint chỉ bao gồm materialized render output semantics. Output
+  Rules generation/business settings, provider/config metadata, source IDs và
+  audit snapshots không tự làm fingerprint hoặc currentness thay đổi.
+- Dependency collections có thứ tự canonical; visual layers phải tăng nghiêm
+  ngặt theo `zIndex`; font stable IDs là duy nhất trong manifest.
+- Business preflight chỉ xét Product, Script, Fact Lock và Voice làm upstream
+  prerequisites. Render placeholder `RENDER_FEATURE_NOT_IMPLEMENTED` không được
+  tự block preflight.
+- Composition creation trước khi có endpoint public phải đi qua server-owned
+  assembly nhận actor/project identity, đọc authoritative records và fail closed
+  khi font/sample/render pins chưa materialize. Không có startRender/RenderJob
+  trong Phase 21A.
+- Shape thay đổi chỉ nằm trong JSONB `CompositionInput`; migration 0023 giữ
+  nguyên và không tạo migration 0024 cho JSON shape.
+
+Phase 21B không được bắt đầu từ quyết định này; byte/font validation, sample/frame
+feasibility, renderer và output persistence vẫn deferred.
 
 ## DEC-036 — Workspace-owned Shared MediaAsset boundary của AFF-US-020 Phase 20A
 

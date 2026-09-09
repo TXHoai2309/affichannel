@@ -58,6 +58,14 @@ export const fontBundleManifestSchema = z
 	})
 	.strict()
 	.superRefine((manifest, context) => {
+		const fontIds = manifest.faces.map((face) => face.fontId);
+		if (new Set(fontIds).size !== fontIds.length) {
+			context.addIssue({
+				code: "custom",
+				path: ["faces"],
+				message: "Font stable IDs must be unique.",
+			});
+		}
 		const weights = manifest.faces.map((face) => face.weight);
 		if (new Set(weights).size !== 3) {
 			context.addIssue({

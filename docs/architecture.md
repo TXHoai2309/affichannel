@@ -3,7 +3,7 @@
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
   AFF-US-019 19D, 19E.1 and 19E.2 accepted; AFF-US-019 DONE
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-04
+- Cập nhật lần cuối: 2026-09-09
 
 ## 1. Mục tiêu kiến trúc
 
@@ -298,6 +298,28 @@ Storage adapter phải hỗ trợ:
 Khi phù hợp, phải validate MIME, extension, metadata đã decode, kích thước, thời
 lượng, độ phân giải và domain nguồn. Coi URL đầu ra từ provider là input không
 đáng tin cậy.
+
+### AFF-US-021 Phase 21A CompositionInput boundary
+
+Phase 21A đã triển khai nền tảng CompositionInput v1 trong `packages/core`:
+Voice dependency dùng một record/segment gồm source-audio facts và provenance,
+còn placement/mix/trim/end boundary chỉ thuộc `sceneComposition.audioTracks`.
+Fingerprint được tạo từ composition semantics đã materialize với canonical
+collection order; Output Rules generation policy và provenance/audit metadata
+được giữ trong snapshot nhưng không phải render semantic truth.
+
+Business preflight reuse Resolver truth của Product, Script, Fact Lock và Voice;
+Render placeholder vẫn là trạng thái presentation/feature availability và không
+tự block upstream render authorization foundation. Trước khi có public creation
+endpoint, `composition-assembly-service` là server-owned boundary nhận actor và
+project ID, đọc Project/Script/Voice/Media/config authority, rồi gọi canonical
+builder. Thiếu font/sample/render materialization trả
+`COMPOSITION_INPUT_INCOMPLETE`; service không nhận client CompositionInput,
+eligibility flags hoặc currentness booleans.
+
+Phase 21A không tạo worker, RenderJob, renderer, FFmpeg, Remotion, output storage,
+hoặc migration mới. Migration 0023 và relational CompositionVersion schema giữ
+nguyên; technical byte/font and sample/frame feasibility remain Phase 21B scope.
 
 ## 10. Kiến trúc job
 

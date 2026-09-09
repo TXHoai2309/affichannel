@@ -21,68 +21,41 @@ export const compositionSceneTimingSchema = z
 	})
 	.strict();
 
-export const compositionAudioTimingSchema = z
-	.object({
-		sourceSampleRate: z.number().int().positive(),
-		trimStartSample: decimal,
-		trimEndSample: decimal,
-		videoStartFrame: decimal,
-		videoDurationFrames: decimal,
-	})
-	.strict()
-	.refine(
-		(value) => BigInt(value.trimEndSample) > BigInt(value.trimStartSample),
-		"Audio trim boundary must be increasing.",
-	);
-
-export const voiceSemanticSegmentSchema = z
+export const voiceCompositionSegmentSchema = z
 	.object({
 		segmentKey: nonEmptyKey,
-		textSnapshot: z.string().trim().min(1),
-		textHash: sha256,
-		checksum: sha256,
-		mimeType: z.literal("audio/mpeg"),
-		byteSize: z.number().int().positive(),
-		durationMs: z.number().int().positive(),
-		timing: compositionAudioTimingSchema,
+		semantic: z
+			.object({
+				checksum: sha256,
+				mimeType: z.literal("audio/mpeg"),
+				byteSize: z.number().int().positive(),
+				sourceSampleRate: z.number().int().positive(),
+				sourceSampleCount: positiveDecimal,
+				durationMs: z.number().int().positive(),
+			})
+			.strict(),
+		provenance: z
+			.object({
+				artifactId: z.string().min(1),
+				sourceScriptVersionId: z.string().min(1),
+				sourceScriptRevision: z.number().int().positive(),
+				textSnapshot: z.string().trim().min(1),
+				textHash: sha256,
+				configId: z.string().min(1),
+				configRevision: z.number().int().positive(),
+				provider: z.string().min(1),
+				voiceId: z.string().min(1),
+				language: z.string().min(2),
+				speed: finiteNumber,
+				storageProvider: z.enum(["local", "r2"]),
+			})
+			.strict(),
 	})
 	.strict();
 
 export const voiceCompositionDependencySchema = z
 	.object({
-		semantic: z
-			.object({
-				config: z
-					.object({
-						provider: z.string().min(1),
-						voiceId: z.string().min(1),
-						language: z.string().min(2),
-						speed: finiteNumber,
-					})
-					.strict(),
-				segments: z.array(voiceSemanticSegmentSchema).min(1),
-			})
-			.strict(),
-		provenance: z
-			.object({
-				configId: z.string().min(1),
-				configRevision: z.number().int().positive(),
-				segments: z
-					.array(
-						z
-							.object({
-								artifactId: z.string().min(1),
-								sourceScriptVersionId: z.string().min(1),
-								sourceScriptRevision: z.number().int().positive(),
-								segmentKey: nonEmptyKey,
-								provider: z.string().min(1),
-								storageProvider: z.enum(["local", "r2"]),
-							})
-							.strict(),
-					)
-					.min(1),
-			})
-			.strict(),
+		segments: z.array(voiceCompositionSegmentSchema).min(1),
 	})
 	.strict();
 
@@ -180,6 +153,8 @@ export const audioTrackSchema = z
 		trackId: nonEmptyKey,
 		sourceVoiceKey: nonEmptyKey,
 		startFrame: decimal,
+		durationFrames: positiveDecimal,
+		endFrame: positiveDecimal,
 		trimStartSample: decimal,
 		trimEndSample: decimal,
 		gainMilliDb: z.number().int(),
@@ -292,6 +267,21 @@ export const compositionInputV1Schema = z
 				message: "Timeline scene order values must be unique.",
 			});
 		}
+		for (let index = 1; index < input.timeline.scenes.length; index += 1) {
+			const previousScene = input.timeline.scenes[index - 1];
+			const currentScene = input.timeline.scenes[index];
+			if (
+				previousScene &&
+				currentScene &&
+				previousScene.order >= currentScene.order
+			) {
+				context.addIssue({
+					code: "custom",
+					path: ["timeline", "scenes", index, "order"],
+					message: "Timeline scenes must be strictly ascending by order.",
+				});
+			}
+		}
 		for (const [index, scene] of input.timeline.scenes.entries()) {
 			if (
 				BigInt(scene.startFrame) + BigInt(scene.durationFrames) >
@@ -370,25 +360,82 @@ export const compositionInputV1Schema = z
 				message: "Media dependency keys must be unique.",
 			});
 		}
+		for (const [index, media] of input.media.entries()) {
+			if (
+				media.provenance.workspaceId !== input.workspaceId ||
+				media.provenance.projectId !== input.projectId
+			) {
+				context.addIssue({
+					code: "custom",
+					path: ["media", index, "provenance"],
+					message: "Media provenance must resolve to the composition scope.",
+				});
+			}
+		}
 		const voiceKeys = new Set(
-			input.voice.semantic.segments.map((segment) => segment.segmentKey),
+			input.voice.segments.map((segment) => segment.segmentKey),
 		);
-		if (voiceKeys.size !== input.voice.semantic.segments.length) {
+		if (voiceKeys.size !== input.voice.segments.length) {
 			context.addIssue({
 				code: "custom",
-				path: ["voice", "semantic", "segments"],
+				path: ["voice", "segments"],
 				message: "Voice segment keys must be unique.",
 			});
 		}
-		const voiceArtifactKeys = input.voice.provenance.segments.map(
-			(segment) => segment.segmentKey,
-		);
-		if (new Set(voiceArtifactKeys).size !== voiceArtifactKeys.length) {
-			context.addIssue({
-				code: "custom",
-				path: ["voice", "provenance", "segments"],
-				message: "Voice provenance segment keys must be unique.",
-			});
+		for (const [index, segment] of input.voice.segments.entries()) {
+			if (
+				segment.provenance.sourceScriptVersionId !==
+				input.script.provenance.scriptVersionId
+			) {
+				context.addIssue({
+					code: "custom",
+					path: [
+						"voice",
+						"segments",
+						index,
+						"provenance",
+						"sourceScriptVersionId",
+					],
+					message: "Voice artifact must belong to the pinned ScriptVersion.",
+				});
+			}
+			if (
+				segment.provenance.sourceScriptRevision !==
+				input.script.provenance.revision
+			) {
+				context.addIssue({
+					code: "custom",
+					path: [
+						"voice",
+						"segments",
+						index,
+						"provenance",
+						"sourceScriptRevision",
+					],
+					message: "Voice artifact must belong to the pinned Script revision.",
+				});
+			}
+		}
+		const firstVoice = input.voice.segments[0];
+		if (firstVoice) {
+			for (const [index, segment] of input.voice.segments.entries()) {
+				const firstProvenance = firstVoice.provenance;
+				const provenance = segment.provenance;
+				if (
+					provenance.configId !== firstProvenance.configId ||
+					provenance.configRevision !== firstProvenance.configRevision ||
+					provenance.provider !== firstProvenance.provider ||
+					provenance.voiceId !== firstProvenance.voiceId ||
+					provenance.language !== firstProvenance.language ||
+					provenance.speed !== firstProvenance.speed
+				) {
+					context.addIssue({
+						code: "custom",
+						path: ["voice", "segments", index, "provenance"],
+						message: "Voice segment provenance must use one VoiceConfig.",
+					});
+				}
+			}
 		}
 		const fontById = new Map(
 			input.fonts.faces.map((face) => [face.fontId, face]),
@@ -399,6 +446,25 @@ export const compositionInputV1Schema = z
 			if (!timing) continue;
 			const zIndexes = new Set<number>();
 			for (const [layerIndex, layer] of scene.layers.entries()) {
+				const previousLayer = scene.layers[layerIndex - 1];
+				if (
+					layerIndex > 0 &&
+					previousLayer !== undefined &&
+					previousLayer.zIndex >= layer.zIndex
+				) {
+					context.addIssue({
+						code: "custom",
+						path: [
+							"sceneComposition",
+							"scenes",
+							sceneIndex,
+							"layers",
+							layerIndex,
+							"zIndex",
+						],
+						message: "Scene layers must be strictly ascending by z-index.",
+					});
+				}
 				if (layerIds.has(layer.layerId))
 					context.addIssue({
 						code: "custom",
@@ -529,15 +595,25 @@ export const compositionInputV1Schema = z
 					message:
 						"Audio track source must resolve to one pinned voice dependency.",
 				});
-			if (BigInt(track.startFrame) > BigInt(input.timeline.totalFrames))
+			if (
+				BigInt(track.endFrame) !==
+				BigInt(track.startFrame) + BigInt(track.durationFrames)
+			)
 				context.addIssue({
 					code: "custom",
-					path: ["sceneComposition", "audioTracks", index, "startFrame"],
-					message: "Audio track startFrame must fit within totalFrames.",
+					path: ["sceneComposition", "audioTracks", index, "endFrame"],
+					message: "Audio endFrame must equal startFrame + durationFrames.",
+				});
+			if (BigInt(track.endFrame) > BigInt(input.timeline.totalFrames))
+				context.addIssue({
+					code: "custom",
+					path: ["sceneComposition", "audioTracks", index, "endFrame"],
+					message: "Audio track endFrame must fit within totalFrames.",
 				});
 		}
 		if (
 			trackVoiceKeys.size !== voiceKeys.size ||
+			trackVoiceKeys.size !== input.sceneComposition.audioTracks.length ||
 			[...voiceKeys].some((key) => !trackVoiceKeys.has(key))
 		)
 			context.addIssue({
@@ -555,7 +631,7 @@ export const compositionInputV1Schema = z
 		)
 			context.addIssue({
 				code: "custom",
-				path: ["voice", "semantic", "segments"],
+				path: ["voice", "segments"],
 				message:
 					"Every script voiceover segment needs one exact voice artifact.",
 			});

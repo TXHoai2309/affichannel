@@ -3,6 +3,10 @@ import type { CompositionInputV1 } from "./types";
 
 const decimalInteger = /^0$|^[1-9][0-9]*$/;
 
+function compareStableKey(left: string, right: string) {
+	return left < right ? -1 : left > right ? 1 : 0;
+}
+
 function normalizeCompositionValue(value: unknown, path: string): unknown {
 	if (typeof value === "bigint") return value.toString(10);
 	if (typeof value === "string") {
@@ -36,9 +40,6 @@ export function canonicalizeCompositionJson(value: unknown): string {
  * publishing fields, and database identities are deliberately excluded.
  */
 export function compositionSemanticProjection(input: CompositionInputV1) {
-	const selectedHook = input.script.semantic.hookVariants.find(
-		(hook) => hook.key === input.script.semantic.selectedHookKey,
-	);
 	const renderedVoiceKeys = new Set(
 		input.sceneComposition.audioTracks.map((track) => track.sourceVoiceKey),
 	);
@@ -56,29 +57,43 @@ export function compositionSemanticProjection(input: CompositionInputV1) {
 			),
 		),
 	);
+	const sceneComposition = {
+		...input.sceneComposition,
+		audioTracks: [...input.sceneComposition.audioTracks].sort((left, right) =>
+			compareStableKey(left.trackId, right.trackId),
+		),
+	};
+
 	return {
 		profile: input.profile,
-		config: input.config.semantic,
 		timeline: input.timeline,
-		sceneComposition: input.sceneComposition,
-		script: {
-			language: input.script.semantic.language,
-			selectedHookKey: input.script.semantic.selectedHookKey,
-			selectedHook: selectedHook?.text ?? null,
-			cta: input.script.semantic.cta,
-		},
+		sceneComposition,
 		voice: {
-			config: input.voice.semantic.config,
-			segments: input.voice.semantic.segments.filter((segment) =>
-				renderedVoiceKeys.has(segment.segmentKey),
-			),
+			segments: input.voice.segments
+				.filter((segment) => renderedVoiceKeys.has(segment.segmentKey))
+				.sort((left, right) =>
+					compareStableKey(left.segmentKey, right.segmentKey),
+				)
+				.map((segment) => ({
+					segmentKey: segment.segmentKey,
+					checksum: segment.semantic.checksum,
+				})),
 		},
 		media: input.media
 			.filter((media) => renderedMediaKeys.has(media.dependencyKey))
+			.sort((left, right) =>
+				compareStableKey(left.dependencyKey, right.dependencyKey),
+			)
 			.map((media) => ({
 				dependencyKey: media.dependencyKey,
-				semantic: media.semantic,
+				checksumSha256: media.semantic.checksumSha256,
 			})),
-		fonts: input.fonts.faces.filter((face) => renderedFontIds.has(face.fontId)),
+		fonts: input.fonts.faces
+			.filter((face) => renderedFontIds.has(face.fontId))
+			.sort((left, right) => compareStableKey(left.fontId, right.fontId))
+			.map((face) => ({
+				fontId: face.fontId,
+				contentSha256: face.contentSha256,
+			})),
 	};
 }

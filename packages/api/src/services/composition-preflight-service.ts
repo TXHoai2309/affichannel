@@ -14,7 +14,6 @@ import { db, mediaAsset, mediaAssetLink } from "@affichannel/db";
 import { and, eq } from "drizzle-orm";
 import { findCompositionVersionRecord } from "./composition-version-repository";
 import { FactLockGate } from "./fact-lock-gate-service";
-import { getOutputRules } from "./output-rules-service";
 import { getProjectWorkflowSubject } from "./project-repository";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { findVoiceConfig } from "./voice-config-service";
@@ -57,6 +56,10 @@ export type CompositionMediaEligibilityAsset = {
 	checksumSha256: string | null;
 };
 
+const BUSINESS_PREFLIGHT_UPSTREAM_CAPABILITIES: ReadonlySet<
+	ApplicabilityCapabilityResult["capability"]
+> = new Set(["PRODUCT", "SCRIPT", "FACT_LOCK", "VOICE"] as const);
+
 /** US020 media reuse policy: Organic has no rights restriction; Affiliate is owned/licensed only. */
 export function isCompositionMediaEligible(input: {
 	contentType: string | null;
@@ -90,11 +93,22 @@ export function evaluateCompositionBusinessPreflight(input: {
 	mediaEligible: boolean;
 	voiceEligible: boolean;
 }): CompositionBusinessPreflight {
+	const applicabilityCapabilities =
+		input.applicabilityCapabilities ??
+		(input.applicability ? [input.applicability] : []);
+	const factLockApplicability =
+		(input.applicability?.capability === "FACT_LOCK"
+			? input.applicability
+			: applicabilityCapabilities.find(
+					(capability) => capability.capability === "FACT_LOCK",
+				)) ?? null;
 	const factLockRequirement =
-		input.applicability?.state === "NOT_REQUIRED" ? "NOT_REQUIRED" : "REQUIRED";
+		factLockApplicability?.state === "NOT_REQUIRED"
+			? "NOT_REQUIRED"
+			: "REQUIRED";
 	const resolverFactLockSatisfied =
-		input.applicability?.state === "READY" &&
-		input.applicability.completion === "COMPLETE";
+		factLockApplicability?.state === "READY" &&
+		factLockApplicability.completion === "COMPLETE";
 	const factLock: CompositionFactLockTruth = {
 		requirement: factLockRequirement,
 		outcome:
@@ -125,11 +139,10 @@ export function evaluateCompositionBusinessPreflight(input: {
 			factLock,
 		};
 	}
-	const blockedCapability = (
-		input.applicabilityCapabilities ?? [input.applicability]
-	).find(
+	const blockedCapability = applicabilityCapabilities.find(
 		(capability): capability is ApplicabilityCapabilityResult =>
 			capability !== null &&
+			BUSINESS_PREFLIGHT_UPSTREAM_CAPABILITIES.has(capability.capability) &&
 			(capability.state === "BLOCKED" || capability.state === "STALE"),
 	);
 	if (blockedCapability) {
@@ -278,16 +291,20 @@ export async function preflightCompositionVersion(
 		actor,
 		version.projectId,
 	);
-	const currentOutputRules = await getOutputRules(actor);
+	const voiceSegments = input.voice.segments;
+	const voiceConfigProvenance = voiceSegments[0]?.provenance;
 	const currentness = evaluateCompositionCurrentness(input, {
 		scriptVersionId: script.id,
 		scriptRevision: script.revision,
 		voiceConfigRevision: voiceConfig?.revision ?? 0,
 		voiceArtifactIds: voiceArtifacts.map((artifact) => artifact.id),
-		voiceArtifactChecksums: input.voice.provenance.segments.map(
-			(dependency) =>
-				voiceArtifacts.find((artifact) => artifact.id === dependency.artifactId)
-					?.checksum ?? "",
+		voiceArtifactRefs: voiceSegments.map((segment) => ({
+			segmentKey: segment.segmentKey,
+			artifactId: segment.provenance.artifactId,
+			checksum: segment.semantic.checksum,
+		})),
+		voiceArtifactChecksums: voiceSegments.map(
+			(segment) => segment.semantic.checksum,
 		),
 		mediaChecksums: input.media.map(
 			(dependency) =>
@@ -295,24 +312,41 @@ export async function preflightCompositionVersion(
 					(asset) => asset.id === dependency.provenance.mediaAssetId,
 				)?.checksumSha256 ?? "",
 		),
+		mediaDependencyRefs: input.media.map((dependency) => ({
+			dependencyKey: dependency.dependencyKey,
+			checksumSha256:
+				linkedMedia.find(
+					(asset) => asset.id === dependency.provenance.mediaAssetId,
+				)?.checksumSha256 ?? "",
+		})),
 		compositionProfileId: input.profile.id,
-		currentConfigSemantic: {
-			compositionProfileId: input.profile.id,
-			outputRules: currentOutputRules,
-		},
 	});
 	const voiceEligible =
-		voiceConfig?.revision === input.voice.provenance.configRevision &&
-		input.voice.provenance.segments.every((dependency) => {
+		voiceConfig !== null &&
+		voiceConfigProvenance !== undefined &&
+		voiceConfig.id === voiceConfigProvenance.configId &&
+		voiceConfig.revision === voiceConfigProvenance.configRevision &&
+		voiceConfig.provider === voiceConfigProvenance.provider &&
+		voiceConfig.voiceId === voiceConfigProvenance.voiceId &&
+		voiceConfig.language === voiceConfigProvenance.language &&
+		voiceConfig.speed === voiceConfigProvenance.speed &&
+		voiceSegments.every((dependency) => {
 			const artifact = voiceArtifacts.find(
-				(candidate) => candidate.id === dependency.artifactId,
-			);
-			const semantic = input.voice.semantic.segments.find(
-				(segment) => segment.segmentKey === dependency.segmentKey,
+				(candidate) => candidate.id === dependency.provenance.artifactId,
 			);
 			return (
 				artifact?.status === "completed" &&
-				artifact.checksum === semantic?.checksum
+				artifact.segmentKey === dependency.segmentKey &&
+				artifact.sourceScriptVersionId === script.id &&
+				artifact.sourceScriptRevision === script.revision &&
+				artifact.voiceConfigRevision === dependency.provenance.configRevision &&
+				artifact.provider === dependency.provenance.provider &&
+				artifact.voiceId === dependency.provenance.voiceId &&
+				artifact.language === dependency.provenance.language &&
+				artifact.speed === dependency.provenance.speed &&
+				artifact.segmentTextSnapshot === dependency.provenance.textSnapshot &&
+				artifact.textHash === dependency.provenance.textHash &&
+				artifact.checksum === dependency.semantic.checksum
 			);
 		});
 	const claimSummary = summarizeCurrentScriptVersionClaims({
@@ -351,15 +385,13 @@ export async function preflightCompositionVersion(
 			voice: {
 				configPresent: voiceConfig !== null,
 				previewPresent: false,
-				totalSegments: input.voice.semantic.segments.length,
+				totalSegments: voiceSegments.length,
 				attemptedSegments: voiceArtifacts.length,
-				usableSegments: voiceEligible
-					? input.voice.semantic.segments.length
-					: 0,
+				usableSegments: voiceEligible ? voiceSegments.length : 0,
 				pendingSegments: 0,
 				failedSegments: 0,
 				indeterminateSegments: 0,
-				staleSegments: voiceEligible ? 0 : input.voice.semantic.segments.length,
+				staleSegments: voiceEligible ? 0 : voiceSegments.length,
 			},
 			render: {
 				featureImplemented: false,

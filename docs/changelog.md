@@ -6,9 +6,22 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-07.
+Cập nhật lần cuối: 2026-09-09.
 
 ## Chưa phát hành
+
+### AFF-US-021 Phase 21A Composition semantics — ACCEPTED
+
+- Added a canonical server-built CompositionInput foundation with one Voice
+  segment record, exact Script lineage, source-audio facts, explicit audio
+  `startFrame`/`durationFrames`/`endFrame`, and deterministic dependency order.
+- Render business preflight no longer self-blocks on the unimplemented Render
+  placeholder; real Product/Script/Fact Lock/Voice blocks remain authoritative.
+- Materialized-only fingerprinting, font stable-ID uniqueness, strict visual
+  z-order, builder failure precedence, and currentness treatment for
+  generation-only Output Rules changes are covered by focused regressions.
+- No RenderJob, renderer, provider call, public CompositionInput creation API,
+  migration 0024, or Phase 21B technical validation was added.
 
 ### AFF-US-020 Owner Manual UAT finalization — ACCEPTED
 

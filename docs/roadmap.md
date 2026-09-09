@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-05
+- Cập nhật lần cuối: 2026-09-09
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -39,6 +39,13 @@ branch `TXH`. Migration `0022` là additive, `MediaAsset` workspace-owned và
 adapters; `/media` vẫn là skeleton và chưa có public media API. 20C–20E
 (protected API, UI và project reuse/E2E) chưa bắt đầu. Quick Image/AFF-US-021
 phụ thuộc vào READY image asset contract của 20B.
+
+AFF-US-021 Phase 21A canonical CompositionInput semantics đã hoàn tất trên branch
+`TXH`: server-owned assembly boundary, explicit audio end boundary, Voice
+lineage/source-fact contract, materialized-only fingerprint, canonical ordering,
+font ID uniqueness và Render-placeholder preflight exclusion đã được regression
+tested. Phase 21B technical byte/font/sample work và Quick Image/render runtime
+chưa bắt đầu.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.
