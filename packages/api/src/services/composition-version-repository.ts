@@ -113,6 +113,31 @@ export async function findCompositionVersionRecord(
 	return row ? mapRow(row) : undefined;
 }
 
+/** Read-only raw boundary for technical preflight schema/fingerprint checks. */
+export async function findCompositionVersionTechnicalRecord(
+	actor: WorkspaceActor,
+	compositionVersionId: string,
+) {
+	const [row] = await db
+		.select({
+			id: compositionVersion.id,
+			workspaceId: compositionVersion.workspaceId,
+			projectId: compositionVersion.projectId,
+			schemaVersion: compositionVersion.schemaVersion,
+			compositionInputJson: compositionVersion.compositionInputJson,
+			compositionFingerprint: compositionVersion.compositionFingerprint,
+		})
+		.from(compositionVersion)
+		.where(
+			and(
+				eq(compositionVersion.id, compositionVersionId),
+				eq(compositionVersion.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1);
+	return row;
+}
+
 export async function listCompositionVersionRecords(
 	actor: WorkspaceActor,
 	projectId: string,

@@ -21,7 +21,10 @@ export async function createCompositionVersion(
 	});
 }
 
+export { createCompositionPreviewDescriptor } from "./composition-preview-descriptor";
+export { technicalPreflightCompositionVersion } from "./composition-technical-preflight-service";
 export {
 	findCompositionVersionRecord,
+	findCompositionVersionTechnicalRecord,
 	listCompositionVersionRecords,
 } from "./composition-version-repository";

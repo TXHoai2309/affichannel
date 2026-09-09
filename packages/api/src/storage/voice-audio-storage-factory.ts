@@ -3,6 +3,7 @@ import { env } from "@affichannel/env/server";
 import {
 	DeleteObjectCommand,
 	GetObjectCommand,
+	HeadObjectCommand,
 	PutObjectCommand,
 	S3Client,
 } from "@aws-sdk/client-s3";
@@ -65,6 +66,17 @@ export function createR2VoiceAudioStorage(config: R2VoiceAudioStorageConfig) {
 			);
 			if (!response.Body) return null;
 			return new Uint8Array(await response.Body.transformToByteArray());
+		},
+		async headObject(key) {
+			try {
+				const response = await client.send(
+					new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
+				);
+				return { byteSize: response.ContentLength ?? 0 };
+			} catch (error) {
+				if ((error as { name?: string }).name === "NotFound") return null;
+				throw error;
+			}
 		},
 		async deleteObject(key) {
 			await client.send(

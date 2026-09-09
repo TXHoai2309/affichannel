@@ -28,6 +28,8 @@ export type VoiceAudioPutResult = {
 export interface VoiceAudioStorage {
 	readonly provider: VoiceAudioStorageProvider;
 	put(input: VoiceAudioPutInput): Promise<VoiceAudioPutResult>;
+	/** Optional existence probe used by technical preflight. */
+	head?(storageKey: string): Promise<{ byteSize: number } | null>;
 	get(storageKey: string): Promise<Uint8Array>;
 	open(storageKey: string): Promise<ReadableStream<Uint8Array>>;
 	delete(storageKey: string): Promise<void>;
@@ -60,6 +62,12 @@ function bytesToStream(bytes: Uint8Array) {
 function storageFailure(message: string, cause?: unknown): VoiceSegmentError {
 	return new VoiceSegmentError("TTS_STORAGE_FAILED", message, {
 		cause: cause instanceof Error ? cause.name : undefined,
+	});
+}
+
+function storageNotFound(message: string): VoiceSegmentError {
+	return new VoiceSegmentError("TTS_STORAGE_FAILED", message, {
+		notFound: true,
 	});
 }
 
@@ -114,7 +122,21 @@ export class LocalVoiceAudioStorage implements VoiceAudioStorage {
 		try {
 			return new Uint8Array(await readFile(this.pathFor(storageKey)));
 		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+				throw storageNotFound("Local voice audio was not found.");
+			}
 			throw storageFailure("Could not read local voice audio.", error);
+		}
+	}
+
+	async head(storageKey: string) {
+		try {
+			const result = await stat(this.pathFor(storageKey));
+			return { byteSize: result.size };
+		} catch (error) {
+			if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+			if (error instanceof VoiceSegmentError) throw error;
+			throw storageFailure("Could not stat local voice audio.", error);
 		}
 	}
 
@@ -147,6 +169,7 @@ export type R2VoiceAudioObjectClient = {
 		checksum: string;
 	}): Promise<void>;
 	getObject(key: string): Promise<Uint8Array | null>;
+	headObject?(key: string): Promise<{ byteSize: number } | null>;
 	deleteObject(key: string): Promise<void>;
 };
 
@@ -178,10 +201,21 @@ export class R2VoiceAudioStorage implements VoiceAudioStorage {
 		assertSafeVoiceAudioStorageKey(storageKey);
 		try {
 			const body = await this.client.getObject(storageKey);
-			if (!body) throw new Error("R2 object was not found.");
+			if (!body) throw storageNotFound("R2 voice audio was not found.");
 			return body;
 		} catch (error) {
+			if (error instanceof VoiceSegmentError) throw error;
 			throw storageFailure("Could not read voice audio from R2.", error);
+		}
+	}
+
+	async head(storageKey: string) {
+		assertSafeVoiceAudioStorageKey(storageKey);
+		if (!this.client.headObject) return null;
+		try {
+			return await this.client.headObject(storageKey);
+		} catch (error) {
+			throw storageFailure("Could not stat voice audio in R2.", error);
 		}
 	}
 

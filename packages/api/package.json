@@ -24,6 +24,8 @@
 		"@orpc/server": "catalog:",
 		"@orpc/zod": "catalog:",
 		"dotenv": "catalog:",
+		"fontkit": "2.0.4",
+		"minimp3-wasm": "0.1.0",
 		"music-metadata": "^11.15.0",
 		"next": "catalog:",
 		"zod": "catalog:"

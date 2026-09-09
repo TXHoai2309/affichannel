@@ -4,4 +4,5 @@ export * from "./currentness";
 export * from "./errors";
 export * from "./output-profile";
 export * from "./profile";
+export * from "./technical-preflight";
 export * from "./types";
