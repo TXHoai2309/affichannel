@@ -193,6 +193,7 @@ type ParsedGaplessInfo = Readonly<{
 	endPadding: number;
 	frameCount: number;
 	decodedSampleFrames: number;
+	decoderSampleFrames?: number;
 	sampleRate: number;
 	channels: 1 | 2;
 }>;
@@ -351,7 +352,11 @@ function readLameGaplessInfo(bytes: Uint8Array): ParsedGaplessInfo | undefined {
 	if ((flags & 0x02) !== 0) cursor += 4;
 	if ((flags & 0x04) !== 0) cursor += 100;
 	if ((flags & 0x08) !== 0) cursor += 4;
-	if (frameCount === 0 || frameCount !== frames.frameCount) return undefined;
+	if (
+		frameCount === 0 ||
+		(frames.frameCount !== frameCount && frames.frameCount !== frameCount + 1)
+	)
+		return undefined;
 	if (
 		cursor + 24 > frame.offset + frame.frameLength ||
 		String.fromCharCode(...bytes.slice(cursor, cursor + 4)) !== "LAME"
@@ -365,8 +370,10 @@ function readLameGaplessInfo(bytes: Uint8Array): ParsedGaplessInfo | undefined {
 		(bytes[gaplessOffset + 2] ?? 0);
 	if (encoderDelay > 4095 || endPadding > 4095) return undefined;
 	const decodedSampleFrames = frameCount * frame.samplesPerFrame;
+	const decoderSampleFrames = frames.frameCount * frame.samplesPerFrame;
 	if (
 		!Number.isSafeInteger(decodedSampleFrames) ||
+		!Number.isSafeInteger(decoderSampleFrames) ||
 		encoderDelay + endPadding >= decodedSampleFrames
 	)
 		return undefined;
@@ -375,6 +382,7 @@ function readLameGaplessInfo(bytes: Uint8Array): ParsedGaplessInfo | undefined {
 		endPadding,
 		frameCount,
 		decodedSampleFrames,
+		decoderSampleFrames,
 		sampleRate: frame.sampleRate,
 		channels: frame.channels,
 	};
@@ -400,10 +408,12 @@ export function validateDecodedMp3SampleDomain(
 			issue: "Decoded MP3 PCM metadata is invalid.",
 		};
 	const decodedSamplesPerChannel = decoded.numSamples / decoded.numChannels;
+	const expectedDecoderSamplesPerChannel =
+		proof.decoderSampleFrames ?? proof.decodedSampleFrames;
 	if (
 		decoded.samplingRate !== proof.sampleRate ||
 		decoded.numChannels !== proof.channels ||
-		decodedSamplesPerChannel !== proof.decodedSampleFrames
+		decodedSamplesPerChannel !== expectedDecoderSamplesPerChannel
 	)
 		return {
 			status: "UNSUPPORTED" as const,
@@ -453,9 +463,8 @@ async function decodeMp3(
 		// The pinned minimp3-wasm build uses the basic minimp3.h decoder: its
 		// numSamples/PCM buffer are the raw interleaved frame domain. Apply the
 		// objectively parsed LAME delay and padding exactly once here.
-		const decodedSamplesPerChannel = sampleDomain.decodedSamplesPerChannel;
 		const usableSampleCount =
-			decodedSamplesPerChannel - gapless.encoderDelay - gapless.endPadding;
+			gapless.decodedSampleFrames - gapless.encoderDelay - gapless.endPadding;
 		if (usableSampleCount <= 0 || !Number.isSafeInteger(usableSampleCount))
 			return failure(
 				"INVALID",

@@ -3,6 +3,7 @@ import type { MediaAssetStorage } from "@affichannel/api/media/media-asset-stora
 import {
 	CompositionTechnicalLoader,
 	readFontAssetManifest,
+	readLameGaplessInfo,
 	technicalPreflightCompositionInput,
 	validateDecodedMp3SampleDomain,
 } from "@affichannel/api/services/composition-technical-loader";
@@ -244,6 +245,83 @@ async function loadVoiceFixture(
 			durationMs: 1,
 		},
 	});
+}
+
+async function readCanonicalMp3Fixture() {
+	const [mp3Bytes, wavBytes, metadataJson] = await Promise.all([
+		readFile(new URL("./fixtures/audio/canonical-source.mp3", import.meta.url)),
+		readFile(new URL("./fixtures/audio/canonical-source.wav", import.meta.url)),
+		readFile(
+			new URL(
+				"./fixtures/audio/canonical-source.metadata.json",
+				import.meta.url,
+			),
+			"utf8",
+		),
+	]);
+	const metadata = JSON.parse(metadataJson) as {
+		source: {
+			sampleRate: number;
+			channels: number;
+			sampleFrames: number;
+			durationMs: number;
+			sha256: string;
+		};
+		encoded: {
+			sha256: string;
+			xingFrameCount: number;
+			physicalMpegFrameCount: number;
+			decoderSampleFramesPerChannel: number;
+			decodedAudioSampleFramesBeforeGaplessAdjustment: number;
+			encoderDelay: number;
+			endPadding: number;
+			expectedUsableSampleFrames: number;
+		};
+	};
+	const encodedBytes = new Uint8Array(mp3Bytes);
+	const sourceBytes = new Uint8Array(wavBytes);
+	expect(sha256Bytes(encodedBytes)).toBe(metadata.encoded.sha256);
+	expect(sha256Bytes(sourceBytes)).toBe(metadata.source.sha256);
+	expect(readLameGaplessInfo(encodedBytes)).toMatchObject({
+		frameCount: metadata.encoded.xingFrameCount,
+		decodedSampleFrames:
+			metadata.encoded.decodedAudioSampleFramesBeforeGaplessAdjustment,
+		decoderSampleFrames: metadata.encoded.decoderSampleFramesPerChannel,
+		encoderDelay: metadata.encoded.encoderDelay,
+		endPadding: metadata.encoded.endPadding,
+		sampleRate: metadata.source.sampleRate,
+		channels: metadata.source.channels,
+	});
+	const wavView = new DataView(
+		sourceBytes.buffer,
+		sourceBytes.byteOffset,
+		sourceBytes.byteLength,
+	);
+	expect(new TextDecoder().decode(sourceBytes.slice(0, 4))).toBe("RIFF");
+	expect(new TextDecoder().decode(sourceBytes.slice(8, 12))).toBe("WAVE");
+	expect(wavView.getUint16(22, true)).toBe(metadata.source.channels);
+	expect(wavView.getUint32(24, true)).toBe(metadata.source.sampleRate);
+	expect(wavView.getUint16(34, true)).toBe(16);
+	const pcmByteSize = wavView.getUint32(40, true);
+	const bytesPerFrame = metadata.source.channels * 2;
+	expect(pcmByteSize % bytesPerFrame).toBe(0);
+	expect(pcmByteSize / bytesPerFrame).toBe(metadata.source.sampleFrames);
+	expect(metadata.source.sampleFrames * 1000).toBe(
+		metadata.source.durationMs * metadata.source.sampleRate,
+	);
+	return {
+		bytes: encodedBytes,
+		sourceSampleRate: metadata.source.sampleRate,
+		sourceSampleFrames: metadata.source.sampleFrames,
+		metadata,
+	};
+}
+
+function removeByte(bytes: Uint8Array, offset: number) {
+	return Uint8Array.from([
+		...bytes.slice(0, offset),
+		...bytes.slice(offset + 1),
+	]);
 }
 
 async function compositionFixture(
@@ -637,6 +715,26 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 		});
 	});
 
+	it("matches canonical WAV-derived PCM facts and LAME gapless arithmetic", async () => {
+		const fixture = await readCanonicalMp3Fixture();
+		const result = await loadVoiceFixture(
+			fixture,
+			fixture.metadata.encoded.expectedUsableSampleFrames,
+		);
+		expect(
+			fixture.metadata.encoded.decodedAudioSampleFramesBeforeGaplessAdjustment -
+				fixture.metadata.encoded.encoderDelay -
+				fixture.metadata.encoded.endPadding,
+		).toBe(fixture.metadata.source.sampleFrames);
+		expect(result).toMatchObject({
+			status: "VALID",
+			facts: {
+				sourceSampleRate: fixture.metadata.source.sampleRate,
+				sourceSampleCount: String(fixture.metadata.source.sampleFrames),
+			},
+		});
+	});
+
 	it("fails closed when decoded scalar samples disagree with proven MPEG frames", () => {
 		expect(
 			validateDecodedMp3SampleDomain(
@@ -687,6 +785,26 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 			reasonCode: "AUDIO_SAMPLE_DOMAIN_UNPROVABLE",
 		});
 	});
+
+	it.each([
+		["MPEG frame", (bytes: Uint8Array) => bytes.slice(0, -1)],
+		["Xing/Info structure", (bytes: Uint8Array) => removeByte(bytes, 44)],
+		["LAME gapless bytes", (bytes: Uint8Array) => removeByte(bytes, 179)],
+	] as const)(
+		"rejects canonical MP3 truncated at the %s boundary",
+		async (_label, truncate) => {
+			const fixture = await readCanonicalMp3Fixture();
+			expect(
+				await loadVoiceFixture({
+					...fixture,
+					bytes: truncate(fixture.bytes),
+				}),
+			).toMatchObject({
+				status: "UNSUPPORTED",
+				reasonCode: "AUDIO_SAMPLE_DOMAIN_UNPROVABLE",
+			});
+		},
+	);
 
 	it("matches checked-in MP3 fixture provenance hashes", () => {
 		expect(sha256Bytes(monoMp3Fixture.bytes)).toBe(
@@ -893,6 +1011,17 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 			status: "UNSUPPORTED",
 			reasonCode: "FONT_UNSUPPORTED",
 		});
+		const remainingCombiningMark = "\u0301";
+		expect(remainingCombiningMark.normalize("NFC")).toBe(
+			remainingCombiningMark,
+		);
+		const combiningMarkResult = await loader.loadFont(pin, [
+			remainingCombiningMark,
+		]);
+		expect(combiningMarkResult).toMatchObject({ status: "VALID" });
+		if (combiningMarkResult.status === "VALID") {
+			expect(combiningMarkResult.facts.glyphCodePoints).toContain(0x0301);
+		}
 		expect(
 			await loader.loadFont({ ...pin, contentSha256: "0".repeat(64) }),
 		).toMatchObject({

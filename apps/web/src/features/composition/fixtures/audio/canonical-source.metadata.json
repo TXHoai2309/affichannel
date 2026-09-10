@@ -1,0 +1,32 @@
+{
+	"schemaVersion": "affichannel-canonical-mp3-fixture.v1",
+	"source": {
+		"fileName": "canonical-source.wav",
+		"format": "PCM signed little-endian",
+		"bitsPerSample": 16,
+		"sampleRate": 44100,
+		"channels": 2,
+		"sampleFrames": 4410,
+		"durationMs": 100,
+		"sha256": "3e6c92955f6ddf9c5c8501e78dc168810a410c5e6c9e595d7706819e17159507",
+		"generation": "4410 frames; left channel is an impulse at frame 0 followed by a 440 Hz sine at amplitude 12000; right channel is a 660 Hz sine at amplitude 8000, with frame 0 set to zero. Integer samples were generated with Python 3.13 stdlib wave/struct/math."
+	},
+	"encoded": {
+		"fileName": "canonical-source.mp3",
+		"sha256": "252c225b5713e35b751819298b932343ea9f378f7af666de148c440eb5695db0",
+		"encoder": "LAME",
+		"encoderVersion": "3.100.1",
+		"encoderBinarySha256": "9a9c815203316e5203847e93100c6acf0d5d7a5be7744c9018825ded037052e7",
+		"command": "lame --silent --noreplaygain -T --cbr -b 128 canonical-source.wav canonical-source.mp3",
+		"license": "LGPL-2.1",
+		"xingMarker": "Info",
+		"xingFlags": "0x0000000f",
+		"xingFrameCount": 5,
+		"physicalMpegFrameCount": 6,
+		"decoderSampleFramesPerChannel": 6912,
+		"decodedAudioSampleFramesBeforeGaplessAdjustment": 5760,
+		"encoderDelay": 576,
+		"endPadding": 774,
+		"expectedUsableSampleFrames": 4410
+	}
+}
