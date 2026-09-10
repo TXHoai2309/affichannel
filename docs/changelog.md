@@ -10,6 +10,18 @@ Cập nhật lần cuối: 2026-09-10.
 
 ## Chưa phát hành
 
+### AFF-US-021 Phase 21C fix-forward 1 — IMPLEMENTED / REVIEW PENDING
+
+- Hardened blocked requeue with exact CompositionVersion/business preflight
+  re-read and typed `CURRENT`, `STALE`, `BLOCKED`, and transient outcomes.
+- Added full attempt fencing tuple CAS, canonical `RenderJob -> RenderAttempt`
+  lock ordering, fail-closed business/currentness exception handling, and
+  `FENCED + QUEUED` side-effect-free retry state.
+- Validated `RENDER_AGAIN` source identity before active deduplication and added
+  true first-insert idempotency race coverage plus worker/deadlock race evidence.
+- Kept migration 0024, `CompositionTechnicalManifestV1` ephemerality, and all
+  21D/21E exclusions unchanged.
+
 ### AFF-US-021 Phase 21C RenderJob orchestration — IMPLEMENTED / REVIEW PENDING
 
 - Added fenced `RenderJob`/`RenderAttempt` persistence with scoped

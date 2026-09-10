@@ -522,8 +522,18 @@ try {
 	]);
 	assert(
 		finalizeRace.some((result) => result.outcome === "ready") &&
-			finalizeRace.every((result) => result.asset.status === "ready"),
-		"concurrent finalize must converge to one READY asset",
+			finalizeRace.every((result) =>
+				["ready", "already_finalized", "in_progress"].includes(result.outcome),
+			),
+		"concurrent finalize must return only safe convergence outcomes",
+	);
+	const finalizedAfterRace = await service.getMediaAsset(
+		actorA,
+		concurrentFinalize.assetId,
+	);
+	assert(
+		finalizedAfterRace.asset.status === "ready",
+		"concurrent finalize must leave one persisted READY asset",
 	);
 
 	const expiredKey = `expired-${randomUUID()}`;

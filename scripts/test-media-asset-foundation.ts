@@ -186,13 +186,20 @@ try {
 			'background', ARRAY['legacy'], 'Legacy image', null, $4)`,
 		[legacyMetadata, legacyWorkspace, legacyProject, legacyUser],
 	);
-	await migrate(drizzle(pool), { migrationsFolder: migrationsRoot });
+	const currentMigrations = await migrationFolderThrough(24);
+	await migrate(drizzle(pool), { migrationsFolder: currentMigrations });
 	const after = await publicTables(pool);
 	const added = after.filter((table) => !before.includes(table));
 	assert(
 		JSON.stringify(added.sort()) ===
-			JSON.stringify(["media_asset", "media_asset_link"]),
-		`Migration 0022 must add only media tables; got ${added.join(", ")}.`,
+			JSON.stringify([
+				"composition_version",
+				"media_asset",
+				"media_asset_link",
+				"render_attempt",
+				"render_job",
+			]),
+		`Current additive migrations must preserve media tables; got ${added.join(", ")}.`,
 	);
 	const bytea = await pool.query<{ count: number }>(
 		"select count(*)::int as count from information_schema.columns where table_schema = 'public' and table_name in ('media_asset','media_asset_link') and data_type = 'bytea'",
@@ -210,7 +217,7 @@ try {
 		"Legacy media_metadata rows must survive the additive migration.",
 	);
 	console.log(
-		"Migration 0021 -> 0022 additive schema, legacy-row survival, and no-binary-column check: PASS",
+		"Migration 0021 -> current additive schema, legacy-row survival, and no-binary-column check: PASS",
 	);
 
 	const workspaceA = `media-ws-a-${randomUUID()}`;
@@ -238,6 +245,7 @@ try {
 		originalFilename: "../hero.png",
 		displayName: " Hero ",
 		declaredMimeType: "image/png",
+		usageRights: "owned",
 		tags: ["Campaign"],
 	});
 	assert(

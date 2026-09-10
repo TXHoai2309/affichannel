@@ -5,6 +5,7 @@ import type {
 	RenderRequestSpecV1,
 } from "@affichannel/core";
 import {
+	CompositionError,
 	canonicalizeCompositionJson,
 	canonicalRequestHash,
 	compositionInputV1Schema,
@@ -12,6 +13,7 @@ import {
 	isOutputEncodingProfileComplete,
 	renderRequestSpecV1Schema,
 	sha256Hex,
+	validateRenderLeaseConfiguration,
 } from "@affichannel/core";
 import {
 	compositionVersion,
@@ -33,7 +35,10 @@ import {
 	sql,
 } from "drizzle-orm";
 import type { CompositionBusinessPreflight } from "./composition-preflight-service";
-import { preflightCompositionVersion } from "./composition-preflight-service";
+import {
+	preflightCompositionVersion,
+	preflightCompositionVersionInTransaction,
+} from "./composition-preflight-service";
 import { technicalPreflightCompositionVersion } from "./composition-technical-preflight-service";
 import { findCompositionVersionRecordInQuery } from "./composition-version-repository";
 import type { DbTransaction } from "./fact-dependency-repository";
@@ -184,6 +189,54 @@ function identityMatches(
 	);
 }
 
+function renderAgainSourceCompatibilityMatches(
+	source: typeof renderJob.$inferSelect,
+	requestSpec: RenderRequestSpecV1,
+	canonicalHash: string,
+) {
+	return (
+		source.compositionVersionId === requestSpec.compositionVersionId &&
+		source.compositionFingerprint === requestSpec.compositionFingerprint &&
+		source.canonicalRequestHash === canonicalHash &&
+		source.outputEncodingProfileFingerprint ===
+			requestSpec.outputEncodingProfileFingerprint &&
+		source.outputContractVersion === requestSpec.outputContractVersion
+	);
+}
+
+async function assertRenderAgainSourceInTransaction(
+	transaction: DbTransaction,
+	input: {
+		actor: WorkspaceActor;
+		projectId: string;
+		sourceRenderJobId: string;
+		requestSpec: RenderRequestSpecV1;
+		canonicalHash: string;
+	},
+) {
+	const [source] = await transaction
+		.select()
+		.from(renderJob)
+		.where(
+			and(
+				eq(renderJob.id, input.sourceRenderJobId),
+				eq(renderJob.workspaceId, input.actor.workspaceId),
+				eq(renderJob.projectId, input.projectId),
+			),
+		)
+		.limit(1);
+	if (source?.status !== "COMPLETED")
+		throw new RenderJobError("RENDER_AGAIN_SOURCE_NOT_COMPLETED");
+	if (
+		!renderAgainSourceCompatibilityMatches(
+			source,
+			input.requestSpec,
+			input.canonicalHash,
+		)
+	)
+		throw new RenderJobError("RENDER_AGAIN_SOURCE_IDENTITY_MISMATCH");
+}
+
 export async function findRenderJob(
 	actor: WorkspaceActor,
 	jobId: string,
@@ -243,6 +296,18 @@ export async function createRenderJob(input: {
 		throw new RenderJobError("RENDER_SOURCE_JOB_REQUIRED");
 	}
 	if (operation === "RENDER_AGAIN") {
+		// Source validation is deliberately completed before any idempotency or
+		// active-dedup lookup. A bad source must never be accepted by an
+		// unrelated active semantic Job.
+		await db.transaction((transaction) =>
+			assertRenderAgainSourceInTransaction(transaction, {
+				actor: input.actor,
+				projectId: input.projectId,
+				sourceRenderJobId: sourceRenderJobId as string,
+				requestSpec,
+				canonicalHash,
+			}),
+		);
 		const business = await preflightCompositionVersion(
 			input.actor,
 			requestSpec.compositionVersionId,
@@ -335,26 +400,13 @@ export async function createRenderJob(input: {
 				throw new RenderJobError("COMPOSITION_VERSION_IDENTITY_MISMATCH");
 			}
 			if (operation === "RENDER_AGAIN") {
-				const [source] = await transaction
-					.select()
-					.from(renderJob)
-					.where(
-						and(
-							eq(renderJob.id, sourceRenderJobId as string),
-							eq(renderJob.workspaceId, input.actor.workspaceId),
-							eq(renderJob.projectId, input.projectId),
-						),
-					)
-					.limit(1);
-				if (source?.status !== "COMPLETED") {
-					throw new RenderJobError("RENDER_AGAIN_SOURCE_NOT_COMPLETED");
-				}
-				if (
-					source.compositionVersionId !== requestSpec.compositionVersionId ||
-					source.compositionFingerprint !== requestSpec.compositionFingerprint
-				) {
-					throw new RenderJobError("RENDER_AGAIN_SOURCE_IDENTITY_MISMATCH");
-				}
+				await assertRenderAgainSourceInTransaction(transaction, {
+					actor: input.actor,
+					projectId: input.projectId,
+					sourceRenderJobId: sourceRenderJobId as string,
+					requestSpec,
+					canonicalHash,
+				});
 			}
 
 			const renderJobValues = {
@@ -430,7 +482,9 @@ async function expireOneAttempt(
 	transaction: DbTransaction,
 	workspaceId: string,
 ) {
-	const [expired] = await transaction
+	// Candidate discovery intentionally takes no conflicting lock. Every
+	// mutation then acquires RenderJob first and RenderAttempt second.
+	const [candidate] = await transaction
 		.select()
 		.from(renderAttempt)
 		.where(
@@ -441,12 +495,39 @@ async function expireOneAttempt(
 			),
 		)
 		.orderBy(asc(renderAttempt.leaseExpiresAt), asc(renderAttempt.id))
+		.limit(1);
+	if (!candidate) return;
+	const [job] = await transaction
+		.select()
+		.from(renderJob)
+		.where(
+			and(
+				eq(renderJob.id, candidate.renderJobId),
+				eq(renderJob.workspaceId, workspaceId),
+				eq(renderJob.status, "RUNNING"),
+			),
+		)
 		.limit(1)
-		.for("update", { of: renderAttempt, skipLocked: true });
-	if (!expired) return;
+		.for("update", { of: renderJob });
+	if (!job) return;
+	const [expired] = await transaction
+		.select()
+		.from(renderAttempt)
+		.where(
+			and(
+				eq(renderAttempt.id, candidate.id),
+				eq(renderAttempt.renderJobId, job.id),
+				eq(renderAttempt.workspaceId, workspaceId),
+				eq(renderAttempt.status, "RUNNING"),
+				lte(renderAttempt.leaseExpiresAt, sql`now()`),
+			),
+		)
+		.limit(1)
+		.for("update", { of: renderAttempt });
+	if (!expired || job.attemptCount !== expired.attemptNumber) return;
 	const now = new Date();
 	const terminalAfterStart = expired.executionStartedAt !== null;
-	await transaction
+	const [fencedAttempt] = await transaction
 		.update(renderAttempt)
 		.set({
 			status: terminalAfterStart ? "INDETERMINATE" : "FENCED",
@@ -456,8 +537,17 @@ async function expireOneAttempt(
 				: "Lease expired before execution started.",
 			finishedAt: now,
 		})
-		.where(eq(renderAttempt.id, expired.id));
-	await transaction
+		.where(
+			and(
+				eq(renderAttempt.id, expired.id),
+				eq(renderAttempt.renderJobId, job.id),
+				eq(renderAttempt.attemptNumber, expired.attemptNumber),
+				eq(renderAttempt.status, "RUNNING"),
+			),
+		)
+		.returning({ id: renderAttempt.id });
+	if (!fencedAttempt) return;
+	const [updatedJob] = await transaction
 		.update(renderJob)
 		.set({
 			status: terminalAfterStart ? "INDETERMINATE" : "QUEUED",
@@ -470,10 +560,13 @@ async function expireOneAttempt(
 		})
 		.where(
 			and(
-				eq(renderJob.id, expired.renderJobId),
+				eq(renderJob.id, job.id),
+				eq(renderJob.attemptCount, expired.attemptNumber),
 				eq(renderJob.status, "RUNNING"),
 			),
-		);
+		)
+		.returning({ id: renderJob.id });
+	if (!updatedJob) throw new RenderJobError("RENDER_LEASE_RECONCILE_CONFLICT");
 }
 
 export async function claimNextRenderAttempt(
@@ -533,6 +626,7 @@ export async function claimNextRenderAttempt(
 export async function recordTechnicalEvidence(input: {
 	attemptId: string;
 	jobId: string;
+	attemptNumber: number;
 	leaseOwner: string;
 	status: "VALID" | "INVALID" | "UNSUPPORTED" | "UNKNOWN";
 	reasonCode: string | null;
@@ -553,6 +647,7 @@ export async function recordTechnicalEvidence(input: {
 			and(
 				eq(renderAttempt.id, input.attemptId),
 				eq(renderAttempt.renderJobId, input.jobId),
+				eq(renderAttempt.attemptNumber, input.attemptNumber),
 				eq(renderAttempt.leaseOwner, input.leaseOwner),
 				eq(renderAttempt.status, "RUNNING"),
 				gt(renderAttempt.leaseExpiresAt, sql`now()`),
@@ -568,6 +663,7 @@ type FinalGateOutcome =
 	| { kind: "AUTHORIZED"; evidenceFingerprint: string }
 	| { kind: "BLOCKED" }
 	| { kind: "STALE" }
+	| { kind: "RETRYABLE"; reason: string }
 	| { kind: "NOT_CLAIMED" };
 
 export async function authorizeAttemptInTransaction(input: {
@@ -575,6 +671,7 @@ export async function authorizeAttemptInTransaction(input: {
 	actor: WorkspaceActor;
 	jobId: string;
 	attemptId: string;
+	attemptNumber: number;
 	leaseOwner: string;
 	technicalEvidenceFingerprint: string;
 	businessGate: (
@@ -599,6 +696,7 @@ export async function authorizeAttemptInTransaction(input: {
 			and(
 				eq(renderAttempt.id, input.attemptId),
 				eq(renderAttempt.renderJobId, input.jobId),
+				eq(renderAttempt.attemptNumber, input.attemptNumber),
 				eq(renderAttempt.workspaceId, input.actor.workspaceId),
 			),
 		)
@@ -608,6 +706,7 @@ export async function authorizeAttemptInTransaction(input: {
 		!job ||
 		!attempt ||
 		job.status !== "RUNNING" ||
+		job.attemptCount !== attempt.attemptNumber ||
 		attempt.status !== "RUNNING" ||
 		attempt.leaseOwner !== input.leaseOwner ||
 		attempt.executionStartedAt !== null ||
@@ -628,25 +727,46 @@ export async function authorizeAttemptInTransaction(input: {
 		.limit(1)
 		.for("update", { of: project });
 
-	const gate = await input.businessGate(input.transaction);
+	let gate: CompositionBusinessPreflight;
+	try {
+		gate = await input.businessGate(input.transaction);
+	} catch (error) {
+		const failure = classifyBusinessPreflightFailure(error);
+		const fenced = await fenceLockedAttemptAndJob(input.transaction, {
+			jobId: job.id,
+			attemptId: attempt.id,
+			attemptNumber: attempt.attemptNumber,
+			leaseOwner: input.leaseOwner,
+			reasonCode: failure.reason,
+			jobStatus: failure.jobStatus,
+		});
+		if (!fenced) return { kind: "NOT_CLAIMED" };
+		if (failure.jobStatus === "FAILED") return { kind: "STALE" };
+		if (failure.jobStatus === "BLOCKED") return { kind: "BLOCKED" };
+		return { kind: "RETRYABLE", reason: failure.reason };
+	}
 	if (gate.currentness.state === "STALE") {
-		await fenceLockedAttemptAndJob(
-			input.transaction,
-			job.id,
-			attempt.id,
-			"COMPOSITION_STALE",
-			"FAILED",
-		);
+		const fenced = await fenceLockedAttemptAndJob(input.transaction, {
+			jobId: job.id,
+			attemptId: attempt.id,
+			attemptNumber: attempt.attemptNumber,
+			leaseOwner: input.leaseOwner,
+			reasonCode: "COMPOSITION_STALE",
+			jobStatus: "FAILED",
+		});
+		if (!fenced) return { kind: "NOT_CLAIMED" };
 		return { kind: "STALE" };
 	}
 	if (!gate.authorization.allowed) {
-		await fenceLockedAttemptAndJob(
-			input.transaction,
-			job.id,
-			attempt.id,
-			gate.authorization.reasonCode,
-			"BLOCKED",
-		);
+		const fenced = await fenceLockedAttemptAndJob(input.transaction, {
+			jobId: job.id,
+			attemptId: attempt.id,
+			attemptNumber: attempt.attemptNumber,
+			leaseOwner: input.leaseOwner,
+			reasonCode: gate.authorization.reasonCode,
+			jobStatus: "BLOCKED",
+		});
+		if (!fenced) return { kind: "NOT_CLAIMED" };
 		return { kind: "BLOCKED" };
 	}
 	const evidenceFingerprint = await sha256Hex(
@@ -669,6 +789,8 @@ export async function authorizeAttemptInTransaction(input: {
 		.where(
 			and(
 				eq(renderAttempt.id, attempt.id),
+				eq(renderAttempt.renderJobId, job.id),
+				eq(renderAttempt.attemptNumber, attempt.attemptNumber),
 				eq(renderAttempt.status, "RUNNING"),
 				eq(renderAttempt.leaseOwner, input.leaseOwner),
 				isNull(renderAttempt.executionStartedAt),
@@ -681,52 +803,150 @@ export async function authorizeAttemptInTransaction(input: {
 		: { kind: "NOT_CLAIMED" };
 }
 
+function classifyBusinessPreflightFailure(error: unknown): {
+	reason: string;
+	jobStatus: "QUEUED" | "BLOCKED" | "FAILED";
+} {
+	const reason =
+		error instanceof CompositionError
+			? error.code
+			: error instanceof Error && error.name === "CompositionError"
+				? error.message
+				: "COMPOSITION_CURRENTNESS_UNKNOWN";
+	if (reason === "COMPOSITION_EXECUTION_BLOCKED")
+		return { reason, jobStatus: "BLOCKED" };
+	if (
+		reason === "COMPOSITION_STALE" ||
+		reason === "COMPOSITION_VERSION_NOT_FOUND" ||
+		reason === "COMPOSITION_SCOPE_MISMATCH" ||
+		reason === "COMPOSITION_INPUT_INVALID" ||
+		reason === "COMPOSITION_INPUT_INCOMPLETE"
+	)
+		return { reason, jobStatus: "FAILED" };
+	return { reason, jobStatus: "QUEUED" };
+}
+
+type FencedAttemptAndJobInput = {
+	jobId: string;
+	attemptId: string;
+	attemptNumber: number;
+	leaseOwner: string;
+	reasonCode: string;
+	jobStatus: "QUEUED" | "BLOCKED" | "FAILED";
+};
+
 async function fenceLockedAttemptAndJob(
 	transaction: DbTransaction,
-	jobId: string,
-	attemptId: string,
-	reasonCode: string,
-	jobStatus: "QUEUED" | "BLOCKED" | "FAILED",
+	input: FencedAttemptAndJobInput,
 ) {
 	const now = new Date();
-	await transaction
+	const [fencedAttempt] = await transaction
 		.update(renderAttempt)
-		.set({ status: "FENCED", errorCode: reasonCode, finishedAt: now })
+		.set({ status: "FENCED", errorCode: input.reasonCode, finishedAt: now })
 		.where(
-			and(eq(renderAttempt.id, attemptId), eq(renderAttempt.status, "RUNNING")),
-		);
-	await transaction
+			and(
+				eq(renderAttempt.id, input.attemptId),
+				eq(renderAttempt.renderJobId, input.jobId),
+				eq(renderAttempt.attemptNumber, input.attemptNumber),
+				eq(renderAttempt.leaseOwner, input.leaseOwner),
+				eq(renderAttempt.status, "RUNNING"),
+				isNull(renderAttempt.executionStartedAt),
+				gt(renderAttempt.leaseExpiresAt, sql`now()`),
+			),
+		)
+		.returning({ id: renderAttempt.id });
+	if (!fencedAttempt) return false;
+	const [updatedJob] = await transaction
 		.update(renderJob)
 		.set({
-			status: jobStatus,
-			reasonCode,
-			errorCode: reasonCode,
+			status: input.jobStatus,
+			reasonCode: input.reasonCode,
+			errorCode: input.reasonCode,
 			finishedAt:
-				jobStatus === "BLOCKED" || jobStatus === "QUEUED" ? null : now,
+				input.jobStatus === "BLOCKED" || input.jobStatus === "QUEUED"
+					? null
+					: now,
 		})
-		.where(eq(renderJob.id, jobId));
+		.where(
+			and(
+				eq(renderJob.id, input.jobId),
+				eq(renderJob.attemptCount, input.attemptNumber),
+				eq(renderJob.status, "RUNNING"),
+			),
+		)
+		.returning({ id: renderJob.id });
+	if (!updatedJob) throw new RenderJobError("RENDER_STATE_TRANSITION_LOST");
+	return true;
 }
 
 export async function authorizeAttempt(input: {
 	actor: WorkspaceActor;
 	jobId: string;
 	attemptId: string;
+	attemptNumber: number;
 	leaseOwner: string;
 	technicalEvidenceFingerprint: string;
 	businessGate: (
 		transaction: DbTransaction,
 	) => Promise<CompositionBusinessPreflight>;
 }): Promise<FinalGateOutcome> {
-	return db.transaction((transaction) =>
-		authorizeAttemptInTransaction({ ...input, transaction }),
-	);
+	try {
+		return await db.transaction((transaction) =>
+			authorizeAttemptInTransaction({ ...input, transaction }),
+		);
+	} catch (error) {
+		// If a database/preflight exception aborted the transaction that held the
+		// locks, make one owner-locked attempt to fence the pre-execution state.
+		const failure = classifyBusinessPreflightFailure(error);
+		try {
+			const fenced = await transitionOwnedAttemptAndJob({
+				jobId: input.jobId,
+				attemptId: input.attemptId,
+				attemptNumber: input.attemptNumber,
+				leaseOwner: input.leaseOwner,
+				attemptStatus: "FENCED",
+				jobStatus: failure.jobStatus,
+				errorCode: failure.reason,
+			});
+			if (!fenced) return { kind: "NOT_CLAIMED" };
+			if (failure.jobStatus === "FAILED") return { kind: "STALE" };
+			if (failure.jobStatus === "BLOCKED") return { kind: "BLOCKED" };
+			return { kind: "RETRYABLE", reason: failure.reason };
+		} catch {
+			return { kind: "NOT_CLAIMED" };
+		}
+	}
 }
+
+export type RequeueBlockedRenderJobOutcome =
+	| { kind: "QUEUED"; job: RenderJobReadModel }
+	| { kind: "BLOCKED"; job: RenderJobReadModel; reason: string }
+	| { kind: "FAILED"; job: RenderJobReadModel; reason: string }
+	| { kind: "RETRYABLE"; job: RenderJobReadModel; reason: string }
+	| { kind: "ACTIVE_ATTEMPT"; job: RenderJobReadModel }
+	| { kind: "NOT_FOUND" };
+
+type RequeueBusinessGate = (
+	transaction: DbTransaction,
+	actor: WorkspaceActor,
+	compositionVersionId: string,
+) => Promise<CompositionBusinessPreflight>;
 
 /** Reopens only a business-blocked Job; the next claim creates a new Attempt. */
 export async function requeueBlockedRenderJob(
 	actor: WorkspaceActor,
 	jobId: string,
-) {
+	businessGate: RequeueBusinessGate = (
+		transaction,
+		gateActor,
+		compositionVersionId,
+	) =>
+		preflightCompositionVersionInTransaction(
+			transaction,
+			gateActor,
+			compositionVersionId,
+		),
+): Promise<RequeueBlockedRenderJobOutcome> {
 	return db.transaction(async (transaction) => {
 		const [job] = await transaction
 			.select()
@@ -739,18 +959,85 @@ export async function requeueBlockedRenderJob(
 			)
 			.limit(1)
 			.for("update", { of: renderJob });
-		if (job?.status !== "BLOCKED") return false;
+		if (job?.status !== "BLOCKED") return { kind: "NOT_FOUND" };
 		const [activeAttempt] = await transaction
-			.select({ id: renderAttempt.id })
+			.select()
 			.from(renderAttempt)
 			.where(
 				and(
+					eq(renderAttempt.workspaceId, actor.workspaceId),
 					eq(renderAttempt.renderJobId, job.id),
 					eq(renderAttempt.status, "RUNNING"),
 				),
 			)
 			.limit(1);
-		if (activeAttempt) return false;
+		if (activeAttempt) return { kind: "ACTIVE_ATTEMPT", job: mapJob(job) };
+
+		const requestSpec = renderRequestSpecV1Schema.safeParse(
+			job.requestSpecJson,
+		);
+		const [version] = await transaction
+			.select({
+				id: compositionVersion.id,
+				projectId: compositionVersion.projectId,
+				compositionFingerprint: compositionVersion.compositionFingerprint,
+			})
+			.from(compositionVersion)
+			.where(
+				and(
+					eq(compositionVersion.id, job.compositionVersionId),
+					eq(compositionVersion.workspaceId, actor.workspaceId),
+					eq(compositionVersion.projectId, job.projectId),
+				),
+			)
+			.limit(1);
+		if (
+			!requestSpec.success ||
+			!version ||
+			version.compositionFingerprint !== job.compositionFingerprint
+		)
+			return await failBlockedJobInTransaction(
+				transaction,
+				job,
+				"COMPOSITION_VERSION_IDENTITY_MISMATCH",
+			);
+
+		let gate: CompositionBusinessPreflight;
+		try {
+			gate = await businessGate(transaction, actor, job.compositionVersionId);
+		} catch (error) {
+			const failure = classifyBusinessPreflightFailure(error);
+			if (failure.jobStatus === "FAILED")
+				return await failBlockedJobInTransaction(
+					transaction,
+					job,
+					failure.reason,
+				);
+			if (failure.jobStatus === "BLOCKED")
+				return {
+					kind: "BLOCKED",
+					job: mapJob(job),
+					reason: failure.reason,
+				};
+			return {
+				kind: "RETRYABLE",
+				job: mapJob(job),
+				reason: failure.reason,
+			};
+		}
+		if (gate.currentness.state === "STALE")
+			return await failBlockedJobInTransaction(
+				transaction,
+				job,
+				gate.currentness.reason ?? "COMPOSITION_STALE",
+			);
+		if (!gate.authorization.allowed)
+			return {
+				kind: "BLOCKED",
+				job: mapJob(job),
+				reason: gate.authorization.reasonCode,
+			};
+
 		const [requeued] = await transaction
 			.update(renderJob)
 			.set({
@@ -760,20 +1047,52 @@ export async function requeueBlockedRenderJob(
 				errorMessage: null,
 				finishedAt: null,
 			})
-			.where(and(eq(renderJob.id, job.id), eq(renderJob.status, "BLOCKED")))
+			.where(
+				and(
+					eq(renderJob.id, job.id),
+					eq(renderJob.workspaceId, actor.workspaceId),
+					eq(renderJob.status, "BLOCKED"),
+				),
+			)
 			.returning();
-		return Boolean(requeued);
+		if (!requeued) return { kind: "NOT_FOUND" };
+		return { kind: "QUEUED", job: mapJob(requeued) };
 	});
+}
+
+async function failBlockedJobInTransaction(
+	transaction: DbTransaction,
+	job: typeof renderJob.$inferSelect,
+	reason: string,
+): Promise<Extract<RequeueBlockedRenderJobOutcome, { kind: "FAILED" }>> {
+	const now = new Date();
+	const [failed] = await transaction
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			reasonCode: reason,
+			errorCode: reason,
+			errorMessage: reason,
+			finishedAt: now,
+		})
+		.where(and(eq(renderJob.id, job.id), eq(renderJob.status, "BLOCKED")))
+		.returning();
+	if (!failed) throw new RenderJobError("RENDER_STATE_TRANSITION_LOST");
+	return { kind: "FAILED", job: mapJob(failed), reason };
 }
 
 export async function markExecutionStarted(input: {
 	jobId: string;
 	attemptId: string;
+	attemptNumber: number;
 	leaseOwner: string;
 }) {
 	return db.transaction(async (transaction) => {
 		const [job] = await transaction
-			.select({ status: renderJob.status })
+			.select({
+				status: renderJob.status,
+				attemptCount: renderJob.attemptCount,
+			})
 			.from(renderJob)
 			.where(eq(renderJob.id, input.jobId))
 			.limit(1)
@@ -785,12 +1104,14 @@ export async function markExecutionStarted(input: {
 				and(
 					eq(renderAttempt.id, input.attemptId),
 					eq(renderAttempt.renderJobId, input.jobId),
+					eq(renderAttempt.attemptNumber, input.attemptNumber),
 				),
 			)
 			.limit(1)
 			.for("update", { of: renderAttempt });
 		if (
 			job?.status !== "RUNNING" ||
+			job?.attemptCount !== attempt?.attemptNumber ||
 			attempt?.status !== "RUNNING" ||
 			attempt.leaseOwner !== input.leaseOwner ||
 			attempt.authorizedAt === null ||
@@ -806,6 +1127,8 @@ export async function markExecutionStarted(input: {
 			.where(
 				and(
 					eq(renderAttempt.id, input.attemptId),
+					eq(renderAttempt.renderJobId, input.jobId),
+					eq(renderAttempt.attemptNumber, input.attemptNumber),
 					eq(renderAttempt.status, "RUNNING"),
 					eq(renderAttempt.leaseOwner, input.leaseOwner),
 					isNull(renderAttempt.executionStartedAt),
@@ -822,6 +1145,7 @@ export async function markExecutionStarted(input: {
 export async function heartbeatRenderAttempt(input: {
 	attemptId: string;
 	jobId: string;
+	attemptNumber: number;
 	leaseOwner: string;
 }) {
 	const [row] = await db
@@ -834,6 +1158,7 @@ export async function heartbeatRenderAttempt(input: {
 			and(
 				eq(renderAttempt.id, input.attemptId),
 				eq(renderAttempt.renderJobId, input.jobId),
+				eq(renderAttempt.attemptNumber, input.attemptNumber),
 				eq(renderAttempt.leaseOwner, input.leaseOwner),
 				eq(renderAttempt.status, "RUNNING"),
 				gt(renderAttempt.leaseExpiresAt, sql`now()`),
@@ -848,6 +1173,7 @@ export async function loadExecutionSnapshot(
 	input: {
 		jobId: string;
 		attemptId: string;
+		attemptNumber: number;
 		leaseOwner: string;
 		technicalManifest: RenderAttemptExecutionSnapshot["technicalManifest"];
 		technicalEvidenceFingerprint: string;
@@ -869,10 +1195,12 @@ export async function loadExecutionSnapshot(
 			and(
 				eq(renderAttempt.id, input.attemptId),
 				eq(renderAttempt.renderJobId, input.jobId),
+				eq(renderAttempt.attemptNumber, input.attemptNumber),
 				eq(renderAttempt.workspaceId, actor.workspaceId),
 				eq(renderAttempt.leaseOwner, input.leaseOwner),
 				eq(renderAttempt.status, "RUNNING"),
 				eq(renderJob.status, "RUNNING"),
+				eq(renderJob.attemptCount, input.attemptNumber),
 				gt(renderAttempt.leaseExpiresAt, sql`now()`),
 				eq(
 					renderAttempt.technicalEvidenceFingerprint,
@@ -924,6 +1252,7 @@ export async function loadExecutionSnapshot(
 type AttemptMutationInput = {
 	attemptId: string;
 	jobId: string;
+	attemptNumber: number;
 	leaseOwner: string;
 	errorCode: string;
 	errorMessage?: string;
@@ -932,14 +1261,16 @@ type AttemptMutationInput = {
 const DEFAULT_RENDER_LEASE_TTL_SECONDS = 300;
 const DEFAULT_RENDER_HEARTBEAT_INTERVAL_SECONDS = 60;
 
+const renderLeaseConfiguration = validateRenderLeaseConfiguration({
+	leaseTtlSeconds:
+		env.RENDER_LEASE_TTL_SECONDS ?? DEFAULT_RENDER_LEASE_TTL_SECONDS,
+	heartbeatIntervalSeconds:
+		env.RENDER_HEARTBEAT_INTERVAL_SECONDS ??
+		DEFAULT_RENDER_HEARTBEAT_INTERVAL_SECONDS,
+});
+
 export function getRenderLeaseConfiguration() {
-	return {
-		leaseTtlSeconds:
-			env.RENDER_LEASE_TTL_SECONDS ?? DEFAULT_RENDER_LEASE_TTL_SECONDS,
-		heartbeatIntervalSeconds:
-			env.RENDER_HEARTBEAT_INTERVAL_SECONDS ??
-			DEFAULT_RENDER_HEARTBEAT_INTERVAL_SECONDS,
-	};
+	return renderLeaseConfiguration;
 }
 
 const renderLeaseTtlSeconds = () =>
@@ -947,16 +1278,22 @@ const renderLeaseTtlSeconds = () =>
 
 async function updateAttemptAndJob(
 	input: AttemptMutationInput & {
-		attemptId: string;
-		jobId: string;
-		leaseOwner: string;
 		attemptStatus: "FAILED" | "INDETERMINATE" | "FENCED";
-		jobStatus: "FAILED" | "INDETERMINATE" | "QUEUED";
+		jobStatus: "FAILED" | "INDETERMINATE" | "QUEUED" | "BLOCKED";
+		beforeExecutionOnly?: boolean;
+		allowPostExecutionRetry?: boolean;
 		errorCode: string;
 		errorMessage?: string;
 	},
 ) {
 	return db.transaction(async (transaction) => {
+		// Canonical lock order: RenderJob first, RenderAttempt second.
+		const [job] = await transaction
+			.select()
+			.from(renderJob)
+			.where(eq(renderJob.id, input.jobId))
+			.limit(1)
+			.for("update", { of: renderJob });
 		const [attempt] = await transaction
 			.select()
 			.from(renderAttempt)
@@ -964,6 +1301,7 @@ async function updateAttemptAndJob(
 				and(
 					eq(renderAttempt.id, input.attemptId),
 					eq(renderAttempt.renderJobId, input.jobId),
+					eq(renderAttempt.attemptNumber, input.attemptNumber),
 					eq(renderAttempt.leaseOwner, input.leaseOwner),
 					eq(renderAttempt.status, "RUNNING"),
 					gt(renderAttempt.leaseExpiresAt, sql`now()`),
@@ -971,43 +1309,78 @@ async function updateAttemptAndJob(
 			)
 			.limit(1)
 			.for("update", { of: renderAttempt });
-		if (!attempt) return false;
+		if (
+			!job ||
+			!attempt ||
+			job.status !== "RUNNING" ||
+			job.attemptCount !== attempt.attemptNumber ||
+			attempt.workspaceId !== job.workspaceId ||
+			(input.beforeExecutionOnly === true &&
+				attempt.executionStartedAt !== null)
+		)
+			return false;
 		const executionStarted = attempt.executionStartedAt !== null;
 		const now = new Date();
-		if (input.attemptStatus === "FENCED" && executionStarted) {
-			input.attemptStatus = "INDETERMINATE";
-			input.jobStatus = "INDETERMINATE";
+		let attemptStatus = input.attemptStatus;
+		let jobStatus = input.jobStatus;
+		if (
+			attemptStatus === "FENCED" &&
+			executionStarted &&
+			input.allowPostExecutionRetry !== true
+		) {
+			attemptStatus = "INDETERMINATE";
+			jobStatus = "INDETERMINATE";
 		}
-		await transaction
+		const [updatedAttempt] = await transaction
 			.update(renderAttempt)
 			.set({
-				status: input.attemptStatus,
+				status: attemptStatus,
 				errorCode: input.errorCode,
 				errorMessage: input.errorMessage ?? null,
 				finishedAt: now,
 			})
-			.where(eq(renderAttempt.id, attempt.id));
-		await transaction
+			.where(
+				and(
+					eq(renderAttempt.id, attempt.id),
+					eq(renderAttempt.renderJobId, job.id),
+					eq(renderAttempt.attemptNumber, attempt.attemptNumber),
+					eq(renderAttempt.leaseOwner, input.leaseOwner),
+					eq(renderAttempt.status, "RUNNING"),
+				),
+			)
+			.returning({ id: renderAttempt.id });
+		if (!updatedAttempt) return false;
+		const [updatedJob] = await transaction
 			.update(renderJob)
 			.set({
-				status: input.jobStatus,
+				status: jobStatus,
 				reasonCode: input.errorCode,
 				errorCode: input.errorCode,
 				errorMessage: input.errorMessage ?? null,
-				finishedAt: input.jobStatus === "QUEUED" ? null : now,
+				finishedAt:
+					jobStatus === "QUEUED" || jobStatus === "BLOCKED" ? null : now,
 			})
 			.where(
-				and(eq(renderJob.id, input.jobId), eq(renderJob.status, "RUNNING")),
-			);
+				and(
+					eq(renderJob.id, job.id),
+					eq(renderJob.attemptCount, attempt.attemptNumber),
+					eq(renderJob.status, "RUNNING"),
+				),
+			)
+			.returning({ id: renderJob.id });
+		if (!updatedJob) throw new RenderJobError("RENDER_STATE_TRANSITION_LOST");
 		return true;
 	});
 }
+
+const transitionOwnedAttemptAndJob = updateAttemptAndJob;
 
 export async function failTechnical(input: AttemptMutationInput) {
 	return updateAttemptAndJob({
 		...input,
 		attemptStatus: "FAILED",
 		jobStatus: "FAILED",
+		beforeExecutionOnly: true,
 	});
 }
 
@@ -1040,7 +1413,8 @@ export async function requeueAfterSideEffectFreeFailure(
 ) {
 	return updateAttemptAndJob({
 		...input,
-		attemptStatus: "FAILED",
+		attemptStatus: "FENCED",
 		jobStatus: "QUEUED",
+		allowPostExecutionRetry: true,
 	});
 }

@@ -3,6 +3,7 @@ import {
 	fingerprintOutputEncodingProfile,
 	isOutputEncodingProfileComplete,
 	MP4_H264_AAC_V1,
+	validateRenderLeaseConfiguration,
 } from "@affichannel/core";
 import { describe, expect, it } from "vitest";
 
@@ -48,5 +49,20 @@ describe("AFF-US-021 EN001 21C render job Owner Locks", () => {
 		await expect(
 			fingerprintOutputEncodingProfile(MP4_H264_AAC_V1),
 		).rejects.toThrow("OUTPUT_ENCODING_PROFILE_INCOMPLETE");
+	});
+
+	it("requires the heartbeat interval to be shorter than the lease TTL", () => {
+		expect(
+			validateRenderLeaseConfiguration({
+				leaseTtlSeconds: 300,
+				heartbeatIntervalSeconds: 60,
+			}),
+		).toEqual({ leaseTtlSeconds: 300, heartbeatIntervalSeconds: 60 });
+		expect(() =>
+			validateRenderLeaseConfiguration({
+				leaseTtlSeconds: 60,
+				heartbeatIntervalSeconds: 60,
+			}),
+		).toThrow("RENDER_HEARTBEAT_INTERVAL_MUST_BE_LESS_THAN_LEASE_TTL");
 	});
 });

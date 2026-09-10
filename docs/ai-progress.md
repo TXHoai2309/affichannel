@@ -16,7 +16,37 @@
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
-- Cập nhật lần cuối: 2026-09-09
+- Cập nhật lần cuối: 2026-09-10
+
+## 2026-09-10 — AFF-US-021 Phase 21C fix-forward 1
+
+Implemented the smallest review corrections on `TXH` without changing the
+0024 schema. `BLOCKED` requeue is now an owner-locked service transaction that
+re-reads the exact CompositionVersion and business preflight: corrected
+`CURRENT + ALLOWED` queues, still-blocked stays blocked, `STALE` fails the old
+Job, and unknown/transient evaluation stays blocked with a typed retryable
+outcome. `RENDER_AGAIN` validates its completed source, workspace/project,
+CompositionVersion, and request compatibility before idempotency or active
+deduplication.
+
+All worker mutation contracts now carry `attemptNumber` in addition to Job,
+Attempt, owner, status, and lease predicates. Every Job + Attempt transaction
+uses `RenderJob -> RenderAttempt` lock order, including expiry reconciliation,
+final authorization, execution start, and terminal/requeue transitions.
+Business/currentness exceptions before execution fence and queue a new attempt;
+side-effect-free retry is `FENCED + QUEUED`; adapter success remains
+`INDETERMINATE` without 21D proof. Lease configuration now rejects heartbeat
+intervals that are not shorter than the lease TTL.
+
+Focused render unit coverage is 5/5. The guarded loopback PostgreSQL render
+harness passes true first-insert idempotency races, blocked-requeue matrix,
+worker orchestration matrix, stale attempt-number CAS checks, retry allocation,
+and bounded expiry/authorization, expiry/execution-start, and failure/execution
+races. Full web unit coverage is 69 files / 658 tests; the composition,
+voice, media, project, and script regression selection is 53 files / 558 tests.
+Voice and Media integration suites pass against disposable PostgreSQL. No
+RenderArtifact, renderer, output storage, MP4 delivery, Video activation,
+21D/21E work, live provider, Neon database, or new migration was added.
 
 ## 2026-09-10 — AFF-US-021 Phase 21C implementation
 

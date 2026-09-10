@@ -9,6 +9,13 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import type { CompositionBusinessPreflight } from "../packages/api/src/services/composition-preflight-service.ts";
+import type { DbTransaction } from "../packages/api/src/services/fact-dependency-repository.ts";
+import type {
+	RenderAttemptExecutionSnapshot,
+	RenderExecutionAdapter,
+	TechnicalPreflightResult,
+} from "../packages/core/src/index.ts";
 
 const URL_ENV = "AFFICHANNEL_E2E_TEST_DATABASE_URL";
 const CONFIRM_ENV = "AFFICHANNEL_E2E_TEST_DATABASE_CONFIRM";
@@ -55,6 +62,7 @@ const { migrate } = await import("drizzle-orm/node-postgres/migrator");
 const { eq } = await import("drizzle-orm");
 const {
 	buildCompositionInputV1,
+	CompositionError,
 	fingerprintOutputEncodingProfile,
 	MP4_H264_AAC_V1,
 } = await import("@affichannel/core");
@@ -72,6 +80,75 @@ const {
 const repository = await import(
 	"../packages/api/src/services/render-job-repository.ts"
 );
+const worker = await import(
+	"../packages/api/src/services/render-worker-service.ts"
+);
+
+const allowedBusinessGate = async (
+	_transaction: DbTransaction,
+	_actor: { workspaceId: string; userId: string },
+	compositionVersionId: string,
+): Promise<CompositionBusinessPreflight> => ({
+	compositionVersionId,
+	currentness: { state: "CURRENT" as const },
+	authorization: {
+		allowed: true as const,
+		reasonCode: "FACT_LOCK_NOT_REQUIRED",
+		factLockRequirement: "NOT_REQUIRED" as const,
+		factLockOutcome: "NOT_EVALUATED" as const,
+	},
+	applicability: null,
+	factLock: {
+		requirement: "NOT_REQUIRED" as const,
+		outcome: "NOT_EVALUATED" as const,
+		evidence: null,
+	},
+});
+
+function makeBusinessGate(
+	currentness: CompositionBusinessPreflight["currentness"],
+	authorization: CompositionBusinessPreflight["authorization"],
+) {
+	return async (
+		_transaction: DbTransaction,
+		_actor: { workspaceId: string; userId: string },
+		compositionVersionId: string,
+	): Promise<CompositionBusinessPreflight> => ({
+		compositionVersionId,
+		currentness,
+		authorization,
+		applicability: null,
+		factLock: {
+			requirement: "NOT_REQUIRED",
+			outcome: "NOT_EVALUATED",
+			evidence: null,
+		},
+	});
+}
+
+function makeTechnicalPreflight(
+	compositionVersionId: string,
+	compositionFingerprint: string,
+	status: TechnicalPreflightResult["status"] = "VALID",
+): TechnicalPreflightResult {
+	const technicalManifest = {
+		schemaVersion: "composition-technical-manifest.v1" as const,
+		compositionFingerprint,
+		media: [],
+		voice: [],
+		fonts: [],
+		timing: [],
+	};
+	return {
+		status,
+		retryable: status === "UNKNOWN",
+		reasonCode: status === "VALID" ? null : "DEPENDENCY_READ_UNAVAILABLE",
+		compositionVersionId,
+		compositionFingerprint,
+		issues: status === "VALID" ? [] : [`Technical ${status}`],
+		...(status === "VALID" ? { technicalManifest } : {}),
+	};
+}
 
 type Journal = { entries: Array<{ idx: number; tag: string }> };
 const migrationsRoot = resolve("packages/db/src/migrations");
@@ -79,6 +156,23 @@ const temporaryFolders: string[] = [];
 
 function assert(condition: unknown, message: string): asserts condition {
 	if (!condition) throw new Error(message);
+}
+
+async function bounded<T>(promise: Promise<T>, label: string) {
+	let timeout: ReturnType<typeof setTimeout> | undefined;
+	try {
+		return await Promise.race([
+			promise,
+			new Promise<T>((_, reject) => {
+				timeout = setTimeout(
+					() => reject(new Error(`${label} exceeded the 5s race bound.`)),
+					5_000,
+				);
+			}),
+		]);
+	} finally {
+		if (timeout) clearTimeout(timeout);
+	}
 }
 
 async function migrationFolder() {
@@ -391,12 +485,153 @@ try {
 		outputEncodingProfileFingerprint: profileFingerprint,
 		outputContractVersion: "output.v1",
 	};
+	const firstInsertRaceVersionId = `render-cv-${randomUUID()}`;
+	await db.insert(compositionVersion).values({
+		id: firstInsertRaceVersionId,
+		workspaceId,
+		projectId,
+		schemaVersion: "composition-input.v1",
+		compositionInputJson: built.input,
+		compositionFingerprint: built.fingerprint,
+		sourceScriptVersionId: "sv1",
+		sourceScriptRevision: 1,
+		createdByUserId: userId,
+		createdAt: new Date(),
+	});
+	const firstInsertRaceSpec = {
+		...requestSpec,
+		compositionVersionId: firstInsertRaceVersionId,
+	};
+	const firstInsertRace = await Promise.all(
+		Array.from({ length: 16 }, (_, index) =>
+			repository.createRenderJob({
+				actor: { workspaceId, userId },
+				projectId,
+				requestSpec: firstInsertRaceSpec,
+				idempotencyKey: `render-first-insert-${index}-${randomUUID()}`,
+			}),
+		),
+	);
+	assert(
+		new Set(firstInsertRace.map((item) => item.id)).size === 1,
+		"A true first-insert race must persist and return one logical Job.",
+	);
+	const conflictingIdempotencyKey = `render-conflicting-idem-${randomUUID()}`;
+	const conflictingProfile = { ...profile, videoBitrateKbps: 4001 };
+	const conflictingSpec = {
+		...requestSpec,
+		outputEncodingProfile: conflictingProfile,
+		outputEncodingProfileFingerprint:
+			await fingerprintOutputEncodingProfile(conflictingProfile),
+	};
+	const conflictingRace = await Promise.allSettled([
+		repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec,
+			idempotencyKey: conflictingIdempotencyKey,
+		}),
+		repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec: conflictingSpec,
+			idempotencyKey: conflictingIdempotencyKey,
+		}),
+	]);
+	assert(
+		conflictingRace.filter((result) => result.status === "fulfilled").length ===
+			1 &&
+			conflictingRace.filter(
+				(result) =>
+					result.status === "rejected" &&
+					result.reason instanceof repository.RenderJobError &&
+					result.reason.code === "RENDER_IDEMPOTENCY_CONFLICT",
+			).length === 1,
+		"A true same-key conflicting race must have one winner and one typed conflict.",
+	);
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, firstInsertRace[0]?.id ?? "missing"));
+	const conflictingWinner = conflictingRace.find(
+		(
+			result,
+		): result is PromiseFulfilledResult<
+			Awaited<ReturnType<typeof repository.createRenderJob>>
+		> => result.status === "fulfilled",
+	);
+	if (conflictingWinner)
+		await db
+			.update(renderJob)
+			.set({
+				status: "FAILED",
+				errorCode: "TEST_CLEANUP",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderJob.id, conflictingWinner.value.id));
 	const job = await repository.createRenderJob({
 		actor: { workspaceId, userId },
 		projectId,
 		requestSpec,
 		idempotencyKey: `render-idem-${randomUUID()}`,
 	});
+	try {
+		await repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec,
+			operation: "RENDER_AGAIN",
+			sourceRenderJobId: `missing-source-${randomUUID()}`,
+			idempotencyKey: `render-again-invalid-${randomUUID()}`,
+		});
+		throw new Error("Bogus RENDER_AGAIN source must be rejected.");
+	} catch (error) {
+		assert(
+			error instanceof repository.RenderJobError &&
+				(error.code === "RENDER_AGAIN_SOURCE_NOT_COMPLETED" ||
+					error.code === "RENDER_AGAIN_SOURCE_IDENTITY_MISMATCH"),
+			"RENDER_AGAIN must validate its source before active deduplication.",
+		);
+	}
+	const completedSourceProfile = { ...profile, videoBitrateKbps: 4050 };
+	const completedSourceSpec = {
+		...requestSpec,
+		outputEncodingProfile: completedSourceProfile,
+		outputEncodingProfileFingerprint: await fingerprintOutputEncodingProfile(
+			completedSourceProfile,
+		),
+	};
+	const completedSource = await repository.createRenderJob({
+		actor: { workspaceId, userId },
+		projectId,
+		requestSpec: completedSourceSpec,
+		idempotencyKey: `render-source-${randomUUID()}`,
+	});
+	await db
+		.update(renderJob)
+		.set({ status: "COMPLETED", finishedAt: new Date() })
+		.where(eq(renderJob.id, completedSource.id));
+	try {
+		await repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec,
+			operation: "RENDER_AGAIN",
+			sourceRenderJobId: completedSource.id,
+			idempotencyKey: `render-again-incompatible-${randomUUID()}`,
+		});
+		throw new Error("Incompatible RENDER_AGAIN source must be rejected.");
+	} catch (error) {
+		assert(
+			error instanceof repository.RenderJobError &&
+				error.code === "RENDER_AGAIN_SOURCE_IDENTITY_MISMATCH",
+			"RENDER_AGAIN must validate exact source request compatibility.",
+		);
+	}
 	const duplicate = await repository.createRenderJob({
 		actor: { workspaceId, userId },
 		projectId,
@@ -521,9 +756,19 @@ try {
 		})
 		.where(eq(renderAttempt.id, reclaimed.attempt.id));
 	assert(
+		!(await repository.markExecutionStarted({
+			jobId: job.id,
+			attemptId: reclaimed.attempt.id,
+			attemptNumber: reclaimed.attempt.attemptNumber + 1,
+			leaseOwner: "worker-retry",
+		})),
+		"Wrong attemptNumber must fail execution-start CAS.",
+	);
+	assert(
 		await repository.markExecutionStarted({
 			jobId: job.id,
 			attemptId: reclaimed.attempt.id,
+			attemptNumber: reclaimed.attempt.attemptNumber,
 			leaseOwner: "worker-retry",
 		}),
 		"Execution marker CAS must succeed after authorization.",
@@ -543,6 +788,7 @@ try {
 		!(await repository.markExecutionStarted({
 			jobId: job.id,
 			attemptId: reclaimed.attempt.id,
+			attemptNumber: reclaimed.attempt.attemptNumber,
 			leaseOwner: "worker-retry",
 		})),
 		"Stale execution-start CAS must be rejected.",
@@ -551,6 +797,7 @@ try {
 		!(await repository.markIndeterminate({
 			attemptId: reclaimed.attempt.id,
 			jobId: job.id,
+			attemptNumber: reclaimed.attempt.attemptNumber,
 			leaseOwner: "worker-retry",
 			errorCode: "STALE_STATE_MUTATION",
 		})),
@@ -590,14 +837,16 @@ try {
 		!(await repository.heartbeatRenderAttempt({
 			attemptId: secondClaim.attempt.id,
 			jobId: secondJob.id,
-			leaseOwner: "wrong-owner",
+			attemptNumber: secondClaim.attempt.attemptNumber + 1,
+			leaseOwner: "worker-heartbeat",
 		})),
-		"Wrong owner heartbeat must be fenced.",
+		"Wrong attemptNumber heartbeat must be fenced.",
 	);
 	assert(
 		await repository.heartbeatRenderAttempt({
 			attemptId: secondClaim.attempt.id,
 			jobId: secondJob.id,
+			attemptNumber: secondClaim.attempt.attemptNumber,
 			leaseOwner: "worker-heartbeat",
 		}),
 		"Owned heartbeat must extend the lease.",
@@ -629,6 +878,7 @@ try {
 		!(await repository.heartbeatRenderAttempt({
 			attemptId: secondClaim.attempt.id,
 			jobId: secondJob.id,
+			attemptNumber: secondClaim.attempt.attemptNumber,
 			leaseOwner: "worker-heartbeat",
 		})),
 		"Expired heartbeat must be rejected.",
@@ -687,12 +937,14 @@ try {
 			finishedAt: null,
 		})
 		.where(eq(renderJob.id, blockedJob.id));
+	const requeueOutcome = await repository.requeueBlockedRenderJob(
+		{ workspaceId, userId },
+		blockedJob.id,
+		allowedBusinessGate,
+	);
 	assert(
-		await repository.requeueBlockedRenderJob(
-			{ workspaceId, userId },
-			blockedJob.id,
-		),
-		"A business-blocked Job must have an explicit requeue path.",
+		requeueOutcome.kind === "QUEUED",
+		"A corrected business-blocked Job must have an explicit requeue path.",
 	);
 	const blockedReclaimed = await repository.claimNextRenderAttempt(
 		workspaceId,
@@ -705,6 +957,156 @@ try {
 				blockedClaim.attempt.outputReservationId,
 		"Blocked requeue must create a new Attempt and reservation.",
 	);
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, blockedReclaimed.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, blockedJob.id));
+
+	async function createBlockedFixture(label: string, bitrate: number) {
+		const fixtureProfile = { ...profile, videoBitrateKbps: bitrate };
+		const fixture = await repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec: {
+				...requestSpec,
+				outputEncodingProfile: fixtureProfile,
+				outputEncodingProfileFingerprint:
+					await fingerprintOutputEncodingProfile(fixtureProfile),
+			},
+			idempotencyKey: `render-blocked-${label}-${randomUUID()}`,
+		});
+		const claimedFixture = await repository.claimNextRenderAttempt(
+			workspaceId,
+			`worker-blocked-${label}`,
+		);
+		assert(
+			claimedFixture?.job.id === fixture.id,
+			`${label}: blocked fixture must be claimable.`,
+		);
+		await db
+			.update(renderAttempt)
+			.set({
+				status: "FENCED",
+				errorCode: "BUSINESS_BLOCKED",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderAttempt.id, claimedFixture.attempt.id));
+		await db
+			.update(renderJob)
+			.set({
+				status: "BLOCKED",
+				reasonCode: "BUSINESS_BLOCKED",
+				errorCode: "BUSINESS_BLOCKED",
+				finishedAt: null,
+			})
+			.where(eq(renderJob.id, fixture.id));
+		return { fixture, claimedFixture };
+	}
+
+	const stillBlockedFixture = await createBlockedFixture("still-blocked", 4250);
+	const stillBlockedOutcome = await repository.requeueBlockedRenderJob(
+		{ workspaceId, userId },
+		stillBlockedFixture.fixture.id,
+		makeBusinessGate(
+			{ state: "CURRENT" },
+			{
+				allowed: false,
+				reasonCode: "FACT_LOCK_BLOCKED",
+				factLockRequirement: "REQUIRED",
+				factLockOutcome: "BLOCKED",
+			},
+		),
+	);
+	assert(
+		stillBlockedOutcome.kind === "BLOCKED" &&
+			(
+				await repository.findRenderJob(
+					{ workspaceId, userId },
+					stillBlockedFixture.fixture.id,
+				)
+			)?.status === "BLOCKED" &&
+			(
+				await db
+					.select()
+					.from(renderAttempt)
+					.where(eq(renderAttempt.renderJobId, stillBlockedFixture.fixture.id))
+			).length === 1,
+		"CURRENT plus still-blocked must remain BLOCKED without a new Attempt.",
+	);
+
+	const staleFixture = await createBlockedFixture("stale", 4260);
+	const staleRequeueOutcome = await repository.requeueBlockedRenderJob(
+		{ workspaceId, userId },
+		staleFixture.fixture.id,
+		makeBusinessGate(
+			{ state: "STALE", reason: "MEDIA_BINARY_CHANGED" },
+			{
+				allowed: false,
+				reasonCode: "COMPOSITION_STALE",
+				factLockRequirement: "NOT_REQUIRED",
+				factLockOutcome: "NOT_EVALUATED",
+			},
+		),
+	);
+	assert(
+		staleRequeueOutcome.kind === "FAILED" &&
+			(
+				await repository.findRenderJob(
+					{ workspaceId, userId },
+					staleFixture.fixture.id,
+				)
+			)?.status === "FAILED",
+		"STALE blocked requeue must terminally fail the old Job.",
+	);
+
+	const unknownFixture = await createBlockedFixture("unknown", 4270);
+	const unknownRequeueOutcome = await repository.requeueBlockedRenderJob(
+		{ workspaceId, userId },
+		unknownFixture.fixture.id,
+		async () => {
+			throw new CompositionError("COMPOSITION_CURRENTNESS_UNKNOWN");
+		},
+	);
+	assert(
+		unknownRequeueOutcome.kind === "RETRYABLE" &&
+			(
+				await repository.findRenderJob(
+					{ workspaceId, userId },
+					unknownFixture.fixture.id,
+				)
+			)?.status === "BLOCKED",
+		"UNKNOWN blocked requeue must remain BLOCKED with a typed retryable outcome.",
+	);
+	const crossWorkspaceOutcome = await repository.requeueBlockedRenderJob(
+		{ workspaceId: `foreign-${randomUUID()}`, userId },
+		unknownFixture.fixture.id,
+	);
+	assert(
+		crossWorkspaceOutcome.kind === "NOT_FOUND",
+		"Cross-workspace blocked requeue must be denied as not found.",
+	);
+	for (const fixture of [stillBlockedFixture, unknownFixture]) {
+		await db
+			.update(renderJob)
+			.set({
+				status: "FAILED",
+				errorCode: "TEST_CLEANUP",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderJob.id, fixture.fixture.id));
+	}
 
 	const differentVersionId = `render-cv-${randomUUID()}`;
 	await db.insert(compositionVersion).values({
@@ -733,6 +1135,537 @@ try {
 			differentVersionJob.compositionVersionId === differentVersionId,
 		"Different CompositionVersions must never coalesce.",
 	);
+
+	// The explicit worker matrix uses deterministic adapters and cleans its
+	// terminal rows between scenarios. It exercises the orchestration boundary,
+	// not a production renderer.
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, blockedReclaimed.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, blockedJob.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, differentVersionJob.id));
+
+	let scenarioIndex = 0;
+	const runWorkerScenario = async (input: {
+		label: string;
+		technical: TechnicalPreflightResult;
+		business?: ReturnType<typeof makeBusinessGate>;
+		execute?: RenderExecutionAdapter;
+	}) => {
+		const scenarioProfile = {
+			...profile,
+			videoBitrateKbps: 4300 + scenarioIndex++,
+		};
+		const scenarioSpec = {
+			...requestSpec,
+			outputEncodingProfile: scenarioProfile,
+			outputEncodingProfileFingerprint:
+				await fingerprintOutputEncodingProfile(scenarioProfile),
+		};
+		const scenarioJob = await repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec: scenarioSpec,
+			idempotencyKey: `render-worker-${input.label}-${randomUUID()}`,
+		});
+		const result = await worker.runNextRenderAttempt(
+			{ workspaceId, userId },
+			`worker-${input.label}`,
+			{
+				technicalPreflight: async () => input.technical,
+				businessPreflight: input.business,
+				execute: input.execute,
+			},
+		);
+		const [scenarioAttempt] = await db
+			.select()
+			.from(renderAttempt)
+			.where(eq(renderAttempt.renderJobId, scenarioJob.id))
+			.limit(1);
+		const persistedJob = await repository.findRenderJob(
+			{ workspaceId, userId },
+			scenarioJob.id,
+		);
+		assert(persistedJob, `${input.label}: persisted Job is required.`);
+		assert(scenarioAttempt, `${input.label}: persisted Attempt is required.`);
+		return { result, scenarioJob, scenarioAttempt, persistedJob, scenarioSpec };
+	};
+
+	const technicalInvalid = await runWorkerScenario({
+		label: "technical-invalid",
+		technical: makeTechnicalPreflight(
+			compositionVersionId,
+			built.fingerprint,
+			"INVALID",
+		),
+	});
+	assert(
+		technicalInvalid.result.kind === "FAILED" &&
+			technicalInvalid.scenarioAttempt.status === "FAILED" &&
+			technicalInvalid.persistedJob.status === "FAILED",
+		"Technical INVALID must fail Attempt and Job.",
+	);
+
+	const technicalUnsupported = await runWorkerScenario({
+		label: "technical-unsupported",
+		technical: makeTechnicalPreflight(
+			compositionVersionId,
+			built.fingerprint,
+			"UNSUPPORTED",
+		),
+	});
+	assert(
+		technicalUnsupported.result.kind === "FAILED" &&
+			technicalUnsupported.scenarioAttempt.status === "FAILED" &&
+			technicalUnsupported.persistedJob.status === "FAILED",
+		"Technical UNSUPPORTED must fail Attempt and Job.",
+	);
+
+	const technicalUnknown = await runWorkerScenario({
+		label: "technical-unknown",
+		technical: makeTechnicalPreflight(
+			compositionVersionId,
+			built.fingerprint,
+			"UNKNOWN",
+		),
+	});
+	assert(
+		technicalUnknown.result.kind === "QUEUED" &&
+			technicalUnknown.scenarioAttempt.status === "FENCED" &&
+			technicalUnknown.persistedJob.status === "QUEUED",
+		"Technical UNKNOWN must fence and queue.",
+	);
+	const technicalUnknownRetry = await repository.claimNextRenderAttempt(
+		workspaceId,
+		"worker-technical-unknown-retry",
+	);
+	assert(
+		technicalUnknownRetry?.job.id === technicalUnknown.scenarioJob.id,
+		"Technical UNKNOWN retry must claim the same Job with a new Attempt.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, technicalUnknownRetry.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, technicalUnknownRetry.job.id));
+
+	const businessBlocked = await runWorkerScenario({
+		label: "business-blocked",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: makeBusinessGate(
+			{ state: "CURRENT" },
+			{
+				allowed: false,
+				reasonCode: "FACT_LOCK_BLOCKED",
+				factLockRequirement: "REQUIRED",
+				factLockOutcome: "BLOCKED",
+			},
+		),
+	});
+	assert(
+		businessBlocked.result.kind === "BLOCKED" &&
+			businessBlocked.scenarioAttempt.status === "FENCED" &&
+			businessBlocked.persistedJob.status === "BLOCKED",
+		"Business BLOCKED must fence and block.",
+	);
+
+	const stale = await runWorkerScenario({
+		label: "composition-stale",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: makeBusinessGate(
+			{ state: "STALE", reason: "MEDIA_BINARY_CHANGED" },
+			{
+				allowed: false,
+				reasonCode: "COMPOSITION_STALE",
+				factLockRequirement: "NOT_REQUIRED",
+				factLockOutcome: "NOT_EVALUATED",
+			},
+		),
+	});
+	assert(
+		stale.result.kind === "FAILED" &&
+			stale.scenarioAttempt.status === "FENCED" &&
+			stale.persistedJob.status === "FAILED",
+		"Composition STALE must fence and fail.",
+	);
+
+	const businessUnknown = await runWorkerScenario({
+		label: "business-unknown",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: async () => {
+			throw new CompositionError("COMPOSITION_CURRENTNESS_UNKNOWN");
+		},
+	});
+	assert(
+		businessUnknown.result.kind === "QUEUED" &&
+			businessUnknown.scenarioAttempt.status === "FENCED" &&
+			businessUnknown.persistedJob.status === "QUEUED",
+		"Business/currentness UNKNOWN must fence and queue.",
+	);
+	const businessUnknownRetry = await repository.claimNextRenderAttempt(
+		workspaceId,
+		"worker-business-unknown-retry",
+	);
+	assert(
+		businessUnknownRetry?.job.id === businessUnknown.scenarioJob.id,
+		"Business UNKNOWN retry must claim the same Job with a new Attempt.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, businessUnknownRetry.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, businessUnknownRetry.job.id));
+
+	let observedSnapshot: RenderAttemptExecutionSnapshot | undefined;
+	const valid = await runWorkerScenario({
+		label: "valid-allowed",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async ({ snapshot }) => {
+			observedSnapshot = snapshot;
+			return { outcome: "SUCCESS" };
+		},
+	});
+	assert(
+		valid.result.kind === "INDETERMINATE" &&
+			valid.scenarioAttempt.status === "INDETERMINATE" &&
+			valid.persistedJob.status === "INDETERMINATE" &&
+			valid.scenarioAttempt.authorizedAt !== null &&
+			valid.scenarioAttempt.executionStartedAt !== null,
+		"VALID + ALLOWED must authorize, mark execution, then remain indeterminate on success.",
+	);
+	assert(
+		observedSnapshot &&
+			observedSnapshot.jobId === valid.scenarioJob.id &&
+			observedSnapshot.attemptId === valid.scenarioAttempt.id &&
+			observedSnapshot.attemptNumber === valid.scenarioAttempt.attemptNumber &&
+			observedSnapshot.execution.outputReservationId ===
+				valid.scenarioAttempt.outputReservationId,
+		"Execution adapter must receive the exact pinned snapshot and fencing tuple.",
+	);
+
+	const deterministicFailure = await runWorkerScenario({
+		label: "adapter-deterministic-failure",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({
+			outcome: "FAILURE",
+			classification: "DETERMINISTIC",
+			sideEffectFree: true,
+			errorCode: "ENCODER_INVALID_INPUT",
+		}),
+	});
+	assert(
+		deterministicFailure.result.kind === "FAILED" &&
+			deterministicFailure.scenarioAttempt.status === "FAILED" &&
+			deterministicFailure.persistedJob.status === "FAILED",
+		"Deterministic adapter failure must fail Attempt and Job.",
+	);
+
+	const retryableFailure = await runWorkerScenario({
+		label: "adapter-side-effect-free-retry",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({
+			outcome: "FAILURE",
+			classification: "RETRYABLE",
+			sideEffectFree: true,
+			errorCode: "ADAPTER_RETRYABLE",
+		}),
+	});
+	assert(
+		retryableFailure.result.kind === "QUEUED" &&
+			retryableFailure.scenarioAttempt.status === "FENCED" &&
+			retryableFailure.persistedJob.status === "QUEUED",
+		"Side-effect-free retry must fence Attempt and queue Job.",
+	);
+	const retryClaim = await repository.claimNextRenderAttempt(
+		workspaceId,
+		"worker-side-effect-free-retry-2",
+	);
+	assert(
+		retryClaim?.job.id === retryableFailure.scenarioJob.id &&
+			retryClaim.attempt.id !== retryableFailure.scenarioAttempt.id &&
+			retryClaim.attempt.attemptNumber ===
+				retryableFailure.scenarioAttempt.attemptNumber + 1 &&
+			retryClaim.attempt.outputReservationId !==
+				retryableFailure.scenarioAttempt.outputReservationId,
+		"Retry claim must create a new Attempt, number, and output reservation.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, retryClaim.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, retryClaim.job.id));
+
+	const ambiguous = await runWorkerScenario({
+		label: "adapter-ambiguous-after-start",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({
+			outcome: "FAILURE",
+			classification: "RETRYABLE",
+			sideEffectFree: false,
+			errorCode: "ADAPTER_AMBIGUOUS",
+		}),
+	});
+	assert(
+		ambiguous.result.kind === "INDETERMINATE" &&
+			ambiguous.scenarioAttempt.status === "INDETERMINATE" &&
+			ambiguous.persistedJob.status === "INDETERMINATE",
+		"Ambiguous post-start adapter failure must be indeterminate.",
+	);
+
+	async function createRaceClaim(label: string, bitrate: number) {
+		const raceProfile = { ...profile, videoBitrateKbps: bitrate };
+		const raceJob = await repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec: {
+				...requestSpec,
+				outputEncodingProfile: raceProfile,
+				outputEncodingProfileFingerprint:
+					await fingerprintOutputEncodingProfile(raceProfile),
+			},
+			idempotencyKey: `render-race-${label}-${randomUUID()}`,
+		});
+		const raceClaim = await repository.claimNextRenderAttempt(
+			workspaceId,
+			`worker-race-${label}`,
+		);
+		assert(raceClaim?.job.id === raceJob.id, `${label}: race claim mismatch.`);
+		return raceClaim;
+	}
+
+	async function cleanupRaceClaim(
+		raceClaim: NonNullable<
+			Awaited<ReturnType<typeof repository.claimNextRenderAttempt>>
+		>,
+	) {
+		await db
+			.update(renderAttempt)
+			.set({
+				status: "FENCED",
+				errorCode: "TEST_CLEANUP",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderAttempt.id, raceClaim.attempt.id));
+		await db
+			.update(renderJob)
+			.set({
+				status: "FAILED",
+				errorCode: "TEST_CLEANUP",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderJob.id, raceClaim.job.id));
+	}
+
+	const expiryVsAuthorization = await createRaceClaim(
+		"expiry-authorization",
+		4510,
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			leaseExpiresAt: new Date(Date.now() - 1000),
+			authorizedAt: new Date(),
+			technicalPreflightStatus: "VALID",
+			technicalEvidenceFingerprint: hash,
+			technicalCheckedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, expiryVsAuthorization.attempt.id));
+	const [expiryAuthorizationResult, expiryWinner] = await bounded(
+		Promise.all([
+			repository.authorizeAttempt({
+				actor: { workspaceId, userId },
+				jobId: expiryVsAuthorization.job.id,
+				attemptId: expiryVsAuthorization.attempt.id,
+				attemptNumber: expiryVsAuthorization.attempt.attemptNumber,
+				leaseOwner: expiryVsAuthorization.attempt.leaseOwner,
+				technicalEvidenceFingerprint: hash,
+				businessGate: (transaction) =>
+					allowedBusinessGate(
+						transaction,
+						{ workspaceId, userId },
+						compositionVersionId,
+					),
+			}),
+			repository.claimNextRenderAttempt(workspaceId, "worker-race-expiry-a"),
+		]),
+		"expiry versus final authorization",
+	);
+	assert(
+		expiryAuthorizationResult.kind === "NOT_CLAIMED" &&
+			expiryWinner?.job.id === expiryVsAuthorization.job.id,
+		"Expiry versus final authorization must have one valid winner without a deadlock.",
+	);
+	const [expiredAuthorizationAttempt] = await db
+		.select()
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, expiryVsAuthorization.attempt.id));
+	assert(
+		expiredAuthorizationAttempt?.status === "FENCED" &&
+			(expiryWinner === undefined || expiryWinner.job.status === "RUNNING"),
+		"Expiry versus authorization must not split Job and Attempt state.",
+	);
+	if (expiryWinner) await cleanupRaceClaim(expiryWinner);
+
+	const expiryVsExecution = await createRaceClaim("expiry-execution", 4520);
+	await db
+		.update(renderAttempt)
+		.set({
+			leaseExpiresAt: new Date(Date.now() - 1000),
+			authorizedAt: new Date(),
+			technicalPreflightStatus: "VALID",
+			technicalEvidenceFingerprint: hash,
+			technicalCheckedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, expiryVsExecution.attempt.id));
+	const [expiryExecutionResult, expiryExecutionWinner] = await bounded(
+		Promise.all([
+			repository.markExecutionStarted({
+				jobId: expiryVsExecution.job.id,
+				attemptId: expiryVsExecution.attempt.id,
+				attemptNumber: expiryVsExecution.attempt.attemptNumber,
+				leaseOwner: expiryVsExecution.attempt.leaseOwner,
+			}),
+			repository.claimNextRenderAttempt(workspaceId, "worker-race-expiry-b"),
+		]),
+		"expiry versus execution-start CAS",
+	);
+	assert(
+		expiryExecutionResult === false &&
+			expiryExecutionWinner?.job.id === expiryVsExecution.job.id,
+		"Expiry versus execution-start CAS must have one valid winner without a deadlock.",
+	);
+	const [expiredExecutionAttempt] = await db
+		.select()
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, expiryVsExecution.attempt.id));
+	assert(
+		expiredExecutionAttempt?.status === "FENCED" &&
+			(expiryExecutionWinner === undefined ||
+				expiryExecutionWinner.job.status === "RUNNING"),
+		"Expiry versus execution-start CAS must not split Job and Attempt state.",
+	);
+	if (expiryExecutionWinner) await cleanupRaceClaim(expiryExecutionWinner);
+
+	const failureVsExecution = await createRaceClaim("failure-execution", 4530);
+	await db
+		.update(renderAttempt)
+		.set({
+			authorizedAt: new Date(),
+			technicalPreflightStatus: "VALID",
+			technicalEvidenceFingerprint: hash,
+			technicalCheckedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, failureVsExecution.attempt.id));
+	const [failureResult, executionResult] = await bounded(
+		Promise.all([
+			repository.failTechnical({
+				jobId: failureVsExecution.job.id,
+				attemptId: failureVsExecution.attempt.id,
+				attemptNumber: failureVsExecution.attempt.attemptNumber,
+				leaseOwner: failureVsExecution.attempt.leaseOwner,
+				errorCode: "TECHNICAL_RACE_FAILURE",
+			}),
+			repository.markExecutionStarted({
+				jobId: failureVsExecution.job.id,
+				attemptId: failureVsExecution.attempt.id,
+				attemptNumber: failureVsExecution.attempt.attemptNumber,
+				leaseOwner: failureVsExecution.attempt.leaseOwner,
+			}),
+		]),
+		"failure/fence versus execution-start CAS",
+	);
+	assert(
+		Number(failureResult) + Number(executionResult) === 1,
+		"Failure versus execution-start CAS must have exactly one winner.",
+	);
+	const failureExecutionJob = await repository.findRenderJob(
+		{ workspaceId, userId },
+		failureVsExecution.job.id,
+	);
+	const [failureExecutionAttempt] = await db
+		.select()
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, failureVsExecution.attempt.id));
+	assert(
+		failureResult
+			? failureExecutionJob?.status === "FAILED" &&
+					failureExecutionAttempt?.status === "FAILED" &&
+					failureExecutionAttempt.executionStartedAt === null
+			: executionResult &&
+					failureExecutionJob?.status === "RUNNING" &&
+					failureExecutionAttempt?.executionStartedAt !== null &&
+					failureExecutionAttempt.status === "RUNNING",
+		"Failure/execution race must leave a consistent winner state.",
+	);
+	if (executionResult) {
+		const reconciled = await repository.markIndeterminate({
+			jobId: failureVsExecution.job.id,
+			attemptId: failureVsExecution.attempt.id,
+			attemptNumber: failureVsExecution.attempt.attemptNumber,
+			leaseOwner: failureVsExecution.attempt.leaseOwner,
+			errorCode: "TEST_CLEANUP",
+		});
+		assert(
+			reconciled,
+			"Execution winner must remain owner-mutable for cleanup.",
+		);
+	}
 
 	const allAttempts = await db
 		.select({ reservation: renderAttempt.outputReservationId })

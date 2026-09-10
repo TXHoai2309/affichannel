@@ -63,6 +63,26 @@ export type RenderExecutionAdapter = (input: {
 
 export type RenderExecutionDisposition = "FAILED" | "QUEUED" | "INDETERMINATE";
 
+export type RenderLeaseConfiguration = Readonly<{
+	leaseTtlSeconds: number;
+	heartbeatIntervalSeconds: number;
+}>;
+
+export function validateRenderLeaseConfiguration(
+	input: RenderLeaseConfiguration,
+): RenderLeaseConfiguration {
+	if (!Number.isInteger(input.leaseTtlSeconds) || input.leaseTtlSeconds <= 0)
+		throw new Error("RENDER_LEASE_TTL_INVALID");
+	if (
+		!Number.isInteger(input.heartbeatIntervalSeconds) ||
+		input.heartbeatIntervalSeconds <= 0
+	)
+		throw new Error("RENDER_HEARTBEAT_INTERVAL_INVALID");
+	if (input.heartbeatIntervalSeconds >= input.leaseTtlSeconds)
+		throw new Error("RENDER_HEARTBEAT_INTERVAL_MUST_BE_LESS_THAN_LEASE_TTL");
+	return input;
+}
+
 /** Owner-locked adapter outcome mapping. COMPLETED is intentionally absent. */
 export function classifyRenderExecutionOutcome(
 	result: RenderExecutionAdapterResult,
