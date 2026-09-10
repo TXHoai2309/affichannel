@@ -21,6 +21,7 @@ import {
 	loadExecutionSnapshot,
 	markExecutionStarted,
 	markIndeterminate,
+	readRenderAttemptState,
 	recordTechnicalEvidence,
 	requeueAfterSideEffectFreeFailure,
 } from "./render-job-repository";
@@ -35,15 +36,93 @@ export type RenderWorkerDependencies = {
 	) => Promise<CompositionBusinessPreflight>;
 	execute?: RenderExecutionAdapter;
 	leaseHeartbeat?: typeof heartbeatRenderAttempt;
+	markIndeterminate?: typeof markIndeterminate;
+	failJobAfterExecution?: typeof failJobAfterExecution;
+	requeueAfterSideEffectFreeFailure?: typeof requeueAfterSideEffectFreeFailure;
 };
 
 export type RenderWorkerResult =
-	| { kind: "IDLE" }
-	| { kind: "FENCED"; reason: string }
-	| { kind: "BLOCKED"; reason: string }
-	| { kind: "FAILED"; reason: string }
-	| { kind: "QUEUED"; reason: string }
-	| { kind: "INDETERMINATE"; reason: string };
+	| { kind: "IDLE"; persisted: false }
+	| {
+			kind: "FENCED" | "BLOCKED" | "FAILED" | "QUEUED" | "INDETERMINATE";
+			persisted: true;
+			reason: string;
+	  }
+	| {
+			kind: "RECONCILIATION_REQUIRED";
+			persisted: false;
+			reason: "STATE_TRANSITION_LOST";
+	  };
+
+type WorkerAttemptIdentity = {
+	actor: WorkspaceActor;
+	jobId: string;
+	attemptId: string;
+	attemptNumber: number;
+	leaseOwner: string;
+};
+
+function persistedResult(
+	kind: Exclude<
+		RenderWorkerResult,
+		{ kind: "IDLE" | "RECONCILIATION_REQUIRED" }
+	>["kind"],
+	reason: string,
+): RenderWorkerResult {
+	return { kind, persisted: true, reason };
+}
+
+function reconciliationRequired(): RenderWorkerResult {
+	return {
+		kind: "RECONCILIATION_REQUIRED",
+		persisted: false,
+		reason: "STATE_TRANSITION_LOST",
+	};
+}
+
+async function resolveStateTransitionLoss(
+	input: WorkerAttemptIdentity,
+	reason: string,
+): Promise<RenderWorkerResult> {
+	try {
+		const state = await readRenderAttemptState(input.actor, {
+			jobId: input.jobId,
+			attemptId: input.attemptId,
+			attemptNumber: input.attemptNumber,
+		});
+		if (
+			!state ||
+			state.jobId !== input.jobId ||
+			state.attemptId !== input.attemptId ||
+			state.attemptJobId !== input.jobId ||
+			state.attemptNumber !== input.attemptNumber ||
+			state.jobAttemptCount !== input.attemptNumber ||
+			state.attemptWorkspaceId !== input.actor.workspaceId ||
+			state.jobWorkspaceId !== input.actor.workspaceId
+		)
+			return reconciliationRequired();
+		if (
+			state.jobStatus === "RUNNING" &&
+			state.attemptStatus === "RUNNING" &&
+			state.leaseOwner !== input.leaseOwner
+		)
+			return reconciliationRequired();
+		if (
+			state.jobStatus === "INDETERMINATE" &&
+			state.attemptStatus === "INDETERMINATE"
+		)
+			return persistedResult("INDETERMINATE", reason);
+		if (state.jobStatus === "FAILED" && state.attemptStatus === "FAILED")
+			return persistedResult("FAILED", reason);
+		if (state.jobStatus === "QUEUED" && state.attemptStatus === "FENCED")
+			return persistedResult("QUEUED", reason);
+		if (state.jobStatus === "BLOCKED" && state.attemptStatus === "FENCED")
+			return persistedResult("BLOCKED", reason);
+		return reconciliationRequired();
+	} catch {
+		return reconciliationRequired();
+	}
+}
 
 async function technicalEvidenceFingerprint(result: TechnicalPreflightResult) {
 	if (!result.technicalManifest) return null;
@@ -60,8 +139,22 @@ export async function runNextRenderAttempt(
 	dependencies: RenderWorkerDependencies = {},
 ): Promise<RenderWorkerResult> {
 	const claimed = await claimNextRenderAttempt(actor.workspaceId, leaseOwner);
-	if (!claimed) return { kind: "IDLE" };
+	if (!claimed) return { kind: "IDLE", persisted: false };
 	const { job, attempt } = claimed;
+	const attemptIdentity: WorkerAttemptIdentity = {
+		actor,
+		jobId: job.id,
+		attemptId: attempt.id,
+		attemptNumber: attempt.attemptNumber,
+		leaseOwner,
+	};
+	const persistIndeterminate =
+		dependencies.markIndeterminate ?? markIndeterminate;
+	const persistPostExecutionFailure =
+		dependencies.failJobAfterExecution ?? failJobAfterExecution;
+	const persistSideEffectFreeRetry =
+		dependencies.requeueAfterSideEffectFreeFailure ??
+		requeueAfterSideEffectFreeFailure;
 	const runTechnicalPreflight =
 		dependencies.technicalPreflight ?? technicalPreflightCompositionVersion;
 	let technical: TechnicalPreflightResult;
@@ -78,8 +171,11 @@ export async function runNextRenderAttempt(
 				"Technical preflight could not be completed before execution.",
 		});
 		return fenced
-			? { kind: "QUEUED", reason: "TECHNICAL_PREFLIGHT_UNKNOWN" }
-			: { kind: "FENCED", reason: "LEASE_LOST" };
+			? persistedResult("QUEUED", "TECHNICAL_PREFLIGHT_UNKNOWN")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"TECHNICAL_PREFLIGHT_UNKNOWN",
+				);
 	}
 	const evidenceFingerprint = await technicalEvidenceFingerprint(technical);
 	const technicalIdentityMatches =
@@ -98,7 +194,11 @@ export async function runNextRenderAttempt(
 			reasonCode: "TECHNICAL_PREFLIGHT_IDENTITY_MISMATCH",
 			technicalEvidenceFingerprint: evidenceFingerprint,
 		});
-		if (!mismatchRecorded) return { kind: "FENCED", reason: "LEASE_LOST" };
+		if (!mismatchRecorded)
+			return await resolveStateTransitionLoss(
+				attemptIdentity,
+				"TECHNICAL_PREFLIGHT_IDENTITY_MISMATCH",
+			);
 		const failed = await failTechnical({
 			attemptId: attempt.id,
 			jobId: job.id,
@@ -109,8 +209,11 @@ export async function runNextRenderAttempt(
 				"Technical evidence did not bind to the queued composition identity.",
 		});
 		return failed
-			? { kind: "FAILED", reason: "TECHNICAL_PREFLIGHT_IDENTITY_MISMATCH" }
-			: { kind: "FENCED", reason: "LEASE_LOST" };
+			? persistedResult("FAILED", "TECHNICAL_PREFLIGHT_IDENTITY_MISMATCH")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"TECHNICAL_PREFLIGHT_IDENTITY_MISMATCH",
+				);
 	}
 	const evidenceRecorded = await recordTechnicalEvidence({
 		attemptId: attempt.id,
@@ -121,7 +224,11 @@ export async function runNextRenderAttempt(
 		reasonCode: technical.reasonCode,
 		technicalEvidenceFingerprint: evidenceFingerprint,
 	});
-	if (!evidenceRecorded) return { kind: "FENCED", reason: "LEASE_LOST" };
+	if (!evidenceRecorded)
+		return await resolveStateTransitionLoss(
+			attemptIdentity,
+			"TECHNICAL_EVIDENCE_STATE_TRANSITION_LOST",
+		);
 
 	if (technical.status === "INVALID" || technical.status === "UNSUPPORTED") {
 		const failed = await failTechnical({
@@ -133,8 +240,11 @@ export async function runNextRenderAttempt(
 			errorMessage: technical.issues.join(" "),
 		});
 		return failed
-			? { kind: "FAILED", reason: technical.reasonCode ?? technical.status }
-			: { kind: "FENCED", reason: "LEASE_LOST" };
+			? persistedResult("FAILED", technical.reasonCode ?? technical.status)
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					technical.reasonCode ?? technical.status,
+				);
 	}
 	if (
 		technical.status === "UNKNOWN" ||
@@ -150,11 +260,14 @@ export async function runNextRenderAttempt(
 			errorMessage: technical.issues.join(" "),
 		});
 		return fenced
-			? {
-					kind: "QUEUED",
-					reason: technical.reasonCode ?? "TECHNICAL_PREFLIGHT_UNKNOWN",
-				}
-			: { kind: "FENCED", reason: "LEASE_LOST" };
+			? persistedResult(
+					"QUEUED",
+					technical.reasonCode ?? "TECHNICAL_PREFLIGHT_UNKNOWN",
+				)
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					technical.reasonCode ?? "TECHNICAL_PREFLIGHT_UNKNOWN",
+				);
 	}
 
 	const authorization = await authorizeAttempt({
@@ -171,13 +284,16 @@ export async function runNextRenderAttempt(
 			)(transaction, actor, job.compositionVersionId),
 	});
 	if (authorization.kind === "BLOCKED")
-		return { kind: "BLOCKED", reason: "BUSINESS_AUTHORIZATION_BLOCKED" };
+		return persistedResult("BLOCKED", "BUSINESS_AUTHORIZATION_BLOCKED");
 	if (authorization.kind === "STALE")
-		return { kind: "FAILED", reason: "COMPOSITION_STALE" };
+		return persistedResult("FAILED", "COMPOSITION_STALE");
 	if (authorization.kind === "RETRYABLE")
-		return { kind: "QUEUED", reason: authorization.reason };
+		return persistedResult("QUEUED", authorization.reason);
 	if (authorization.kind !== "AUTHORIZED")
-		return { kind: "FENCED", reason: "LEASE_LOST" };
+		return await resolveStateTransitionLoss(
+			attemptIdentity,
+			"AUTHORIZATION_STATE_TRANSITION_LOST",
+		);
 
 	const executionMarked = await markExecutionStarted({
 		jobId: job.id,
@@ -194,8 +310,11 @@ export async function runNextRenderAttempt(
 			errorCode: "LEASE_LOST_BEFORE_EXECUTION",
 		});
 		return fenced
-			? { kind: "FENCED", reason: "LEASE_LOST_BEFORE_EXECUTION" }
-			: { kind: "FENCED", reason: "LEASE_LOST" };
+			? persistedResult("FENCED", "LEASE_LOST_BEFORE_EXECUTION")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"LEASE_LOST_BEFORE_EXECUTION",
+				);
 	}
 
 	let snapshot: Awaited<ReturnType<typeof loadExecutionSnapshot>>;
@@ -213,7 +332,7 @@ export async function runNextRenderAttempt(
 			error instanceof Error && "code" in error
 				? String((error as { code: unknown }).code)
 				: "RENDER_EXECUTION_SNAPSHOT_INVALID";
-		const persisted = await markIndeterminate({
+		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -224,15 +343,12 @@ export async function runNextRenderAttempt(
 					? error.message
 					: "Execution snapshot could not be validated.",
 		});
-		return {
-			kind: "INDETERMINATE",
-			reason: persisted
-				? snapshotErrorCode
-				: "LEASE_LOST_AFTER_EXECUTION_MARKER",
-		};
+		return persisted
+			? persistedResult("INDETERMINATE", snapshotErrorCode)
+			: await resolveStateTransitionLoss(attemptIdentity, snapshotErrorCode);
 	}
 	if (!snapshot) {
-		const persisted = await markIndeterminate({
+		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -241,16 +357,16 @@ export async function runNextRenderAttempt(
 			errorMessage:
 				"Execution marker was committed but the lease was no longer provable.",
 		});
-		return {
-			kind: "INDETERMINATE",
-			reason: persisted
-				? "LEASE_LOST_AFTER_EXECUTION_MARKER"
-				: "LEASE_LOST_AFTER_EXECUTION_MARKER",
-		};
+		return persisted
+			? persistedResult("INDETERMINATE", "LEASE_LOST_AFTER_EXECUTION_MARKER")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"LEASE_LOST_AFTER_EXECUTION_MARKER",
+				);
 	}
 
 	if (!dependencies.execute) {
-		const persisted = await markIndeterminate({
+		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -259,19 +375,19 @@ export async function runNextRenderAttempt(
 			errorMessage:
 				"21C has no production renderer; immutable output proof belongs to 21D.",
 		});
-		return {
-			kind: "INDETERMINATE",
-			reason: persisted
-				? "RENDER_ADAPTER_NOT_CONFIGURED"
-				: "LEASE_LOST_AFTER_EXECUTION_MARKER",
-		};
+		return persisted
+			? persistedResult("INDETERMINATE", "RENDER_ADAPTER_NOT_CONFIGURED")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"RENDER_ADAPTER_NOT_CONFIGURED",
+				);
 	}
 
 	let result: RenderExecutionAdapterResult;
 	try {
 		result = await dependencies.execute({ snapshot });
 	} catch (error) {
-		const persisted = await markIndeterminate({
+		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -282,15 +398,15 @@ export async function runNextRenderAttempt(
 					? error.message
 					: "Adapter threw an unknown error.",
 		});
-		return {
-			kind: "INDETERMINATE",
-			reason: persisted
-				? "RENDER_ADAPTER_EXCEPTION"
-				: "LEASE_LOST_AFTER_EXECUTION_MARKER",
-		};
+		return persisted
+			? persistedResult("INDETERMINATE", "RENDER_ADAPTER_EXCEPTION")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"RENDER_ADAPTER_EXCEPTION",
+				);
 	}
 	if (result.outcome === "SUCCESS") {
-		const persisted = await markIndeterminate({
+		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -299,16 +415,16 @@ export async function runNextRenderAttempt(
 			errorMessage:
 				"21C execution succeeded without immutable 21D RenderArtifact proof.",
 		});
-		return {
-			kind: "INDETERMINATE",
-			reason: persisted
-				? "AWAITING_RENDER_ARTIFACT_PROOF"
-				: "LEASE_LOST_AFTER_EXECUTION_MARKER",
-		};
+		return persisted
+			? persistedResult("INDETERMINATE", "AWAITING_RENDER_ARTIFACT_PROOF")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"AWAITING_RENDER_ARTIFACT_PROOF",
+				);
 	}
 	const disposition = classifyRenderExecutionOutcome(result);
 	if (disposition === "INDETERMINATE") {
-		const persisted = await markIndeterminate({
+		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -316,15 +432,12 @@ export async function runNextRenderAttempt(
 			errorCode: result.errorCode,
 			errorMessage: result.errorMessage,
 		});
-		return {
-			kind: "INDETERMINATE",
-			reason: persisted
-				? result.errorCode
-				: "LEASE_LOST_AFTER_EXECUTION_MARKER",
-		};
+		return persisted
+			? persistedResult("INDETERMINATE", result.errorCode)
+			: await resolveStateTransitionLoss(attemptIdentity, result.errorCode);
 	}
 	if (disposition === "FAILED") {
-		const persisted = await failJobAfterExecution({
+		const persisted = await persistPostExecutionFailure({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -333,11 +446,11 @@ export async function runNextRenderAttempt(
 			errorMessage: result.errorMessage,
 		});
 		return persisted
-			? { kind: "FAILED", reason: result.errorCode }
-			: { kind: "INDETERMINATE", reason: "LEASE_LOST_AFTER_EXECUTION_MARKER" };
+			? persistedResult("FAILED", result.errorCode)
+			: await resolveStateTransitionLoss(attemptIdentity, result.errorCode);
 	}
 	if (disposition === "QUEUED") {
-		const persisted = await requeueAfterSideEffectFreeFailure({
+		const persisted = await persistSideEffectFreeRetry({
 			attemptId: attempt.id,
 			jobId: job.id,
 			attemptNumber: attempt.attemptNumber,
@@ -346,10 +459,10 @@ export async function runNextRenderAttempt(
 			errorMessage: result.errorMessage,
 		});
 		return persisted
-			? { kind: "QUEUED", reason: result.errorCode }
-			: { kind: "INDETERMINATE", reason: "LEASE_LOST_AFTER_EXECUTION_MARKER" };
+			? persistedResult("QUEUED", result.errorCode)
+			: await resolveStateTransitionLoss(attemptIdentity, result.errorCode);
 	}
-	const persisted = await markIndeterminate({
+	const persisted = await persistIndeterminate({
 		attemptId: attempt.id,
 		jobId: job.id,
 		attemptNumber: attempt.attemptNumber,
@@ -357,10 +470,9 @@ export async function runNextRenderAttempt(
 		errorCode: result.errorCode,
 		errorMessage: result.errorMessage,
 	});
-	return {
-		kind: "INDETERMINATE",
-		reason: persisted ? result.errorCode : "LEASE_LOST_AFTER_EXECUTION_MARKER",
-	};
+	return persisted
+		? persistedResult("INDETERMINATE", result.errorCode)
+		: await resolveStateTransitionLoss(attemptIdentity, result.errorCode);
 }
 
 export async function heartbeatOwnedRenderAttempt(

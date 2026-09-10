@@ -18,6 +18,24 @@
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
 - Cập nhật lần cuối: 2026-09-10
 
+## 2026-09-10 — AFF-US-021 Phase 21C fix-forward 2
+
+Hardened worker orchestration after post-execution CAS loss. Worker results now
+separate persisted domain outcomes from `RECONCILIATION_REQUIRED` /
+`STATE_TRANSITION_LOST`; every failed post-execution mutation performs an exact
+workspace-scoped Job/Attempt reread before reporting a persisted state. Added
+defensive handling for an explicit business/currentness `UNKNOWN` result,
+same-key same-identity first-insert race coverage, and wrong-`attemptNumber`
+coverage for technical evidence, authorization, failure, fence/requeue, and
+indeterminate transitions.
+
+The guarded loopback PostgreSQL render harness passes the CAS-loss matrix,
+returned-UNKNOWN case, same-key idempotency race, and existing 21C lock-order
+races. Voice, Media, US019, US020, full web tests, typecheck, build, DB
+generation, touched-file Biome, and diff checks pass. No schema/migration,
+RenderArtifact, renderer, output storage, MP4 delivery, Video activation,
+21D/21E work, live provider, or Neon database was added.
+
 ## 2026-09-10 — AFF-US-021 Phase 21C fix-forward 1
 
 Implemented the smallest review corrections on `TXH` without changing the

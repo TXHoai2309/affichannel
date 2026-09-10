@@ -10,6 +10,18 @@ Cập nhật lần cuối: 2026-09-10.
 
 ## Chưa phát hành
 
+### AFF-US-021 Phase 21C fix-forward 2 — IMPLEMENTED / REVIEW PENDING
+
+- Added explicit internal `RECONCILIATION_REQUIRED` /
+  `STATE_TRANSITION_LOST` worker results for unproven CAS loss.
+- Added authoritative exact Job/Attempt rereads after post-execution mutation
+  misses; workers no longer claim `FAILED`, `QUEUED`, or `INDETERMINATE`
+  without persisted-state proof.
+- Hardened explicit business/currentness `UNKNOWN` handling and expanded
+  same-key idempotency, wrong-`attemptNumber`, and CAS-loss integration tests.
+- Kept migration 0024 and all 21D/21E, renderer, output-storage, MP4 delivery,
+  and Video activation exclusions unchanged.
+
 ### AFF-US-021 Phase 21C fix-forward 1 — IMPLEMENTED / REVIEW PENDING
 
 - Hardened blocked requeue with exact CompositionVersion/business preflight

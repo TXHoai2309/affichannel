@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { CompositionBusinessPreflight } from "../packages/api/src/services/composition-preflight-service.ts";
 import type { DbTransaction } from "../packages/api/src/services/fact-dependency-repository.ts";
+import type { RenderWorkerDependencies } from "../packages/api/src/services/render-worker-service.ts";
 import type {
 	RenderAttemptExecutionSnapshot,
 	RenderExecutionAdapter,
@@ -516,6 +517,55 @@ try {
 		new Set(firstInsertRace.map((item) => item.id)).size === 1,
 		"A true first-insert race must persist and return one logical Job.",
 	);
+	const sameKeyRaceVersionId = `render-cv-${randomUUID()}`;
+	await db.insert(compositionVersion).values({
+		id: sameKeyRaceVersionId,
+		workspaceId,
+		projectId,
+		schemaVersion: "composition-input.v1",
+		compositionInputJson: built.input,
+		compositionFingerprint: built.fingerprint,
+		sourceScriptVersionId: "sv1",
+		sourceScriptRevision: 1,
+		createdByUserId: userId,
+		createdAt: new Date(),
+	});
+	const sameKeyRaceSpec = {
+		...requestSpec,
+		compositionVersionId: sameKeyRaceVersionId,
+	};
+	const sameKeyRaceIdempotencyKey = `render-same-key-${randomUUID()}`;
+	const sameKeyRace = await Promise.all(
+		Array.from({ length: 16 }, () =>
+			repository.createRenderJob({
+				actor: { workspaceId, userId },
+				projectId,
+				requestSpec: sameKeyRaceSpec,
+				idempotencyKey: sameKeyRaceIdempotencyKey,
+			}),
+		),
+	);
+	assert(
+		new Set(sameKeyRace.map((item) => item.id)).size === 1,
+		"Same-key same-identity first-insert race must return one Job ID to every caller.",
+	);
+	const sameKeyPersisted = await db
+		.select()
+		.from(renderJob)
+		.where(eq(renderJob.compositionVersionId, sameKeyRaceVersionId));
+	assert(
+		sameKeyPersisted.length === 1 &&
+			sameKeyPersisted[0]?.id === sameKeyRace[0]?.id,
+		"Same-key same-identity first-insert race must persist exactly one Job.",
+	);
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, sameKeyRace[0]?.id ?? "missing"));
 	const conflictingIdempotencyKey = `render-conflicting-idem-${randomUUID()}`;
 	const conflictingProfile = { ...profile, videoBitrateKbps: 4001 };
 	const conflictingSpec = {
@@ -900,6 +950,143 @@ try {
 		})
 		.where(eq(renderJob.id, secondJob.id));
 
+	const wrongAttemptNumberJob = await repository.createRenderJob({
+		actor: { workspaceId, userId },
+		projectId,
+		requestSpec: {
+			...requestSpec,
+			outputEncodingProfile: { ...profile, videoBitrateKbps: 4150 },
+			outputEncodingProfileFingerprint: await fingerprintOutputEncodingProfile({
+				...profile,
+				videoBitrateKbps: 4150,
+			}),
+		},
+		idempotencyKey: `render-wrong-attempt-number-${randomUUID()}`,
+	});
+	const wrongAttemptNumberClaim = await repository.claimNextRenderAttempt(
+		workspaceId,
+		"worker-wrong-attempt-number",
+	);
+	assert(
+		wrongAttemptNumberClaim?.job.id === wrongAttemptNumberJob.id,
+		"Wrong-attemptNumber fixture must be claimable.",
+	);
+	const wrongAttemptNumber = wrongAttemptNumberClaim.attempt.attemptNumber + 1;
+	assert(
+		!(await repository.recordTechnicalEvidence({
+			attemptId: wrongAttemptNumberClaim.attempt.id,
+			jobId: wrongAttemptNumberJob.id,
+			attemptNumber: wrongAttemptNumber,
+			leaseOwner: "worker-wrong-attempt-number",
+			status: "VALID",
+			reasonCode: null,
+			technicalEvidenceFingerprint: hash,
+		})),
+		"Wrong attemptNumber technical evidence must be rejected.",
+	);
+	const untouchedAttemptAfterEvidence = (
+		await db
+			.select()
+			.from(renderAttempt)
+			.where(eq(renderAttempt.id, wrongAttemptNumberClaim.attempt.id))
+			.limit(1)
+	)[0];
+	assert(
+		untouchedAttemptAfterEvidence?.technicalPreflightStatus === null,
+		"Wrong attemptNumber technical evidence must not mutate the Attempt.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			technicalPreflightVersion: "composition-technical-preflight.v1",
+			technicalPreflightStatus: "VALID",
+			technicalEvidenceFingerprint: hash,
+			technicalCheckedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, wrongAttemptNumberClaim.attempt.id));
+	const wrongAuthorization = await repository.authorizeAttempt({
+		actor: { workspaceId, userId },
+		jobId: wrongAttemptNumberJob.id,
+		attemptId: wrongAttemptNumberClaim.attempt.id,
+		attemptNumber: wrongAttemptNumber,
+		leaseOwner: "worker-wrong-attempt-number",
+		technicalEvidenceFingerprint: hash,
+		businessGate: (transaction) =>
+			allowedBusinessGate(
+				transaction,
+				{ workspaceId, userId },
+				compositionVersionId,
+			),
+	});
+	assert(
+		wrongAuthorization.kind === "NOT_CLAIMED",
+		"Wrong attemptNumber final authorization must be rejected.",
+	);
+	assert(
+		!(await repository.failTechnical({
+			attemptId: wrongAttemptNumberClaim.attempt.id,
+			jobId: wrongAttemptNumberJob.id,
+			attemptNumber: wrongAttemptNumber,
+			leaseOwner: "worker-wrong-attempt-number",
+			errorCode: "WRONG_ATTEMPT_NUMBER_FAILURE",
+		})),
+		"Wrong attemptNumber failure transition must be rejected.",
+	);
+	assert(
+		!(await repository.fenceAndRequeue({
+			attemptId: wrongAttemptNumberClaim.attempt.id,
+			jobId: wrongAttemptNumberJob.id,
+			attemptNumber: wrongAttemptNumber,
+			leaseOwner: "worker-wrong-attempt-number",
+			errorCode: "WRONG_ATTEMPT_NUMBER_REQUEUE",
+		})),
+		"Wrong attemptNumber fence/requeue transition must be rejected.",
+	);
+	assert(
+		!(await repository.markIndeterminate({
+			attemptId: wrongAttemptNumberClaim.attempt.id,
+			jobId: wrongAttemptNumberJob.id,
+			attemptNumber: wrongAttemptNumber,
+			leaseOwner: "worker-wrong-attempt-number",
+			errorCode: "WRONG_ATTEMPT_NUMBER_INDETERMINATE",
+		})),
+		"Wrong attemptNumber indeterminate transition must be rejected.",
+	);
+	const wrongAttemptNumberJobState = await repository.findRenderJob(
+		{ workspaceId, userId },
+		wrongAttemptNumberJob.id,
+	);
+	const wrongAttemptNumberAttemptState = (
+		await db
+			.select()
+			.from(renderAttempt)
+			.where(eq(renderAttempt.id, wrongAttemptNumberClaim.attempt.id))
+			.limit(1)
+	)[0];
+	assert(
+		wrongAttemptNumberJobState?.status === "RUNNING" &&
+			wrongAttemptNumberAttemptState?.status === "RUNNING" &&
+			wrongAttemptNumberAttemptState.authorizedAt === null &&
+			wrongAttemptNumberAttemptState.executionStartedAt === null,
+		"Wrong attemptNumber matrix must not mutate Job or Attempt state.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, wrongAttemptNumberClaim.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, wrongAttemptNumberJob.id));
+
 	const blockedProfile = { ...profile, videoBitrateKbps: 4200 };
 	const blockedJob = await repository.createRenderJob({
 		actor: { workspaceId, userId },
@@ -1170,6 +1357,12 @@ try {
 		technical: TechnicalPreflightResult;
 		business?: ReturnType<typeof makeBusinessGate>;
 		execute?: RenderExecutionAdapter;
+		workerDependencies?: Pick<
+			RenderWorkerDependencies,
+			| "markIndeterminate"
+			| "failJobAfterExecution"
+			| "requeueAfterSideEffectFreeFailure"
+		>;
 	}) => {
 		const scenarioProfile = {
 			...profile,
@@ -1194,6 +1387,7 @@ try {
 				technicalPreflight: async () => input.technical,
 				businessPreflight: input.business,
 				execute: input.execute,
+				...input.workerDependencies,
 			},
 		);
 		const [scenarioAttempt] = await db
@@ -1357,6 +1551,52 @@ try {
 		})
 		.where(eq(renderJob.id, businessUnknownRetry.job.id));
 
+	const returnedBusinessUnknown = await runWorkerScenario({
+		label: "business-unknown-returned-object",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: makeBusinessGate(
+			{ state: "UNKNOWN", reason: "CURRENTNESS_OBJECT_UNKNOWN" },
+			{
+				allowed: true,
+				reasonCode: "FACT_LOCK_NOT_REQUIRED",
+				factLockRequirement: "NOT_REQUIRED",
+				factLockOutcome: "NOT_EVALUATED",
+			},
+		),
+	});
+	assert(
+		returnedBusinessUnknown.result.kind === "QUEUED" &&
+			returnedBusinessUnknown.result.persisted === true &&
+			returnedBusinessUnknown.scenarioAttempt.status === "FENCED" &&
+			returnedBusinessUnknown.persistedJob.status === "QUEUED",
+		"Returned currentness UNKNOWN must fence and queue without invoking the adapter.",
+	);
+	const returnedBusinessUnknownRetry = await repository.claimNextRenderAttempt(
+		workspaceId,
+		"worker-business-unknown-returned-object-retry",
+	);
+	assert(
+		returnedBusinessUnknownRetry?.job.id ===
+			returnedBusinessUnknown.scenarioJob.id,
+		"Returned currentness UNKNOWN must permit a later retry Attempt.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({
+			status: "FENCED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderAttempt.id, returnedBusinessUnknownRetry.attempt.id));
+	await db
+		.update(renderJob)
+		.set({
+			status: "FAILED",
+			errorCode: "TEST_CLEANUP",
+			finishedAt: new Date(),
+		})
+		.where(eq(renderJob.id, returnedBusinessUnknownRetry.job.id));
+
 	let observedSnapshot: RenderAttemptExecutionSnapshot | undefined;
 	const valid = await runWorkerScenario({
 		label: "valid-allowed",
@@ -1467,6 +1707,116 @@ try {
 			ambiguous.persistedJob.status === "INDETERMINATE",
 		"Ambiguous post-start adapter failure must be indeterminate.",
 	);
+
+	const successCasLoss = await runWorkerScenario({
+		label: "success-cas-loss",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({ outcome: "SUCCESS" }),
+		workerDependencies: {
+			markIndeterminate: async () => false,
+		},
+	});
+	assert(
+		successCasLoss.result.kind === "RECONCILIATION_REQUIRED" &&
+			successCasLoss.result.persisted === false &&
+			successCasLoss.result.reason === "STATE_TRANSITION_LOST" &&
+			successCasLoss.scenarioAttempt.status === "RUNNING" &&
+			successCasLoss.scenarioAttempt.executionStartedAt !== null &&
+			successCasLoss.persistedJob.status === "RUNNING",
+		"Success CAS loss with unresolved DB state must require reconciliation.",
+	);
+
+	const successCasLossWithWinner = await runWorkerScenario({
+		label: "success-cas-loss-with-winner",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({ outcome: "SUCCESS" }),
+		workerDependencies: {
+			markIndeterminate: async (mutation) => {
+				assert(
+					await repository.markIndeterminate(mutation),
+					"Injected winner must persist INDETERMINATE before returning a lost CAS.",
+				);
+				return false;
+			},
+		},
+	});
+	assert(
+		successCasLossWithWinner.result.kind === "INDETERMINATE" &&
+			successCasLossWithWinner.result.persisted === true &&
+			successCasLossWithWinner.scenarioAttempt.status === "INDETERMINATE" &&
+			successCasLossWithWinner.persistedJob.status === "INDETERMINATE",
+		"Success CAS loss may report INDETERMINATE only after authoritative proof.",
+	);
+
+	const deterministicFailureCasLoss = await runWorkerScenario({
+		label: "deterministic-failure-cas-loss",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({
+			outcome: "FAILURE",
+			classification: "DETERMINISTIC",
+			sideEffectFree: true,
+			errorCode: "DETERMINISTIC_CAS_LOSS",
+		}),
+		workerDependencies: {
+			failJobAfterExecution: async () => false,
+		},
+	});
+	assert(
+		deterministicFailureCasLoss.result.kind === "RECONCILIATION_REQUIRED" &&
+			deterministicFailureCasLoss.result.persisted === false &&
+			deterministicFailureCasLoss.scenarioAttempt.status === "RUNNING" &&
+			deterministicFailureCasLoss.persistedJob.status === "RUNNING",
+		"Deterministic failure CAS loss must not report FAILED without proof.",
+	);
+
+	const retryCasLoss = await runWorkerScenario({
+		label: "retry-cas-loss",
+		technical: makeTechnicalPreflight(compositionVersionId, built.fingerprint),
+		business: allowedBusinessGate,
+		execute: async () => ({
+			outcome: "FAILURE",
+			classification: "RETRYABLE",
+			sideEffectFree: true,
+			errorCode: "RETRY_CAS_LOSS",
+		}),
+		workerDependencies: {
+			requeueAfterSideEffectFreeFailure: async () => false,
+		},
+	});
+	assert(
+		retryCasLoss.result.kind === "RECONCILIATION_REQUIRED" &&
+			retryCasLoss.result.persisted === false &&
+			retryCasLoss.scenarioAttempt.status === "RUNNING" &&
+			retryCasLoss.persistedJob.status === "RUNNING",
+		"Side-effect-free retry CAS loss must not report QUEUED without proof.",
+	);
+
+	for (const scenario of [
+		successCasLoss,
+		successCasLossWithWinner,
+		deterministicFailureCasLoss,
+		retryCasLoss,
+	]) {
+		await db
+			.update(renderAttempt)
+			.set({
+				status: "FENCED",
+				errorCode: "TEST_CLEANUP",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderAttempt.id, scenario.scenarioAttempt.id));
+		await db
+			.update(renderJob)
+			.set({
+				status: "FAILED",
+				errorCode: "TEST_CLEANUP",
+				finishedAt: new Date(),
+			})
+			.where(eq(renderJob.id, scenario.scenarioJob.id));
+	}
 
 	async function createRaceClaim(label: string, bitrate: number) {
 		const raceProfile = { ...profile, videoBitrateKbps: bitrate };

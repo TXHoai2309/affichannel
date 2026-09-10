@@ -745,6 +745,18 @@ export async function authorizeAttemptInTransaction(input: {
 		if (failure.jobStatus === "BLOCKED") return { kind: "BLOCKED" };
 		return { kind: "RETRYABLE", reason: failure.reason };
 	}
+	if (gate.currentness.state === "UNKNOWN") {
+		const fenced = await fenceLockedAttemptAndJob(input.transaction, {
+			jobId: job.id,
+			attemptId: attempt.id,
+			attemptNumber: attempt.attemptNumber,
+			leaseOwner: input.leaseOwner,
+			reasonCode: gate.currentness.reason,
+			jobStatus: "QUEUED",
+		});
+		if (!fenced) return { kind: "NOT_CLAIMED" };
+		return { kind: "RETRYABLE", reason: gate.currentness.reason };
+	}
 	if (gate.currentness.state === "STALE") {
 		const fenced = await fenceLockedAttemptAndJob(input.transaction, {
 			jobId: job.id,
@@ -1031,6 +1043,12 @@ export async function requeueBlockedRenderJob(
 				job,
 				gate.currentness.reason ?? "COMPOSITION_STALE",
 			);
+		if (gate.currentness.state === "UNKNOWN")
+			return {
+				kind: "RETRYABLE",
+				job: mapJob(job),
+				reason: gate.currentness.reason,
+			};
 		if (!gate.authorization.allowed)
 			return {
 				kind: "BLOCKED",
@@ -1247,6 +1265,65 @@ export async function loadExecutionSnapshot(
 		technicalManifest: input.technicalManifest,
 		technicalEvidenceFingerprint: input.technicalEvidenceFingerprint,
 	};
+}
+
+export type RenderAttemptAuthoritativeState = Readonly<{
+	jobId: string;
+	jobWorkspaceId: string;
+	jobStatus: string;
+	jobAttemptCount: number;
+	attemptId: string;
+	attemptJobId: string;
+	attemptWorkspaceId: string;
+	attemptNumber: number;
+	attemptStatus: string;
+	leaseOwner: string;
+	leaseExpiresAt: Date;
+	executionStartedAt: Date | null;
+}>;
+
+/**
+ * Reads the exact Job/Attempt tuple without requiring current ownership. This
+ * is used only after a worker CAS miss to distinguish a concurrent winner from
+ * an unresolved state transition.
+ */
+export async function readRenderAttemptState(
+	actor: WorkspaceActor,
+	input: {
+		jobId: string;
+		attemptId: string;
+		attemptNumber: number;
+	},
+): Promise<RenderAttemptAuthoritativeState | undefined> {
+	const [row] = await db
+		.select({
+			jobId: renderJob.id,
+			jobWorkspaceId: renderJob.workspaceId,
+			jobStatus: renderJob.status,
+			jobAttemptCount: renderJob.attemptCount,
+			attemptId: renderAttempt.id,
+			attemptJobId: renderAttempt.renderJobId,
+			attemptWorkspaceId: renderAttempt.workspaceId,
+			attemptNumber: renderAttempt.attemptNumber,
+			attemptStatus: renderAttempt.status,
+			leaseOwner: renderAttempt.leaseOwner,
+			leaseExpiresAt: renderAttempt.leaseExpiresAt,
+			executionStartedAt: renderAttempt.executionStartedAt,
+		})
+		.from(renderAttempt)
+		.innerJoin(renderJob, eq(renderJob.id, renderAttempt.renderJobId))
+		.where(
+			and(
+				eq(renderJob.id, input.jobId),
+				eq(renderJob.workspaceId, actor.workspaceId),
+				eq(renderAttempt.id, input.attemptId),
+				eq(renderAttempt.renderJobId, input.jobId),
+				eq(renderAttempt.workspaceId, actor.workspaceId),
+				eq(renderAttempt.attemptNumber, input.attemptNumber),
+			),
+		)
+		.limit(1);
+	return row;
 }
 
 type AttemptMutationInput = {
