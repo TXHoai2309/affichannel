@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-09
+- Cập nhật lần cuối: 2026-09-10
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -44,8 +44,10 @@ AFF-US-021 Phase 21A canonical CompositionInput semantics đã hoàn tất trên
 `TXH`: server-owned assembly boundary, explicit audio end boundary, Voice
 lineage/source-fact contract, materialized-only fingerprint, canonical ordering,
 font ID uniqueness và Render-placeholder preflight exclusion đã được regression
-tested. Phase 21B technical byte/font/sample work và Quick Image/render runtime
-chưa bắt đầu.
+tested. Phase 21B technical byte/font/sample work đã được nhận làm baseline.
+Phase 21C đã triển khai persistence/orchestration nội bộ cho RenderJob/RenderAttempt
+theo DEC-038; output proof, renderer, storage và public startRender vẫn chưa active.
+Phase 21D/21E chưa bắt đầu.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.

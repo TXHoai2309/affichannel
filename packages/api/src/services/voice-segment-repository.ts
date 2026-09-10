@@ -17,7 +17,7 @@ import {
 } from "@affichannel/db";
 import { env } from "@affichannel/env/server";
 import { and, desc, eq, isNull, lte } from "drizzle-orm";
-
+import type { DbTransaction } from "./fact-dependency-repository";
 import type { WorkspaceActor } from "./workspace";
 
 export type VoiceSegmentArtifactRow = typeof voiceSegmentArtifact.$inferSelect;
@@ -339,6 +339,15 @@ export async function listVoiceSegmentArtifacts(
 	projectId: string,
 	segmentKey?: string,
 ) {
+	return listVoiceSegmentArtifactsInQuery(db, actor, projectId, segmentKey);
+}
+
+export async function listVoiceSegmentArtifactsInQuery(
+	query: typeof db | DbTransaction,
+	actor: WorkspaceActor,
+	projectId: string,
+	segmentKey?: string,
+) {
 	const conditions = [
 		eq(voiceSegmentArtifact.workspaceId, actor.workspaceId),
 		eq(voiceSegmentArtifact.projectId, projectId),
@@ -346,7 +355,7 @@ export async function listVoiceSegmentArtifacts(
 	if (segmentKey !== undefined) {
 		conditions.push(eq(voiceSegmentArtifact.segmentKey, segmentKey));
 	}
-	const rows = await db
+	const rows = await query
 		.select()
 		.from(voiceSegmentArtifact)
 		.where(and(...conditions))

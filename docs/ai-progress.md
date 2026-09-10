@@ -18,6 +18,28 @@
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
 - Cập nhật lần cuối: 2026-09-09
 
+## 2026-09-10 — AFF-US-021 Phase 21C implementation
+
+Implemented EN001-T05/T11 on `TXH` after the accepted 21A/21B/21C0 baseline.
+Migration `0024` adds only `render_job` and `render_attempt`. The repository
+implements scoped idempotency and active dedup, atomic `FOR UPDATE SKIP LOCKED`
+claim, attempt numbering, server-generated output reservation, lease/heartbeat,
+fencing, final business/currentness re-read, authorization CAS, execution-start
+CAS, and the frozen failure/retry/`INDETERMINATE` matrix.
+
+The internal worker accepts an engine-independent adapter and never finalizes
+`COMPLETED`: adapter success without immutable 21D RenderArtifact proof becomes
+`INDETERMINATE`. `CompositionTechnicalManifestV1` remains in-memory; only
+minimal technical and business evidence fingerprints are durable. The incomplete
+`mp4-h264-aac-v1` profile remains rejected for production job creation. No
+RenderArtifact, output storage, renderer, FFmpeg, Remotion, publishing/export,
+Video activation, 21D/21E work, or live provider was added.
+
+Focused unit coverage is 4/4. Guarded disposable PostgreSQL coverage passes
+active dedup, 8-worker single-winner claim, pre/post execution lease loss,
+heartbeat ownership and reservation uniqueness. Final commit and remote parity
+are recorded in the completion handoff.
+
 ## 2026-09-09 — AFF-US-021 Phase 21A fix-forward 2
 
 Starting from `TXH` baseline `f59fdc51f83db8b6dec6500bb47c2079ec7d67b3`,

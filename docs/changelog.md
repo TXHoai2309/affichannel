@@ -6,9 +6,24 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-09.
+Cập nhật lần cuối: 2026-09-10.
 
 ## Chưa phát hành
+
+### AFF-US-021 Phase 21C RenderJob orchestration — IMPLEMENTED / REVIEW PENDING
+
+- Added fenced `RenderJob`/`RenderAttempt` persistence with scoped
+  idempotency, active deduplication, attempt numbering, lease ownership,
+  heartbeat and `FOR UPDATE SKIP LOCKED` worker claim.
+- Added technical preflight evidence minimization, transaction-scoped
+  business/currentness re-read, `authorizedAt` and `executionStartedAt` CAS
+  boundaries, and Owner-Lock failure/retry/`INDETERMINATE` mapping.
+- Kept `CompositionTechnicalManifestV1` ephemeral and limited durable evidence
+  to version/status/reason/timestamps/fingerprints. No RenderArtifact, output
+  storage, MP4/FFmpeg/Remotion, production startRender, publishing, Video
+  activation, or Phase 21D/21E was added.
+- Added migration `0024` and guarded disposable PostgreSQL concurrency coverage;
+  no live provider or Neon database was used.
 
 ### AFF-US-021 Phase 21A Composition semantics — ACCEPTED
 

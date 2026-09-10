@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-09-09
+- Cập nhật lần cuối: 2026-09-10
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -43,6 +43,41 @@ DEC-025 cho công việc mới.
 
 Phase 21B không được bắt đầu từ quyết định này; byte/font validation, sample/frame
 feasibility, renderer và output persistence vẫn deferred.
+
+## DEC-038 — AFF-US-021 Phase 21C fenced RenderJob orchestration
+
+- Trạng thái: **Đã chấp nhận cho implementation review**
+- Ngày: 2026-09-10
+
+### Quyết định
+
+- `RenderJob` và `RenderAttempt` là persistence boundary duy nhất của 21C.
+  Idempotency theo `(workspaceId, idempotencyKey)` và active identity theo
+  `(workspaceId, projectId, compositionVersionId, canonicalRequestHash)` dùng
+  unique index; active request với key khác trả Job đang tồn tại và không lưu
+  key mới.
+- Worker claim dùng transaction `FOR UPDATE SKIP LOCKED`. Lease mặc định là
+  300 giây, heartbeat 60 giây; cả hai là server configuration.
+- `authorizedAt` chỉ được ghi sau final business/currentness re-read trong
+  transaction ngắn. `executionStartedAt` là CAS ngay trước adapter đắt tiền.
+  Lease mất trước marker chỉ được fence/requeue khi side-effect-free; sau marker
+  là `INDETERMINATE` nếu không chứng minh được điều ngược lại.
+- Technical `INVALID`/`UNSUPPORTED` kết thúc Attempt/Job ở `FAILED`; technical
+  `UNKNOWN` trước execution fence Attempt và requeue Job. Business block giữ
+  `CURRENT` và chuyển Job `BLOCKED`; `STALE` kết thúc Job cũ ở `FAILED`.
+- 21C không tạo `RenderArtifact`, output storage, production renderer hay
+  success-finalize. Adapter success không có immutable 21D proof luôn là
+  `INDETERMINATE`. Technical manifest vẫn ephemeral; DB chỉ lưu version,
+  status, reason, timestamp và evidence fingerprint tối thiểu.
+
+### Hệ quả
+
+- `outputReservationId` là UUID server-generated, duy nhất theo Attempt và
+  chưa phải private storage key; 21D sẽ mapping identity này.
+- `mp4-h264-aac-v1` vẫn incomplete, vì vậy không có production startRender
+  route. Complete deterministic profile chỉ dành cho orchestration tests.
+- Migration `0024` chỉ bổ sung hai bảng RenderJob/RenderAttempt và các
+  constraint/index phục vụ state machine.
 
 ## DEC-036 — Workspace-owned Shared MediaAsset boundary của AFF-US-020 Phase 20A
 

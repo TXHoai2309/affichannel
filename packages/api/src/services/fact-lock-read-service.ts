@@ -33,8 +33,11 @@ import {
 	ClaimManifestRepositoryError,
 	getClaimManifestByIdInTransaction,
 } from "./claim-manifest-repository";
+import type { DbTransaction } from "./fact-dependency-repository";
 import { loadFactLockClaimsInTransaction } from "./fact-lock-claim-read-repository";
 import type { WorkspaceActor } from "./workspace";
+
+type DbQuery = typeof db | DbTransaction;
 
 type FactLockRunRow = typeof factLockRun.$inferSelect;
 type FactDependencyRow = typeof factDependency.$inferSelect;
@@ -250,13 +253,23 @@ function mapCurrentScript(
 		: null;
 }
 
+async function inTransaction<T>(
+	query: DbQuery,
+	callback: (transaction: DbTransaction) => Promise<T>,
+) {
+	return query === db
+		? db.transaction(callback)
+		: callback(query as DbTransaction);
+}
+
 async function readManifest(
+	query: DbQuery,
 	actor: WorkspaceActor,
 	projectId: string,
 	claimManifestId: string,
 ): Promise<ClaimManifest> {
 	try {
-		const manifest = await db.transaction((transaction) =>
+		const manifest = await inTransaction(query, (transaction) =>
 			getClaimManifestByIdInTransaction(transaction, {
 				workspaceId: actor.workspaceId,
 				projectId,
@@ -282,12 +295,13 @@ async function readManifest(
 }
 
 async function readClaims(
+	query: DbQuery,
 	actor: WorkspaceActor,
 	run: FactLockRunRow,
 	manifest: ClaimManifest | undefined,
 ) {
 	try {
-		return await db.transaction((transaction) =>
+		return await inTransaction(query, (transaction) =>
 			loadFactLockClaimsInTransaction(transaction, actor, run.id, manifest),
 		);
 	} catch (error) {
@@ -375,7 +389,8 @@ function manifestDependenciesCurrent(
 	);
 }
 
-export async function loadFactLockReadContext(
+async function loadFactLockReadContextInQuery(
+	query: DbQuery,
 	actor: WorkspaceActor,
 	projectId: string,
 	options: { includeArchived?: boolean } = {},
@@ -386,7 +401,7 @@ export async function loadFactLockReadContext(
 	];
 	if (!options.includeArchived)
 		projectConditions.push(isNull(project.archivedAt));
-	const [projectRecord] = await db
+	const [projectRecord] = await query
 		.select({
 			id: project.id,
 			workspaceId: project.workspaceId,
@@ -407,7 +422,7 @@ export async function loadFactLockReadContext(
 		);
 	}
 	const [productRecord] = projectRecord.productId
-		? await db
+		? await query
 				.select({ status: product.status, archivedAt: product.archivedAt })
 				.from(product)
 				.where(
@@ -424,7 +439,7 @@ export async function loadFactLockReadContext(
 		productArchivedAt: productRecord?.archivedAt ?? null,
 	};
 
-	const [currentScript] = await db
+	const [currentScript] = await query
 		.select({
 			id: scriptVersion.id,
 			revision: scriptVersion.revision,
@@ -442,7 +457,7 @@ export async function loadFactLockReadContext(
 		.limit(1);
 	const currentScriptVersion = mapCurrentScript(currentScript);
 
-	const runs = await db
+	const runs = await query
 		.select()
 		.from(factLockRun)
 		.where(
@@ -478,6 +493,7 @@ export async function loadFactLockReadContext(
 	for (const parsed of parsedRuns) {
 		if (parsed.mode !== "MANIFEST_V1") continue;
 		const manifest = await readManifest(
+			query,
 			actor,
 			projectId,
 			parsed.run.claimManifestId as string,
@@ -497,7 +513,7 @@ export async function loadFactLockReadContext(
 	const dependencies =
 		runIds.length === 0
 			? []
-			: await db
+			: await query
 					.select()
 					.from(factDependency)
 					.where(
@@ -524,7 +540,7 @@ export async function loadFactLockReadContext(
 	const currentFacts =
 		projectRecord.productId === null || allFactIds.length === 0
 			? []
-			: await db
+			: await query
 					.select()
 					.from(productFact)
 					.where(
@@ -544,7 +560,7 @@ export async function loadFactLockReadContext(
 		const claims =
 			parsed.snapshot === null
 				? []
-				: await readClaims(actor, parsed.run, manifest);
+				: await readClaims(query, actor, parsed.run, manifest);
 		if (parsed.snapshot === null) {
 			contextRuns.push({
 				id: parsed.run.id,
@@ -652,6 +668,23 @@ export async function loadFactLockReadContext(
 		runs: contextRuns,
 		gateInput,
 	};
+}
+
+export async function loadFactLockReadContext(
+	actor: WorkspaceActor,
+	projectId: string,
+	options: { includeArchived?: boolean } = {},
+): Promise<FactLockReadContext> {
+	return loadFactLockReadContextInQuery(db, actor, projectId, options);
+}
+
+export async function loadFactLockReadContextInTransaction(
+	query: DbTransaction,
+	actor: WorkspaceActor,
+	projectId: string,
+	options: { includeArchived?: boolean } = {},
+): Promise<FactLockReadContext> {
+	return loadFactLockReadContextInQuery(query, actor, projectId, options);
 }
 
 export function toFactLockReadModel(

@@ -169,6 +169,13 @@
       "when": 1788852334496,
       "tag": "0023_sweet_molecule_man",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1789030254913,
+      "tag": "0024_wandering_ikaris",
+      "breakpoints": true
     }
   ]
 }

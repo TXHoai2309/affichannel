@@ -357,11 +357,12 @@ export async function hasAccessibleProject(
 	return Boolean(record);
 }
 
-export async function findCurrentScriptVersion(
+export async function findCurrentScriptVersionInQuery(
+	query: typeof db | DbTransaction,
 	actor: WorkspaceActor,
 	projectId: string,
 ) {
-	const [record] = await db
+	const [record] = await query
 		.select()
 		.from(scriptVersion)
 		.where(
@@ -374,6 +375,13 @@ export async function findCurrentScriptVersion(
 		.orderBy(desc(scriptVersion.updatedAt), desc(scriptVersion.id))
 		.limit(1);
 	return record ? mapScriptVersionRecord(record) : undefined;
+}
+
+export async function findCurrentScriptVersion(
+	actor: WorkspaceActor,
+	projectId: string,
+) {
+	return findCurrentScriptVersionInQuery(db, actor, projectId);
 }
 
 export async function findScriptVersion(

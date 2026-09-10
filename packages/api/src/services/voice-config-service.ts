@@ -128,7 +128,15 @@ export async function findVoiceConfig(
 		throw new VoiceConfigError("VOICE_CONFIG_NOT_FOUND");
 	}
 
-	const [record] = await findCurrentConfig(db, actor, projectId);
+	return findVoiceConfigInQuery(db, actor, projectId);
+}
+
+export async function findVoiceConfigInQuery(
+	query: typeof db | DbTransaction,
+	actor: WorkspaceActor,
+	projectId: string,
+) {
+	const [record] = await findCurrentConfig(query, actor, projectId);
 	return record ? mapVoiceConfig(record) : null;
 }
 

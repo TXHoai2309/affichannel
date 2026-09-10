@@ -6,19 +6,24 @@ import type {
 import {
 	CompositionError,
 	evaluateCompositionCurrentness,
+	evaluateFactLockGate,
 	resolveProjectApplicability,
 	summarizeCurrentScriptVersionClaims,
 	validateScriptVersionForFactLock,
 } from "@affichannel/core";
 import { db, mediaAsset, mediaAssetLink } from "@affichannel/db";
 import { and, eq } from "drizzle-orm";
-import { findCompositionVersionRecord } from "./composition-version-repository";
+import { findCompositionVersionRecordInQuery } from "./composition-version-repository";
+import type { DbTransaction } from "./fact-dependency-repository";
 import { FactLockGate } from "./fact-lock-gate-service";
-import { getProjectWorkflowSubject } from "./project-repository";
-import { findCurrentScriptVersion } from "./script-version-repository";
-import { findVoiceConfig } from "./voice-config-service";
-import { listVoiceSegmentArtifacts } from "./voice-segment-repository";
+import { loadFactLockReadContextInTransaction } from "./fact-lock-read-service";
+import { getProjectWorkflowSubjectInQuery } from "./project-repository";
+import { findCurrentScriptVersionInQuery } from "./script-version-repository";
+import { findVoiceConfigInQuery } from "./voice-config-service";
+import { listVoiceSegmentArtifactsInQuery } from "./voice-segment-repository";
 import type { WorkspaceActor } from "./workspace";
+
+type DbQuery = typeof db | DbTransaction;
 
 export type CompositionExecutionAuthorization =
 	| {
@@ -236,27 +241,34 @@ export function evaluateCompositionBusinessPreflight(input: {
 }
 
 /** Read-only boundary for future startRender. It re-reads scope and script before authorization. */
-export async function preflightCompositionVersion(
+async function preflightCompositionVersionInQuery(
+	query: DbQuery,
 	actor: WorkspaceActor,
 	compositionVersionId: string,
 ) {
-	const version = await findCompositionVersionRecord(
+	const version = await findCompositionVersionRecordInQuery(
+		query,
 		actor,
 		compositionVersionId,
 	);
 	if (!version) throw new CompositionError("COMPOSITION_VERSION_NOT_FOUND");
-	const subject = await getProjectWorkflowSubject(
+	const subject = await getProjectWorkflowSubjectInQuery(
+		query,
 		actor.workspaceId,
 		version.projectId,
 	);
-	const script = await findCurrentScriptVersion(actor, version.projectId);
+	const script = await findCurrentScriptVersionInQuery(
+		query,
+		actor,
+		version.projectId,
+	);
 	if (!subject || !script)
 		throw new CompositionError(
 			"COMPOSITION_EXECUTION_BLOCKED",
 			"Project hoặc Script hiện tại không khả dụng.",
 		);
 	const input = version.compositionInput;
-	const linkedMedia = await db
+	const linkedMedia = await query
 		.select({
 			id: mediaAsset.id,
 			status: mediaAsset.status,
@@ -286,8 +298,13 @@ export async function preflightCompositionVersion(
 			checksumSha256: dependency.semantic.checksumSha256,
 		});
 	});
-	const voiceConfig = await findVoiceConfig(actor, version.projectId);
-	const voiceArtifacts = await listVoiceSegmentArtifacts(
+	const voiceConfig = await findVoiceConfigInQuery(
+		query,
+		actor,
+		version.projectId,
+	);
+	const voiceArtifacts = await listVoiceSegmentArtifactsInQuery(
+		query,
 		actor,
 		version.projectId,
 	);
@@ -410,7 +427,18 @@ export async function preflightCompositionVersion(
 		applicability.state === "READY" &&
 		applicability.completion === "NOT_STARTED"
 	) {
-		factLock = await FactLockGate.evaluate(actor, version.projectId);
+		factLock =
+			query === db
+				? await FactLockGate.evaluate(actor, version.projectId)
+				: evaluateFactLockGate(
+						(
+							await loadFactLockReadContextInTransaction(
+								query as DbTransaction,
+								actor,
+								version.projectId,
+							)
+						).gateInput,
+					);
 		applicabilityResult = buildApplicabilityResult(factLock.reason);
 	}
 	const finalApplicability =
@@ -426,4 +454,19 @@ export async function preflightCompositionVersion(
 		mediaEligible,
 		voiceEligible,
 	});
+}
+
+export async function preflightCompositionVersion(
+	actor: WorkspaceActor,
+	compositionVersionId: string,
+) {
+	return preflightCompositionVersionInQuery(db, actor, compositionVersionId);
+}
+
+export async function preflightCompositionVersionInTransaction(
+	query: DbTransaction,
+	actor: WorkspaceActor,
+	compositionVersionId: string,
+) {
+	return preflightCompositionVersionInQuery(query, actor, compositionVersionId);
 }

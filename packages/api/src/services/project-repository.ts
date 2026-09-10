@@ -26,6 +26,9 @@ import {
 	projectStepStatus,
 } from "@affichannel/db";
 import { and, desc, eq, isNotNull, isNull, or } from "drizzle-orm";
+import type { DbTransaction } from "./fact-dependency-repository";
+
+type DbQuery = typeof db | DbTransaction;
 
 export type ProjectDetails = {
 	id: string;
@@ -515,7 +518,15 @@ export async function getProjectWorkflowSubject(
 	workspaceId: string,
 	projectId: string,
 ): Promise<ProjectWorkflowSubject | undefined> {
-	const [record] = await db
+	return getProjectWorkflowSubjectInQuery(db, workspaceId, projectId);
+}
+
+export async function getProjectWorkflowSubjectInQuery(
+	query: DbQuery,
+	workspaceId: string,
+	projectId: string,
+): Promise<ProjectWorkflowSubject | undefined> {
+	const [record] = await query
 		.select({
 			id: project.id,
 			contentType: project.contentType,

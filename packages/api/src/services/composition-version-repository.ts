@@ -7,8 +7,10 @@ import {
 } from "@affichannel/core";
 import { compositionVersion, db, project } from "@affichannel/db";
 import { and, desc, eq } from "drizzle-orm";
-
+import type { DbTransaction } from "./fact-dependency-repository";
 import type { WorkspaceActor } from "./workspace";
+
+type DbQuery = typeof db | DbTransaction;
 
 export type CompositionVersionReadModel = {
 	id: string;
@@ -100,7 +102,15 @@ export async function findCompositionVersionRecord(
 	actor: WorkspaceActor,
 	compositionVersionId: string,
 ) {
-	const [row] = await db
+	return findCompositionVersionRecordInQuery(db, actor, compositionVersionId);
+}
+
+export async function findCompositionVersionRecordInQuery(
+	query: DbQuery,
+	actor: WorkspaceActor,
+	compositionVersionId: string,
+) {
+	const [row] = await query
 		.select()
 		.from(compositionVersion)
 		.where(

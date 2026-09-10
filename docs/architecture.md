@@ -337,10 +337,10 @@ sequenceDiagram
     API->>DB: Tạo queued job
     API-->>UI: Trả job ID
     Worker->>DB: Claim job bằng lease
-    Worker->>Store: Tải asset đã validate
-    Worker->>Worker: Compose và render
-    Worker->>Store: Upload output bất biến
-    Worker->>DB: Đánh dấu completed và lưu metadata
+    Worker->>DB: Claim RenderAttempt bằng fenced lease
+    Worker->>DB: Technical preflight + business/currentness re-read
+    Worker->>Worker: Gọi adapter nội bộ nếu đã authorized
+    Worker->>DB: FAILED / QUEUED / BLOCKED / INDETERMINATE
     UI->>API: Poll hoặc subscribe trạng thái
     API->>DB: Đọc job đã kiểm tra quyền
     API-->>UI: Trả progress/kết quả
@@ -358,6 +358,28 @@ Thuộc tính job bắt buộc:
 - quy tắc cancel;
 - snapshot input bất biến;
 - chi phí dự kiến và thực tế khi có phát sinh.
+
+### AFF-US-021 Phase 21C orchestration boundary
+
+21C hiện thực hóa persistence và worker protocol, không phải render engine.
+`RenderJob` giữ request identity và immutable CompositionVersion reference;
+`RenderAttempt` giữ lease, minimal preflight evidence, authorization/execution
+markers và server-generated `outputReservationId`. Claim là transaction ngắn
+dùng `FOR UPDATE SKIP LOCKED`; heartbeat chỉ gia hạn đúng owner khi lease còn
+hiệu lực.
+
+Technical preflight chạy trước final business gate. Gate cuối re-read
+CompositionVersion scope, Project, Script, Voice, Media và Fact Lock truth trong
+transaction ngắn trước khi ghi `authorizedAt`; không lưu full technical
+manifest hoặc full Resolver/FactLock payload. `executionStartedAt` được fenced
+CAS ngay trước adapter. Adapter success không thể tự ghi `COMPLETED`; chỉ Phase
+21D với immutable output proof và RenderArtifact mới được reconcile/finalize
+thành công.
+
+Do `mp4-h264-aac-v1` chưa hoàn chỉnh, không expose production `startRender`.
+Complete deterministic profile chỉ là test fixture cho orchestration. 21C không
+tạo output storage/key, FFmpeg, Remotion, renderer, publishing/export hay Video
+activation.
 
 ## 11. Provider adapter
 

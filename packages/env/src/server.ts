@@ -106,6 +106,18 @@ export const env = createEnv({
 			.positive()
 			.max(86_400_000)
 			.default(5 * 60_000),
+		RENDER_LEASE_TTL_SECONDS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(86_400)
+			.default(300),
+		RENDER_HEARTBEAT_INTERVAL_SECONDS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(86_400)
+			.default(60),
 		MEDIA_STORAGE_PROVIDER: z.enum(["local", "r2"]).default("local"),
 		MEDIA_GRANT_SIGNING_SECRET: z.string().min(32).optional(),
 		MEDIA_LOCAL_ROOT: z.string().trim().min(1).default(".data/media-library"),
