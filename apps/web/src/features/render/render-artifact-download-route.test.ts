@@ -168,6 +168,19 @@ describe("protected RenderArtifact download route", () => {
 		},
 	);
 
+	it("does not emit 206 when storage returns an inconsistent range proof", async () => {
+		mocks.openRange.mockResolvedValue({
+			start: 1,
+			end: 3,
+			byteSize: 99,
+			contentType: "video/mp4" as const,
+			stream: body(bytes.slice(1, 4)),
+		});
+		const response = await request("bytes=1-3");
+		expect(response.status).toBe(404);
+		expect(response.headers.get("content-range")).toBeNull();
+	});
+
 	it("denies unauthenticated access before artifact lookup", async () => {
 		mocks.createContext.mockResolvedValue({ session: null });
 		const response = await request();

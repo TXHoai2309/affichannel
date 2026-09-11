@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import {
+	canonicalRequestHash,
 	compositionInputV1Schema,
+	fingerprintOutputEncodingProfile,
 	type RenderRequestSpecV1,
 	renderRequestSpecV1Schema,
 } from "@affichannel/core";
@@ -242,6 +244,16 @@ async function loadExpectedComposition(
 	);
 	if (!requestSpec.success || !compositionInput.success)
 		throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+	let recomputedRequestHash: string;
+	let recomputedProfileFingerprint: string;
+	try {
+		[recomputedRequestHash, recomputedProfileFingerprint] = await Promise.all([
+			canonicalRequestHash(requestSpec.data),
+			fingerprintOutputEncodingProfile(requestSpec.data.outputEncodingProfile),
+		]);
+	} catch {
+		throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+	}
 	if (
 		version.workspaceId !== job.workspaceId ||
 		version.projectId !== job.projectId ||
@@ -249,7 +261,10 @@ async function loadExpectedComposition(
 		requestSpec.data.compositionVersionId !== job.compositionVersionId ||
 		requestSpec.data.compositionFingerprint !== job.compositionFingerprint ||
 		requestSpec.data.outputEncodingProfileFingerprint !==
-			job.outputEncodingProfileFingerprint
+			job.outputEncodingProfileFingerprint ||
+		requestSpec.data.outputContractVersion !== job.outputContractVersion ||
+		recomputedRequestHash !== job.canonicalRequestHash ||
+		recomputedProfileFingerprint !== job.outputEncodingProfileFingerprint
 	)
 		throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
 	return {

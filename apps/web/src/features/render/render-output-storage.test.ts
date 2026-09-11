@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -198,6 +199,137 @@ describe("AFF-US-021 EN001 21D local output storage", () => {
 		await expect(
 			r2.createOnce({ storageKey: KEY, body: body(new Uint8Array([7])) }),
 		).rejects.toMatchObject({ code: "RENDER_OUTPUT_STORAGE_CONFLICT" });
+	});
+
+	it("proves R2 HEAD MIME, size, and optional checksum metadata before bytes", async () => {
+		const checksum = createHash("sha256")
+			.update(deterministicRenderOutputFixture)
+			.digest("hex");
+		const makeStorage = (
+			stat: {
+				byteSize: number;
+				contentType: string | null;
+				etag?: string | null;
+				checksumSha256: string | null;
+			} | null,
+		) =>
+			new R2RenderOutputStorage(
+				{
+					async putObject() {},
+					async headObject() {
+						return stat ? { ...stat, etag: stat.etag ?? null } : null;
+					},
+					async getObject() {
+						return {
+							stream: body(deterministicRenderOutputFixture),
+							byteSize: deterministicRenderOutputFixture.byteLength,
+							contentType: "video/mp4",
+						};
+					},
+					async deleteObject() {},
+				},
+				{ tempRoot: root },
+			);
+
+		await expect(
+			makeStorage({
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				contentType: "video/mp4",
+				checksumSha256: checksum,
+			}).verifyExact({
+				storageKey: KEY,
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				checksumSha256: checksum,
+			}),
+		).resolves.toMatchObject({ checksumSha256: checksum });
+		await expect(
+			makeStorage({
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				contentType: "application/octet-stream",
+				checksumSha256: checksum,
+			}).verifyExact({
+				storageKey: KEY,
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				checksumSha256: checksum,
+			}),
+		).rejects.toMatchObject({ code: "RENDER_OUTPUT_STORAGE_CONFLICT" });
+		await expect(
+			makeStorage({
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				contentType: "video/mp4",
+				checksumSha256: "0".repeat(64),
+			}).verifyExact({
+				storageKey: KEY,
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				checksumSha256: checksum,
+			}),
+		).rejects.toMatchObject({ code: "RENDER_OUTPUT_STORAGE_CONFLICT" });
+		await expect(
+			makeStorage({
+				byteSize: deterministicRenderOutputFixture.byteLength - 1,
+				contentType: "video/mp4",
+				checksumSha256: null,
+			}).verifyExact({
+				storageKey: KEY,
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				checksumSha256: checksum,
+			}),
+		).rejects.toMatchObject({ code: "RENDER_OUTPUT_STORAGE_CONFLICT" });
+		await expect(
+			makeStorage(null).verifyExact({
+				storageKey: KEY,
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				checksumSha256: checksum,
+			}),
+		).rejects.toMatchObject({ code: "RENDER_OUTPUT_STORAGE_NOT_FOUND" });
+	});
+
+	it("fails closed when an R2 range response is not the requested MP4 length", async () => {
+		const makeStorage = (
+			result: {
+				byteSize: number;
+				contentType: string;
+			} | null,
+		) =>
+			new R2RenderOutputStorage(
+				{
+					async putObject() {},
+					async headObject() {
+						return null;
+					},
+					async getObject() {
+						return result
+							? { ...result, stream: body(deterministicRenderOutputFixture) }
+							: null;
+					},
+					async deleteObject() {},
+				},
+				{ tempRoot: root },
+			);
+		await expect(
+			makeStorage({ byteSize: 3, contentType: "video/mp4" }).openRange({
+				storageKey: KEY,
+				start: 0,
+				end: 2,
+			}),
+		).resolves.toMatchObject({ byteSize: 3 });
+		for (const result of [
+			{
+				byteSize: deterministicRenderOutputFixture.byteLength,
+				contentType: "video/mp4",
+			},
+			{ byteSize: 2, contentType: "video/mp4" },
+			{ byteSize: 3, contentType: "application/octet-stream" },
+			{ byteSize: 0, contentType: "video/mp4" },
+		]) {
+			await expect(
+				makeStorage(result).openRange({
+					storageKey: KEY,
+					start: 0,
+					end: 2,
+				}),
+			).rejects.toMatchObject({ code: "RENDER_OUTPUT_STORAGE_ERROR" });
+		}
 	});
 
 	it("marks an R2 write error with unknown outcome", async () => {

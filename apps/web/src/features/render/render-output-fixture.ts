@@ -39,16 +39,16 @@ function zeros(length: number) {
 	return new Uint8Array(length);
 }
 
-function mvhd() {
+function mvhd(duration = 1) {
 	const payload = zeros(20);
 	payload.set(u32(30), 8);
-	payload.set(u32(1), 12);
+	payload.set(u32(duration), 12);
 	return fullBox("mvhd", payload);
 }
 
-function tkhd(width: number, height: number) {
+function tkhd(width: number, height: number, duration = 1) {
 	const payload = zeros(84);
-	payload.set(u32(1), 16);
+	payload.set(u32(duration), 16);
 	payload.set(u32(width * 0x10000), 72);
 	payload.set(u32(height * 0x10000), 76);
 	return fullBox("tkhd", payload);
@@ -79,8 +79,23 @@ function stts(entries: ReadonlyArray<{ count: number; delta: number }>) {
 	);
 }
 
-function stsc(samplesPerChunk = 1) {
-	return fullBox("stsc", concat(u32(1), u32(1), u32(samplesPerChunk), u32(1)));
+function stsc(
+	samplesPerChunk = 1,
+	entries: ReadonlyArray<{ firstChunk: number; samplesPerChunk: number }> = [
+		{ firstChunk: 1, samplesPerChunk },
+	],
+) {
+	return fullBox(
+		"stsc",
+		concat(
+			u32(entries.length),
+			...entries.flatMap((entry) => [
+				u32(entry.firstChunk),
+				u32(entry.samplesPerChunk),
+				u32(1),
+			]),
+		),
+	);
 }
 
 function stsz(sampleSizes: number | ReadonlyArray<number>) {
@@ -96,8 +111,9 @@ function stszFixed(sampleSize: number, sampleCount: number) {
 	return fullBox("stsz", concat(u32(sampleSize), u32(sampleCount)));
 }
 
-function stco(offset: number) {
-	return fullBox("stco", concat(u32(1), u32(offset)));
+function stco(offsets: number | ReadonlyArray<number>) {
+	const values = typeof offsets === "number" ? [offsets] : offsets;
+	return fullBox("stco", concat(u32(values.length), ...values.map(u32)));
 }
 
 function dinf() {
@@ -139,9 +155,11 @@ function mediaInfo(
 	duration: number,
 	width = 0,
 	height = 0,
+	trackDuration = 1,
+	trackExtras: ReadonlyArray<Uint8Array> = [],
 ) {
 	const mediaHeader = mdhd(timescale, duration);
-	const trackHeader = tkhd(width, height);
+	const trackHeader = tkhd(width, height, trackDuration);
 	const media = box(
 		"mdia",
 		concat(
@@ -157,11 +175,11 @@ function mediaInfo(
 			),
 		),
 	);
-	return box("trak", concat(trackHeader, media));
+	return box("trak", concat(trackHeader, ...trackExtras, media));
 }
 
 function makeMoov(
-	videoOffset: number,
+	videoOffsets: number | ReadonlyArray<number>,
 	audioOffset: number,
 	options: {
 		videoEntries?: ReadonlyArray<{ count: number; delta: number }>;
@@ -170,23 +188,41 @@ function makeMoov(
 		videoFixedSampleSize?: number;
 		videoTimescale?: number;
 		includeAudio?: boolean;
+		videoChunkOffsets?: ReadonlyArray<number>;
+		videoChunkMap?: ReadonlyArray<{
+			firstChunk: number;
+			samplesPerChunk: number;
+		}>;
+		includeCtts?: boolean;
+		includeEditList?: boolean;
 	} = {},
 ) {
 	const videoEntries = options.videoEntries ?? [{ count: 1, delta: 1 }];
+	const videoSampleCount = videoEntries.reduce(
+		(total, entry) => total + entry.count,
+		0,
+	);
 	const videoDuration = videoEntries.reduce(
 		(total, entry) => total + entry.count * entry.delta,
 		0,
 	);
+	const videoTimescale = options.videoTimescale ?? 30;
+	const movieDuration = (videoDuration * 30) / videoTimescale;
+	if (!Number.isSafeInteger(movieDuration) || movieDuration <= 0)
+		throw new Error("fixture movie duration must be integral");
 	const videoTable = box(
 		"stbl",
 		concat(
 			stsd(avc1(1080, 1920)),
 			stts(videoEntries),
-			stsc(options.videoSamplesPerChunk),
+			stsc(options.videoSamplesPerChunk, options.videoChunkMap),
 			options.videoFixedSampleSize === undefined
 				? stsz(options.videoSizes ?? 4)
-				: stszFixed(options.videoFixedSampleSize, 1),
-			stco(videoOffset),
+				: stszFixed(options.videoFixedSampleSize, videoSampleCount),
+			stco(videoOffsets),
+			...(options.includeCtts
+				? [fullBox("ctts", concat(u32(1), u32(videoSampleCount), u32(0)))]
+				: []),
 		),
 	);
 	const audioTable = box(
@@ -207,11 +243,23 @@ function makeMoov(
 			videoDuration,
 			1080,
 			1920,
+			movieDuration,
+			options.includeEditList
+				? [
+						box(
+							"edts",
+							fullBox(
+								"elst",
+								concat(u32(1), u32(movieDuration), u32(0), u32(0x00010000)),
+							),
+						),
+					]
+				: [],
 		),
 	];
 	if (options.includeAudio !== false)
 		tracks.push(mediaInfo("soun", audioTable, 48_000, 1_600));
-	return box("moov", concat(mvhd(), ...tracks));
+	return box("moov", concat(mvhd(movieDuration), ...tracks));
 }
 
 function makeFixture(
@@ -223,7 +271,10 @@ function makeFixture(
 		"ftyp",
 		concat(text("isom"), u32(0), text("isom"), text("mp42")),
 	);
-	const firstMoov = makeMoov(0, 0, options);
+	const firstVideoOffsets = options.videoChunkOffsets
+		? options.videoChunkOffsets.map(() => 0)
+		: [0];
+	const firstMoov = makeMoov(firstVideoOffsets, 0, options);
 	const mdatPayload =
 		options.includeAudio === false
 			? videoPayload
@@ -231,7 +282,10 @@ function makeFixture(
 	const mdat = box("mdat", mdatPayload);
 	const videoOffset = ftyp.byteLength + firstMoov.byteLength + 8;
 	const audioOffset = videoOffset + videoPayload.byteLength;
-	const moov = makeMoov(videoOffset, audioOffset, options);
+	const videoOffsets = options.videoChunkOffsets
+		? options.videoChunkOffsets.map((offset) => videoOffset + offset)
+		: videoOffset;
+	const moov = makeMoov(videoOffsets, audioOffset, options);
 	return concat(ftyp, moov, mdat);
 }
 
@@ -254,6 +308,63 @@ export const deterministicVideoOnlyRenderOutputFixture = makeFixture({
 	includeAudio: false,
 	videoFixedSampleSize: 4,
 });
+
+export const deterministicEditListRenderOutputFixture = makeFixture({
+	includeEditList: true,
+});
+
+export const deterministicCompositionOffsetRenderOutputFixture = makeFixture({
+	includeCtts: true,
+});
+
+export const deterministicFirstChunkTwoRenderOutputFixture = makeFixture(
+	{
+		includeAudio: false,
+		videoEntries: [
+			{ count: 1, delta: 1 },
+			{ count: 1, delta: 1 },
+		],
+		videoSizes: [4, 4],
+		videoChunkMap: [{ firstChunk: 2, samplesPerChunk: 1 }],
+		videoChunkOffsets: [0, 4, 8],
+	},
+	new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3]),
+);
+
+export const deterministicFixedChunkOverlapRenderOutputFixture = makeFixture(
+	{
+		includeAudio: false,
+		videoEntries: [
+			{ count: 1, delta: 1 },
+			{ count: 1, delta: 1 },
+		],
+		videoFixedSampleSize: 4,
+		videoChunkOffsets: [0, 3],
+	},
+	new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2]),
+);
+
+export const deterministicFixedSampleOutsideMdatRenderOutputFixture =
+	makeFixture(
+		{
+			includeAudio: false,
+			videoFixedSampleSize: 8,
+		},
+		new Uint8Array([0, 0, 0, 1]),
+	);
+
+export const deterministicVariableChunkOverlapRenderOutputFixture = makeFixture(
+	{
+		includeAudio: false,
+		videoEntries: [
+			{ count: 1, delta: 1 },
+			{ count: 1, delta: 1 },
+		],
+		videoSizes: [4, 4],
+		videoChunkOffsets: [0, 3],
+	},
+	new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2]),
+);
 
 /** Independently recorded fixture authority; never derive this from the validator. */
 export const deterministicRenderOutputFixtureProvenance = {

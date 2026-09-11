@@ -297,6 +297,19 @@ abstract class BaseRenderOutputStorage implements RenderOutputStorage {
 		byteSize: number;
 		checksumSha256: string;
 	}) {
+		const metadata = await this.head(input.storageKey);
+		if (!metadata) throw notFound("Stored render output was not found.");
+		if (metadata.byteSize !== input.byteSize)
+			throw conflict("Stored render output metadata has the wrong byte size.");
+		if (metadata.contentType !== "video/mp4")
+			throw conflict("Stored render output metadata has the wrong MIME type.");
+		if (
+			metadata.checksumSha256 !== null &&
+			metadata.checksumSha256 !== input.checksumSha256
+		)
+			throw conflict(
+				"Stored render output metadata has the wrong SHA-256 checksum.",
+			);
 		const stream = await this.open(input.storageKey);
 		const actual = await digestBody(stream);
 		if (
@@ -484,7 +497,7 @@ export type R2RenderOutputObjectClient = {
 	): Promise<{
 		stream: ReadableStream<Uint8Array>;
 		byteSize: number;
-		contentType: "video/mp4";
+		contentType: string;
 	} | null>;
 	deleteObject(key: string): Promise<void>;
 };
@@ -561,12 +574,23 @@ export class R2RenderOutputStorage extends BaseRenderOutputStorage {
 		assertSafeRenderOutputStorageKey(input.storageKey);
 		const result = await this.client.getObject(input.storageKey, input);
 		if (!result) throw notFound("R2 render output was not found.");
+		const expectedByteSize = input.end - input.start + 1;
+		if (
+			input.start < 0 ||
+			input.end < input.start ||
+			!Number.isSafeInteger(expectedByteSize) ||
+			result.byteSize !== expectedByteSize ||
+			result.contentType !== "video/mp4"
+		)
+			throw storageFailure(
+				"R2 returned an invalid render output range response.",
+			);
 		return {
 			start: input.start,
 			end: input.end,
 			stream: result.stream,
 			byteSize: result.byteSize,
-			contentType: result.contentType,
+			contentType: "video/mp4" as const,
 		};
 	}
 

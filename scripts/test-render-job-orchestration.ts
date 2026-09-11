@@ -97,7 +97,7 @@ const orphanService = await import(
 const { createRenderOutputStorageKey } = await import(
 	"../packages/api/src/storage/render-output-storage.ts"
 );
-const { LocalRenderOutputStorage } = await import(
+const { LocalRenderOutputStorage, R2RenderOutputStorage } = await import(
 	"../packages/api/src/storage/render-output-storage.ts"
 );
 const {
@@ -2278,6 +2278,86 @@ try {
 		"RENDER_OUTPUT_INVALID",
 	);
 
+	const wrongMimeR2Artifact = await prepareArtifactScenario(
+		"r2-wrong-mime",
+		"RUNNING",
+	);
+	const wrongMimeR2Storage = new R2RenderOutputStorage(
+		{
+			async putObject() {},
+			async headObject() {
+				return {
+					byteSize: deterministicRenderOutputFixture.byteLength,
+					contentType: "application/octet-stream",
+					etag: null,
+					checksumSha256: deterministicRenderOutputFixtureProvenance.sha256,
+				};
+			},
+			async getObject() {
+				return {
+					stream: fixtureBody(),
+					byteSize: deterministicRenderOutputFixture.byteLength,
+					contentType: "video/mp4",
+				};
+			},
+			async deleteObject() {},
+		},
+		{ tempRoot: outputRoot },
+	);
+	await expectStorageFailure(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: wrongMimeR2Artifact.job.id,
+			attemptId: wrongMimeR2Artifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: wrongMimeR2Artifact.attempt.leaseOwner,
+			storage: wrongMimeR2Storage,
+		}),
+		"RENDER_OUTPUT_STORAGE_CONFLICT",
+	);
+	const [wrongMimeJobState] = await db
+		.select({ status: renderJob.status })
+		.from(renderJob)
+		.where(eq(renderJob.id, wrongMimeR2Artifact.job.id));
+	const [wrongMimeAttemptState] = await db
+		.select({ status: renderAttempt.status })
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, wrongMimeR2Artifact.attempt.id));
+	assert(
+		wrongMimeJobState?.status === "RUNNING" &&
+			wrongMimeAttemptState?.status === "RUNNING" &&
+			(
+				await db
+					.select({ id: renderArtifact.id })
+					.from(renderArtifact)
+					.where(eq(renderArtifact.renderJobId, wrongMimeR2Artifact.job.id))
+			).length === 0,
+		"A wrong-MIME R2 object cannot complete an Artifact, Attempt, or Job.",
+	);
+
+	const provenanceArtifact = await prepareArtifactScenario(
+		"provenance-tampered",
+		"RUNNING",
+	);
+	await db
+		.update(renderJob)
+		.set({
+			requestSpecJson: {
+				...provenanceArtifact.job.requestSpec,
+				outputContractVersion: "tampered-output-contract.v1",
+			},
+		})
+		.where(eq(renderJob.id, provenanceArtifact.job.id));
+	await expectRenderArtifactError(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: provenanceArtifact.job.id,
+			attemptId: provenanceArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: provenanceArtifact.attempt.leaseOwner,
+			storage: outputStorage,
+		}),
+		"RENDER_ARTIFACT_PROVENANCE_INVALID",
+	);
+
 	const normalArtifact = await prepareArtifactScenario("normal", "RUNNING");
 	await outputStorage.createOnce({
 		storageKey: outputKey(normalArtifact),
@@ -2593,6 +2673,61 @@ try {
 	assert(
 		(await outputStorage.head(outputKey(orphanScenario))) === null,
 		"A proven orphan may be physically deleted only after the final ownership check.",
+	);
+
+	const completedWithoutArtifact = await prepareArtifactScenario(
+		"completed-without-artifact",
+		"RUNNING",
+	);
+	await outputStorage.createOnce({
+		storageKey: outputKey(completedWithoutArtifact),
+		body: fixtureBody(),
+	});
+	const impossibleCompletedAt = new Date();
+	await db
+		.update(renderAttempt)
+		.set({ status: "COMPLETED", finishedAt: impossibleCompletedAt })
+		.where(eq(renderAttempt.id, completedWithoutArtifact.attempt.id));
+	await db
+		.update(renderJob)
+		.set({ status: "COMPLETED", finishedAt: impossibleCompletedAt })
+		.where(eq(renderJob.id, completedWithoutArtifact.job.id));
+	const impossibleCompletedInspection =
+		await orphanService.inspectRenderOutputOwnership({
+			storage: outputStorage,
+			workspaceId,
+			projectId,
+			renderJobId: completedWithoutArtifact.job.id,
+			renderAttemptId: completedWithoutArtifact.attempt.id,
+			attemptNumber: 1,
+			outputReservationId: completedWithoutArtifact.attempt.outputReservationId,
+		});
+	assert(
+		impossibleCompletedInspection.status === "PROTECTED",
+		"Attempt COMPLETED without an Artifact must remain protected from orphan deletion.",
+	);
+	let impossibleCompletedDeletionRejected = false;
+	try {
+		await orphanService.deleteProvenRenderOutputOrphan({
+			storage: outputStorage,
+			workspaceId,
+			projectId,
+			renderJobId: completedWithoutArtifact.job.id,
+			renderAttemptId: completedWithoutArtifact.attempt.id,
+			attemptNumber: 1,
+			outputReservationId: completedWithoutArtifact.attempt.outputReservationId,
+			byteSize: deterministicRenderOutputFixtureProvenance.byteSize,
+			checksumSha256: deterministicRenderOutputFixtureProvenance.sha256,
+		});
+	} catch (error) {
+		impossibleCompletedDeletionRejected =
+			error instanceof Error &&
+			error.message === "RENDER_OUTPUT_ORPHAN_NOT_PROVEN";
+	}
+	assert(
+		impossibleCompletedDeletionRejected &&
+			(await outputStorage.head(outputKey(completedWithoutArtifact))) !== null,
+		"An impossible completed state must never be physically deleted as an orphan.",
 	);
 	console.log(
 		"21D immutable Artifact atomic finalize, stale-worker fencing, idempotency, and trusted reconciliation: PASS",

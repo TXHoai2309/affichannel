@@ -88,6 +88,8 @@ export async function GET(
 		if (
 			!stored ||
 			stored.byteSize !== artifact.byteSize ||
+			(artifact.storageProvider === "r2" &&
+				stored.contentType !== artifact.mimeType) ||
 			(stored.contentType !== null &&
 				stored.contentType !== artifact.mimeType) ||
 			(stored.checksumSha256 !== null &&
@@ -147,6 +149,13 @@ export async function GET(
 			start: range.start,
 			end: range.end,
 		});
+		if (
+			ranged.start !== range.start ||
+			ranged.end !== range.end ||
+			ranged.byteSize !== range.end - range.start + 1 ||
+			ranged.contentType !== artifact.mimeType
+		)
+			throw new MediaAssetError("MEDIA_ASSET_STORAGE_NOT_FOUND");
 		return new Response(ranged.stream, {
 			status: 206,
 			headers: {

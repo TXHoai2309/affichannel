@@ -51,6 +51,15 @@ export class RenderOutputValidationError extends Error {
 	}
 }
 
+export class RenderOutputUnsupportedError extends Error {
+	readonly code = "RENDER_OUTPUT_UNSUPPORTED" as const;
+
+	constructor(message: string) {
+		super(message);
+		this.name = "RenderOutputUnsupportedError";
+	}
+}
+
 type Mp4Box = Readonly<{
 	type: string;
 	start: number;
@@ -69,6 +78,10 @@ const MAX_MOOV_BYTES = 32 * 1024 * 1024;
 
 function invalid(message: string): never {
 	throw new RenderOutputValidationError(message);
+}
+
+function unsupported(message: string): never {
+	throw new RenderOutputUnsupportedError(message);
 }
 
 function ensureRange(bytes: Uint8Array, offset: number, length: number) {
@@ -162,6 +175,7 @@ function parseMovieHeader(bytes: Uint8Array, box: Mp4Box) {
 			: uint32(bytes, durationOffset);
 	if (timescale <= 0 || duration <= 0)
 		invalid("MP4 movie duration is invalid.");
+	return { movieTimescale: timescale, movieDuration: duration };
 }
 
 function parseMediaHeader(bytes: Uint8Array, box: Mp4Box) {
@@ -188,9 +202,19 @@ function parseTrackDimensions(bytes: Uint8Array, box: Mp4Box) {
 	const heightOffset = widthOffset + 4;
 	const widthFixed = uint32(bytes, widthOffset);
 	const heightFixed = uint32(bytes, heightOffset);
+	const durationOffset = box.payloadStart + (version === 1 ? 28 : 20);
+	const duration =
+		version === 1
+			? uint64(bytes, durationOffset)
+			: uint32(bytes, durationOffset);
+	if (duration <= 0) invalid("MP4 track duration is invalid.");
 	if (widthFixed % 0x10000 !== 0 || heightFixed % 0x10000 !== 0)
 		invalid("MP4 track dimensions are not integral pixels.");
-	return { width: widthFixed / 0x10000, height: heightFixed / 0x10000 };
+	return {
+		width: widthFixed / 0x10000,
+		height: heightFixed / 0x10000,
+		duration,
+	};
 }
 
 function parseHandler(bytes: Uint8Array, box: Mp4Box) {
@@ -273,6 +297,7 @@ function parseChunkMap(bytes: Uint8Array, box: Mp4Box) {
 		const sampleDescriptionIndex = uint32(bytes, offset + 8);
 		if (
 			firstChunk <= 0 ||
+			(index === 0 && firstChunk !== 1) ||
 			samplesPerChunk <= 0 ||
 			sampleDescriptionIndex !== 1 ||
 			firstChunk <= (entries.at(-1)?.firstChunk ?? 0)
@@ -294,7 +319,7 @@ function parseCompositionOffsets(bytes: Uint8Array, box: Mp4Box) {
 		offset += 8;
 	}
 	if (offset !== box.end) invalid("MP4 composition-offset table is truncated.");
-	invalid(
+	unsupported(
 		"MP4 ctts composition offsets are unsupported by render-output-validation.v1.",
 	);
 }
@@ -352,6 +377,9 @@ function validateSampleLayout(input: {
 			if (input.fixedSampleSize !== null) {
 				const chunkEnd =
 					chunkStart + entry.samplesPerChunk * input.fixedSampleSize;
+				const nextChunkStart = input.chunkOffsets[chunkIndex + 1];
+				if (nextChunkStart !== undefined && chunkEnd > nextChunkStart)
+					invalid("MP4 samples overlap the next chunk.");
 				if (
 					!Number.isSafeInteger(chunkEnd) ||
 					!input.mdatRanges.some(
@@ -504,13 +532,22 @@ function validateContainer(
 	const moovChildren = parseBoxes(moovBytes, moov.payloadStart, moov.end);
 	const mvhd = moovChildren.find((box) => box.type === "mvhd");
 	if (!mvhd) invalid("MP4 movie header is missing.");
-	parseMovieHeader(moovBytes, mvhd);
+	const movieHeader = parseMovieHeader(moovBytes, mvhd);
 	const expectedWidth = expectation.compositionInput.profile.logicalWidth;
 	const expectedHeight = expectation.compositionInput.profile.logicalHeight;
 	const expectedFps = expectation.compositionInput.timeline.fps;
 	const expectedFrames = BigInt(
 		expectation.compositionInput.timeline.totalFrames,
 	);
+	if (
+		BigInt(movieHeader.movieDuration) * BigInt(expectedFps.numerator) !==
+		expectedFrames *
+			BigInt(expectedFps.denominator) *
+			BigInt(movieHeader.movieTimescale)
+	)
+		invalid(
+			"MP4 movie duration does not match the exact composition timeline.",
+		);
 	const expectedAudioMetadata = expectedAudio(
 		expectation.requestSpec.outputEncodingProfile,
 		expectation.compositionInput,
@@ -525,6 +562,10 @@ function validateContainer(
 	let audioMetadata: ReturnType<typeof parseMp4a> | null = null;
 	for (const trak of moovChildren.filter((box) => box.type === "trak")) {
 		const trakChildren = parseBoxes(moovBytes, trak.payloadStart, trak.end);
+		if (trakChildren.some((box) => box.type === "edts" || box.type === "elst"))
+			unsupported(
+				"MP4 edit-list presentation semantics are unsupported by render-output-validation.v1.",
+			);
 		const tkhd = trakChildren.find((box) => box.type === "tkhd");
 		const mdia = trakChildren.find((box) => box.type === "mdia");
 		if (!tkhd || !mdia) invalid("MP4 track is missing required headers.");
@@ -611,6 +652,15 @@ function validateContainer(
 				expectedFrames * BigInt(fpsDenominator) * BigInt(mediaHeader.timescale)
 			)
 				invalid("MP4 duration does not match the exact composition timeline.");
+			if (
+				BigInt(trackDimensions.duration) * BigInt(fpsNumerator) !==
+				expectedFrames *
+					BigInt(fpsDenominator) *
+					BigInt(movieHeader.movieTimescale)
+			)
+				invalid(
+					"MP4 video track presentation duration does not match the exact composition timeline.",
+				);
 			videoMetadata = {
 				...dimensions,
 				frameCount: timing.sampleCount,

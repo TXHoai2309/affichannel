@@ -69,7 +69,8 @@ async function proveOrphanEligibility(input: {
 			!job ||
 			!attempt ||
 			attempt.status === "RUNNING" ||
-			attempt.status === "INDETERMINATE"
+			attempt.status === "INDETERMINATE" ||
+			attempt.status === "COMPLETED"
 		)
 			return "PROTECTED" as const;
 		const [newerAttempt] = await transaction

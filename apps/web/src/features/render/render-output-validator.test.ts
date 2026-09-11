@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import {
+	RenderOutputUnsupportedError,
 	RenderOutputValidationError,
 	validateRenderOutputBytes,
 } from "@affichannel/api/services/render-output-validator";
@@ -9,9 +10,15 @@ import type {
 } from "@affichannel/core";
 import { describe, expect, it } from "vitest";
 import {
+	deterministicCompositionOffsetRenderOutputFixture,
+	deterministicEditListRenderOutputFixture,
+	deterministicFirstChunkTwoRenderOutputFixture,
+	deterministicFixedChunkOverlapRenderOutputFixture,
+	deterministicFixedSampleOutsideMdatRenderOutputFixture,
 	deterministicMalformedTimingRenderOutputFixture,
 	deterministicRenderOutputFixture,
 	deterministicRenderOutputFixtureProvenance,
+	deterministicVariableChunkOverlapRenderOutputFixture,
 	deterministicVideoOnlyRenderOutputFixture,
 } from "./render-output-fixture";
 
@@ -130,6 +137,52 @@ describe("AFF-US-021 EN001 21D output proof", () => {
 		).rejects.toBeInstanceOf(RenderOutputValidationError);
 	});
 
+	it("proves the exact movie and video-track presentation durations", async () => {
+		const mvhd = findAscii(deterministicRenderOutputFixture, "mvhd");
+		await expect(
+			validateRenderOutputBytes(
+				withU32(deterministicRenderOutputFixture, mvhd + 20, 2),
+				expectation(),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+
+		const tkhd = findAscii(deterministicRenderOutputFixture, "tkhd");
+		await expect(
+			validateRenderOutputBytes(
+				withU32(deterministicRenderOutputFixture, tkhd + 24, 2),
+				expectation(),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+
+		await expect(
+			validateRenderOutputBytes(
+				deterministicRenderOutputFixture,
+				expectation(),
+			),
+		).resolves.toMatchObject({ validatedMetadata: { totalFrames: "1" } });
+	});
+
+	it("classifies edit lists and composition offsets as typed unsupported features", async () => {
+		await expect(
+			validateRenderOutputBytes(
+				deterministicEditListRenderOutputFixture,
+				expectation(),
+			),
+		).rejects.toMatchObject({ code: "RENDER_OUTPUT_UNSUPPORTED" });
+		await expect(
+			validateRenderOutputBytes(
+				deterministicEditListRenderOutputFixture,
+				expectation(),
+			),
+		).rejects.toBeInstanceOf(RenderOutputUnsupportedError);
+		await expect(
+			validateRenderOutputBytes(
+				deterministicCompositionOffsetRenderOutputFixture,
+				expectation(),
+			),
+		).rejects.toMatchObject({ code: "RENDER_OUTPUT_UNSUPPORTED" });
+	});
+
 	it("does not accept an ftyp-only byte sequence", async () => {
 		const ftypOnly = deterministicRenderOutputFixture.slice(0, 24);
 		await expect(
@@ -138,6 +191,31 @@ describe("AFF-US-021 EN001 21D output proof", () => {
 	});
 
 	it("maps every declared sample interval into mdat", async () => {
+		await expect(
+			validateRenderOutputBytes(
+				deterministicFirstChunkTwoRenderOutputFixture,
+				expectation("2", 1080, { hasAudio: false }),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+		await expect(
+			validateRenderOutputBytes(
+				deterministicFixedChunkOverlapRenderOutputFixture,
+				expectation("2", 1080, { hasAudio: false }),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+		await expect(
+			validateRenderOutputBytes(
+				deterministicFixedSampleOutsideMdatRenderOutputFixture,
+				expectation("1", 1080, { hasAudio: false }),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+		await expect(
+			validateRenderOutputBytes(
+				deterministicVariableChunkOverlapRenderOutputFixture,
+				expectation("2", 1080, { hasAudio: false }),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+
 		const stsz = findAscii(deterministicRenderOutputFixture, "stsz");
 		await expect(
 			validateRenderOutputBytes(
