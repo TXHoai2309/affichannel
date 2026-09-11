@@ -14,7 +14,15 @@ declare module "fontkit" {
 			script?: string,
 			language?: string,
 			direction?: string,
-		) => { glyphs: readonly { advanceWidth: number }[] };
+		) => {
+			glyphs: readonly { advanceWidth: number }[];
+			positions: readonly {
+				xAdvance: number;
+				yAdvance: number;
+				xOffset: number;
+				yOffset: number;
+			}[];
+		};
 		"OS/2"?: { usWeightClass?: number };
 	};
 

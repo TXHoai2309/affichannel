@@ -612,9 +612,10 @@ export const compositionInputV1Schema = z
 				});
 		}
 		if (
-			trackVoiceKeys.size !== voiceKeys.size ||
-			trackVoiceKeys.size !== input.sceneComposition.audioTracks.length ||
-			[...voiceKeys].some((key) => !trackVoiceKeys.has(key))
+			input.sceneComposition.audioTracks.length > 0 &&
+			(trackVoiceKeys.size !== voiceKeys.size ||
+				trackVoiceKeys.size !== input.sceneComposition.audioTracks.length ||
+				[...voiceKeys].some((key) => !trackVoiceKeys.has(key)))
 		)
 			context.addIssue({
 				code: "custom",

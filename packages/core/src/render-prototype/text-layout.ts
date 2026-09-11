@@ -101,6 +101,16 @@ function fits(
 	return units * fontSizePx <= boxWidthPx * unitsPerEm;
 }
 
+function measuredUnits(metrics: T09FontMetrics, text: string): number {
+	const value = metrics.measureUnits(text);
+	if (!Number.isSafeInteger(value) || value < 0)
+		throw new T09TextLayoutError(
+			"TEXT_LAYOUT_INVALID",
+			"Text measurement must be a finite non-negative safe integer.",
+		);
+	return value;
+}
+
 function wrapLine(
 	line: string,
 	input: T09TextLayoutInput,
@@ -117,7 +127,7 @@ function wrapLine(
 	while (remaining.length > 0) {
 		if (
 			fits(
-				metrics.measureUnits(remaining),
+				measuredUnits(metrics, remaining),
 				input.fontSizePx,
 				input.box.widthPx,
 				metrics.unitsPerEm,
@@ -135,7 +145,7 @@ function wrapLine(
 			const candidate = remaining.slice(0, index);
 			if (
 				fits(
-					metrics.measureUnits(candidate),
+					measuredUnits(metrics, candidate),
 					input.fontSizePx,
 					input.box.widthPx,
 					metrics.unitsPerEm,
@@ -200,7 +210,7 @@ export function materializeT09TextLayout(
 	);
 	const materialized = lines.map((line, lineIndex) => {
 		const measuredWidthPx = roundHalfUp(
-			metrics.measureUnits(line) * input.fontSizePx,
+			measuredUnits(metrics, line) * input.fontSizePx,
 			metrics.unitsPerEm,
 		);
 		if (measuredWidthPx > input.box.widthPx)
