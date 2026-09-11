@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-10
+- Cập nhật lần cuối: 2026-09-11
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -47,7 +47,10 @@ font ID uniqueness và Render-placeholder preflight exclusion đã được regr
 tested. Phase 21B technical byte/font/sample work đã được nhận làm baseline.
 Phase 21C đã triển khai persistence/orchestration nội bộ cho RenderJob/RenderAttempt
 theo DEC-038; output proof, renderer, storage và public startRender vẫn chưa active.
-Phase 21D/21E chưa bắt đầu.
+Phase 21E-A prototype contracts/tooling foundation đã hoàn tất ở mức
+implementation-ready và chờ owner technical review; Phase 21E-B/C/D/E chưa bắt
+đầu. Exact FFmpeg artifact/build/SHA/license approval vẫn là gate trước actual
+execution.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.

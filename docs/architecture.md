@@ -3,7 +3,7 @@
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
   AFF-US-019 19D, 19E.1 and 19E.2 accepted; AFF-US-019 DONE
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-09
+- Cập nhật lần cuối: 2026-09-11
 
 ## 1. Mục tiêu kiến trúc
 
@@ -380,6 +380,23 @@ Do `mp4-h264-aac-v1` chưa hoàn chỉnh, không expose production `startRender`
 Complete deterministic profile chỉ là test fixture cho orchestration. 21C không
 tạo output storage/key, FFmpeg, Remotion, renderer, publishing/export hay Video
 activation.
+
+### AFF-US-021 Phase 21E-A prototype contract boundary
+
+21E-A chỉ bổ sung internal/test-only contracts trong `packages/core` và
+`packages/api`: profile video-only T09, manifest/resolver cho một FFmpeg binary
+được pin bằng absolute path + SHA-256, fontkit text layout, deterministic fixture
+và command plan. Manifest mặc định fail-closed ở `PENDING_BINARY_APPROVAL`; không
+có fallback đến `PATH` và không có code execute process.
+
+T09 fixture giữ `audioTracks: []`. Render plan chỉ mang exact input asset/font/text
+paths, fingerprints, frame intervals, output metadata và server-owned reservation.
+Output-ready handoff không được tạo checksum, storage locator, proof hoặc
+`RenderArtifact`; 21D storage-backed validation/finalization vẫn là authority.
+Phase 21E-A không mở rộng production output profile/`RenderRequestSpecV1`, không
+thêm migration/schema, không gọi provider/Neon và không activate Video, Preview,
+public Render hay MediaAsset promotion. Actual render và Phase 21E-B/C/D/E còn
+blocked/deferred.
 
 ## 11. Provider adapter
 

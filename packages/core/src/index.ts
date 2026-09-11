@@ -23,6 +23,7 @@ export * from "./project/project-types";
 export * from "./project/project-validation";
 export * from "./project/project-write-contract";
 export * from "./render-job";
+export * from "./render-prototype";
 export * from "./script-claim-refresh";
 export * from "./script-generation/canonical-json";
 export * from "./script-generation/errors";

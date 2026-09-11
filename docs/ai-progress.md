@@ -16,7 +16,21 @@
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
-- Cập nhật lần cuối: 2026-09-10
+- Cập nhật lần cuối: 2026-09-11
+
+## 2026-09-11 — AFF-US-021 Phase 21E-A prototype contracts/tooling foundation
+
+Implemented the internal-only T09 prototype boundary on `TXH`: the fixed
+video-only profile and fingerprint, pending/approved FFmpeg manifest and
+absolute-path/hash resolver, fontkit-backed deterministic
+`affichannel-text-layout-v1`, two-scene T09 fixture, render-plan/argv types, and
+reservation-only output-ready handoff. Focused contract coverage is 9/9.
+
+The fixture uses `audioTracks: []`; no AAC, silence, actual FFmpeg execution,
+MP4, storage write, 21D finalization, reconciliation, public startRender, Video
+UI, MediaAsset promotion, migration, Neon, or live R2 was added. The manifest
+remains `PENDING_BINARY_APPROVAL` until the owner pins the exact FFmpeg
+artifact/build/SHA/license metadata. Phase 21E-B/C/D/E must not start.
 
 ## 2026-09-10 — AFF-US-021 Phase 21C fix-forward 2
 

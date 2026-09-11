@@ -6,9 +6,19 @@ AffiChannel được ghi tại đây.
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-10.
+Cập nhật lần cuối: 2026-09-11.
 
 ## Chưa phát hành
+
+### AFF-US-021 Phase 21E-A prototype contracts/tooling foundation
+
+- Added the internal-only `mp4-h264-video-only-t09-v1` profile, deterministic
+  fontkit text-layout contract, two-scene video-only fixture, FFmpeg manifest/
+  absolute-path resolver, render command plan, and reservation-only output-ready
+  handoff.
+- Kept the FFmpeg artifact approval gate pending and did not execute FFmpeg,
+  create MP4/output storage, change migrations/schema, activate public render or
+  Video/Preview UI, or start Phase 21E-B/C/D/E.
 
 ### AFF-US-021 Phase 21C fix-forward 2 — IMPLEMENTED / REVIEW PENDING
 

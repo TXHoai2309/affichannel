@@ -6,6 +6,15 @@ declare module "fontkit" {
 		version: string | null;
 		italicAngle: number;
 		characterSet: readonly number[];
+		unitsPerEm: number;
+		ascent: number;
+		layout: (
+			text: string,
+			features?: Record<string, boolean>,
+			script?: string,
+			language?: string,
+			direction?: string,
+		) => { glyphs: readonly { advanceWidth: number }[] };
 		"OS/2"?: { usWeightClass?: number };
 	};
 
