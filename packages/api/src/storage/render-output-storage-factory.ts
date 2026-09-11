@@ -48,15 +48,18 @@ function responseStream(body: unknown) {
 
 export function createR2RenderOutputStorage(
 	config: RenderOutputR2StorageConfig,
+	options: { client?: S3Client; tempRoot?: string } = {},
 ) {
-	const client = new S3Client({
-		region: "auto",
-		endpoint: config.endpoint,
-		credentials: {
-			accessKeyId: config.accessKeyId,
-			secretAccessKey: config.secretAccessKey,
-		},
-	});
+	const client =
+		options.client ??
+		new S3Client({
+			region: "auto",
+			endpoint: config.endpoint,
+			credentials: {
+				accessKeyId: config.accessKeyId,
+				secretAccessKey: config.secretAccessKey,
+			},
+		});
 	const objectClient: R2RenderOutputObjectClient = {
 		async putObject(input) {
 			await client.send(
@@ -114,7 +117,7 @@ export function createR2RenderOutputStorage(
 		},
 	};
 	return new R2RenderOutputStorage(objectClient, {
-		tempRoot: env.RENDER_OUTPUT_LOCAL_ROOT,
+		tempRoot: options.tempRoot ?? env.RENDER_OUTPUT_LOCAL_ROOT,
 	});
 }
 

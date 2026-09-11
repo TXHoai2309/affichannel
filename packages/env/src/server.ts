@@ -147,6 +147,12 @@ export const env = createEnv({
 			.positive()
 			.max(3_600_000)
 			.default(5 * 60_000),
+		RENDER_ARTIFACT_DOWNLOAD_TTL_MS: z.coerce
+			.number()
+			.int()
+			.positive()
+			.max(3_600_000)
+			.default(5 * 60_000),
 		MEDIA_IMAGE_MAX_BYTES: z.coerce
 			.number()
 			.int()

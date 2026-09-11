@@ -83,7 +83,7 @@ describe("protected RenderArtifact download route", () => {
 		mocks.head.mockResolvedValue({
 			byteSize: artifact.byteSize,
 			contentType: artifact.mimeType,
-			checksumSha256: artifact.checksumSha256,
+			checksumSha256: null,
 			etag: null,
 		});
 		mocks.verifyExact.mockResolvedValue({});
@@ -101,6 +101,22 @@ describe("protected RenderArtifact download route", () => {
 			open: mocks.open,
 			openRange: mocks.openRange,
 		});
+	});
+
+	it("uses an R2 HEAD checksum for range delivery without a second full scan", async () => {
+		mocks.findArtifact.mockResolvedValue({
+			...artifact,
+			storageProvider: "r2",
+		});
+		mocks.head.mockResolvedValue({
+			byteSize: artifact.byteSize,
+			contentType: artifact.mimeType,
+			checksumSha256: artifact.checksumSha256,
+			etag: null,
+		});
+		const response = await request("bytes=1-3");
+		expect(response.status).toBe(206);
+		expect(mocks.verifyExact).not.toHaveBeenCalled();
 	});
 
 	it("authenticates and serves a full immutable artifact", async () => {

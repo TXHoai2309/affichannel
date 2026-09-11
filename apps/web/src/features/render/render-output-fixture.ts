@@ -69,16 +69,31 @@ function stsd(entry: Uint8Array) {
 	return fullBox("stsd", concat(u32(1), entry));
 }
 
-function stts(sampleDelta: number) {
-	return fullBox("stts", concat(u32(1), u32(1), u32(sampleDelta)));
+function stts(entries: ReadonlyArray<{ count: number; delta: number }>) {
+	return fullBox(
+		"stts",
+		concat(
+			u32(entries.length),
+			...entries.flatMap((entry) => [u32(entry.count), u32(entry.delta)]),
+		),
+	);
 }
 
-function stsc() {
-	return fullBox("stsc", concat(u32(1), u32(1), u32(1), u32(1)));
+function stsc(samplesPerChunk = 1) {
+	return fullBox("stsc", concat(u32(1), u32(1), u32(samplesPerChunk), u32(1)));
 }
 
-function stsz(sampleSize: number) {
-	return fullBox("stsz", concat(u32(0), u32(1), u32(sampleSize)));
+function stsz(sampleSizes: number | ReadonlyArray<number>) {
+	if (typeof sampleSizes === "number")
+		return fullBox("stsz", concat(u32(0), u32(1), u32(sampleSizes)));
+	return fullBox(
+		"stsz",
+		concat(u32(0), u32(sampleSizes.length), ...sampleSizes.map(u32)),
+	);
+}
+
+function stszFixed(sampleSize: number, sampleCount: number) {
+	return fullBox("stsz", concat(u32(sampleSize), u32(sampleCount)));
 }
 
 function stco(offset: number) {
@@ -145,44 +160,100 @@ function mediaInfo(
 	return box("trak", concat(trackHeader, media));
 }
 
-function makeMoov(videoOffset: number, audioOffset: number) {
+function makeMoov(
+	videoOffset: number,
+	audioOffset: number,
+	options: {
+		videoEntries?: ReadonlyArray<{ count: number; delta: number }>;
+		videoSizes?: number | ReadonlyArray<number>;
+		videoSamplesPerChunk?: number;
+		videoFixedSampleSize?: number;
+		videoTimescale?: number;
+		includeAudio?: boolean;
+	} = {},
+) {
+	const videoEntries = options.videoEntries ?? [{ count: 1, delta: 1 }];
+	const videoDuration = videoEntries.reduce(
+		(total, entry) => total + entry.count * entry.delta,
+		0,
+	);
 	const videoTable = box(
 		"stbl",
-		concat(stsd(avc1(1080, 1920)), stts(1), stsc(), stsz(4), stco(videoOffset)),
+		concat(
+			stsd(avc1(1080, 1920)),
+			stts(videoEntries),
+			stsc(options.videoSamplesPerChunk),
+			options.videoFixedSampleSize === undefined
+				? stsz(options.videoSizes ?? 4)
+				: stszFixed(options.videoFixedSampleSize, 1),
+			stco(videoOffset),
+		),
 	);
 	const audioTable = box(
 		"stbl",
 		concat(
 			stsd(mp4a(48_000, 2)),
-			stts(1_600),
+			stts([{ count: 1, delta: 1_600 }]),
 			stsc(),
 			stsz(4),
 			stco(audioOffset),
 		),
 	);
-	return box(
-		"moov",
-		concat(
-			mvhd(),
-			mediaInfo("vide", videoTable, 30, 1, 1080, 1920),
-			mediaInfo("soun", audioTable, 48_000, 1_600),
+	const tracks = [
+		mediaInfo(
+			"vide",
+			videoTable,
+			options.videoTimescale ?? 30,
+			videoDuration,
+			1080,
+			1920,
 		),
-	);
+	];
+	if (options.includeAudio !== false)
+		tracks.push(mediaInfo("soun", audioTable, 48_000, 1_600));
+	return box("moov", concat(mvhd(), ...tracks));
 }
 
-export const deterministicRenderOutputFixture = (() => {
+function makeFixture(
+	options: Parameters<typeof makeMoov>[2] = {},
+	videoPayload = new Uint8Array([0, 0, 0, 1]),
+	audioPayload = new Uint8Array([0, 0, 0, 2]),
+) {
 	const ftyp = box(
 		"ftyp",
 		concat(text("isom"), u32(0), text("isom"), text("mp42")),
 	);
-	const firstMoov = makeMoov(0, 0);
-	const mdatPayload = new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2]);
+	const firstMoov = makeMoov(0, 0, options);
+	const mdatPayload =
+		options.includeAudio === false
+			? videoPayload
+			: concat(videoPayload, audioPayload);
 	const mdat = box("mdat", mdatPayload);
 	const videoOffset = ftyp.byteLength + firstMoov.byteLength + 8;
-	const audioOffset = videoOffset + 4;
-	const moov = makeMoov(videoOffset, audioOffset);
+	const audioOffset = videoOffset + videoPayload.byteLength;
+	const moov = makeMoov(videoOffset, audioOffset, options);
 	return concat(ftyp, moov, mdat);
-})();
+}
+
+export const deterministicRenderOutputFixture = makeFixture();
+
+export const deterministicMalformedTimingRenderOutputFixture = makeFixture(
+	{
+		videoEntries: [
+			{ count: 1, delta: 1 },
+			{ count: 1, delta: 3 },
+		],
+		videoSizes: [4, 4],
+		videoSamplesPerChunk: 2,
+		videoTimescale: 60,
+	},
+	new Uint8Array([0, 0, 0, 1, 0, 0, 0, 2]),
+);
+
+export const deterministicVideoOnlyRenderOutputFixture = makeFixture({
+	includeAudio: false,
+	videoFixedSampleSize: 4,
+});
 
 /** Independently recorded fixture authority; never derive this from the validator. */
 export const deterministicRenderOutputFixtureProvenance = {

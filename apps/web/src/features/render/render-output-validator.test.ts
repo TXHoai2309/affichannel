@@ -9,8 +9,10 @@ import type {
 } from "@affichannel/core";
 import { describe, expect, it } from "vitest";
 import {
+	deterministicMalformedTimingRenderOutputFixture,
 	deterministicRenderOutputFixture,
 	deterministicRenderOutputFixtureProvenance,
+	deterministicVideoOnlyRenderOutputFixture,
 } from "./render-output-fixture";
 
 const testProfile = {
@@ -28,13 +30,26 @@ const testProfile = {
 	keyframeIntervalFrames: 30,
 } as const;
 
-function expectation(totalFrames = "1", width = 1080) {
+function expectation(
+	totalFrames = "1",
+	width = 1080,
+	options: {
+		hasAudio?: boolean;
+		audioSampleRate?: number;
+		audioChannels?: number;
+	} = {},
+) {
+	const hasAudio = options.hasAudio ?? true;
 	return {
 		requestSpec: {
 			schemaVersion: "render-request.v1",
 			compositionVersionId: "composition-v1",
 			compositionFingerprint: "a".repeat(64),
-			outputEncodingProfile: testProfile,
+			outputEncodingProfile: {
+				...testProfile,
+				audioSampleRate: options.audioSampleRate ?? testProfile.audioSampleRate,
+				audioChannels: options.audioChannels ?? testProfile.audioChannels,
+			},
 			outputEncodingProfileFingerprint: "b".repeat(64),
 			outputContractVersion: "test-output-contract.v1",
 		} as unknown as RenderRequestSpecV1,
@@ -47,8 +62,35 @@ function expectation(totalFrames = "1", width = 1080) {
 				fps: { numerator: 30, denominator: 1 },
 				totalFrames,
 			},
+			sceneComposition: {
+				scenes: [],
+				audioTracks: hasAudio ? [{}] : [],
+			},
 		} as unknown as CompositionInputV1,
 	};
+}
+
+function findAscii(bytes: Uint8Array, value: string) {
+	const needle = new TextEncoder().encode(value);
+	for (let index = 0; index <= bytes.length - needle.length; index += 1) {
+		if (needle.every((item, offset) => bytes[index + offset] === item))
+			return index;
+	}
+	throw new Error(`box ${value} not found`);
+}
+
+function withU32(bytes: Uint8Array, offset: number, value: number) {
+	const result = bytes.slice();
+	result.set(
+		new Uint8Array([
+			(value >>> 24) & 0xff,
+			(value >>> 16) & 0xff,
+			(value >>> 8) & 0xff,
+			value & 0xff,
+		]),
+		offset,
+	);
+	return result;
 }
 
 describe("AFF-US-021 EN001 21D output proof", () => {
@@ -92,6 +134,77 @@ describe("AFF-US-021 EN001 21D output proof", () => {
 		const ftypOnly = deterministicRenderOutputFixture.slice(0, 24);
 		await expect(
 			validateRenderOutputBytes(ftypOnly, expectation()),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+	});
+
+	it("maps every declared sample interval into mdat", async () => {
+		const stsz = findAscii(deterministicRenderOutputFixture, "stsz");
+		await expect(
+			validateRenderOutputBytes(
+				withU32(deterministicRenderOutputFixture, stsz + 4 + 4, 10_000),
+				expectation(),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+
+		const stsc = findAscii(
+			deterministicMalformedTimingRenderOutputFixture,
+			"stsc",
+		);
+		await expect(
+			validateRenderOutputBytes(
+				withU32(
+					deterministicMalformedTimingRenderOutputFixture,
+					stsc + 4 + 12,
+					1,
+				),
+				expectation("2"),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+		await expect(
+			validateRenderOutputBytes(
+				withU32(
+					deterministicMalformedTimingRenderOutputFixture,
+					stsc + 4 + 8,
+					0,
+				),
+				expectation("2"),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+	});
+
+	it("rejects aggregate-correct but uneven per-frame timing", async () => {
+		await expect(
+			validateRenderOutputBytes(
+				deterministicMalformedTimingRenderOutputFixture,
+				expectation("2"),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+	});
+
+	it("treats audio as conditional on the composition contract", async () => {
+		await expect(
+			validateRenderOutputBytes(
+				deterministicVideoOnlyRenderOutputFixture,
+				expectation("1", 1080, { hasAudio: false }),
+			),
+		).resolves.toMatchObject({ validatedMetadata: { audio: null } });
+		await expect(
+			validateRenderOutputBytes(
+				deterministicVideoOnlyRenderOutputFixture,
+				expectation(),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+		await expect(
+			validateRenderOutputBytes(
+				deterministicRenderOutputFixture,
+				expectation("1", 1080, { audioSampleRate: 44_100 }),
+			),
+		).rejects.toBeInstanceOf(RenderOutputValidationError);
+		await expect(
+			validateRenderOutputBytes(
+				deterministicRenderOutputFixture,
+				expectation("1", 1080, { audioChannels: 1 }),
+			),
 		).rejects.toBeInstanceOf(RenderOutputValidationError);
 	});
 

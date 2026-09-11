@@ -92,6 +92,50 @@ describe("AFF-US-021 EN001 21D local output storage", () => {
 		expect(await storage.head(KEY)).toBeNull();
 	});
 
+	it("publishes concurrent local writers atomically without overwrite", async () => {
+		const [left, right] = await Promise.all([
+			storage.createOnce({
+				storageKey: KEY,
+				body: body(deterministicRenderOutputFixture),
+			}),
+			storage.createOnce({
+				storageKey: KEY,
+				body: body(deterministicRenderOutputFixture),
+			}),
+		]);
+		expect(new Set([left.kind, right.kind])).toEqual(
+			new Set(["CREATED", "ALREADY_EXISTS"]),
+		);
+		expect(
+			new Uint8Array(await new Response(await storage.open(KEY)).arrayBuffer()),
+		).toEqual(deterministicRenderOutputFixture);
+
+		const differentKey = `${KEY.replace("reservation1", "reservation2")}`;
+		const results = await Promise.allSettled([
+			storage.createOnce({
+				storageKey: differentKey,
+				body: body(new Uint8Array([11, 12])),
+			}),
+			storage.createOnce({
+				storageKey: differentKey,
+				body: body(new Uint8Array([13, 14])),
+			}),
+		]);
+		expect(
+			results.filter((result) => result.status === "fulfilled"),
+		).toHaveLength(1);
+		expect(
+			results.filter((result) => result.status === "rejected"),
+		).toHaveLength(1);
+		const finalBytes = new Uint8Array(
+			await new Response(await storage.open(differentKey)).arrayBuffer(),
+		);
+		expect([
+			[11, 12],
+			[13, 14],
+		]).toContainEqual([...finalBytes]);
+	});
+
 	it("uses conditional creation for R2 and inspects exact 412 duplicates", async () => {
 		const objects = new Map<string, Uint8Array>();
 		const r2 = new R2RenderOutputStorage(

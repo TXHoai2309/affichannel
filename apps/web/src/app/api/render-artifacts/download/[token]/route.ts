@@ -94,20 +94,25 @@ export async function GET(
 				stored.checksumSha256 !== artifact.checksumSha256)
 		)
 			throw new MediaAssetError("MEDIA_ASSET_STORAGE_NOT_FOUND");
-		try {
-			await storage.verifyExact({
-				storageKey: artifact.storageKey,
-				byteSize: artifact.byteSize,
-				checksumSha256: artifact.checksumSha256,
-			});
-		} catch (error) {
-			if (
-				!(error instanceof RenderOutputStorageError) ||
-				(error.code !== "RENDER_OUTPUT_STORAGE_NOT_FOUND" &&
-					error.code !== "RENDER_OUTPUT_STORAGE_CONFLICT")
-			)
-				throw error;
-			throw new MediaAssetError("MEDIA_ASSET_STORAGE_NOT_FOUND");
+		// R2 HEAD carries the immutable SHA-256 metadata written at publication;
+		// local HEAD deliberately does not, so local downloads retain a full
+		// digest scan at this read boundary. Completion-time proof is always full.
+		if (stored.checksumSha256 === null) {
+			try {
+				await storage.verifyExact({
+					storageKey: artifact.storageKey,
+					byteSize: artifact.byteSize,
+					checksumSha256: artifact.checksumSha256,
+				});
+			} catch (error) {
+				if (
+					!(error instanceof RenderOutputStorageError) ||
+					(error.code !== "RENDER_OUTPUT_STORAGE_NOT_FOUND" &&
+						error.code !== "RENDER_OUTPUT_STORAGE_CONFLICT")
+				)
+					throw error;
+				throw new MediaAssetError("MEDIA_ASSET_STORAGE_NOT_FOUND");
+			}
 		}
 
 		const range = parseRange(request.headers.get("range"), artifact.byteSize);

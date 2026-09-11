@@ -36,13 +36,13 @@ export async function persistAndValidateRenderOutput(input: {
 		storageKey,
 		body: input.body,
 	});
-	const validation = await validateRenderOutputStream(
-		await input.storage.open(storageKey),
-		{
-			requestSpec: input.requestSpec,
-			compositionInput: input.compositionInput,
-		},
-	);
+	const validation = await validateStoredRenderOutput({
+		storage: input.storage,
+		storageKey,
+		outputReservationId: input.outputReservationId,
+		requestSpec: input.requestSpec,
+		compositionInput: input.compositionInput,
+	});
 	if (
 		validation.byteSize !== stored.proof.byteSize ||
 		validation.checksumSha256 !== stored.proof.checksumSha256
@@ -56,6 +56,44 @@ export async function persistAndValidateRenderOutput(input: {
 		mimeType: "video/mp4",
 		byteSize: validation.byteSize,
 		checksumSha256: validation.checksumSha256,
+		validationVersion: RENDER_OUTPUT_VALIDATION_VERSION,
+		validatedMetadata: validation.validatedMetadata,
+	};
+}
+
+export async function validateStoredRenderOutput(input: {
+	storage: RenderOutputStorage;
+	storageKey: string;
+	outputReservationId: string;
+	requestSpec: RenderRequestSpecV1;
+	compositionInput: CompositionInputV1;
+}): Promise<StoredRenderOutputProofV1> {
+	const validation = await validateRenderOutputStream(
+		await input.storage.open(input.storageKey),
+		{
+			requestSpec: input.requestSpec,
+			compositionInput: input.compositionInput,
+		},
+	);
+	const stored = await input.storage.verifyExact({
+		storageKey: input.storageKey,
+		byteSize: validation.byteSize,
+		checksumSha256: validation.checksumSha256,
+	});
+	if (
+		stored.provider !== input.storage.provider ||
+		stored.storageKey !== input.storageKey ||
+		stored.contentType !== "video/mp4"
+	)
+		throw new Error("RENDER_OUTPUT_STORAGE_IDENTITY_MISMATCH");
+	return {
+		schemaVersion: RENDER_OUTPUT_PROOF_VERSION,
+		outputReservationId: input.outputReservationId,
+		storageProvider: stored.provider,
+		storageKey: stored.storageKey,
+		mimeType: stored.contentType,
+		byteSize: stored.byteSize,
+		checksumSha256: stored.checksumSha256,
 		validationVersion: RENDER_OUTPUT_VALIDATION_VERSION,
 		validatedMetadata: validation.validatedMetadata,
 	};

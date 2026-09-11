@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, createReadStream } from "node:fs";
-import { copyFile, lstat, mkdir, open, rm, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { link, lstat, mkdir, open, rm, stat } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 
@@ -365,7 +365,10 @@ export class LocalRenderOutputStorage extends BaseRenderOutputStorage {
 			const existing = await this.inspectExisting(input.storageKey, expected);
 			if (existing) return { kind: "ALREADY_EXISTS" as const, proof: existing };
 			try {
-				await copyFile(tempPath, targetPath, constants.COPYFILE_EXCL);
+				// The temp file is in the same directory and has been fsynced. A
+				// hard-link is an atomic no-replace publication on Windows/Linux:
+				// it either creates the complete final name or returns EEXIST.
+				await link(tempPath, targetPath);
 			} catch (error) {
 				if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
 				const raced = await this.inspectExisting(input.storageKey, expected);

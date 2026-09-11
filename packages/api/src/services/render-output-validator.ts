@@ -202,6 +202,7 @@ function parseTimeToSample(bytes: Uint8Array, box: Mp4Box) {
 	let offset = box.payloadStart + 8;
 	let sampleCount = 0;
 	let duration = 0;
+	const entries: Array<{ count: number; delta: number }> = [];
 	for (let index = 0; index < entryCount; index += 1) {
 		const count = uint32(bytes, offset);
 		const delta = uint32(bytes, offset + 4);
@@ -209,10 +210,13 @@ function parseTimeToSample(bytes: Uint8Array, box: Mp4Box) {
 			invalid("MP4 sample timing entry is invalid.");
 		sampleCount += count;
 		duration += count * delta;
+		if (!Number.isSafeInteger(sampleCount) || !Number.isSafeInteger(duration))
+			invalid("MP4 sample timing exceeds the supported safe range.");
+		entries.push({ count, delta });
 		offset += 8;
 	}
 	if (offset !== box.end) invalid("MP4 time-to-sample table is truncated.");
-	return { sampleCount, duration };
+	return { sampleCount, duration, entries };
 }
 
 function parseSampleSize(bytes: Uint8Array, box: Mp4Box) {
@@ -223,7 +227,15 @@ function parseSampleSize(bytes: Uint8Array, box: Mp4Box) {
 		box.payloadStart + 12 + (sampleSize === 0 ? sampleCount * 4 : 0);
 	if (box.end !== expectedEnd)
 		invalid("MP4 sample-size table is structurally invalid.");
-	return { sampleSize, sampleCount };
+	const sizes =
+		sampleSize === 0
+			? Array.from({ length: sampleCount }, (_, index) =>
+					uint32(bytes, box.payloadStart + 12 + index * 4),
+				)
+			: null;
+	if (sizes?.some((size) => size <= 0))
+		invalid("MP4 sample-size table contains an empty sample.");
+	return { sampleSize, sampleCount, sizes };
 }
 
 function parseChunkOffsets(bytes: Uint8Array, box: Mp4Box) {
@@ -233,7 +245,10 @@ function parseChunkOffsets(bytes: Uint8Array, box: Mp4Box) {
 	let offset = box.payloadStart + 8;
 	const wide = box.type === "co64";
 	for (let index = 0; index < entryCount; index += 1) {
-		offsets.push(wide ? uint64(bytes, offset) : uint32(bytes, offset));
+		const chunkOffset = wide ? uint64(bytes, offset) : uint32(bytes, offset);
+		if (chunkOffset <= 0 || chunkOffset <= (offsets.at(-1) ?? 0))
+			invalid("MP4 chunk offsets are invalid or non-monotonic.");
+		offsets.push(chunkOffset);
 		offset += wide ? 8 : 4;
 	}
 	if (offset !== box.end) invalid("MP4 chunk-offset table is truncated.");
@@ -246,27 +261,135 @@ function parseChunkMap(bytes: Uint8Array, box: Mp4Box) {
 	const expectedEnd = box.payloadStart + 8 + entryCount * 12;
 	if (box.end !== expectedEnd)
 		invalid("MP4 sample-to-chunk table is structurally invalid.");
+	const entries: Array<{
+		firstChunk: number;
+		samplesPerChunk: number;
+		sampleDescriptionIndex: number;
+	}> = [];
 	for (let index = 0; index < entryCount; index += 1) {
 		const offset = box.payloadStart + 8 + index * 12;
 		const firstChunk = uint32(bytes, offset);
 		const samplesPerChunk = uint32(bytes, offset + 4);
 		const sampleDescriptionIndex = uint32(bytes, offset + 8);
-		if (firstChunk <= 0 || samplesPerChunk <= 0 || sampleDescriptionIndex !== 1)
+		if (
+			firstChunk <= 0 ||
+			samplesPerChunk <= 0 ||
+			sampleDescriptionIndex !== 1 ||
+			firstChunk <= (entries.at(-1)?.firstChunk ?? 0)
+		)
 			invalid("MP4 sample-to-chunk entry is invalid.");
+		entries.push({ firstChunk, samplesPerChunk, sampleDescriptionIndex });
 	}
+	return entries;
 }
 
 function parseCompositionOffsets(bytes: Uint8Array, box: Mp4Box) {
 	const entryCount = uint32(bytes, box.payloadStart + 4);
+	if (entryCount <= 0) invalid("MP4 composition-offset table is empty.");
 	let offset = box.payloadStart + 8;
 	for (let index = 0; index < entryCount; index += 1) {
 		const count = uint32(bytes, offset);
-		const value = uint32(bytes, offset + 4);
-		if (count <= 0 || value !== 0)
-			invalid("MP4 composition offsets do not match the exact frame timeline.");
+		uint32(bytes, offset + 4);
+		if (count <= 0) invalid("MP4 composition-offset entry is invalid.");
 		offset += 8;
 	}
 	if (offset !== box.end) invalid("MP4 composition-offset table is truncated.");
+	invalid(
+		"MP4 ctts composition offsets are unsupported by render-output-validation.v1.",
+	);
+}
+
+function validateSampleLayout(input: {
+	chunkOffsets: ReadonlyArray<number>;
+	chunkMap: ReadonlyArray<{
+		firstChunk: number;
+		samplesPerChunk: number;
+		sampleDescriptionIndex: number;
+	}>;
+	sampleCount: number;
+	fixedSampleSize: number | null;
+	sampleSizes: ReadonlyArray<number> | null;
+	mdatRanges: ReadonlyArray<Readonly<{ start: number; end: number }>>;
+}) {
+	let mappedSampleCount = 0;
+	for (const [entryIndex, entry] of input.chunkMap.entries()) {
+		const firstChunkIndex = entry.firstChunk - 1;
+		const nextEntry = input.chunkMap[entryIndex + 1];
+		const nextFirstChunkIndex = nextEntry
+			? nextEntry.firstChunk - 1
+			: input.chunkOffsets.length;
+		const chunkCount = nextFirstChunkIndex - firstChunkIndex;
+		const entrySampleCount = chunkCount * entry.samplesPerChunk;
+		if (!Number.isSafeInteger(entrySampleCount) || entrySampleCount <= 0)
+			invalid("MP4 sample-to-chunk mapping exceeds the supported safe range.");
+		mappedSampleCount += entrySampleCount;
+		if (!Number.isSafeInteger(mappedSampleCount))
+			invalid("MP4 sample-to-chunk mapping exceeds the supported safe range.");
+	}
+	if (mappedSampleCount !== input.sampleCount)
+		invalid("MP4 sample-to-chunk mapping count disagrees with stsz.");
+	let sampleIndex = 0;
+	for (const [entryIndex, entry] of input.chunkMap.entries()) {
+		const firstChunkIndex = entry.firstChunk - 1;
+		const nextEntry = input.chunkMap[entryIndex + 1];
+		const nextFirstChunkIndex = nextEntry
+			? nextEntry.firstChunk - 1
+			: input.chunkOffsets.length;
+		if (
+			firstChunkIndex < 0 ||
+			firstChunkIndex >= input.chunkOffsets.length ||
+			nextFirstChunkIndex <= firstChunkIndex ||
+			nextFirstChunkIndex > input.chunkOffsets.length
+		)
+			invalid("MP4 sample-to-chunk entries reference invalid chunks.");
+		for (
+			let chunkIndex = firstChunkIndex;
+			chunkIndex < nextFirstChunkIndex;
+			chunkIndex += 1
+		) {
+			const chunkStart = input.chunkOffsets[chunkIndex];
+			if (chunkStart === undefined) invalid("MP4 chunk is missing.");
+			if (input.fixedSampleSize !== null) {
+				const chunkEnd =
+					chunkStart + entry.samplesPerChunk * input.fixedSampleSize;
+				if (
+					!Number.isSafeInteger(chunkEnd) ||
+					!input.mdatRanges.some(
+						(range) => chunkStart >= range.start && chunkEnd <= range.end,
+					)
+				)
+					invalid("MP4 fixed-size samples point outside mdat.");
+				sampleIndex += entry.samplesPerChunk;
+				continue;
+			}
+			let sampleCursor = chunkStart;
+			for (
+				let sampleOffset = 0;
+				sampleOffset < entry.samplesPerChunk;
+				sampleOffset += 1
+			) {
+				const sampleSize = input.sampleSizes?.[sampleIndex];
+				if (sampleSize === undefined)
+					invalid("MP4 sample-to-chunk mapping has too many samples.");
+				const sampleEnd = sampleCursor + sampleSize;
+				if (!Number.isSafeInteger(sampleEnd) || sampleEnd <= sampleCursor)
+					invalid("MP4 sample interval exceeds the supported safe range.");
+				if (
+					!input.mdatRanges.some(
+						(range) => sampleCursor >= range.start && sampleEnd <= range.end,
+					)
+				)
+					invalid("MP4 sample interval points outside mdat.");
+				sampleCursor = sampleEnd;
+				sampleIndex += 1;
+			}
+			const nextChunkStart = input.chunkOffsets[chunkIndex + 1];
+			if (nextChunkStart !== undefined && sampleCursor > nextChunkStart)
+				invalid("MP4 samples overlap the next chunk.");
+		}
+	}
+	if (sampleIndex !== input.sampleCount)
+		invalid("MP4 sample-to-chunk mapping has too few samples.");
 }
 
 function parseAvc1(bytes: Uint8Array, entry: Mp4Box) {
@@ -349,7 +472,11 @@ function parseMp4a(bytes: Uint8Array, entry: Mp4Box) {
 	return config;
 }
 
-function expectedAudio(profile: OutputEncodingProfile) {
+function expectedAudio(
+	profile: OutputEncodingProfile,
+	compositionInput: CompositionInputV1,
+) {
+	if (compositionInput.sceneComposition.audioTracks.length === 0) return null;
 	if (!profile.audioCodec) return null;
 	if (profile.audioCodec !== "AAC-LC")
 		invalid("The output profile requests an unsupported audio codec.");
@@ -386,6 +513,7 @@ function validateContainer(
 	);
 	const expectedAudioMetadata = expectedAudio(
 		expectation.requestSpec.outputEncodingProfile,
+		expectation.compositionInput,
 	);
 	let videoMetadata:
 		| (ReturnType<typeof parseAvc1> & {
@@ -425,15 +553,16 @@ function validateContainer(
 		const sizes = parseSampleSize(moovBytes, stsz);
 		if (timing.sampleCount !== sizes.sampleCount)
 			invalid("MP4 sample timing and sample-size counts disagree.");
-		parseChunkMap(moovBytes, stsc);
-		for (const chunkOffset of parseChunkOffsets(moovBytes, stco)) {
-			if (
-				!mdatRanges.some(
-					(range) => chunkOffset >= range.start && chunkOffset < range.end,
-				)
-			)
-				invalid("MP4 sample data points outside mdat.");
-		}
+		const chunkMap = parseChunkMap(moovBytes, stsc);
+		const chunkOffsets = parseChunkOffsets(moovBytes, stco);
+		validateSampleLayout({
+			chunkOffsets,
+			chunkMap,
+			sampleCount: sizes.sampleCount,
+			fixedSampleSize: sizes.sampleSize === 0 ? null : sizes.sampleSize,
+			sampleSizes: sizes.sizes,
+			mdatRanges,
+		});
 		const ctts = stblChildren.find((box) => box.type === "ctts");
 		if (ctts) parseCompositionOffsets(moovBytes, ctts);
 		const sampleEntryCount = uint32(moovBytes, stsd.payloadStart + 4);
@@ -467,6 +596,10 @@ function validateContainer(
 				);
 			const expectedDelta =
 				(mediaHeader.timescale * fpsDenominator) / fpsNumerator;
+			if (timing.entries.some((entry) => entry.delta !== expectedDelta))
+				invalid(
+					"MP4 every-frame timing deltas do not match the exact composition FPS.",
+				);
 			if (timing.duration !== timing.sampleCount * expectedDelta)
 				invalid("MP4 frame timing does not match the exact composition FPS.");
 			if (BigInt(timing.sampleCount) !== expectedFrames)

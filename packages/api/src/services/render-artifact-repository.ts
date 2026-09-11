@@ -13,8 +13,16 @@ import {
 	renderJob,
 } from "@affichannel/db";
 import { and, eq, gt } from "drizzle-orm";
-import { createRenderOutputStorageKey } from "../storage/render-output-storage";
+import {
+	createRenderOutputStorageKey,
+	type RenderOutputBody,
+	type RenderOutputStorage,
+} from "../storage/render-output-storage";
 import type { DbTransaction } from "./fact-dependency-repository";
+import {
+	persistAndValidateRenderOutput,
+	validateStoredRenderOutput,
+} from "./render-output-proof-service";
 import type {
 	StoredRenderOutputProofV1,
 	ValidatedRenderOutputMetadataV1,
@@ -58,7 +66,18 @@ export type RenderArtifactReadModel = Readonly<{
 	createdAt: Date;
 }>;
 
-type FinalizeInput = Readonly<{
+type FinalizeRequest = Readonly<{
+	jobId: string;
+	attemptId: string;
+	attemptNumber: number;
+	leaseOwner?: string;
+	storage: RenderOutputStorage;
+	body?: RenderOutputBody;
+}>;
+
+type ReconcileRequest = Omit<FinalizeRequest, "body" | "leaseOwner">;
+
+type FinalizeProofInput = Readonly<{
 	jobId: string;
 	attemptId: string;
 	attemptNumber: number;
@@ -100,6 +119,8 @@ function proofMetadataMatchesRequest(
 	compositionInput: ReturnType<typeof compositionInputV1Schema.parse>,
 ) {
 	const profile = requestSpec.outputEncodingProfile;
+	const audioRequired =
+		compositionInput.sceneComposition.audioTracks.length > 0;
 	if (
 		metadata.schemaVersion !== "render-output-metadata.v1" ||
 		metadata.container !== "MP4" ||
@@ -111,8 +132,11 @@ function proofMetadataMatchesRequest(
 		metadata.frameRate.denominator !==
 			compositionInput.timeline.fps.denominator ||
 		metadata.totalFrames !== compositionInput.timeline.totalFrames ||
-		metadata.audio?.codec !== profile.audioCodec ||
+		(audioRequired &&
+			(!metadata.audio || metadata.audio.codec !== profile.audioCodec)) ||
+		(!audioRequired && metadata.audio !== null) ||
 		(metadata.audio &&
+			audioRequired &&
 			(metadata.audio.sampleRate !== profile.audioSampleRate ||
 				metadata.audio.channels !== profile.audioChannels))
 	)
@@ -177,7 +201,7 @@ function assertProofShape(proof: StoredRenderOutputProofV1) {
 
 async function loadLockedAttemptContext(
 	transaction: DbTransaction,
-	input: FinalizeInput,
+	input: FinalizeProofInput,
 ) {
 	const [job] = await transaction
 		.select()
@@ -234,6 +258,65 @@ async function loadExpectedComposition(
 	};
 }
 
+async function loadFinalizeContext(input: FinalizeRequest) {
+	return db.transaction(async (transaction) => {
+		const [job] = await transaction
+			.select()
+			.from(renderJob)
+			.where(eq(renderJob.id, input.jobId))
+			.limit(1);
+		if (!job) throw new RenderArtifactError("RENDER_JOB_NOT_FOUND");
+		const [attempt] = await transaction
+			.select()
+			.from(renderAttempt)
+			.where(
+				and(
+					eq(renderAttempt.id, input.attemptId),
+					eq(renderAttempt.renderJobId, job.id),
+					eq(renderAttempt.attemptNumber, input.attemptNumber),
+				),
+			)
+			.limit(1);
+		if (!attempt) throw new RenderArtifactError("RENDER_ATTEMPT_NOT_FOUND");
+		const expected = await loadExpectedComposition(transaction, job);
+		return {
+			job,
+			attempt,
+			expected,
+			storageKey: createRenderOutputStorageKey({
+				workspaceId: job.workspaceId,
+				projectId: job.projectId,
+				renderJobId: job.id,
+				renderAttemptId: attempt.id,
+				outputReservationId: attempt.outputReservationId,
+			}),
+		};
+	});
+}
+
+async function buildVerifiedProof(input: FinalizeRequest) {
+	const context = await loadFinalizeContext(input);
+	if (input.body !== undefined)
+		return persistAndValidateRenderOutput({
+			storage: input.storage,
+			workspaceId: context.job.workspaceId,
+			projectId: context.job.projectId,
+			renderJobId: context.job.id,
+			renderAttemptId: context.attempt.id,
+			outputReservationId: context.attempt.outputReservationId,
+			requestSpec: context.expected.requestSpec,
+			compositionInput: context.expected.compositionInput,
+			body: input.body,
+		});
+	return validateStoredRenderOutput({
+		storage: input.storage,
+		storageKey: context.storageKey,
+		outputReservationId: context.attempt.outputReservationId,
+		requestSpec: context.expected.requestSpec,
+		compositionInput: context.expected.compositionInput,
+	});
+}
+
 async function assertNoNewerAttempt(
 	transaction: DbTransaction,
 	jobId: string,
@@ -255,9 +338,10 @@ async function assertNoNewerAttempt(
 
 async function finalizeInTransaction(
 	transaction: DbTransaction,
-	input: FinalizeInput,
+	input: FinalizeProofInput,
 	mode: "NORMAL" | "RECONCILIATION",
 ) {
+	assertProofShape(input.proof);
 	const { job, attempt } = await loadLockedAttemptContext(transaction, input);
 	if (
 		attempt.attemptNumber !== input.attemptNumber ||
@@ -407,11 +491,21 @@ async function finalizeInTransaction(
 	return mapArtifact(inserted);
 }
 
-export async function finalizeRenderArtifact(input: FinalizeInput) {
-	assertProofShape(input.proof);
+export async function finalizeRenderArtifact(input: FinalizeRequest) {
+	const proof = await buildVerifiedProof(input);
 	try {
 		return await db.transaction((transaction) =>
-			finalizeInTransaction(transaction, input, "NORMAL"),
+			finalizeInTransaction(
+				transaction,
+				{
+					jobId: input.jobId,
+					attemptId: input.attemptId,
+					attemptNumber: input.attemptNumber,
+					leaseOwner: input.leaseOwner,
+					proof,
+				},
+				"NORMAL",
+			),
 		);
 	} catch (error) {
 		if (error instanceof RenderArtifactError || !isUniqueViolation(error))
@@ -420,11 +514,20 @@ export async function finalizeRenderArtifact(input: FinalizeInput) {
 	}
 }
 
-export async function reconcileRenderArtifact(input: FinalizeInput) {
-	assertProofShape(input.proof);
+export async function reconcileRenderArtifact(input: ReconcileRequest) {
+	const proof = await buildVerifiedProof(input);
 	try {
 		return await db.transaction((transaction) =>
-			finalizeInTransaction(transaction, input, "RECONCILIATION"),
+			finalizeInTransaction(
+				transaction,
+				{
+					jobId: input.jobId,
+					attemptId: input.attemptId,
+					attemptNumber: input.attemptNumber,
+					proof,
+				},
+				"RECONCILIATION",
+			),
 		);
 	} catch (error) {
 		if (error instanceof RenderArtifactError || !isUniqueViolation(error))
