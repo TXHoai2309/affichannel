@@ -2,7 +2,11 @@ import {
 	canonicalizeCompositionJson,
 	compositionSemanticProjection,
 } from "./canonicalization";
-import type { CompositionCurrentness, CompositionInputV1 } from "./types";
+import {
+	type CompositionCurrentness,
+	type CompositionInputV1,
+	renderedVoiceKeysForComposition,
+} from "./types";
 
 export type CompositionCurrentSource = {
 	scriptVersionId: string;
@@ -47,44 +51,51 @@ export function evaluateCompositionCurrentness(
 	input: CompositionInputV1,
 	current: CompositionCurrentSource,
 ): CompositionCurrentness {
+	const renderedVoiceKeys = renderedVoiceKeysForComposition(input);
+	const renderedVoiceSegments = input.voice.segments.filter((segment) =>
+		renderedVoiceKeys.has(segment.segmentKey),
+	);
 	if (
 		input.script.provenance.scriptVersionId !== current.scriptVersionId ||
 		input.script.provenance.revision !== current.scriptRevision
 	)
 		return { state: "STALE", reason: "SCRIPT_REVISION_CHANGED" };
-	if (
-		input.voice.segments[0]?.provenance.configRevision !==
-		current.voiceConfigRevision
-	)
-		return { state: "STALE", reason: "VOICE_SOURCE_CHANGED" };
-	if (current.voiceArtifactRefs) {
-		const inputVoiceRefs = input.voice.segments.map((segment) => ({
-			segmentKey: segment.segmentKey,
-			artifactId: segment.provenance.artifactId,
-			checksum: segment.semantic.checksum,
-		}));
+	if (renderedVoiceKeys.size > 0) {
 		if (
-			!sameKeyedValues(inputVoiceRefs, current.voiceArtifactRefs, "segmentKey")
+			renderedVoiceSegments[0]?.provenance.configRevision !==
+			current.voiceConfigRevision
 		)
 			return { state: "STALE", reason: "VOICE_SOURCE_CHANGED" };
-	} else if (
-		input.voice.segments.some(
-			(segment) =>
-				!current.voiceArtifactIds.includes(segment.provenance.artifactId),
-		)
-	)
-		return { state: "STALE", reason: "VOICE_SOURCE_CHANGED" };
-	if (current.voiceArtifactChecksums && !current.voiceArtifactRefs) {
-		const checksums = input.voice.segments.map(
-			(segment) => segment.semantic.checksum,
-		);
-		if (
-			checksums.length !== current.voiceArtifactChecksums.length ||
-			checksums.some(
-				(value, index) => value !== current.voiceArtifactChecksums?.[index],
+		if (current.voiceArtifactRefs) {
+			const inputVoiceRefs = renderedVoiceSegments.map((segment) => ({
+				segmentKey: segment.segmentKey,
+				artifactId: segment.provenance.artifactId,
+				checksum: segment.semantic.checksum,
+			}));
+			const currentVoiceRefs = current.voiceArtifactRefs.filter((ref) =>
+				renderedVoiceKeys.has(ref.segmentKey),
+			);
+			if (!sameKeyedValues(inputVoiceRefs, currentVoiceRefs, "segmentKey"))
+				return { state: "STALE", reason: "VOICE_SOURCE_CHANGED" };
+		} else if (
+			renderedVoiceSegments.some(
+				(segment) =>
+					!current.voiceArtifactIds.includes(segment.provenance.artifactId),
 			)
 		)
 			return { state: "STALE", reason: "VOICE_SOURCE_CHANGED" };
+		if (current.voiceArtifactChecksums && !current.voiceArtifactRefs) {
+			const checksums = renderedVoiceSegments.map(
+				(segment) => segment.semantic.checksum,
+			);
+			if (
+				checksums.length !== current.voiceArtifactChecksums.length ||
+				checksums.some(
+					(value, index) => value !== current.voiceArtifactChecksums?.[index],
+				)
+			)
+				return { state: "STALE", reason: "VOICE_SOURCE_CHANGED" };
+		}
 	}
 	if (current.mediaDependencyRefs) {
 		const inputMediaRefs = input.media.map((item) => ({

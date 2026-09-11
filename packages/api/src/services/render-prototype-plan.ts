@@ -7,8 +7,11 @@ import {
 	fingerprintT09PrototypeProfile,
 	prototypeToolManifestSchema,
 	sha256Hex,
+	T09_VIDEO_ONLY_PROFILE,
 	type T09PlanLayer,
+	type T09PrototypeOutputProfile,
 	type T09RenderPlan,
+	t09PrototypeOutputProfileSchema,
 	t09RenderPlanSchema,
 } from "@affichannel/core";
 import {
@@ -287,7 +290,20 @@ export async function buildT09RenderPlan(
 	verifyT09Composition(compositionInput);
 	const renderLayers = requireT09LayerSemantics(compositionInput);
 	const exactToolManifestIdentity = await sha256Hex(parsedManifest);
-	const outputProfileFingerprint = await fingerprintT09PrototypeProfile();
+	const outputProfile: T09PrototypeOutputProfile =
+		t09PrototypeOutputProfileSchema.parse(T09_VIDEO_ONLY_PROFILE);
+	const outputProfileFingerprint =
+		await fingerprintT09PrototypeProfile(outputProfile);
+	if (
+		outputProfile.width !== compositionInput.profile.logicalWidth ||
+		outputProfile.height !== compositionInput.profile.logicalHeight ||
+		outputProfile.fps.numerator !== compositionInput.profile.fps.numerator ||
+		outputProfile.fps.denominator !== compositionInput.profile.fps.denominator
+	)
+		throw new T09RenderPlanError(
+			"COMPOSITION_INPUT_INVALID",
+			"T09 output profile does not match the canonical composition dimensions or FPS.",
+		);
 	const inputAssets = compositionInput.media
 		.filter((asset) =>
 			renderLayers.some(
@@ -364,6 +380,14 @@ export async function buildT09RenderPlan(
 			maxLines: layer.maxLines,
 			fontContentSha256: font.contentSha256,
 		});
+		const explicitLines = layout.normalizedText.split("\n");
+		if (
+			layout.lines.length !== explicitLines.length ||
+			layout.lines.some((line, index) => line.text !== explicitLines[index])
+		)
+			unsupported(
+				`T09 requires explicit hard text lines without renderer-side wrapping on ${layer.layerId}.`,
+			);
 		for (const line of layout.lines) {
 			const key = `${layer.layerId}:${line.lineIndex}`;
 			const textFilePath = input.textFilePaths[key];
@@ -413,6 +437,7 @@ export async function buildT09RenderPlan(
 		compositionVersionId: compositionFixture.compositionVersionId,
 		compositionFingerprint: canonicalResult.fingerprint,
 		outputProfileFingerprint,
+		outputProfile,
 		stagingRoot,
 		width: compositionInput.profile.logicalWidth,
 		height: compositionInput.profile.logicalHeight,

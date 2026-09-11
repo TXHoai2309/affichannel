@@ -23,7 +23,7 @@ const MEDIA_SHA256 =
 export type T09CanonicalCompositionFixture = Readonly<{
 	compositionInput: CompositionInputV1;
 	compositionFingerprint: string;
-	compositionVersionId: "t09-composition-v1";
+	compositionVersionId: string;
 }>;
 
 export type T09CompositionSourceFixture = CompositionInputBuilderSource;
@@ -43,7 +43,7 @@ function textLayer(input: { layerId: string; text: string }) {
 		fontStyle: "normal" as const,
 		fontSizePx: 72,
 		lineHeightPx: 88,
-		textAlign: "CENTER" as const,
+		textAlign: "LEFT" as const,
 		colorRgba: { r: 255, g: 255, b: 255, a: 255 },
 		maxLines: 2,
 		textLayoutVersion: "affichannel-text-layout-v1" as const,
@@ -86,14 +86,14 @@ export const T09_COMPOSITION_FIXTURE: T09CompositionSourceFixture = {
 					order: 1,
 					durationSeconds: 1,
 					visualDirection: "Deterministic scene one",
-					onScreenText: "AFFI\nCHANNEL",
+					onScreenText: "VIDEO\nDEMO",
 					voiceoverSegmentKeys: ["t09-voice"],
 				},
 				{
 					order: 2,
 					durationSeconds: 1,
 					visualDirection: "Deterministic scene two",
-					onScreenText: "PHASE\n21E-A",
+					onScreenText: "PHASE\nTEST",
 					voiceoverSegmentKeys: [],
 				},
 			],
@@ -228,7 +228,7 @@ export const T09_COMPOSITION_FIXTURE: T09CompositionSourceFixture = {
 						layerId: "t09-media-scene-1",
 						sourceMediaKey: "t09-background-png",
 					}),
-					textLayer({ layerId: "t09-text-scene-1", text: "AFFI\nCHANNEL" }),
+					textLayer({ layerId: "t09-text-scene-1", text: "VIDEO\nDEMO" }),
 				],
 			},
 			{
@@ -238,7 +238,7 @@ export const T09_COMPOSITION_FIXTURE: T09CompositionSourceFixture = {
 						layerId: "t09-media-scene-2",
 						sourceMediaKey: "t09-background-png",
 					}),
-					textLayer({ layerId: "t09-text-scene-2", text: "PHASE\n21E-A" }),
+					textLayer({ layerId: "t09-text-scene-2", text: "PHASE\nTEST" }),
 				],
 			},
 		],

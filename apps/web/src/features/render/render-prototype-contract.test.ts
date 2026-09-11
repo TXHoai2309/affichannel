@@ -24,6 +24,7 @@ import {
 	fingerprintT09PrototypeProfile,
 	materializeT09TextLayout,
 	type PrototypeToolManifest,
+	parseOutputEncodingProfile,
 	T09_FFMPEG_TOOL_MANIFEST,
 	T09_VIDEO_ONLY_PROFILE,
 	T09TextLayoutError,
@@ -109,6 +110,35 @@ async function planFor(input: {
 	});
 }
 
+async function commandForPlan(
+	root: string,
+	plan: Awaited<ReturnType<typeof planFor>>,
+	manifest: PrototypeToolManifest,
+) {
+	const binarySha256 = manifest.binarySha256;
+	if (!binarySha256) throw new Error("missing test binary hash");
+	return buildT09FfmpegCommandPlan({
+		plan,
+		tool: {
+			executablePath: resolve(root, "ffmpeg.exe"),
+			manifest,
+			manifestIdentity: plan.exactToolManifestIdentity,
+			binarySha256,
+		},
+		outputPath: createT09ServerOwnedStagingPath({
+			rootPath: root,
+			relativePath: "render-output.mp4",
+		}),
+	});
+}
+
+function argvValue(argv: readonly string[], flag: string) {
+	const index = argv.indexOf(flag);
+	if (index < 0 || argv[index + 1] === undefined)
+		throw new Error(`Missing argv flag ${flag}`);
+	return argv[index + 1] as string;
+}
+
 describe("AFF-US-021 21E-A prototype contracts", () => {
 	it("keeps the T09 profile internal and video-only", async () => {
 		expect(T09_VIDEO_ONLY_PROFILE).toMatchObject({
@@ -149,13 +179,19 @@ describe("AFF-US-021 21E-A prototype contracts", () => {
 			]);
 			expect(plan.renderLayers[1]).toMatchObject({
 				kind: "TEXT",
-				text: "AFFI\nCHANNEL",
+				text: "VIDEO\nDEMO",
 				colorRgba: { r: 255, g: 255, b: 255, a: 255 },
 				opacityBasisPoints: 10_000,
 				zIndex: 1,
 				startFrame: 0,
 				endFrame: 30,
 			});
+			expect(plan.materializedTextLines.map((line) => line.line.text)).toEqual([
+				"VIDEO",
+				"DEMO",
+				"PHASE",
+				"TEST",
+			]);
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}
@@ -253,9 +289,193 @@ describe("AFF-US-021 21E-A prototype contracts", () => {
 			expect(command.argv).not.toContain("-y");
 			expect(command.argv).toContain("-an");
 			expect(command.argv).not.toContain("aac");
-			expect(command.filterGraph).toContain("0x0C2238@0.251");
+			expect(command.filterGraph).toContain("0x0C2238@0.250980392156862745");
+			expect(command.filterGraph).toContain(
+				"colorspace=all=bt709:iall=bt709:fast=0",
+			);
+			expect(command.filterGraph).toContain("y_align=baseline");
+			expect(command.filterGraph).toContain(":y=197:");
+			expect(command.filterGraph).toContain("expansion=none");
 			expect(command.filterGraph).toContain("between(n,0,29)");
 			expect(command.filterGraph).toContain("between(n,30,59)");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("passes through a persisted CompositionVersion ID", async () => {
+		const root = await mkdtemp(join(resolve("."), "t09-version-id-"));
+		try {
+			const fixture = await canonicalFixture();
+			const plan = await planFor({
+				root,
+				composition: {
+					...fixture,
+					compositionVersionId: "0199a-real-persisted-composition-version",
+				},
+			});
+			expect(plan.compositionVersionId).toBe(
+				"0199a-real-persisted-composition-version",
+			);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("keeps expression-like text literal at the text-file boundary", async () => {
+		const root = await mkdtemp(join(resolve("."), "t09-text-safety-"));
+		try {
+			const fixture = await canonicalFixture();
+			const changedInput = structuredClone(fixture.compositionInput);
+			const text = changedInput.sceneComposition.scenes[0]?.layers[1];
+			if (text?.kind !== "TEXT") throw new Error("missing text fixture");
+			text.text = "PRICE %{n} 100%\nDEMO";
+			const changed = await buildCompositionInputV1(changedInput);
+			if (!changed.ok) throw new Error("changed fixture must remain valid");
+			const manifest = approvedManifest(
+				createHash("sha256").update("text-safety").digest("hex"),
+			);
+			const plan = await planFor({
+				root,
+				manifest,
+				composition: {
+					compositionInput: changed.input,
+					compositionFingerprint: changed.fingerprint,
+					compositionVersionId: fixture.compositionVersionId,
+				},
+			});
+			const command = await commandForPlan(root, plan, manifest);
+			expect(command.filterGraph).toContain("textfile=");
+			expect(command.filterGraph).toContain("expansion=none");
+			expect(command.filterGraph).not.toContain("PRICE %{n} 100%");
+			expect(command.filterGraph).not.toContain("PRICE");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it.each(["CENTER", "RIGHT"] as const)(
+		"fails closed for unsupported %s FFmpeg alignment",
+		async (textAlign) => {
+			const root = await mkdtemp(join(resolve("."), "t09-alignment-"));
+			try {
+				const manifest = approvedManifest(
+					createHash("sha256").update(textAlign).digest("hex"),
+				);
+				const plan = await planFor({ root, manifest });
+				const tampered = structuredClone(plan);
+				const textLayer = tampered.renderLayers.find(
+					(layer) => layer.kind === "TEXT",
+				);
+				if (textLayer?.kind !== "TEXT")
+					throw new Error("missing planned text layer");
+				textLayer.textAlign = textAlign;
+				await expect(
+					commandForPlan(root, tampered, manifest),
+				).rejects.toMatchObject({ code: "RENDERER_FEATURE_UNSUPPORTED" });
+			} finally {
+				await rm(root, { recursive: true, force: true });
+			}
+		},
+	);
+
+	it("binds the complete profile snapshot and derives all command settings", async () => {
+		const root = await mkdtemp(join(resolve("."), "t09-profile-"));
+		try {
+			const manifest = approvedManifest(
+				createHash("sha256").update("profile").digest("hex"),
+			);
+			const plan = await planFor({ root, manifest });
+			expect(plan.outputProfile).toEqual(T09_VIDEO_ONLY_PROFILE);
+			expect(plan.outputProfileFingerprint).toBe(
+				await fingerprintT09PrototypeProfile(plan.outputProfile),
+			);
+			const command = await commandForPlan(root, plan, manifest);
+			expect(argvValue(command.argv, "-threads")).toBe(
+				String(plan.outputProfile.threads),
+			);
+			expect(argvValue(command.argv, "-pix_fmt")).toBe(
+				plan.outputProfile.pixelFormat,
+			);
+			expect(argvValue(command.argv, "-b:v")).toBe(
+				`${plan.outputProfile.videoBitrateKbps}k`,
+			);
+			expect(argvValue(command.argv, "-g")).toBe(
+				String(plan.outputProfile.keyint),
+			);
+			expect(argvValue(command.argv, "-keyint_min")).toBe(
+				String(plan.outputProfile.minKeyint),
+			);
+			expect(argvValue(command.argv, "-bf")).toBe(
+				String(plan.outputProfile.bFrames),
+			);
+			expect(argvValue(command.argv, "-framerate")).toBe("30/1");
+			expect(argvValue(command.argv, "-r")).toBe("30/1");
+			expect(argvValue(command.argv, "-sc_threshold")).toBe("0");
+			expect(argvValue(command.argv, "-flags")).toBe("+cgop");
+			expect(argvValue(command.argv, "-color_primaries")).toBe("bt709");
+			expect(argvValue(command.argv, "-color_trc")).toBe("bt709");
+			expect(argvValue(command.argv, "-colorspace")).toBe("bt709");
+			expect(argvValue(command.argv, "-c:v")).toBe("libx264");
+			expect(argvValue(command.argv, "-f")).toBe("mp4");
+			expect(command.filterGraph).toContain("scale=1080:1920");
+			expect(command.argv).toContain("-an");
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects profile drift and keeps the T09 profile out of production requests", async () => {
+		const root = await mkdtemp(join(resolve("."), "t09-profile-drift-"));
+		try {
+			const manifest = approvedManifest(
+				createHash("sha256").update("profile-drift").digest("hex"),
+			);
+			const plan = await planFor({ root, manifest });
+			const changedProfile = structuredClone(plan);
+			Reflect.set(changedProfile.outputProfile, "videoBitrateKbps", 1999);
+			await expect(
+				commandForPlan(root, changedProfile, manifest),
+			).rejects.toMatchObject({ code: "T09_PROFILE_MISMATCH" });
+			const changedFingerprint = structuredClone(plan);
+			changedFingerprint.outputProfileFingerprint = "0".repeat(64);
+			await expect(
+				commandForPlan(root, changedFingerprint, manifest),
+			).rejects.toMatchObject({ code: "T09_PROFILE_MISMATCH" });
+			expect(
+				parseOutputEncodingProfile({
+					id: "mp4-h264-video-only-t09-v1",
+				}),
+			).toMatchObject({ success: false });
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("uses deterministic high-precision alpha ratios", async () => {
+		const root = await mkdtemp(join(resolve("."), "t09-alpha-"));
+		try {
+			const manifest = approvedManifest(
+				createHash("sha256").update("alpha").digest("hex"),
+			);
+			const plan = await planFor({ root, manifest });
+			const cases = [
+				[255, 10_000, "1"],
+				[128, 5_000, "0.250980392156862745"],
+				[1, 1, "0.000000392156862745"],
+			] as const;
+			for (const [channelAlpha, opacity, expected] of cases) {
+				const tampered = structuredClone(plan);
+				const textLayer = tampered.renderLayers.find(
+					(layer) => layer.kind === "TEXT",
+				);
+				if (textLayer?.kind !== "TEXT")
+					throw new Error("missing planned text layer");
+				textLayer.colorRgba.a = channelAlpha;
+				textLayer.opacityBasisPoints = opacity;
+				const command = await commandForPlan(root, tampered, manifest);
+				expect(command.filterGraph).toContain(`@${expected}`);
+			}
 		} finally {
 			await rm(root, { recursive: true, force: true });
 		}

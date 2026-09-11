@@ -7,6 +7,7 @@ import {
 	CompositionError,
 	evaluateCompositionCurrentness,
 	evaluateFactLockGate,
+	renderedVoiceKeysForComposition,
 	resolveProjectApplicability,
 	summarizeCurrentScriptVersionClaims,
 	validateScriptVersionForFactLock,
@@ -308,13 +309,22 @@ async function preflightCompositionVersionInQuery(
 		actor,
 		version.projectId,
 	);
-	const voiceSegments = input.voice.segments;
+	const renderedVoiceKeys = renderedVoiceKeysForComposition(input);
+	const voiceSegments = input.voice.segments.filter((segment) =>
+		renderedVoiceKeys.has(segment.segmentKey),
+	);
+	const renderedVoiceArtifactIds = new Set(
+		voiceSegments.map((segment) => segment.provenance.artifactId),
+	);
+	const renderedVoiceArtifacts = voiceArtifacts.filter((artifact) =>
+		renderedVoiceArtifactIds.has(artifact.id),
+	);
 	const voiceConfigProvenance = voiceSegments[0]?.provenance;
 	const currentness = evaluateCompositionCurrentness(input, {
 		scriptVersionId: script.id,
 		scriptRevision: script.revision,
 		voiceConfigRevision: voiceConfig?.revision ?? 0,
-		voiceArtifactIds: voiceArtifacts.map((artifact) => artifact.id),
+		voiceArtifactIds: renderedVoiceArtifacts.map((artifact) => artifact.id),
 		voiceArtifactRefs: voiceSegments.map((segment) => ({
 			segmentKey: segment.segmentKey,
 			artifactId: segment.provenance.artifactId,
@@ -339,33 +349,35 @@ async function preflightCompositionVersionInQuery(
 		compositionProfileId: input.profile.id,
 	});
 	const voiceEligible =
-		voiceConfig !== null &&
-		voiceConfigProvenance !== undefined &&
-		voiceConfig.id === voiceConfigProvenance.configId &&
-		voiceConfig.revision === voiceConfigProvenance.configRevision &&
-		voiceConfig.provider === voiceConfigProvenance.provider &&
-		voiceConfig.voiceId === voiceConfigProvenance.voiceId &&
-		voiceConfig.language === voiceConfigProvenance.language &&
-		voiceConfig.speed === voiceConfigProvenance.speed &&
-		voiceSegments.every((dependency) => {
-			const artifact = voiceArtifacts.find(
-				(candidate) => candidate.id === dependency.provenance.artifactId,
-			);
-			return (
-				artifact?.status === "completed" &&
-				artifact.segmentKey === dependency.segmentKey &&
-				artifact.sourceScriptVersionId === script.id &&
-				artifact.sourceScriptRevision === script.revision &&
-				artifact.voiceConfigRevision === dependency.provenance.configRevision &&
-				artifact.provider === dependency.provenance.provider &&
-				artifact.voiceId === dependency.provenance.voiceId &&
-				artifact.language === dependency.provenance.language &&
-				artifact.speed === dependency.provenance.speed &&
-				artifact.segmentTextSnapshot === dependency.provenance.textSnapshot &&
-				artifact.textHash === dependency.provenance.textHash &&
-				artifact.checksum === dependency.semantic.checksum
-			);
-		});
+		renderedVoiceKeys.size === 0 ||
+		(voiceConfig !== null &&
+			voiceConfigProvenance !== undefined &&
+			voiceConfig.id === voiceConfigProvenance.configId &&
+			voiceConfig.revision === voiceConfigProvenance.configRevision &&
+			voiceConfig.provider === voiceConfigProvenance.provider &&
+			voiceConfig.voiceId === voiceConfigProvenance.voiceId &&
+			voiceConfig.language === voiceConfigProvenance.language &&
+			voiceConfig.speed === voiceConfigProvenance.speed &&
+			voiceSegments.every((dependency) => {
+				const artifact = renderedVoiceArtifacts.find(
+					(candidate) => candidate.id === dependency.provenance.artifactId,
+				);
+				return (
+					artifact?.status === "completed" &&
+					artifact.segmentKey === dependency.segmentKey &&
+					artifact.sourceScriptVersionId === script.id &&
+					artifact.sourceScriptRevision === script.revision &&
+					artifact.voiceConfigRevision ===
+						dependency.provenance.configRevision &&
+					artifact.provider === dependency.provenance.provider &&
+					artifact.voiceId === dependency.provenance.voiceId &&
+					artifact.language === dependency.provenance.language &&
+					artifact.speed === dependency.provenance.speed &&
+					artifact.segmentTextSnapshot === dependency.provenance.textSnapshot &&
+					artifact.textHash === dependency.provenance.textHash &&
+					artifact.checksum === dependency.semantic.checksum
+				);
+			}));
 	const claimSummary = summarizeCurrentScriptVersionClaims({
 		contentType: subject.contentType,
 		creationPath: subject.creationPath,
@@ -403,7 +415,7 @@ async function preflightCompositionVersionInQuery(
 				configPresent: voiceConfig !== null,
 				previewPresent: false,
 				totalSegments: voiceSegments.length,
-				attemptedSegments: voiceArtifacts.length,
+				attemptedSegments: renderedVoiceArtifacts.length,
 				usableSegments: voiceEligible ? voiceSegments.length : 0,
 				pendingSegments: 0,
 				failedSegments: 0,

@@ -578,7 +578,6 @@ export const compositionInputV1Schema = z
 			}
 		}
 		const trackIds = new Set<string>();
-		const trackVoiceKeys = new Set<string>();
 		for (const [index, track] of input.sceneComposition.audioTracks.entries()) {
 			if (trackIds.has(track.trackId))
 				context.addIssue({
@@ -587,7 +586,6 @@ export const compositionInputV1Schema = z
 					message: "Audio track IDs must be unique.",
 				});
 			trackIds.add(track.trackId);
-			trackVoiceKeys.add(track.sourceVoiceKey);
 			if (!voiceKeys.has(track.sourceVoiceKey))
 				context.addIssue({
 					code: "custom",
@@ -611,18 +609,6 @@ export const compositionInputV1Schema = z
 					message: "Audio track endFrame must fit within totalFrames.",
 				});
 		}
-		if (
-			input.sceneComposition.audioTracks.length > 0 &&
-			(trackVoiceKeys.size !== voiceKeys.size ||
-				trackVoiceKeys.size !== input.sceneComposition.audioTracks.length ||
-				[...voiceKeys].some((key) => !trackVoiceKeys.has(key)))
-		)
-			context.addIssue({
-				code: "custom",
-				path: ["sceneComposition", "audioTracks"],
-				message:
-					"Every pinned voice dependency must be materialized in one audio track.",
-			});
 		const scriptKeys = input.script.semantic.voiceoverSegments.map(
 			(segment) => segment.key,
 		);
@@ -639,6 +625,16 @@ export const compositionInputV1Schema = z
 	});
 
 export type CompositionInputV1 = z.infer<typeof compositionInputV1Schema>;
+
+/** Voice dependencies referenced by the render timeline; audit-only voice is excluded. */
+export function renderedVoiceKeysForComposition(
+	input: Pick<CompositionInputV1, "sceneComposition">,
+) {
+	return new Set(
+		input.sceneComposition.audioTracks.map((track) => track.sourceVoiceKey),
+	);
+}
+
 export type CompositionInputV1Result =
 	| { ok: true; input: CompositionInputV1; fingerprint: string }
 	| {

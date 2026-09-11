@@ -1,5 +1,8 @@
 import { canonicalizeJson } from "../script-generation/canonical-json";
-import type { CompositionInputV1 } from "./types";
+import {
+	type CompositionInputV1,
+	renderedVoiceKeysForComposition,
+} from "./types";
 
 const decimalInteger = /^0$|^[1-9][0-9]*$/;
 
@@ -40,9 +43,7 @@ export function canonicalizeCompositionJson(value: unknown): string {
  * publishing fields, and database identities are deliberately excluded.
  */
 export function compositionSemanticProjection(input: CompositionInputV1) {
-	const renderedVoiceKeys = new Set(
-		input.sceneComposition.audioTracks.map((track) => track.sourceVoiceKey),
-	);
+	const renderedVoiceKeys = renderedVoiceKeysForComposition(input);
 	const renderedMediaKeys = new Set(
 		input.sceneComposition.scenes.flatMap((scene) =>
 			scene.layers.flatMap((layer) =>

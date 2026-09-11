@@ -9,6 +9,7 @@ import {
 	checkCompositionAudioTiming,
 	compositionInputV1Schema,
 	MediaAssetError,
+	renderedVoiceKeysForComposition,
 	sha256Hex,
 	type TechnicalFontManifestFact,
 	type TechnicalMediaManifestFact,
@@ -1201,8 +1202,12 @@ export async function technicalPreflightCompositionInput(
 	const mediaResults = await Promise.all(
 		parsed.data.media.map((pin) => loader.loadMedia(pin)),
 	);
+	const renderedVoiceKeys = renderedVoiceKeysForComposition(parsed.data);
+	const renderedVoicePins = parsed.data.voice.segments.filter((pin) =>
+		renderedVoiceKeys.has(pin.segmentKey),
+	);
 	const voiceResults = await Promise.all(
-		parsed.data.voice.segments.map((pin) => loader.loadVoice(pin)),
+		renderedVoicePins.map((pin) => loader.loadVoice(pin)),
 	);
 	const fontResults = await loader.loadFontBundle(
 		parsed.data.fonts,

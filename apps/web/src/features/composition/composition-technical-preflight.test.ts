@@ -1088,4 +1088,48 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 		);
 		expect(JSON.stringify(built.input)).toBe(before);
 	});
+
+	it("does not read an unused voice artifact for a video-only composition", async () => {
+		const mediaBytes = pngFixture();
+		const voiceBytes = supportedMp3Fixture();
+		const media = mediaAsset(mediaBytes);
+		const voice = voiceArtifact(voiceBytes);
+		const manifest = await readFontAssetManifest();
+		const fonts = manifest.faces.map((face) => ({
+			family: face.family,
+			weight: face.weight,
+			style: face.style,
+			fontId: face.fontStableId,
+			contentSha256: face.sha256,
+		})) as CompositionInputV1["fonts"]["faces"];
+		const audioBuilt = await compositionFixture(fonts, media, voice);
+		if (!audioBuilt.ok) throw new Error("audio fixture must be valid");
+		const videoOnlySource = structuredClone(audioBuilt.input);
+		videoOnlySource.sceneComposition.audioTracks = [];
+		const videoOnly = await buildCompositionInputV1(videoOnlySource);
+		if (!videoOnly.ok) throw new Error("video-only fixture must be valid");
+		let voiceReads = 0;
+		const loader = new CompositionTechnicalLoader({
+			actor,
+			projectId: "p1",
+			findMediaAsset: async () => media,
+			findVoiceArtifact: async () => {
+				voiceReads += 1;
+				throw new Error("unused voice must not be read");
+			},
+			mediaStorage: () => mediaStorage(mediaBytes),
+			voiceStorage: () => {
+				throw new Error("unused voice storage must not be opened");
+			},
+		});
+		const result = await technicalPreflightCompositionInput(
+			loader,
+			"cv-video-only",
+			videoOnly.input,
+			videoOnly.fingerprint,
+		);
+		expect(result.status).toBe("VALID");
+		expect(result.technicalManifest?.voice).toEqual([]);
+		expect(voiceReads).toBe(0);
+	});
 });

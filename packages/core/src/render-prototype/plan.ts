@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { t09PrototypeOutputProfileSchema } from "./profile";
 import type { T09MaterializedTextLine } from "./text-layout";
 
 const sha256 = z.string().regex(/^[a-f0-9]{64}$/);
@@ -131,6 +132,7 @@ export const t09RenderPlanSchema = z
 		compositionVersionId: nonEmpty,
 		compositionFingerprint: sha256,
 		outputProfileFingerprint: sha256,
+		outputProfile: t09PrototypeOutputProfileSchema,
 		stagingRoot: nonEmpty,
 		width: z.literal(1080),
 		height: z.literal(1920),

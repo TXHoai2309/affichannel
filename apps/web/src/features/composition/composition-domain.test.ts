@@ -225,6 +225,14 @@ async function built() {
 	return result;
 }
 
+async function builtVideoOnly() {
+	const draft = structuredClone(source());
+	draft.sceneComposition.audioTracks = [];
+	const result = await buildCompositionInputV1(draft);
+	if (!result.ok) throw new Error(result.code);
+	return result;
+}
+
 function twoVoiceSource() {
 	const draft = structuredClone(source());
 	draft.script.semantic.voiceoverSegments.push({
@@ -596,6 +604,18 @@ describe("CompositionInputV1", () => {
 		expect(usedFontChanged.fingerprint).not.toBe(first.fingerprint);
 	});
 
+	it("excludes audit-only voice bytes from a video-only fingerprint", async () => {
+		const first = await builtVideoOnly();
+		const changedSource = structuredClone(source());
+		changedSource.sceneComposition.audioTracks = [];
+		changedSource.voice.segments[0].semantic.checksum = "b".repeat(64);
+		changedSource.voice.segments[0].provenance.artifactId =
+			"changed-audit-artifact";
+		const changed = await buildCompositionInputV1(changedSource);
+		if (!changed.ok) throw new Error("video-only fixture incomplete");
+		expect(changed.fingerprint).toBe(first.fingerprint);
+	});
+
 	it("canonicalizes non-semantic dependency order while retaining audio placement", async () => {
 		const reordered = twoVoiceSource();
 		reordered.voice.segments.reverse();
@@ -811,6 +831,75 @@ describe("Composition currentness", () => {
 		});
 		expect(configChanged.state).toBe("CURRENT");
 	});
+
+	it("ignores audit-only voice changes for video-only currentness", async () => {
+		const result = await builtVideoOnly();
+		const current = evaluateCompositionCurrentness(result.input, {
+			scriptVersionId: "sv1",
+			scriptRevision: 1,
+			voiceConfigRevision: 999,
+			voiceArtifactIds: [],
+			voiceArtifactChecksums: ["b".repeat(64)],
+			voiceArtifactRefs: [
+				{
+					segmentKey: "voice-a",
+					artifactId: "changed-audit-artifact",
+					checksum: "b".repeat(64),
+				},
+			],
+			mediaChecksums: [HASH],
+			compositionProfileId: "vertical-standard-v1",
+		});
+		expect(current).toEqual({ state: "CURRENT" });
+	});
+
+	it("still treats a rendered voice dependency as currentness-critical", async () => {
+		const result = await built();
+		const current = evaluateCompositionCurrentness(result.input, {
+			scriptVersionId: "sv1",
+			scriptRevision: 1,
+			voiceConfigRevision: 1,
+			voiceArtifactIds: ["changed-artifact"],
+			voiceArtifactChecksums: [HASH],
+			mediaChecksums: [HASH],
+			compositionProfileId: "vertical-standard-v1",
+		});
+		expect(current).toMatchObject({
+			state: "STALE",
+			reason: "VOICE_SOURCE_CHANGED",
+		});
+	});
+
+	it("ignores an unrendered voice dependency when another voice is rendered", async () => {
+		const draft = structuredClone(twoVoiceSource());
+		draft.sceneComposition.audioTracks =
+			draft.sceneComposition.audioTracks.filter(
+				(track) => track.sourceVoiceKey === "voice-a",
+			);
+		const result = await buildCompositionInputV1(draft);
+		if (!result.ok) throw new Error(result.code);
+		const current = evaluateCompositionCurrentness(result.input, {
+			scriptVersionId: "sv1",
+			scriptRevision: 1,
+			voiceConfigRevision: 1,
+			voiceArtifactRefs: [
+				{
+					segmentKey: "voice-a",
+					artifactId: "va1",
+					checksum: HASH,
+				},
+				{
+					segmentKey: "voice-b",
+					artifactId: "changed-unused-artifact",
+					checksum: "b".repeat(64),
+				},
+			],
+			voiceArtifactIds: ["va1", "changed-unused-artifact"],
+			mediaChecksums: [HASH],
+			compositionProfileId: "vertical-standard-v1",
+		});
+		expect(current).toEqual({ state: "CURRENT" });
+	});
 });
 
 describe("Composition business preflight truth", () => {
@@ -904,6 +993,30 @@ describe("Composition business preflight truth", () => {
 			outcome: "NOT_EVALUATED",
 			evidence: null,
 		});
+	});
+
+	it("allows a video-only business preflight without voice configuration", () => {
+		const result = evaluateCompositionBusinessPreflight({
+			compositionVersionId: "cv-video-only",
+			currentness,
+			applicability: capability(
+				"NOT_REQUIRED",
+				"NOT_STARTED",
+				"FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+			),
+			applicabilityCapabilities: [
+				capability(
+					"NOT_REQUIRED",
+					"NOT_STARTED",
+					"FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+				),
+				ready("VOICE", "VOICE_READY"),
+			],
+			factLock: null,
+			mediaEligible: true,
+			voiceEligible: true,
+		});
+		expect(result.authorization.allowed).toBe(true);
 	});
 
 	it("accepts a current Organic/general Resolver NOT_REQUIRED result without running Fact Lock", () => {
