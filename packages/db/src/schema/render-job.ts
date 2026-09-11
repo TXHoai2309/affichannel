@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+	bigint,
 	check,
 	foreignKey,
 	index,
@@ -210,3 +211,95 @@ export const renderAttempt = pgTable(
 
 export type RenderJobRow = typeof renderJob.$inferSelect;
 export type RenderAttemptRow = typeof renderAttempt.$inferSelect;
+
+export const renderArtifact = pgTable(
+	"render_artifact",
+	{
+		id: text("id").primaryKey(),
+		workspaceId: text("workspace_id")
+			.notNull()
+			.references(() => workspace.id, { onDelete: "restrict" }),
+		projectId: text("project_id")
+			.notNull()
+			.references(() => project.id, { onDelete: "restrict" }),
+		renderJobId: text("render_job_id")
+			.notNull()
+			.references(() => renderJob.id, { onDelete: "restrict" }),
+		renderAttemptId: text("render_attempt_id")
+			.notNull()
+			.references(() => renderAttempt.id, { onDelete: "restrict" }),
+		attemptNumber: integer("attempt_number").notNull(),
+		compositionVersionId: text("composition_version_id")
+			.notNull()
+			.references(() => compositionVersion.id, { onDelete: "restrict" }),
+		compositionFingerprint: text("composition_fingerprint").notNull(),
+		canonicalRequestHash: text("canonical_request_hash").notNull(),
+		outputEncodingProfileFingerprint: text(
+			"output_encoding_profile_fingerprint",
+		).notNull(),
+		outputContractVersion: text("output_contract_version").notNull(),
+		outputReservationId: text("output_reservation_id").notNull(),
+		storageProvider: text("storage_provider").notNull(),
+		storageKey: text("storage_key").notNull(),
+		mimeType: text("mime_type").notNull(),
+		byteSize: bigint("byte_size", { mode: "number" }).notNull(),
+		checksumSha256: text("checksum_sha256").notNull(),
+		validationVersion: text("validation_version").notNull(),
+		validatedMetadataJson: jsonb("validated_metadata_json").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+	},
+	(table) => [
+		check(
+			"render_artifact_attempt_number_check",
+			sql`${table.attemptNumber} > 0`,
+		),
+		check(
+			"render_artifact_scope_hash_check",
+			sql`${table.compositionFingerprint} ~ '^[a-f0-9]{64}$' and ${table.canonicalRequestHash} ~ '^[a-f0-9]{64}$' and ${table.outputEncodingProfileFingerprint} ~ '^[a-f0-9]{64}$'`,
+		),
+		check(
+			"render_artifact_storage_provider_check",
+			sql`${table.storageProvider} in ('local', 'r2')`,
+		),
+		check(
+			"render_artifact_storage_key_check",
+			sql`length(trim(${table.storageKey})) > 0 and ${table.storageKey} like 'render-artifacts/v1/%'`,
+		),
+		check(
+			"render_artifact_media_check",
+			sql`${table.mimeType} = 'video/mp4' and ${table.byteSize} > 0`,
+		),
+		check(
+			"render_artifact_checksum_check",
+			sql`${table.checksumSha256} ~ '^[a-f0-9]{64}$'`,
+		),
+		check(
+			"render_artifact_metadata_check",
+			sql`length(trim(${table.validationVersion})) > 0 and jsonb_typeof(${table.validatedMetadataJson}) = 'object'`,
+		),
+		uniqueIndex("render_artifact_attempt_unique").on(table.renderAttemptId),
+		uniqueIndex("render_artifact_reservation_unique").on(
+			table.outputReservationId,
+		),
+		uniqueIndex("render_artifact_storage_identity_unique").on(
+			table.storageProvider,
+			table.storageKey,
+		),
+		index("render_artifact_job_created_idx").on(
+			table.workspaceId,
+			table.renderJobId,
+			table.createdAt,
+			table.id,
+		),
+		index("render_artifact_project_created_idx").on(
+			table.workspaceId,
+			table.projectId,
+			table.createdAt,
+			table.id,
+		),
+	],
+);
+
+export type RenderArtifactRow = typeof renderArtifact.$inferSelect;

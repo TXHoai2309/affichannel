@@ -71,6 +71,7 @@ const {
 	compositionVersion,
 	db,
 	project,
+	renderArtifact,
 	renderAttempt,
 	renderJob,
 	scriptGeneration,
@@ -84,6 +85,32 @@ const repository = await import(
 const worker = await import(
 	"../packages/api/src/services/render-worker-service.ts"
 );
+const artifactRepository = await import(
+	"../packages/api/src/services/render-artifact-repository.ts"
+);
+const { createRenderOutputStorageKey } = await import(
+	"../packages/api/src/storage/render-output-storage.ts"
+);
+const { RENDER_OUTPUT_PROOF_VERSION, RENDER_OUTPUT_VALIDATION_VERSION } =
+	await import("../packages/api/src/services/render-output-validator.ts");
+
+async function expectRenderArtifactError(
+	promise: Promise<unknown>,
+	code: string,
+) {
+	try {
+		await promise;
+	} catch (error) {
+		assert(
+			typeof error === "object" &&
+				error !== null &&
+				(error as { code?: unknown }).code === code,
+			`Expected RenderArtifactError ${code}.`,
+		);
+		return;
+	}
+	throw new Error(`Expected RenderArtifactError ${code}.`);
+}
 
 const allowedBusinessGate = async (
 	_transaction: DbTransaction,
@@ -2016,6 +2043,365 @@ try {
 			"Execution winner must remain owner-mutable for cleanup.",
 		);
 	}
+
+	const artifactMetadata = {
+		schemaVersion: "render-output-metadata.v1" as const,
+		container: "MP4" as const,
+		mimeType: "video/mp4" as const,
+		videoCodec: "H.264/AVC" as const,
+		width: 1080,
+		height: 1920,
+		frameRate: { numerator: 30, denominator: 1 },
+		totalFrames: built.input.timeline.totalFrames,
+		duration: { timescale: 30, value: built.input.timeline.totalFrames },
+		audio: { codec: "AAC-LC" as const, sampleRate: 48_000, channels: 2 },
+	};
+
+	async function prepareArtifactScenario(
+		label: string,
+		status: "RUNNING" | "INDETERMINATE",
+	) {
+		const scenarioProfile = {
+			...profile,
+			videoBitrateKbps: 5000 + label.length,
+		};
+		const scenarioFingerprint =
+			await fingerprintOutputEncodingProfile(scenarioProfile);
+		const scenarioRequestSpec = {
+			...requestSpec,
+			outputEncodingProfile: scenarioProfile,
+			outputEncodingProfileFingerprint: scenarioFingerprint,
+		};
+		const job = await repository.createRenderJob({
+			actor: { workspaceId, userId },
+			projectId,
+			requestSpec: scenarioRequestSpec,
+			idempotencyKey: `render-21d-${label}-${randomUUID()}`,
+		});
+		const now = new Date();
+		const attemptId = randomUUID();
+		const outputReservationId = randomUUID();
+		await db
+			.update(renderJob)
+			.set({
+				status,
+				attemptCount: 1,
+				finishedAt: status === "INDETERMINATE" ? now : null,
+			})
+			.where(eq(renderJob.id, job.id));
+		await db.insert(renderAttempt).values({
+			id: attemptId,
+			workspaceId,
+			renderJobId: job.id,
+			attemptNumber: 1,
+			status,
+			leaseOwner: `worker-21d-${label}`,
+			leaseExpiresAt:
+				status === "RUNNING"
+					? new Date(now.getTime() + 60_000)
+					: new Date(now.getTime() - 60_000),
+			claimedAt: now,
+			lastHeartbeatAt: now,
+			authorizedAt: now,
+			executionStartedAt: now,
+			outputReservationId,
+			finishedAt: status === "INDETERMINATE" ? now : null,
+		});
+		const [attempt] = await db
+			.select()
+			.from(renderAttempt)
+			.where(eq(renderAttempt.id, attemptId))
+			.limit(1);
+		assert(attempt, `${label}: Attempt setup must persist.`);
+		const proof = {
+			schemaVersion: RENDER_OUTPUT_PROOF_VERSION as "render-output-proof.v1",
+			outputReservationId,
+			storageProvider: "local" as const,
+			storageKey: createRenderOutputStorageKey({
+				workspaceId,
+				projectId,
+				renderJobId: job.id,
+				renderAttemptId: attempt.id,
+				outputReservationId,
+			}),
+			mimeType: "video/mp4" as const,
+			byteSize: 977,
+			checksumSha256:
+				"4858b30c1b184fb72854f4d8e8052c67f40b35c79a87298521a1b6af6367b158",
+			validationVersion: RENDER_OUTPUT_VALIDATION_VERSION,
+			validatedMetadata: artifactMetadata,
+		};
+		return { job, attempt, proof };
+	}
+
+	const normalArtifact = await prepareArtifactScenario("normal", "RUNNING");
+	const finalizedArtifact = await artifactRepository.finalizeRenderArtifact({
+		jobId: normalArtifact.job.id,
+		attemptId: normalArtifact.attempt.id,
+		attemptNumber: 1,
+		leaseOwner: normalArtifact.attempt.leaseOwner,
+		proof: normalArtifact.proof,
+	});
+	const [normalJobState] = await db
+		.select({ status: renderJob.status })
+		.from(renderJob)
+		.where(eq(renderJob.id, normalArtifact.job.id));
+	const [normalAttemptState] = await db
+		.select({ status: renderAttempt.status })
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, normalArtifact.attempt.id));
+	const normalArtifacts = await db
+		.select({ id: renderArtifact.id })
+		.from(renderArtifact)
+		.where(eq(renderArtifact.renderJobId, normalArtifact.job.id));
+	assert(
+		finalizedArtifact.id &&
+			finalizedArtifact.renderAttemptId === normalArtifact.attempt.id &&
+			normalJobState?.status === "COMPLETED" &&
+			normalAttemptState?.status === "COMPLETED" &&
+			normalArtifacts.length === 1,
+		"Normal 21D finalization must atomically create exactly one Artifact and complete Attempt then Job.",
+	);
+	const idempotentArtifact = await artifactRepository.finalizeRenderArtifact({
+		jobId: normalArtifact.job.id,
+		attemptId: normalArtifact.attempt.id,
+		attemptNumber: 1,
+		leaseOwner: normalArtifact.attempt.leaseOwner,
+		proof: normalArtifact.proof,
+	});
+	assert(
+		idempotentArtifact.id === finalizedArtifact.id &&
+			(
+				await db
+					.select({ id: renderArtifact.id })
+					.from(renderArtifact)
+					.where(eq(renderArtifact.renderJobId, normalArtifact.job.id))
+			).length === 1,
+		"An exact finalize replay must be idempotent and must not create a second Artifact.",
+	);
+
+	const concurrentArtifact = await prepareArtifactScenario(
+		"concurrent",
+		"RUNNING",
+	);
+	const concurrentResults = await Promise.all([
+		artifactRepository.finalizeRenderArtifact({
+			jobId: concurrentArtifact.job.id,
+			attemptId: concurrentArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: concurrentArtifact.attempt.leaseOwner,
+			proof: concurrentArtifact.proof,
+		}),
+		artifactRepository.finalizeRenderArtifact({
+			jobId: concurrentArtifact.job.id,
+			attemptId: concurrentArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: concurrentArtifact.attempt.leaseOwner,
+			proof: concurrentArtifact.proof,
+		}),
+	]);
+	assert(
+		concurrentResults[0]?.id === concurrentResults[1]?.id &&
+			(
+				await db
+					.select({ id: renderArtifact.id })
+					.from(renderArtifact)
+					.where(eq(renderArtifact.renderJobId, concurrentArtifact.job.id))
+			).length === 1,
+		"Concurrent exact finalization must return one immutable Artifact ID.",
+	);
+
+	const conflictingArtifact = await prepareArtifactScenario(
+		"conflict",
+		"RUNNING",
+	);
+	const conflictingProof = {
+		...conflictingArtifact.proof,
+		checksumSha256:
+			"c4858b37f62061a40e0ce80eb6828b25b963cfe80603810f85ff6868cff96b44",
+	};
+	const conflictResults = await Promise.allSettled([
+		artifactRepository.finalizeRenderArtifact({
+			jobId: conflictingArtifact.job.id,
+			attemptId: conflictingArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: conflictingArtifact.attempt.leaseOwner,
+			proof: conflictingArtifact.proof,
+		}),
+		artifactRepository.finalizeRenderArtifact({
+			jobId: conflictingArtifact.job.id,
+			attemptId: conflictingArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: conflictingArtifact.attempt.leaseOwner,
+			proof: conflictingProof,
+		}),
+	]);
+	const conflictSuccesses = conflictResults.filter(
+		(result) => result.status === "fulfilled",
+	);
+	const conflictFailures = conflictResults.filter(
+		(result) => result.status === "rejected",
+	);
+	assert(
+		conflictSuccesses.length === 1 &&
+			conflictFailures.length === 1 &&
+			(conflictFailures[0] as PromiseRejectedResult).reason?.code ===
+				"RENDER_ARTIFACT_CONFLICT" &&
+			(
+				await db
+					.select({ id: renderArtifact.id })
+					.from(renderArtifact)
+					.where(eq(renderArtifact.renderJobId, conflictingArtifact.job.id))
+			).length === 1,
+		"Concurrent conflicting proofs must produce one immutable winner and one typed conflict.",
+	);
+
+	const staleArtifact = await prepareArtifactScenario("stale", "RUNNING");
+	await expectRenderArtifactError(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: staleArtifact.job.id,
+			attemptId: staleArtifact.attempt.id,
+			attemptNumber: 99,
+			leaseOwner: staleArtifact.attempt.leaseOwner,
+			proof: staleArtifact.proof,
+		}),
+		"RENDER_ATTEMPT_NOT_FOUND",
+	);
+	await expectRenderArtifactError(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: staleArtifact.job.id,
+			attemptId: staleArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: "wrong-worker",
+			proof: staleArtifact.proof,
+		}),
+		"RENDER_ARTIFACT_FENCED",
+	);
+	await expectRenderArtifactError(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: staleArtifact.job.id,
+			attemptId: staleArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: staleArtifact.attempt.leaseOwner,
+			proof: {
+				...staleArtifact.proof,
+				outputReservationId: randomUUID(),
+			},
+		}),
+		"RENDER_ARTIFACT_OUTPUT_IDENTITY_MISMATCH",
+	);
+	await expectRenderArtifactError(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: staleArtifact.job.id,
+			attemptId: staleArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: staleArtifact.attempt.leaseOwner,
+			proof: {
+				...staleArtifact.proof,
+				validatedMetadata: {
+					...staleArtifact.proof.validatedMetadata,
+					width: 720,
+				},
+			},
+		}),
+		"RENDER_ARTIFACT_OUTPUT_CONTRACT_MISMATCH",
+	);
+	const [uncompletedJob] = await db
+		.select({ status: renderJob.status })
+		.from(renderJob)
+		.where(eq(renderJob.id, staleArtifact.job.id));
+	const [uncompletedAttempt] = await db
+		.select({ status: renderAttempt.status })
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, staleArtifact.attempt.id));
+	assert(
+		uncompletedJob?.status === "RUNNING" &&
+			uncompletedAttempt?.status === "RUNNING",
+		"A failed artifact proof must not complete the Job or Attempt.",
+	);
+	await db
+		.update(renderAttempt)
+		.set({ leaseExpiresAt: new Date(Date.now() - 60_000) })
+		.where(eq(renderAttempt.id, staleArtifact.attempt.id));
+	await expectRenderArtifactError(
+		artifactRepository.finalizeRenderArtifact({
+			jobId: staleArtifact.job.id,
+			attemptId: staleArtifact.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: staleArtifact.attempt.leaseOwner,
+			proof: staleArtifact.proof,
+		}),
+		"RENDER_ARTIFACT_FENCED",
+	);
+	assert(
+		(
+			await db
+				.select({ id: renderArtifact.id })
+				.from(renderArtifact)
+				.where(eq(renderArtifact.renderJobId, staleArtifact.job.id))
+		).length === 0,
+		"An expired worker must not normal-finalize an Artifact.",
+	);
+
+	const reconciledArtifact = await prepareArtifactScenario(
+		"reconcile",
+		"INDETERMINATE",
+	);
+	const reconciled = await artifactRepository.reconcileRenderArtifact({
+		jobId: reconciledArtifact.job.id,
+		attemptId: reconciledArtifact.attempt.id,
+		attemptNumber: 1,
+		proof: reconciledArtifact.proof,
+	});
+	const [reconciledJobState] = await db
+		.select({ status: renderJob.status })
+		.from(renderJob)
+		.where(eq(renderJob.id, reconciledArtifact.job.id));
+	const [reconciledAttemptState] = await db
+		.select({ status: renderAttempt.status })
+		.from(renderAttempt)
+		.where(eq(renderAttempt.id, reconciledArtifact.attempt.id));
+	assert(
+		reconciled.id &&
+			reconciledJobState?.status === "COMPLETED" &&
+			reconciledAttemptState?.status === "COMPLETED",
+		"Trusted reconciliation must finalize an eligible expired INDETERMINATE Attempt without a current lease.",
+	);
+
+	const reconciliationRace = await prepareArtifactScenario(
+		"reconcile-race",
+		"INDETERMINATE",
+	);
+	const reconciliationRaceResults = await Promise.allSettled([
+		artifactRepository.reconcileRenderArtifact({
+			jobId: reconciliationRace.job.id,
+			attemptId: reconciliationRace.attempt.id,
+			attemptNumber: 1,
+			proof: reconciliationRace.proof,
+		}),
+		artifactRepository.finalizeRenderArtifact({
+			jobId: reconciliationRace.job.id,
+			attemptId: reconciliationRace.attempt.id,
+			attemptNumber: 1,
+			leaseOwner: reconciliationRace.attempt.leaseOwner,
+			proof: reconciliationRace.proof,
+		}),
+	]);
+	assert(
+		reconciliationRaceResults.every(
+			(result) => result.status === "fulfilled",
+		) &&
+			(
+				await db
+					.select({ id: renderArtifact.id })
+					.from(renderArtifact)
+					.where(eq(renderArtifact.renderJobId, reconciliationRace.job.id))
+			).length === 1,
+		"Concurrent normal/reconciliation finalize must resolve to one immutable Artifact.",
+	);
+	console.log(
+		"21D immutable Artifact atomic finalize, stale-worker fencing, idempotency, and trusted reconciliation: PASS",
+	);
 
 	const allAttempts = await db
 		.select({ reservation: renderAttempt.outputReservationId })

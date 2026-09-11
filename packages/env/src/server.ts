@@ -118,6 +118,16 @@ export const env = createEnv({
 			.positive()
 			.max(86_400)
 			.default(60),
+		RENDER_OUTPUT_STORAGE_PROVIDER: z.enum(["local", "r2"]).default("local"),
+		RENDER_OUTPUT_LOCAL_ROOT: z
+			.string()
+			.trim()
+			.min(1)
+			.default(".data/render-output"),
+		RENDER_OUTPUT_R2_ENDPOINT: z.url().optional(),
+		RENDER_OUTPUT_R2_BUCKET: z.string().trim().min(1).optional(),
+		RENDER_OUTPUT_R2_ACCESS_KEY_ID: z.string().trim().min(1).optional(),
+		RENDER_OUTPUT_R2_SECRET_ACCESS_KEY: z.string().trim().min(1).optional(),
 		MEDIA_STORAGE_PROVIDER: z.enum(["local", "r2"]).default("local"),
 		MEDIA_GRANT_SIGNING_SECRET: z.string().min(32).optional(),
 		MEDIA_LOCAL_ROOT: z.string().trim().min(1).default(".data/media-library"),
