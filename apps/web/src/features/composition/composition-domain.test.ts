@@ -446,6 +446,59 @@ describe("CompositionInputV1", () => {
 			});
 	});
 
+	it("requires one materialized audio track per pinned voice except video-only audit voice", async () => {
+		const videoOnly = await buildCompositionInputV1(
+			mutated((draft) => {
+				draft.sceneComposition.audioTracks = [];
+			}),
+		);
+		expect(videoOnly.ok).toBe(true);
+
+		const completeAudio = await buildCompositionInputV1(twoVoiceSource());
+		expect(completeAudio.ok).toBe(true);
+
+		const incompleteAudio = await buildCompositionInputV1(
+			(() => {
+				const draft = twoVoiceSource();
+				draft.sceneComposition.audioTracks =
+					draft.sceneComposition.audioTracks.filter(
+						(track) => track.sourceVoiceKey === "voice-a",
+					);
+				return draft;
+			})(),
+		);
+		expect(incompleteAudio).toMatchObject({
+			ok: false,
+			code: "COMPOSITION_INPUT_INVALID",
+		});
+
+		const missingSourceVoiceKey = await buildCompositionInputV1(
+			mutated((draft) => {
+				draft.sceneComposition.audioTracks[0].sourceVoiceKey = "voice-missing";
+			}),
+		);
+		expect(missingSourceVoiceKey).toMatchObject({
+			ok: false,
+			code: "COMPOSITION_INPUT_INVALID",
+		});
+
+		const duplicateVoiceTrack = await buildCompositionInputV1(
+			mutated((draft) => {
+				const firstTrack = draft.sceneComposition.audioTracks[0];
+				draft.sceneComposition.audioTracks.push({
+					...firstTrack,
+					trackId: "track-voice-a-duplicate",
+					startFrame: "15",
+					endFrame: "30",
+				});
+			}),
+		);
+		expect(duplicateVoiceTrack).toMatchObject({
+			ok: false,
+			code: "COMPOSITION_INPUT_INVALID",
+		});
+	});
+
 	it("classifies missing plus invalid input as INVALID, not INCOMPLETE", async () => {
 		const result = await buildCompositionInputV1(
 			mutated((draft) => {
@@ -868,37 +921,6 @@ describe("Composition currentness", () => {
 			state: "STALE",
 			reason: "VOICE_SOURCE_CHANGED",
 		});
-	});
-
-	it("ignores an unrendered voice dependency when another voice is rendered", async () => {
-		const draft = structuredClone(twoVoiceSource());
-		draft.sceneComposition.audioTracks =
-			draft.sceneComposition.audioTracks.filter(
-				(track) => track.sourceVoiceKey === "voice-a",
-			);
-		const result = await buildCompositionInputV1(draft);
-		if (!result.ok) throw new Error(result.code);
-		const current = evaluateCompositionCurrentness(result.input, {
-			scriptVersionId: "sv1",
-			scriptRevision: 1,
-			voiceConfigRevision: 1,
-			voiceArtifactRefs: [
-				{
-					segmentKey: "voice-a",
-					artifactId: "va1",
-					checksum: HASH,
-				},
-				{
-					segmentKey: "voice-b",
-					artifactId: "changed-unused-artifact",
-					checksum: "b".repeat(64),
-				},
-			],
-			voiceArtifactIds: ["va1", "changed-unused-artifact"],
-			mediaChecksums: [HASH],
-			compositionProfileId: "vertical-standard-v1",
-		});
-		expect(current).toEqual({ state: "CURRENT" });
 	});
 });
 

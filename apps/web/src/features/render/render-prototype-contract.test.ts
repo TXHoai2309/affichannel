@@ -167,6 +167,9 @@ describe("AFF-US-021 21E-A prototype contracts", () => {
 		expect(fixture.compositionInput.schemaVersion).toBe("composition-input.v1");
 		expect(fixture.compositionInput.sceneComposition.audioTracks).toEqual([]);
 		expect(fixture.compositionInput.timeline.totalFrames).toBe("60");
+		expect(fixture.compositionFingerprint).toBe(
+			"4b8d10c5ee81d5978fa317f2c8e220e8ab1bf979ec85020e2063f1290714bfd9",
+		);
 		const root = await mkdtemp(join(resolve("."), "t09-canonical-"));
 		try {
 			const plan = await planFor({ root, composition: fixture });
