@@ -1,7 +1,9 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
 	createT09TestRenderExecutionAdapter,
@@ -11,6 +13,7 @@ import {
 	T09_PROCESS_LOG_LIMIT_BYTES,
 } from "@affichannel/api/services/render-prototype-execution-adapter";
 import {
+	assertT09FilesystemPathAuthority,
 	createT09AttemptOutputStagingPath,
 	createT09ServerOwnedStagingPath,
 } from "@affichannel/api/services/render-prototype-staging";
@@ -45,8 +48,10 @@ function childAsProcess(child: FakeChild) {
 	return child as unknown as ChildProcessWithoutNullStreams;
 }
 
+const testRoot = join(tmpdir(), "affichannel-t09-test-root");
+mkdirSync(testRoot, { recursive: true });
 const outputPath = createT09AttemptOutputStagingPath({
-	rootPath: "C:\\affichannel-private-render",
+	rootPath: testRoot,
 	jobId: "job-1",
 	attemptId: "attempt-1",
 	attemptNumber: 1,
@@ -705,6 +710,57 @@ describe("AFF-US-021 EN001 21E-B T09 execution contract", () => {
 				relativePath: "../outside.mp4",
 			}),
 		).toThrow("must remain inside");
+	});
+
+	it("freezes staging authority and rejects mutation", () => {
+		expect(Object.isFrozen(outputPath)).toBe(true);
+		expect(() => {
+			(outputPath as { absolutePath: string }).absolutePath = "C:\\outside.mp4";
+		}).toThrow();
+		expect(() =>
+			assertT09FilesystemPathAuthority({
+				absolutePath: outputPath.absolutePath,
+				rootPath: outputPath.rootPath,
+				label: "T09 test path",
+				allowMissingFinal: true,
+			}),
+		).not.toThrow();
+	});
+
+	it("rejects a final junction reparse point", async () => {
+		const root = await mkdtemp(join(tmpdir(), "t09-final-reparse-"));
+		try {
+			const target = join(root, "target");
+			const link = join(root, "link");
+			mkdirSync(target, { recursive: true });
+			symlinkSync(target, link, "junction");
+			expect(() =>
+				createT09ServerOwnedStagingPath({
+					rootPath: root,
+					relativePath: "link/output.mp4",
+				}),
+			).toThrow(/reparse|authority|filesystem/i);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("rejects a parent junction reparse point", async () => {
+		const root = await mkdtemp(join(tmpdir(), "t09-parent-reparse-"));
+		try {
+			const target = join(root, "target");
+			const link = join(root, "parent-link");
+			mkdirSync(target, { recursive: true });
+			symlinkSync(target, link, "junction");
+			expect(() =>
+				createT09ServerOwnedStagingPath({
+					rootPath: root,
+					relativePath: "parent-link/output.mp4",
+				}),
+			).toThrow(/reparse|authority|filesystem/i);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	it("keeps the T09 staging handoff local and server-owned", () => {

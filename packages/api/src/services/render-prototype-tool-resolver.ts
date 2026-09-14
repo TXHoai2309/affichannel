@@ -6,6 +6,7 @@ import {
 	prototypeToolManifestSchema,
 	sha256Hex,
 } from "@affichannel/core";
+import { assertT09FilesystemPathAuthority } from "./render-prototype-staging";
 
 export class T09ToolResolutionError extends Error {
 	readonly code:
@@ -16,6 +17,7 @@ export class T09ToolResolutionError extends Error {
 		| "T09_FFMPEG_BINARY_IDENTITY_MISMATCH"
 		| "T09_FFMPEG_BINARY_NOT_FOUND"
 		| "T09_FFMPEG_BINARY_NOT_REGULAR_FILE"
+		| "T09_FFMPEG_PATH_REPARSE_UNSAFE"
 		| "T09_FFMPEG_PLATFORM_MISMATCH"
 		| "T09_FFMPEG_BINARY_HASH_MISMATCH";
 
@@ -30,6 +32,7 @@ const T09_RESOLVED_TOOL_AUTHORITY = Symbol("T09_RESOLVED_TOOL_AUTHORITY");
 
 export type ResolvedT09FfmpegTool = Readonly<{
 	executablePath: string;
+	canonicalExecutablePath: string;
 	manifest: PrototypeToolManifest;
 	manifestIdentity: string;
 	binarySha256: string;
@@ -84,6 +87,21 @@ export async function resolveT09FfmpegTool(input: {
 			"T09_FFMPEG_BINARY_NOT_REGULAR_FILE",
 			"The explicitly configured FFmpeg path is not a regular file.",
 		);
+	let canonicalExecutablePath: string;
+	try {
+		canonicalExecutablePath = assertT09FilesystemPathAuthority({
+			absolutePath: input.configuredPath,
+			label: "T09 FFmpeg executable",
+			allowMissingFinal: false,
+		}).canonicalPath;
+	} catch (error) {
+		throw new T09ToolResolutionError(
+			"T09_FFMPEG_PATH_REPARSE_UNSAFE",
+			error instanceof Error
+				? error.message
+				: "The FFmpeg executable path has unsafe filesystem identity.",
+		);
+	}
 	const bytes = await readFile(input.configuredPath);
 	const binarySha256 = sha256Bytes(bytes);
 	if (binarySha256 !== manifest.binarySha256)
@@ -93,6 +111,7 @@ export async function resolveT09FfmpegTool(input: {
 		);
 	const resolved = {
 		executablePath: input.configuredPath,
+		canonicalExecutablePath,
 		manifest,
 		manifestIdentity: await sha256Hex(manifest),
 		binarySha256,
@@ -146,6 +165,7 @@ export async function revalidateT09FfmpegTool(input: {
 	});
 	if (
 		current.executablePath !== input.tool.executablePath ||
+		current.canonicalExecutablePath !== input.tool.canonicalExecutablePath ||
 		current.manifestIdentity !== input.tool.manifestIdentity ||
 		current.binarySha256 !== input.tool.binarySha256
 	)

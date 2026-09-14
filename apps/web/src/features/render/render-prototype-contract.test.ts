@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { mkdirSync, symlinkSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { buildT09FfmpegCommandPlan } from "@affichannel/api/services/render-prototype-command-plan";
 import {
@@ -121,6 +123,7 @@ async function commandForPlan(
 		plan,
 		tool: {
 			executablePath: resolve(root, "ffmpeg.exe"),
+			canonicalExecutablePath: resolve(root, "ffmpeg.exe"),
 			manifest,
 			manifestIdentity: plan.exactToolManifestIdentity,
 			binarySha256,
@@ -279,6 +282,7 @@ describe("AFF-US-021 21E-A prototype contracts", () => {
 				plan,
 				tool: {
 					executablePath: resolve(root, "ffmpeg.exe"),
+					canonicalExecutablePath: resolve(root, "ffmpeg.exe"),
 					manifest,
 					manifestIdentity: plan.exactToolManifestIdentity,
 					binarySha256,
@@ -796,6 +800,29 @@ describe("AFF-US-021 21E-A prototype contracts", () => {
 		expect(parsed).not.toHaveProperty("checksumSha256");
 		expect(parsed).not.toHaveProperty("storageKey");
 		expect(parsed).not.toHaveProperty("proof");
+	});
+
+	it("rejects an approved executable under a parent junction", async () => {
+		const root = await mkdtemp(join(tmpdir(), "t09-tool-reparse-"));
+		try {
+			const target = join(root, "target");
+			const link = join(root, "parent-link");
+			const binaryPath = join(link, "ffmpeg.exe");
+			const bytes = Buffer.from("junction-test-binary");
+			mkdirSync(target, { recursive: true });
+			symlinkSync(target, link, "junction");
+			await writeFile(binaryPath, bytes);
+			await expect(
+				resolveT09FfmpegTool({
+					configuredPath: binaryPath,
+					manifest: approvedManifest(
+						createHash("sha256").update(bytes).digest("hex"),
+					),
+				}),
+			).rejects.toMatchObject({ code: "T09_FFMPEG_PATH_REPARSE_UNSAFE" });
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
 	});
 
 	it("keeps the checked-in PNG fixture byte identity explicit", () => {
