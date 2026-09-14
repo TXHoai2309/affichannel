@@ -14,6 +14,8 @@ import type { ResolvedT09FfmpegTool } from "./render-prototype-tool-resolver";
 
 export type T09FfmpegCommandPlan = Readonly<{
 	executablePath: string;
+	toolManifestIdentity: string;
+	toolBinarySha256: string;
 	argv: readonly string[];
 	outputPath: string;
 	filterGraph: string;
@@ -389,6 +391,8 @@ export async function buildT09FfmpegCommandPlan(input: {
 	] as const;
 	return {
 		executablePath: input.tool.executablePath,
+		toolManifestIdentity: input.tool.manifestIdentity,
+		toolBinarySha256: input.tool.binarySha256,
 		argv,
 		outputPath,
 		filterGraph,

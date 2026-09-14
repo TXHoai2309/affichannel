@@ -77,7 +77,7 @@ type FinalizeRequest = Readonly<{
 	body?: RenderOutputBody;
 }>;
 
-type ReconcileRequest = Omit<FinalizeRequest, "body" | "leaseOwner">;
+type ReconcileRequest = Omit<FinalizeRequest, "leaseOwner">;
 
 type FinalizeProofInput = Readonly<{
 	jobId: string;

@@ -7,6 +7,7 @@ import {
 	canonicalizeCompositionJson,
 	classifyRenderExecutionOutcome,
 	sha256Hex,
+	t09OutputReadySchema,
 } from "@affichannel/core";
 import type { CompositionBusinessPreflight } from "./composition-preflight-service";
 import { preflightCompositionVersionInTransaction } from "./composition-preflight-service";
@@ -17,6 +18,7 @@ import {
 	failJobAfterExecution,
 	failTechnical,
 	fenceAndRequeue,
+	getRenderLeaseConfiguration,
 	heartbeatRenderAttempt,
 	loadExecutionSnapshot,
 	markExecutionStarted,
@@ -127,6 +129,94 @@ async function resolveStateTransitionLoss(
 async function technicalEvidenceFingerprint(result: TechnicalPreflightResult) {
 	if (!result.technicalManifest) return null;
 	return sha256Hex(canonicalizeCompositionJson(result.technicalManifest));
+}
+
+const RENDER_HEARTBEAT_CHECK_TIMEOUT_MS = 5_000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number) {
+	return new Promise<T>((resolve, reject) => {
+		const timer = setTimeout(
+			() => reject(new Error("RENDER_HEARTBEAT_CHECK_TIMEOUT")),
+			timeoutMs,
+		);
+		promise.then(
+			(value) => {
+				clearTimeout(timer);
+				resolve(value);
+			},
+			(error: unknown) => {
+				clearTimeout(timer);
+				reject(error);
+			},
+		);
+	});
+}
+
+export async function executeRenderAdapterWithHeartbeat(input: {
+	adapter: RenderExecutionAdapter;
+	snapshot: NonNullable<Awaited<ReturnType<typeof loadExecutionSnapshot>>>;
+	heartbeat?: typeof heartbeatRenderAttempt;
+	heartbeatIntervalMs?: number;
+}): Promise<RenderExecutionAdapterResult> {
+	const controller = new AbortController();
+	const heartbeat = input.heartbeat ?? heartbeatRenderAttempt;
+	const heartbeatIntervalMs =
+		input.heartbeatIntervalMs ??
+		getRenderLeaseConfiguration().heartbeatIntervalSeconds * 1000;
+	let leaseLost = false;
+	let heartbeatInFlight: Promise<void> | null = null;
+
+	const runHeartbeat = () => {
+		if (heartbeatInFlight || leaseLost) return;
+		const pending = withTimeout(
+			Promise.resolve().then(() =>
+				heartbeat({
+					attemptId: input.snapshot.attemptId,
+					jobId: input.snapshot.jobId,
+					attemptNumber: input.snapshot.attemptNumber,
+					leaseOwner: input.snapshot.leaseOwner,
+				}),
+			),
+			RENDER_HEARTBEAT_CHECK_TIMEOUT_MS,
+		)
+			.then((owned) => {
+				if (!owned) {
+					leaseLost = true;
+					controller.abort();
+				}
+			})
+			.catch(() => {
+				leaseLost = true;
+				controller.abort();
+			});
+		let tracked!: Promise<void>;
+		tracked = pending.finally(() => {
+			if (heartbeatInFlight === tracked) heartbeatInFlight = null;
+		});
+		heartbeatInFlight = tracked;
+	};
+
+	const heartbeatTimer = setInterval(runHeartbeat, heartbeatIntervalMs);
+	try {
+		const result = await input.adapter({
+			snapshot: input.snapshot,
+			signal: controller.signal,
+		});
+		if (heartbeatInFlight) await heartbeatInFlight;
+		if (leaseLost)
+			return {
+				outcome: "FAILURE",
+				classification: "RETRYABLE",
+				sideEffectFree: false,
+				errorCode: "RENDER_LEASE_LOST_DURING_EXECUTION",
+				errorMessage:
+					"Render attempt lease ownership was lost while execution was active.",
+			};
+		return result;
+	} finally {
+		clearInterval(heartbeatTimer);
+		if (heartbeatInFlight) await heartbeatInFlight;
+	}
 }
 
 /**
@@ -385,7 +475,11 @@ export async function runNextRenderAttempt(
 
 	let result: RenderExecutionAdapterResult;
 	try {
-		result = await dependencies.execute({ snapshot });
+		result = await executeRenderAdapterWithHeartbeat({
+			adapter: dependencies.execute,
+			snapshot,
+			heartbeat: dependencies.leaseHeartbeat,
+		});
 	} catch (error) {
 		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
@@ -406,6 +500,33 @@ export async function runNextRenderAttempt(
 				);
 	}
 	if (result.outcome === "SUCCESS") {
+		if (result.outputReady) {
+			const outputReady = t09OutputReadySchema.safeParse(result.outputReady);
+			if (
+				!outputReady.success ||
+				outputReady.data.jobId !== snapshot.jobId ||
+				outputReady.data.attemptId !== snapshot.attemptId ||
+				outputReady.data.attemptNumber !== snapshot.attemptNumber ||
+				outputReady.data.outputReservationId !==
+					snapshot.execution.outputReservationId
+			) {
+				const persisted = await persistIndeterminate({
+					attemptId: attempt.id,
+					jobId: job.id,
+					attemptNumber: attempt.attemptNumber,
+					leaseOwner,
+					errorCode: "OUTPUT_READY_IDENTITY_MISMATCH",
+					errorMessage:
+						"OUTPUT_READY did not exactly match the claimed attempt reservation.",
+				});
+				return persisted
+					? persistedResult("INDETERMINATE", "OUTPUT_READY_IDENTITY_MISMATCH")
+					: await resolveStateTransitionLoss(
+							attemptIdentity,
+							"OUTPUT_READY_IDENTITY_MISMATCH",
+						);
+			}
+		}
 		const persisted = await persistIndeterminate({
 			attemptId: attempt.id,
 			jobId: job.id,

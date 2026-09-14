@@ -3,6 +3,7 @@ import type {
 	CompositionTechnicalManifestV1,
 	RenderRequestSpecV1,
 } from "./composition";
+import type { T09OutputReady } from "./render-prototype/output-ready";
 
 export const renderJobOperations = ["START_RENDER", "RENDER_AGAIN"] as const;
 export type RenderJobOperation = (typeof renderJobOperations)[number];
@@ -48,17 +49,28 @@ export type RenderAttemptExecutionSnapshot = Readonly<{
 }>;
 
 export type RenderExecutionAdapterResult =
-	| { outcome: "SUCCESS" }
+	| {
+			outcome: "SUCCESS";
+			/**
+			 * Identity-only handoff for the 21D proof path. This is optional for
+			 * legacy 21C test adapters; a successful adapter result without it is
+			 * still never trusted as completion.
+			 */
+			outputReady?: T09OutputReady;
+	  }
 	| {
 			outcome: "FAILURE";
 			classification: "DETERMINISTIC" | "RETRYABLE";
 			sideEffectFree: boolean;
+			/** A proven terminal technical contract violation, even when bytes exist. */
+			terminal?: boolean;
 			errorCode: string;
 			errorMessage?: string;
 	  };
 
 export type RenderExecutionAdapter = (input: {
 	snapshot: RenderAttemptExecutionSnapshot;
+	signal?: AbortSignal;
 }) => Promise<RenderExecutionAdapterResult>;
 
 export type RenderExecutionDisposition = "FAILED" | "QUEUED" | "INDETERMINATE";
@@ -88,6 +100,8 @@ export function classifyRenderExecutionOutcome(
 	result: RenderExecutionAdapterResult,
 ): RenderExecutionDisposition {
 	if (result.outcome === "SUCCESS") return "INDETERMINATE";
+	if (result.terminal && result.classification === "DETERMINISTIC")
+		return "FAILED";
 	if (result.sideEffectFree && result.classification === "DETERMINISTIC")
 		return "FAILED";
 	if (result.sideEffectFree && result.classification === "RETRYABLE")

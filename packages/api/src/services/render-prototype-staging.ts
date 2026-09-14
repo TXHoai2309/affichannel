@@ -56,3 +56,36 @@ export function assertT09ServerOwnedStagingPath(
 		throw new Error(`${label} must be a server-owned T09 staging path.`);
 	return value.absolutePath;
 }
+
+function safeIdentityPart(value: string, label: string) {
+	if (!/^[A-Za-z0-9_-]+$/u.test(value))
+		throw new Error(`${label} must be a safe server-generated identity.`);
+	return value;
+}
+
+/**
+ * Derives the one attempt-owned output path from server-generated identities.
+ * The path is deliberately not part of OUTPUT_READY, which remains an
+ * identity-only handoff to the 21D proof authority.
+ */
+export function createT09AttemptOutputStagingPath(input: {
+	rootPath: string;
+	jobId: string;
+	attemptId: string;
+	attemptNumber: number;
+	outputReservationId: string;
+}) {
+	if (!Number.isSafeInteger(input.attemptNumber) || input.attemptNumber <= 0)
+		throw new Error("T09 attempt number must be a positive safe integer.");
+	return createT09ServerOwnedStagingPath({
+		rootPath: input.rootPath,
+		relativePath: [
+			"attempts",
+			safeIdentityPart(input.jobId, "T09 job ID"),
+			safeIdentityPart(input.attemptId, "T09 attempt ID"),
+			String(input.attemptNumber),
+			safeIdentityPart(input.outputReservationId, "T09 output reservation ID"),
+			"output.mp4",
+		].join("/"),
+	});
+}
