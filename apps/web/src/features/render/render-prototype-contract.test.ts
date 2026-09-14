@@ -425,6 +425,8 @@ describe("AFF-US-021 21E-A prototype contracts", () => {
 			expect(argvValue(command.argv, "-colorspace")).toBe("bt709");
 			expect(argvValue(command.argv, "-c:v")).toBe("libx264");
 			expect(argvValue(command.argv, "-f")).toBe("mp4");
+			expect(argvValue(command.argv, "-use_editlist")).toBe("0");
+			expect(command.argv).not.toContain("-avoid_negative_ts");
 			expect(command.filterGraph).toContain("scale=1080:1920");
 			expect(command.argv).toContain("-an");
 		} finally {

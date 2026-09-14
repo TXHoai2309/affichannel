@@ -12,6 +12,7 @@ import type { T09FfmpegCommandPlan } from "./render-prototype-command-plan";
 import {
 	assertT09ServerOwnedStagingPath,
 	createT09AttemptOutputStagingPath,
+	prepareT09AttemptOutputStaging,
 	type T09ServerOwnedStagingPath,
 } from "./render-prototype-staging";
 import {
@@ -339,6 +340,7 @@ export async function executeT09FfmpegProcess(
 	let outputReady: T09OutputReady;
 	try {
 		outputReady = validateExecutionContract(input);
+		await prepareT09AttemptOutputStaging(input.outputPath);
 	} catch (error) {
 		return failure({
 			errorCode: "T09_EXECUTION_CONTRACT_INVALID",

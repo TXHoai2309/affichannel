@@ -1,5 +1,6 @@
 import { lstatSync, realpathSync } from "node:fs";
-import { isAbsolute, parse, relative, resolve, sep } from "node:path";
+import { lstat, mkdir } from "node:fs/promises";
+import { dirname, isAbsolute, parse, relative, resolve, sep } from "node:path";
 
 const T09_SERVER_OWNED_PATH = Symbol("T09_SERVER_OWNED_PATH");
 const T09_SERVER_OWNED_CANONICAL_ROOT = Symbol(
@@ -242,4 +243,95 @@ export function createT09AttemptOutputStagingPath(input: {
 			"output.mp4",
 		].join("/"),
 	});
+}
+
+function filesystemError(label: string, detail: string): never {
+	throw new T09PathAuthorityError(`${label} ${detail}`);
+}
+
+async function materializeT09Directory(input: {
+	rootPath: string;
+	directoryPath: string;
+	label: string;
+}) {
+	const rootPath = resolve(input.rootPath);
+	const directoryPath = resolve(input.directoryPath);
+	if (!isWithinRoot(rootPath, directoryPath))
+		filesystemError(input.label, "must remain inside its server-owned root.");
+
+	const rootAuthority = assertT09FilesystemPathAuthority({
+		absolutePath: rootPath,
+		rootPath,
+		label: input.label,
+		allowMissingFinal: false,
+	});
+	const rootStats = await lstat(rootAuthority.absolutePath);
+	if (!rootStats.isDirectory())
+		filesystemError(input.label, "root must be a directory.");
+
+	let currentPath = rootPath;
+	const components = relative(rootPath, directoryPath)
+		.split(/[\\/]+/u)
+		.filter(Boolean);
+	for (const component of components) {
+		currentPath = resolve(currentPath, component);
+		try {
+			await mkdir(currentPath);
+		} catch (error) {
+			const code =
+				error && typeof error === "object" && "code" in error
+					? (error as { code?: unknown }).code
+					: undefined;
+			if (code !== "EEXIST")
+				filesystemError(input.label, "parent directory could not be created.");
+		}
+		assertT09FilesystemPathAuthority({
+			absolutePath: currentPath,
+			rootPath,
+			label: input.label,
+			allowMissingFinal: false,
+		});
+		const stats = await lstat(currentPath);
+		if (!stats.isDirectory())
+			filesystemError(input.label, "contains a non-directory component.");
+	}
+}
+
+/**
+ * Materializes only the server-owned parent directory for an attempt output.
+ * The output file itself must remain absent so FFmpeg's -n contract and the
+ * later storage-backed proof remain authoritative.
+ */
+export async function prepareT09AttemptOutputStaging(
+	outputPath: T09ServerOwnedStagingPath,
+) {
+	const absolutePath = assertT09ServerOwnedStagingPath(
+		outputPath,
+		"T09 output staging",
+	);
+	const parentPath = dirname(absolutePath);
+	await materializeT09Directory({
+		rootPath: outputPath.rootPath,
+		directoryPath: parentPath,
+		label: "T09 output staging",
+	});
+	assertT09FilesystemPathAuthority({
+		absolutePath: parentPath,
+		rootPath: outputPath.rootPath,
+		label: "T09 output staging parent",
+		allowMissingFinal: false,
+	});
+	try {
+		await lstat(absolutePath);
+	} catch (error) {
+		if ((error as NodeJS.ErrnoException).code === "ENOENT") return outputPath;
+		filesystemError(
+			"T09 output staging",
+			"output identity could not be inspected.",
+		);
+	}
+	filesystemError(
+		"T09 output staging",
+		"output file already exists and cannot be overwritten.",
+	);
 }

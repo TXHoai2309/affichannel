@@ -2,7 +2,7 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { createHash } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { mkdirSync, symlinkSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import {
@@ -16,6 +16,7 @@ import {
 	assertT09FilesystemPathAuthority,
 	createT09AttemptOutputStagingPath,
 	createT09ServerOwnedStagingPath,
+	prepareT09AttemptOutputStaging,
 } from "@affichannel/api/services/render-prototype-staging";
 import { assertT09StagedOutputHandoff } from "@affichannel/api/services/render-prototype-staging-handoff";
 import { resolveT09FfmpegTool } from "@affichannel/api/services/render-prototype-tool-resolver";
@@ -710,6 +711,77 @@ describe("AFF-US-021 EN001 21E-B T09 execution contract", () => {
 				relativePath: "../outside.mp4",
 			}),
 		).toThrow("must remain inside");
+	});
+
+	it("materializes the exact attempt parent idempotently without precreating output", async () => {
+		const root = await mkdtemp(join(tmpdir(), "t09-materialize-"));
+		try {
+			const path = createT09AttemptOutputStagingPath({
+				rootPath: root,
+				jobId: "job-materialize",
+				attemptId: "attempt-materialize",
+				attemptNumber: 2,
+				outputReservationId: "reservation-materialize",
+			});
+			const prepared = await prepareT09AttemptOutputStaging(path);
+			const parent = resolve(path.absolutePath, "..");
+			expect(prepared.absolutePath).toBe(path.absolutePath);
+			expect(stat(parent).then((value) => value.isDirectory())).resolves.toBe(
+				true,
+			);
+			expect(stat(path.absolutePath)).rejects.toMatchObject({ code: "ENOENT" });
+			await expect(prepareT09AttemptOutputStaging(path)).resolves.toBe(path);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("shows the materialized parent to the fake spawn with the exact no-overwrite argv", async () => {
+		let spawnParent: string | undefined;
+		const child = new FakeChild();
+		const result = await executeT09FfmpegProcess(
+			{
+				commandPlan: command({
+					argv: [
+						"-hide_banner",
+						"-n",
+						"-use_editlist",
+						"0",
+						outputPath.absolutePath,
+					],
+				}),
+				outputPath,
+				outputReady,
+			},
+			{
+				spawn: (_executablePath, argv, options) => {
+					spawnParent = options.cwd;
+					expect(argv.at(-1)).toBe(outputPath.absolutePath);
+					expect(argv).toContain("-n");
+					expect(argv).toContain("-use_editlist");
+					expect(argv[argv.indexOf("-use_editlist") + 1]).toBe("0");
+					expect(argv).not.toContain("-y");
+					expect(argv).not.toContain("-avoid_negative_ts");
+					return spawnThat(child, { exitCode: 0 })(
+						_executablePath,
+						argv,
+						options,
+					);
+				},
+				probeOutput: async () => ({ state: "PRESENT", byteSize: 1024 }),
+			},
+		);
+
+		expect(result).toMatchObject({ outcome: "SUCCESS" });
+		expect(spawnParent).toBe(outputPath.rootPath);
+		expect(
+			stat(resolve(outputPath.absolutePath, "..")).then((value) =>
+				value.isDirectory(),
+			),
+		).resolves.toBe(true);
+		expect(stat(outputPath.absolutePath)).rejects.toMatchObject({
+			code: "ENOENT",
+		});
 	});
 
 	it("freezes staging authority and rejects mutation", () => {

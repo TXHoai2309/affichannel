@@ -387,6 +387,8 @@ export async function buildT09FfmpegCommandPlan(input: {
 		String(input.plan.totalFrames),
 		"-f",
 		profile.container.toLowerCase(),
+		"-use_editlist",
+		"0",
 		outputPath,
 	] as const;
 	return {
