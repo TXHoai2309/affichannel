@@ -22,6 +22,7 @@ export * from "./project/project-service";
 export * from "./project/project-types";
 export * from "./project/project-validation";
 export * from "./project/project-write-contract";
+export * from "./quick-image";
 export * from "./render-job";
 export * from "./render-prototype";
 export * from "./script-claim-refresh";

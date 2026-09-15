@@ -170,20 +170,116 @@ describe("AFF-US-016 M3A Project write contract", () => {
 		});
 	});
 
-	it.each([
-		["AFFILIATE", "QUICK_IMAGE", "QUICK_IMAGE_STANDARD"],
-		["AFFILIATE", "MEDIA_FIRST", "MEDIA_FIRST_STANDARD"],
-	])("keeps %s/%s inactive during M3", (contentType, creationPath, key) => {
+	it("allows the locked Affiliate Quick Image identity", () => {
 		expect(
 			classify({
-				contentType,
-				creationPath,
-				contentFormat: { key, version: 1 },
+				contentType: "AFFILIATE",
+				creationPath: "QUICK_IMAGE",
+				contentFormat: { key: "QUICK_IMAGE_STANDARD", version: 1 },
+				quickImage: { durationSeconds: 5 },
 			}),
 		).toEqual({
-			kind: "rejected",
-			reasonCode: "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
+			kind: "canonical",
+			identity: {
+				contentType: "AFFILIATE",
+				creationPath: "QUICK_IMAGE",
+				contentFormat: { key: "QUICK_IMAGE_STANDARD", version: 1 },
+			},
+			writableDuringM3: true,
 		});
+	});
+
+	it.each([5, 10])(
+		"rejects a Scripted request carrying Quick Image duration %s",
+		(durationSeconds) => {
+			expect(
+				classify({
+					...canonicalAffiliateIdentity,
+					quickImage: { durationSeconds },
+				}),
+			).toEqual({
+				kind: "rejected",
+				reasonCode: "QUICK_IMAGE_FIELDS_REQUIRE_QUICK_IMAGE_IDENTITY",
+			});
+		},
+	);
+
+	it("requires the Quick Image payload for a Quick Image identity", () => {
+		expect(
+			classify({
+				contentType: "AFFILIATE",
+				creationPath: "QUICK_IMAGE",
+				contentFormat: { key: "QUICK_IMAGE_STANDARD", version: 1 },
+			}),
+		).toEqual({ kind: "rejected", reasonCode: "QUICK_IMAGE_PAYLOAD_REQUIRED" });
+	});
+
+	it("rejects a malformed Quick Image payload", () => {
+		const parsed = channelFirstCompatibleCreateProjectInputSchema.safeParse({
+			...legacyPayload,
+			contentType: "AFFILIATE",
+			creationPath: "QUICK_IMAGE",
+			contentFormat: { key: "QUICK_IMAGE_STANDARD", version: 1 },
+			quickImage: { durationSeconds: 7 },
+		});
+
+		expect(parsed.success).toBe(false);
+	});
+
+	it("keeps unrelated legacy unknown fields strip-compatible", () => {
+		const parsed = channelFirstCompatibleCreateProjectInputSchema.safeParse({
+			...legacyPayload,
+			...canonicalAffiliateIdentity,
+			unrelatedLegacyField: "ignored",
+		});
+
+		expect(parsed.success).toBe(true);
+		if (parsed.success) {
+			expect("unrelatedLegacyField" in parsed.data).toBe(false);
+		}
+	});
+
+	it.each([
+		["AFFILIATE", "QUICK_IMAGE", "SCRIPTED_STANDARD"],
+		["AFFILIATE", "MEDIA_FIRST", "MEDIA_FIRST_STANDARD"],
+		["AFFILIATE", "SCRIPTED", "QUICK_IMAGE_STANDARD"],
+	])(
+		"rejects inactive or mismatched %s/%s identity",
+		(contentType, creationPath, key) => {
+			expect(
+				classify({
+					contentType,
+					creationPath,
+					contentFormat: { key, version: 1 },
+				}),
+			).toEqual({
+				kind: "rejected",
+				reasonCode:
+					creationPath === "MEDIA_FIRST"
+						? "CHANNEL_FIRST_IDENTITY_NOT_ACTIVE"
+						: "CONTENT_FORMAT_PATH_MISMATCH",
+			});
+		},
+	);
+
+	it("rejects an unsupported Quick Image format version", () => {
+		expect(
+			classify({
+				contentType: "AFFILIATE",
+				creationPath: "QUICK_IMAGE",
+				contentFormat: { key: "QUICK_IMAGE_STANDARD", version: 2 },
+			}),
+		).toEqual({ kind: "rejected", reasonCode: "UNKNOWN_CONTENT_FORMAT_REF" });
+	});
+
+	it("rejects an unknown creation path", () => {
+		expect(
+			classify({
+				contentType: "AFFILIATE",
+				creationPath: "UNKNOWN_PATH",
+				contentFormat: { key: "QUICK_IMAGE_STANDARD", version: 1 },
+			}),
+		).toEqual({ kind: "rejected", reasonCode: "INVALID_CREATION_PATH" });
 	});
 
 	it("allows Organic Scripted creation without a Product", () => {

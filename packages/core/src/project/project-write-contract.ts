@@ -1,10 +1,12 @@
 import { z } from "zod";
 import type { ContentFormatRegistry } from "../content-format/registry";
 import {
+	CONTENT_FORMAT_DEFAULTS,
 	getContentFormatDefinition,
 	INITIAL_CONTENT_FORMAT_REGISTRY,
 } from "../content-format/registry";
 import { resolveContentFormatRef } from "../content-format/resolver";
+import { quickImageDurationSecondsSchema } from "../quick-image/duration";
 import {
 	CONTENT_TYPES,
 	type ContentType,
@@ -27,6 +29,10 @@ export const projectWriteIdentityInputSchema = z.object({
 		})
 		.strict()
 		.nullable()
+		.optional(),
+	quickImage: z
+		.object({ durationSeconds: quickImageDurationSecondsSchema })
+		.strict()
 		.optional(),
 });
 
@@ -77,6 +83,8 @@ export const PROJECT_WRITE_IDENTITY_REJECTION_REASONS = [
 	"CONTENT_FORMAT_PATH_MISMATCH",
 	"CHANNEL_FIRST_IDENTITY_NOT_ACTIVE",
 	"PROJECT_IDENTITY_CHANGED_DURING_UPDATE",
+	"QUICK_IMAGE_FIELDS_REQUIRE_QUICK_IMAGE_IDENTITY",
+	"QUICK_IMAGE_PAYLOAD_REQUIRED",
 ] as const;
 
 export type ProjectWriteIdentityRejectionReason =
@@ -169,7 +177,8 @@ export function classifyProjectWriteIdentity(
 	if (
 		input.contentType === undefined &&
 		input.creationPath === undefined &&
-		input.contentFormat === undefined
+		input.contentFormat === undefined &&
+		input.quickImage === undefined
 	) {
 		return {
 			kind: "legacy",
@@ -232,11 +241,36 @@ export function classifyProjectWriteIdentity(
 		creationPath,
 		contentFormat: { key, version },
 	};
+	const isQuickImageIdentity =
+		(contentType === "AFFILIATE" || contentType === "ORGANIC") &&
+		creationPath === "QUICK_IMAGE" &&
+		key === CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.key &&
+		version === CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.version;
+	if (input.quickImage !== undefined && !isQuickImageIdentity) {
+		return {
+			kind: "rejected",
+			reasonCode: "QUICK_IMAGE_FIELDS_REQUIRE_QUICK_IMAGE_IDENTITY",
+		};
+	}
+	if (isQuickImageIdentity && input.quickImage === undefined) {
+		return {
+			kind: "rejected",
+			reasonCode: "QUICK_IMAGE_PAYLOAD_REQUIRED",
+		};
+	}
 	if (
 		(contentType === "AFFILIATE" || contentType === "ORGANIC") &&
 		creationPath === "SCRIPTED" &&
 		key === LEGACY_AFFILIATE_IDENTITY.contentFormat.key &&
 		version === LEGACY_AFFILIATE_IDENTITY.contentFormat.version
+	) {
+		return { kind: "canonical", identity, writableDuringM3: true };
+	}
+	if (
+		(contentType === "AFFILIATE" || contentType === "ORGANIC") &&
+		creationPath === "QUICK_IMAGE" &&
+		key === CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.key &&
+		version === CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.version
 	) {
 		return { kind: "canonical", identity, writableDuringM3: true };
 	}

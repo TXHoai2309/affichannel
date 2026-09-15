@@ -1,6 +1,10 @@
 import { z } from "zod";
 
 import { productNameSchema } from "../product/validation";
+import {
+	quickImageDurationSecondsSchema,
+	quickImageIdentitySchema,
+} from "../quick-image";
 import { CONTENT_BRIEF_PLATFORMS } from "./project-types";
 import { projectWriteIdentityInputSchema } from "./project-write-contract";
 
@@ -54,6 +58,26 @@ export const createProjectInputSchema =
 
 export const updateProjectInputSchema =
 	channelFirstCompatibleUpdateProjectInputSchema;
+
+/**
+ * Slice 1's typed Quick Image request boundary. Persistence is intentionally
+ * deferred to the Quick Image settings slice; this schema must not be merged
+ * into the active Content Brief contract yet.
+ */
+export const quickImageProjectInputSchema = z
+	.object({
+		name: projectNameSchema,
+		productId: productIdSchema,
+		...quickImageIdentitySchema.shape,
+		quickImage: z
+			.object({ durationSeconds: quickImageDurationSecondsSchema })
+			.strict(),
+	})
+	.strict();
+
+export type QuickImageProjectInput = z.infer<
+	typeof quickImageProjectInputSchema
+>;
 
 export const projectIdInputSchema = z.object({
 	id: projectIdSchema,
