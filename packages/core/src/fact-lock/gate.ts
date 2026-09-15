@@ -4,6 +4,7 @@ import {
 	validateScriptVersionForFactLock,
 	validateScriptVersionForFactLockRun,
 } from "../script-version/validation";
+import type { QuickImageFactLockSourceProvenance } from "./quick-image-currentness";
 import type { FactLockReadInputMode, FactLockRunStatus } from "./types";
 
 export const factLockGateReasons = [
@@ -38,6 +39,7 @@ export type FactLockGateEvaluationInput = {
 		revision: number;
 		snapshot: ScriptVersionEditableSnapshot;
 	} | null;
+	currentQuickImageClaimSource?: QuickImageFactLockSourceProvenance | null;
 	runs: FactLockGateRunInput[];
 };
 
@@ -72,7 +74,61 @@ function result(
 export function evaluateFactLockGate(
 	input: FactLockGateEvaluationInput,
 ): FactLockGateResult {
-	if (!input.currentScriptVersion) return result("NO_SCRIPT_VERSION", input);
+	const hasQuickImageSource =
+		input.currentQuickImageClaimSource !== null &&
+		input.currentQuickImageClaimSource !== undefined;
+	if (
+		!input.currentScriptVersion &&
+		input.currentQuickImageClaimSource !== undefined &&
+		!hasQuickImageSource
+	)
+		return result("FACT_LOCK_INDETERMINATE", input);
+	if (!input.currentScriptVersion && !hasQuickImageSource)
+		return result("NO_SCRIPT_VERSION", input);
+
+	const runs = [...input.runs].sort(
+		(left, right) =>
+			new Date(right.createdAt).getTime() -
+				new Date(left.createdAt).getTime() || right.id.localeCompare(left.id),
+	);
+	if (!input.currentScriptVersion) {
+		const currentRuns = runs.filter(
+			(run) =>
+				run.inputMode === "MANIFEST_V1" &&
+				run.scriptVersionId === null &&
+				run.sourceScriptRevision === null,
+		);
+		if (currentRuns.length === 0) return result("FACT_LOCK_NOT_RUN", input);
+		const currentResultRuns = currentRuns.filter(
+			(run) => run.status === "passed" || run.status === "review_required",
+		);
+		const latestCurrentResultRun = currentResultRuns[0];
+		if (latestCurrentResultRun && !latestCurrentResultRun.sourceCurrent)
+			return result("FACT_LOCK_STALE_SCRIPT", input, latestCurrentResultRun);
+		if (latestCurrentResultRun && !latestCurrentResultRun.dependenciesCurrent)
+			return result("FACT_LOCK_STALE_FACTS", input, latestCurrentResultRun);
+		if (
+			latestCurrentResultRun?.status === "passed" &&
+			latestCurrentResultRun.sourceCurrent &&
+			latestCurrentResultRun.dependenciesCurrent
+		)
+			return result("FACT_LOCK_PASSED", input, latestCurrentResultRun);
+		if (
+			latestCurrentResultRun?.status === "review_required" &&
+			latestCurrentResultRun.sourceCurrent &&
+			latestCurrentResultRun.dependenciesCurrent
+		)
+			return result("FACT_LOCK_REVIEW_REQUIRED", input, latestCurrentResultRun);
+		const latestCurrentRun = currentRuns[0];
+		if (!latestCurrentRun) return result("FACT_LOCK_NOT_RUN", input);
+		if (latestCurrentRun.status === "pending")
+			return result("FACT_LOCK_PENDING", input, latestCurrentRun);
+		if (latestCurrentRun.status === "failed")
+			return result("FACT_LOCK_FAILED", input, latestCurrentRun);
+		if (latestCurrentRun.status === "indeterminate")
+			return result("FACT_LOCK_INDETERMINATE", input, latestCurrentRun);
+		return result("FACT_LOCK_NOT_RUN", input, latestCurrentRun);
+	}
 
 	const organicSnapshot = input.currentScriptVersion.snapshot;
 	const isOrganicDraft = organicSnapshot.schemaVersion === "script-draft.v3";
@@ -90,11 +146,6 @@ export function evaluateFactLockGate(
 		if (!structurallyReady) return result("SCRIPT_NOT_READY", input);
 	}
 
-	const runs = [...input.runs].sort(
-		(left, right) =>
-			new Date(right.createdAt).getTime() -
-				new Date(left.createdAt).getTime() || right.id.localeCompare(left.id),
-	);
 	if (runs.length === 0) return result("FACT_LOCK_NOT_RUN", input);
 
 	const current = input.currentScriptVersion;

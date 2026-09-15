@@ -1,5 +1,11 @@
 import { buildSubjectAwareManifestClaimProjection } from "../claim-subject/manifest-projection";
 import type { SubjectAwareScriptClaim } from "../claim-subject/types";
+import {
+	canonicalizeQuickImageClaimSourceDocument,
+	type QuickImageClaimSourceDocument,
+	quickImageClaimSourceContentHash,
+	quickImageClaimSourceElementContentHash,
+} from "../quick-image/claim-source";
 import { canonicalizeJson } from "../script-generation/canonical-json";
 import {
 	ORGANIC_SCRIPT_OUTPUT_SCHEMA_VERSION,
@@ -27,6 +33,7 @@ import type {
 	ClaimManifestClaim,
 	ClaimManifestLocator,
 	ClaimManifestSourceContentProjection,
+	NoScriptClaimManifestLocator,
 	ScriptVersionClaimManifestLocator,
 	SubjectAwareClaimManifestClaim,
 } from "./types";
@@ -61,6 +68,19 @@ export function scriptVersionClaimManifestLocator(
 	return {
 		sourceType: "SCRIPT_VERSION",
 		occurrence: cloneOccurrence(occurrence),
+	};
+}
+
+export function quickImageClaimManifestLocator(
+	element: Pick<
+		QuickImageClaimSourceDocument["elements"][number],
+		"kind" | "id"
+	>,
+): NoScriptClaimManifestLocator {
+	return {
+		sourceType: "NO_SCRIPT",
+		elementKind: element.kind,
+		elementKey: element.id,
 	};
 }
 
@@ -319,6 +339,101 @@ export async function buildClaimManifestFromScriptVersion(
 		projectId: input.data.projectId,
 		source,
 		productId: input.data.productId,
+		schemaVersion: CLAIM_MANIFEST_SCHEMA_VERSION,
+		builderVersion: CLAIM_MANIFEST_BUILDER_VERSION,
+		claims,
+		claimCount: claims.length,
+		isEmpty: claims.length === 0,
+		fingerprint,
+	}) as BuiltClaimManifest;
+}
+
+export type BuildClaimManifestFromQuickImageSourceInput = Readonly<{
+	workspaceId: string;
+	projectId: string;
+	productId: string | null;
+	source: QuickImageClaimSourceDocument;
+	sourceRevision: number;
+	sourceContentHashSha256: string;
+}>;
+
+/** Builds the generic v1 ClaimManifest from the durable Quick Image source. */
+export async function buildClaimManifestFromQuickImageSource(
+	rawInput: BuildClaimManifestFromQuickImageSourceInput,
+): Promise<BuiltClaimManifest> {
+	if (
+		!Number.isInteger(rawInput.sourceRevision) ||
+		rawInput.sourceRevision <= 0
+	)
+		throw new ClaimManifestError("INVALID_CLAIM_MANIFEST", ["INVALID_SOURCE"]);
+	if (!/^[a-f0-9]{64}$/.test(rawInput.sourceContentHashSha256))
+		throw new ClaimManifestError("INVALID_CLAIM_MANIFEST", ["INVALID_SOURCE"]);
+
+	const sourceDocument = canonicalizeQuickImageClaimSourceDocument(
+		rawInput.source,
+	);
+	const expectedSourceHash =
+		await quickImageClaimSourceContentHash(sourceDocument);
+	if (expectedSourceHash !== rawInput.sourceContentHashSha256)
+		throw new ClaimManifestError("INVALID_CLAIM_MANIFEST", [
+			"FINGERPRINT_MISMATCH",
+		]);
+
+	const elements = await Promise.all(
+		sourceDocument.elements.map(async (element) => ({
+			kind: element.kind,
+			key: element.id,
+			revision: String(rawInput.sourceRevision),
+			contentHash: await quickImageClaimSourceElementContentHash(element),
+		})),
+	);
+	const source = {
+		sourceType: "NO_SCRIPT" as const,
+		sourceSchemaVersion: sourceDocument.version,
+		sourceRevision: String(rawInput.sourceRevision),
+		elements,
+		sourceContentHash: rawInput.sourceContentHashSha256,
+	};
+	const claimCandidates = sourceDocument.elements.filter(
+		(element) => canonicalClaimSourceText(element.text).length > 0,
+	);
+	const locators = claimCandidates.map(quickImageClaimManifestLocator);
+	const ordinals = assignSameLocatorOrdinals(locators);
+	const claims = await Promise.all(
+		claimCandidates.map(async (element, index) => {
+			const locator = locators[index];
+			const sameLocatorOrdinal = ordinals[index];
+			if (!locator || sameLocatorOrdinal === undefined)
+				throw new ClaimManifestError("INVALID_CLAIM_MANIFEST", [
+					"CLAIM_REFERENCE_INVALID",
+				]);
+			const claimText = canonicalClaimSourceText(element.text);
+			const claimKeyHash = await sha256Hex({
+				sourceType: "NO_SCRIPT",
+				locator,
+				sameLocatorOrdinal,
+				claimText,
+			});
+			return {
+				claimKey: `claim_${claimKeyHash}`,
+				claimText,
+				locator,
+				sourceTextHash: await claimManifestSourceTextHash(element.text),
+			};
+		}),
+	);
+	const fingerprint = await claimManifestFingerprint({
+		workspaceId: rawInput.workspaceId,
+		projectId: rawInput.projectId,
+		source,
+		productId: rawInput.productId,
+		claims,
+	});
+	return immutable({
+		workspaceId: rawInput.workspaceId,
+		projectId: rawInput.projectId,
+		source,
+		productId: rawInput.productId,
 		schemaVersion: CLAIM_MANIFEST_SCHEMA_VERSION,
 		builderVersion: CLAIM_MANIFEST_BUILDER_VERSION,
 		claims,

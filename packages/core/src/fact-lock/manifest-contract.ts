@@ -325,7 +325,14 @@ export async function evaluateManifestExecutionEligibility(
 	const isAffiliate =
 		input.project.contentType === "AFFILIATE" &&
 		parsedManifest.data.builderVersion === "claim-manifest-builder.v1";
-	if (!isOrganic && !isAffiliate)
+	const isQuickImage =
+		(input.project.contentType === "ORGANIC" ||
+			input.project.contentType === "AFFILIATE") &&
+		input.project.creationPath === "QUICK_IMAGE" &&
+		input.project.contentFormatKey === "QUICK_IMAGE_STANDARD" &&
+		input.project.contentFormatVersion === 1 &&
+		parsedManifest.data.builderVersion === "claim-manifest-builder.v1";
+	if (!isOrganic && !isAffiliate && !isQuickImage)
 		return eligibilityFailure("CONTENT_TYPE_MISMATCH");
 	if (
 		!(await (isOrganic
@@ -336,12 +343,28 @@ export async function evaluateManifestExecutionEligibility(
 			"INVALID_MANIFEST_FINGERPRINT",
 			"CLAIM_MANIFEST_FINGERPRINT_MISMATCH",
 		);
-	if (parsedManifest.data.source.sourceType !== "SCRIPT_VERSION")
-		return eligibilityFailure("SOURCE_TYPE_UNSUPPORTED");
 	if (parsedManifest.data.workspaceId !== input.project.workspaceId)
 		return eligibilityFailure("WORKSPACE_MISMATCH");
 	if (parsedManifest.data.projectId !== input.project.id)
 		return eligibilityFailure("PROJECT_MISMATCH");
+	if (
+		!input.project.productId ||
+		parsedManifest.data.productId !== input.project.productId
+	)
+		return eligibilityFailure("PRODUCT_MISMATCH");
+	if (isQuickImage) {
+		if (
+			parsedManifest.data.source.sourceType !== "NO_SCRIPT" ||
+			parsedManifest.data.source.sourceSchemaVersion !==
+				"quick-image-claim-source.v1"
+		)
+			return eligibilityFailure("SOURCE_TYPE_UNSUPPORTED");
+		return {
+			eligible: true,
+			reason: "ELIGIBLE",
+			strategy: "AFFILIATE_V1",
+		};
+	}
 	if (input.project.creationPath !== "SCRIPTED")
 		return eligibilityFailure("CREATION_PATH_MISMATCH");
 	if (
@@ -349,11 +372,8 @@ export async function evaluateManifestExecutionEligibility(
 		input.project.contentFormatVersion !== 1
 	)
 		return eligibilityFailure("CONTENT_FORMAT_MISMATCH");
-	if (
-		!input.project.productId ||
-		parsedManifest.data.productId !== input.project.productId
-	)
-		return eligibilityFailure("PRODUCT_MISMATCH");
+	if (parsedManifest.data.source.sourceType !== "SCRIPT_VERSION")
+		return eligibilityFailure("SOURCE_TYPE_UNSUPPORTED");
 	if (!input.currentScriptVersion)
 		return eligibilityFailure("SCRIPT_VERSION_MISSING");
 	if (

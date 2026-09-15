@@ -1,6 +1,9 @@
 import {
 	type BuiltSubjectAwareClaimManifest,
+	CONTENT_FORMAT_DEFAULTS,
+	classifyPersistedProjectIdentity,
 	deriveFactLockEffectiveStatus,
+	deriveQuickImageFactLockEffectiveStatus,
 	FactLockError,
 	type FactLockGateEvaluationInput,
 	type FactLockProductFactSnapshot,
@@ -8,6 +11,7 @@ import {
 	type FactLockReadRun,
 	type FactLockRunStatus,
 	factLockInputSnapshotSchema,
+	isCurrentQuickImageFactLockSource,
 	manifestFactLockInputSnapshotAnySchema,
 	type ParsedFactLockInputSnapshot,
 	type ParsedManifestFactLockInputSnapshot,
@@ -35,6 +39,7 @@ import {
 } from "./claim-manifest-repository";
 import type { DbTransaction } from "./fact-dependency-repository";
 import { loadFactLockClaimsInTransaction } from "./fact-lock-claim-read-repository";
+import { getQuickImageClaimSourceInTransaction } from "./quick-image-claim-source-service";
 import type { WorkspaceActor } from "./workspace";
 
 type DbQuery = typeof db | DbTransaction;
@@ -61,9 +66,16 @@ type ReadContextRun = FactLockReadRun & {
 	sourceCurrent: boolean;
 };
 
+type ReadQuickImageClaimSource = {
+	sourceSchemaVersion: "quick-image-claim-source.v1";
+	revision: number;
+	sourceContentHashSha256: string;
+};
+
 export type FactLockReadContext = {
 	project: ReadProject;
 	currentScriptVersion: FactLockGateEvaluationInput["currentScriptVersion"];
+	currentQuickImageClaimSource: ReadQuickImageClaimSource | null;
 	runs: ReadContextRun[];
 	gateInput: FactLockGateEvaluationInput;
 };
@@ -74,6 +86,24 @@ function readFailure(message: string): never {
 
 function manifestFailure(message: string): never {
 	throw new FactLockError("CLAIM_MANIFEST_FINGERPRINT_MISMATCH", message);
+}
+
+function isCanonicalQuickImageProject(projectRecord: ReadProject) {
+	const classification = classifyPersistedProjectIdentity({
+		productId: projectRecord.productId,
+		contentType: projectRecord.contentType,
+		creationPath: projectRecord.creationPath,
+		contentFormatKey: projectRecord.contentFormatKey,
+		contentFormatVersion: projectRecord.contentFormatVersion,
+	});
+	return (
+		classification.kind === "canonical" &&
+		classification.identity.creationPath === "QUICK_IMAGE" &&
+		classification.identity.contentFormat.key ===
+			CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.key &&
+		classification.identity.contentFormat.version ===
+			CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.version
+	);
 }
 
 /**
@@ -129,11 +159,12 @@ function parseManifestSnapshot(
 		row.claimManifestFingerprint === null ||
 		parsed.data.claimManifest.id !== row.claimManifestId ||
 		parsed.data.claimManifest.fingerprint !== row.claimManifestFingerprint ||
-		parsed.data.source.sourceType !== "SCRIPT_VERSION" ||
-		row.scriptVersionId === null ||
-		row.sourceScriptRevision === null ||
-		parsed.data.source.scriptVersionId !== row.scriptVersionId ||
-		parsed.data.source.scriptVersionRevision !== row.sourceScriptRevision
+		(parsed.data.source.sourceType === "SCRIPT_VERSION"
+			? row.scriptVersionId === null ||
+				row.sourceScriptRevision === null ||
+				parsed.data.source.scriptVersionId !== row.scriptVersionId ||
+				parsed.data.source.scriptVersionRevision !== row.sourceScriptRevision
+			: row.scriptVersionId !== null || row.sourceScriptRevision !== null)
 	) {
 		manifestFailure("Manifest Fact Lock provenance không khớp.");
 	}
@@ -192,7 +223,30 @@ function manifestSourceCurrent(
 	run: FactLockRunRow,
 	manifest: ClaimManifest,
 	currentScriptVersion: FactLockGateEvaluationInput["currentScriptVersion"],
+	currentQuickImageClaimSource: ReadQuickImageClaimSource | null,
 ) {
+	const quickImageCurrent =
+		isCanonicalQuickImageProject(projectRecord) &&
+		projectRecord.archivedAt === null &&
+		manifest.source.sourceType === "NO_SCRIPT" &&
+		run.scriptVersionId === null &&
+		run.sourceScriptRevision === null &&
+		currentQuickImageClaimSource !== null &&
+		isCurrentQuickImageFactLockSource({
+			runSource: {
+				sourceType: "NO_SCRIPT",
+				sourceSchemaVersion: manifest.source
+					.sourceSchemaVersion as "quick-image-claim-source.v1",
+				sourceRevision: manifest.source.sourceRevision,
+				sourceContentHash: manifest.source.sourceContentHash,
+			},
+			currentSource: {
+				sourceType: "NO_SCRIPT",
+				sourceSchemaVersion: currentQuickImageClaimSource.sourceSchemaVersion,
+				sourceRevision: String(currentQuickImageClaimSource.revision),
+				sourceContentHash: currentQuickImageClaimSource.sourceContentHashSha256,
+			},
+		});
 	const affiliateCurrent =
 		projectRecord.archivedAt === null &&
 		projectRecord.contentType === "AFFILIATE" &&
@@ -232,7 +286,7 @@ function manifestSourceCurrent(
 			manifest.source.claimsSourceRevision &&
 		currentScriptVersion.id === manifest.source.scriptVersionId &&
 		currentScriptVersion.revision === manifest.source.scriptVersionRevision;
-	return affiliateCurrent || organicCurrent;
+	return quickImageCurrent || affiliateCurrent || organicCurrent;
 }
 
 function mapCurrentScript(
@@ -438,23 +492,33 @@ async function loadFactLockReadContextInQuery(
 		productStatus: productRecord?.status ?? null,
 		productArchivedAt: productRecord?.archivedAt ?? null,
 	};
+	const currentQuickImageClaimSource = isCanonicalQuickImageProject(readProject)
+		? await inTransaction(query, (transaction) =>
+				getQuickImageClaimSourceInTransaction(transaction, {
+					workspaceId: actor.workspaceId,
+					projectId,
+				}),
+			)
+		: null;
 
-	const [currentScript] = await query
-		.select({
-			id: scriptVersion.id,
-			revision: scriptVersion.revision,
-			editableSnapshotJson: scriptVersion.editableSnapshotJson,
-		})
-		.from(scriptVersion)
-		.where(
-			and(
-				eq(scriptVersion.workspaceId, actor.workspaceId),
-				eq(scriptVersion.projectId, projectId),
-				eq(scriptVersion.status, "draft"),
-			),
-		)
-		.orderBy(desc(scriptVersion.updatedAt), desc(scriptVersion.id))
-		.limit(1);
+	const [currentScript] = isCanonicalQuickImageProject(readProject)
+		? []
+		: await query
+				.select({
+					id: scriptVersion.id,
+					revision: scriptVersion.revision,
+					editableSnapshotJson: scriptVersion.editableSnapshotJson,
+				})
+				.from(scriptVersion)
+				.where(
+					and(
+						eq(scriptVersion.workspaceId, actor.workspaceId),
+						eq(scriptVersion.projectId, projectId),
+						eq(scriptVersion.status, "draft"),
+					),
+				)
+				.orderBy(desc(scriptVersion.updatedAt), desc(scriptVersion.id))
+				.limit(1);
 	const currentScriptVersion = mapCurrentScript(currentScript);
 
 	const runs = await query
@@ -593,6 +657,7 @@ async function loadFactLockReadContextInQuery(
 					parsed.run,
 					manifest,
 					currentScriptVersion,
+					currentQuickImageClaimSource,
 				)
 			: legacySourceCurrent(parsed.run, currentScriptVersion);
 		const dependenciesCurrent =
@@ -610,12 +675,19 @@ async function loadFactLockReadContextInQuery(
 						currentFacts,
 						projectRecord.productId,
 					);
-		const effectiveStatus = deriveFactLockEffectiveStatus(
-			parsed.run.status as FactLockRunStatus,
-			parsed.run.sourceScriptRevision ?? 0,
-			currentScriptVersion?.revision ?? null,
-			dependenciesCurrent && sourceCurrent,
-		);
+		const effectiveStatus =
+			manifest?.source.sourceType === "NO_SCRIPT"
+				? deriveQuickImageFactLockEffectiveStatus({
+						status: parsed.run.status as FactLockRunStatus,
+						sourceCurrent,
+						dependenciesCurrent,
+					})
+				: deriveFactLockEffectiveStatus(
+						parsed.run.status as FactLockRunStatus,
+						parsed.run.sourceScriptRevision ?? 0,
+						currentScriptVersion?.revision ?? null,
+						dependenciesCurrent && sourceCurrent,
+					);
 		contextRuns.push({
 			id: parsed.run.id,
 			inputMode: parsed.mode,
@@ -640,6 +712,18 @@ async function loadFactLockReadContextInQuery(
 							manifest.source.sourceType === "SCRIPT_VERSION"
 								? manifest.source.scriptVersionRevision
 								: null,
+						sourceSchemaVersion:
+							manifest.source.sourceType === "NO_SCRIPT"
+								? manifest.source.sourceSchemaVersion
+								: null,
+						sourceRevision:
+							manifest.source.sourceType === "NO_SCRIPT"
+								? manifest.source.sourceRevision
+								: null,
+						sourceContentHash:
+							manifest.source.sourceType === "NO_SCRIPT"
+								? manifest.source.sourceContentHash
+								: null,
 					}
 				: null,
 			facts: toSnapshotFacts(parsed.snapshot.productFacts),
@@ -651,6 +735,18 @@ async function loadFactLockReadContextInQuery(
 
 	const gateInput: FactLockGateEvaluationInput = {
 		currentScriptVersion,
+		currentQuickImageClaimSource: isCanonicalQuickImageProject(readProject)
+			? currentQuickImageClaimSource
+				? {
+						sourceType: "NO_SCRIPT",
+						sourceSchemaVersion:
+							currentQuickImageClaimSource.sourceSchemaVersion,
+						sourceRevision: String(currentQuickImageClaimSource.revision),
+						sourceContentHash:
+							currentQuickImageClaimSource.sourceContentHashSha256,
+					}
+				: null
+			: undefined,
 		runs: contextRuns.map((run) => ({
 			id: run.id,
 			inputMode: run.inputMode,
@@ -665,6 +761,14 @@ async function loadFactLockReadContextInQuery(
 	return {
 		project: readProject,
 		currentScriptVersion,
+		currentQuickImageClaimSource: currentQuickImageClaimSource
+			? {
+					sourceSchemaVersion: currentQuickImageClaimSource.sourceSchemaVersion,
+					revision: currentQuickImageClaimSource.revision,
+					sourceContentHashSha256:
+						currentQuickImageClaimSource.sourceContentHashSha256,
+				}
+			: null,
 		runs: contextRuns,
 		gateInput,
 	};
@@ -711,6 +815,7 @@ export function toFactLockReadModel(
 					).claimsStatus,
 				}
 			: null,
+		currentQuickImageClaimSource: context.currentQuickImageClaimSource,
 		latestRequest,
 		latestApplicableRun: applicable ?? null,
 		effectiveStatus: latestRequest?.effectiveStatus ?? null,

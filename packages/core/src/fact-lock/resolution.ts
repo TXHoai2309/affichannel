@@ -25,6 +25,11 @@ function replaceOccurrence(
 	claim: Pick<FactLockStoredClaim, "claimText" | "occurrence">,
 	replacement: string,
 ) {
+	if (
+		"sourceType" in claim.occurrence &&
+		claim.occurrence.sourceType === "NO_SCRIPT"
+	)
+		return { ok: false as const, reason: "missing" };
 	const occurrence = claim.occurrence as ClaimOccurrence;
 	let source: string | null | undefined;
 	switch (occurrence.section) {

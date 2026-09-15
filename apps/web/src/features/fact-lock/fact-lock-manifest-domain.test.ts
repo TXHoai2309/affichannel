@@ -1,4 +1,5 @@
 import {
+	buildClaimManifestFromQuickImageSource,
 	buildManifestFactLockInputSnapshot,
 	buildManifestFactLockVerificationInput,
 	buildManifestZeroClaimOutcome,
@@ -20,6 +21,7 @@ import {
 	type ManifestProductFactsSnapshot,
 	manifestRequestHashProjection,
 	productFactsFingerprintProjection,
+	quickImageClaimSourceContentHash,
 	selectConfirmedProductManifestClaims,
 	subjectAwareClaimManifestFingerprint,
 	validateManifestFactLockProviderResult,
@@ -420,6 +422,46 @@ describe("AFF-US-018 Phase 18A pure Manifest Fact Lock", () => {
 		expect(getManifestFactLockResolutionPolicy()).toEqual({
 			sourceMutationAllowed: false,
 			allowedActions: ["status_only_manual_approval"],
+		});
+	});
+
+	it("accepts only the exact Quick Image NO_SCRIPT authority", async () => {
+		const source = {
+			version: "quick-image-claim-source.v1" as const,
+			elements: [
+				{ id: "caption-main", kind: "CAPTION" as const, text: "Pin 20 giờ." },
+			],
+		};
+		const sourceHash = await quickImageClaimSourceContentHash(source);
+		const quickImageManifest = await buildClaimManifestFromQuickImageSource({
+			workspaceId: "workspace-18a",
+			projectId: "project-18a",
+			productId: "product-18a",
+			source,
+			sourceRevision: 1,
+			sourceContentHashSha256: sourceHash,
+		});
+		const executableQuickImageManifest = {
+			...quickImageManifest,
+			id: "manifest-quick-image",
+		};
+		const quickImageProject = executableProject({
+			contentType: "AFFILIATE",
+			creationPath: "QUICK_IMAGE",
+			contentFormatKey: "QUICK_IMAGE_STANDARD",
+			contentFormatVersion: 1,
+			currentScriptVersionId: null,
+		});
+		expect(
+			await evaluateManifestExecutionEligibility({
+				manifest: executableQuickImageManifest,
+				project: quickImageProject,
+				currentScriptVersion: null,
+			}),
+		).toEqual({
+			eligible: true,
+			reason: "ELIGIBLE",
+			strategy: "AFFILIATE_V1",
 		});
 	});
 

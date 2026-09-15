@@ -1,3 +1,4 @@
+import type { NoScriptClaimManifestLocator } from "../claim-manifest/types";
 import type {
 	FactAssessment,
 	FactGenerationUsability,
@@ -107,6 +108,10 @@ export type FactLockProviderClaim = {
 	}>;
 };
 
+export type FactLockClaimOccurrence =
+	| ClaimOccurrence
+	| NoScriptClaimManifestLocator;
+
 export type FactLockProviderOutput = {
 	schemaVersion: typeof FACT_LOCK_OUTPUT_SCHEMA_VERSION;
 	claims: FactLockProviderClaim[];
@@ -114,8 +119,9 @@ export type FactLockProviderOutput = {
 
 export type FactLockStoredClaim = Omit<
 	FactLockProviderClaim,
-	"factMappings"
+	"factMappings" | "occurrence"
 > & {
+	occurrence: FactLockClaimOccurrence;
 	id: string | null;
 	reviewStatus: FactLockReviewStatus;
 	checkedAt: Date;
@@ -136,6 +142,9 @@ export type FactLockClaimManifestReadSummary = {
 	sourceType: "SCRIPT_VERSION" | "NO_SCRIPT";
 	sourceScriptVersionId: string | null;
 	sourceScriptRevision: number | null;
+	sourceSchemaVersion: string | null;
+	sourceRevision: string | null;
+	sourceContentHash: string | null;
 };
 
 export type FactLockReadRun = {
@@ -159,6 +168,11 @@ export type FactLockReadModel = {
 		revision: number;
 		claimsSourceRevision: number;
 		claimsStatus: "current" | "stale";
+	} | null;
+	currentQuickImageClaimSource: {
+		sourceSchemaVersion: "quick-image-claim-source.v1";
+		revision: number;
+		sourceContentHashSha256: string;
 	} | null;
 	latestRequest: FactLockReadRun | null;
 	latestApplicableRun: FactLockReadRun | null;

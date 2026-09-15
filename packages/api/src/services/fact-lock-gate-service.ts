@@ -1,11 +1,14 @@
 import {
 	type BuiltSubjectAwareClaimManifest,
 	type ClaimManifest,
+	CONTENT_FORMAT_DEFAULTS,
+	classifyPersistedProjectIdentity,
 	evaluateFactLockGate,
 	FactLockError,
 	type FactLockGateEvaluationInput,
 	type FactLockGateResult,
 	type FactLockProductFactSnapshot,
+	isCurrentQuickImageFactLockSource,
 	manifestFactLockInputSnapshotAnySchema,
 	type ParsedFactLockInputSnapshot,
 	type ParsedManifestFactLockInputSnapshot,
@@ -47,6 +50,7 @@ export type FactLockGateInputBuilderInput = {
 	facts: ProductFactRow[];
 	project?: GateProject;
 	claimManifests?: readonly ClaimManifest[];
+	currentQuickImageClaimSource?: FactLockGateEvaluationInput["currentQuickImageClaimSource"];
 };
 
 function invalidRead(message: string): never {
@@ -70,6 +74,25 @@ function isCurrentOrganicScript(snapshot: unknown) {
 				(claim.subjectSource === "USER" ||
 					claim.subjectSource === "STRUCTURED_SOURCE"),
 		)
+	);
+}
+
+function isCanonicalQuickImageProject(projectRecord: GateProject | undefined) {
+	if (!projectRecord) return false;
+	const classification = classifyPersistedProjectIdentity({
+		productId: projectRecord.productId,
+		contentType: projectRecord.contentType,
+		creationPath: projectRecord.creationPath,
+		contentFormatKey: projectRecord.contentFormatKey,
+		contentFormatVersion: projectRecord.contentFormatVersion,
+	});
+	return (
+		classification.kind === "canonical" &&
+		classification.identity.creationPath === "QUICK_IMAGE" &&
+		classification.identity.contentFormat.key ===
+			CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.key &&
+		classification.identity.contentFormat.version ===
+			CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.version
 	);
 }
 
@@ -127,11 +150,12 @@ function parseRun(row: GateRunRow) {
 		row.claimManifestFingerprint === null ||
 		parsed.data.claimManifest.id !== row.claimManifestId ||
 		parsed.data.claimManifest.fingerprint !== row.claimManifestFingerprint ||
-		parsed.data.source.sourceType !== "SCRIPT_VERSION" ||
-		row.scriptVersionId === null ||
-		row.sourceScriptRevision === null ||
-		parsed.data.source.scriptVersionId !== row.scriptVersionId ||
-		parsed.data.source.scriptVersionRevision !== row.sourceScriptRevision
+		(parsed.data.source.sourceType === "SCRIPT_VERSION"
+			? row.scriptVersionId === null ||
+				row.sourceScriptRevision === null ||
+				parsed.data.source.scriptVersionId !== row.scriptVersionId ||
+				parsed.data.source.scriptVersionRevision !== row.sourceScriptRevision
+			: row.scriptVersionId !== null || row.sourceScriptRevision !== null)
 	)
 		invalidManifest("Manifest Fact Lock snapshot không hợp lệ.");
 	return {
@@ -157,6 +181,7 @@ function buildInput(
 	);
 	return {
 		currentScriptVersion: input.currentScriptVersion,
+		currentQuickImageClaimSource: input.currentQuickImageClaimSource,
 		runs: input.runs.map((row) => {
 			const parsed = parseRun(row);
 			if (parsed.snapshot === null) {
@@ -185,33 +210,51 @@ function buildInput(
 			const runDependencies = dependenciesByRun.get(row.id) ?? [];
 			const snapshotFacts = inputFacts(parsed.snapshot);
 			const sourceCurrent = manifest
-				? Boolean(
-						input.project &&
-							input.project.archivedAt === null &&
-							input.project.creationPath === "SCRIPTED" &&
-							input.project.contentFormatKey === "SCRIPTED_STANDARD" &&
-							input.project.contentFormatVersion === 1 &&
-							manifest.source.sourceType === "SCRIPT_VERSION" &&
-							((manifest.builderVersion === "claim-manifest-builder.v1" &&
-								input.project.contentType === "AFFILIATE") ||
-								(manifest.builderVersion === "claim-manifest-builder.v2" &&
-									input.project.contentType === "ORGANIC" &&
-									(input.project.productStatus === undefined ||
-										(input.project.productStatus === "active" &&
-											input.project.productArchivedAt === null)) &&
-									isCurrentOrganicScript(
-										input.currentScriptVersion?.snapshot,
-									) &&
-									input.currentScriptVersion?.snapshot.claimsSourceRevision ===
-										manifest.source.claimsSourceRevision)) &&
-							row.scriptVersionId === manifest.source.scriptVersionId &&
-							row.sourceScriptRevision ===
-								manifest.source.scriptVersionRevision &&
-							input.currentScriptVersion?.id ===
-								manifest.source.scriptVersionId &&
-							input.currentScriptVersion.revision ===
-								manifest.source.scriptVersionRevision,
-					)
+				? isCanonicalQuickImageProject(input.project)
+					? Boolean(
+							manifest.source.sourceType === "NO_SCRIPT" &&
+								row.scriptVersionId === null &&
+								row.sourceScriptRevision === null &&
+								input.currentQuickImageClaimSource &&
+								isCurrentQuickImageFactLockSource({
+									runSource: {
+										sourceType: "NO_SCRIPT",
+										sourceSchemaVersion: manifest.source
+											.sourceSchemaVersion as "quick-image-claim-source.v1",
+										sourceRevision: manifest.source.sourceRevision,
+										sourceContentHash: manifest.source.sourceContentHash,
+									},
+									currentSource: input.currentQuickImageClaimSource,
+								}),
+						)
+					: Boolean(
+							input.project &&
+								input.project.archivedAt === null &&
+								input.project.creationPath === "SCRIPTED" &&
+								input.project.contentFormatKey === "SCRIPTED_STANDARD" &&
+								input.project.contentFormatVersion === 1 &&
+								manifest.source.sourceType === "SCRIPT_VERSION" &&
+								((manifest.builderVersion === "claim-manifest-builder.v1" &&
+									input.project.contentType === "AFFILIATE") ||
+									(manifest.builderVersion === "claim-manifest-builder.v2" &&
+										input.project.contentType === "ORGANIC" &&
+										(input.project.productStatus === undefined ||
+											(input.project.productStatus === "active" &&
+												input.project.productArchivedAt === null)) &&
+										isCurrentOrganicScript(
+											input.currentScriptVersion?.snapshot,
+										) &&
+										input.currentScriptVersion?.snapshot
+											.claimsSourceRevision ===
+											manifest.source.claimsSourceRevision)) &&
+								row.scriptVersionId === manifest.source.scriptVersionId &&
+								row.sourceScriptRevision ===
+									manifest.source.scriptVersionRevision &&
+								input.currentScriptVersion?.id ===
+									manifest.source.scriptVersionId &&
+								input.currentScriptVersion.revision ===
+									manifest.source.scriptVersionRevision,
+						)
 				: row.scriptVersionId === input.currentScriptVersion?.id &&
 					row.sourceScriptRevision === input.currentScriptVersion?.revision;
 			const organicProductCount =

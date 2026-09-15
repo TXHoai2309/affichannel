@@ -12,10 +12,7 @@ import {
 } from "./manifest-request-hash";
 import type { FactLockPolicySnapshot } from "./types";
 
-export type ManifestFactLockSourceProvenance = Extract<
-	ClaimManifest["source"],
-	{ sourceType: "SCRIPT_VERSION" }
->;
+export type ManifestFactLockSourceProvenance = ClaimManifest["source"];
 
 export type ManifestFactLockZeroClaimSemantics = Readonly<{
 	status: "passed";
@@ -65,9 +62,6 @@ export function buildManifestFactLockInputSnapshot(input: {
 	policy: FactLockPolicySnapshot | null;
 	outputRules: OutputRules | null;
 }): ManifestFactLockInputSnapshotV1 {
-	if (input.manifest.source.sourceType !== "SCRIPT_VERSION") {
-		throw new Error("Manifest Fact Lock requires a ScriptVersion source.");
-	}
 	const isZeroClaim =
 		input.manifest.claimCount === 0 && input.manifest.isEmpty === true;
 	const isNonZeroClaim =

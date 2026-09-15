@@ -147,13 +147,6 @@ export const manifestFactLockInputSnapshotSchema = z
 					message: "NON_EMPTY_POLICY_MISSING",
 				});
 		}
-		if (snapshot.source.sourceType !== "SCRIPT_VERSION") {
-			context.addIssue({
-				code: "custom",
-				path: ["source"],
-				message: "MANIFEST_SOURCE_UNSUPPORTED",
-			});
-		}
 	});
 
 export const manifestFactLockInputSnapshotV2Schema = z

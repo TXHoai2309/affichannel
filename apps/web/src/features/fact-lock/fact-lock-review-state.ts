@@ -86,6 +86,10 @@ export function filterFactLockClaims(
 export function getFactLockOccurrenceLabel(
 	occurrence: FactLockStoredClaim["occurrence"],
 ) {
+	if ("sourceType" in occurrence)
+		return occurrence.sourceType === "NO_SCRIPT"
+			? `${occurrence.elementKind} · ${occurrence.elementKey}`
+			: "Script source";
 	if (occurrence.section === "hook") return `Hook · ${occurrence.hookKey}`;
 	if (occurrence.section === "voiceover")
 		return `Voiceover · ${occurrence.segmentKey}`;

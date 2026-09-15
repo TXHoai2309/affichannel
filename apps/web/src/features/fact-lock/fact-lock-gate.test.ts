@@ -73,6 +73,30 @@ function manifestRun(
 	return run(status, { inputMode: "MANIFEST_V1", ...overrides });
 }
 
+const quickImageSource = {
+	sourceType: "NO_SCRIPT" as const,
+	sourceSchemaVersion: "quick-image-claim-source.v1" as const,
+	sourceRevision: "3",
+	sourceContentHash: "a".repeat(64),
+};
+
+function quickImageRun(
+	status: "pending" | "review_required" | "passed" | "failed" | "indeterminate",
+	overrides: Partial<FactLockGateEvaluationInput["runs"][number]> = {},
+) {
+	return {
+		id: `quick-image-run-${status}`,
+		inputMode: "MANIFEST_V1" as const,
+		scriptVersionId: null,
+		sourceScriptRevision: null,
+		sourceCurrent: true,
+		status,
+		dependenciesCurrent: true,
+		createdAt: "2026-08-18T00:00:00.000Z",
+		...overrides,
+	};
+}
+
 describe("FactLockGate", () => {
 	it("blocks without a current ScriptVersion or Fact Lock run", () => {
 		expect(
@@ -294,5 +318,37 @@ describe("FactLockGate", () => {
 			reason: "FACT_LOCK_PASSED",
 			factLockRunId: manifest.id,
 		});
+	});
+
+	it("gates Quick Image NO_SCRIPT runs by source authority and Product Facts", () => {
+		const current = quickImageRun("passed");
+		expect(
+			evaluateFactLockGate({
+				currentScriptVersion: null,
+				currentQuickImageClaimSource: quickImageSource,
+				runs: [current],
+			}),
+		).toMatchObject({ allowed: true, reason: "FACT_LOCK_PASSED" });
+		expect(
+			evaluateFactLockGate({
+				currentScriptVersion: null,
+				currentQuickImageClaimSource: quickImageSource,
+				runs: [quickImageRun("passed", { sourceCurrent: false })],
+			}),
+		).toMatchObject({ allowed: false, reason: "FACT_LOCK_STALE_SCRIPT" });
+		expect(
+			evaluateFactLockGate({
+				currentScriptVersion: null,
+				currentQuickImageClaimSource: quickImageSource,
+				runs: [quickImageRun("passed", { dependenciesCurrent: false })],
+			}),
+		).toMatchObject({ allowed: false, reason: "FACT_LOCK_STALE_FACTS" });
+		expect(
+			evaluateFactLockGate({
+				currentScriptVersion: null,
+				currentQuickImageClaimSource: null,
+				runs: [current],
+			}),
+		).toMatchObject({ allowed: false, reason: "FACT_LOCK_INDETERMINATE" });
 	});
 });

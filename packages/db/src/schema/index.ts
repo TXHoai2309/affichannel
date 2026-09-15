@@ -13,6 +13,7 @@ export * from "./product";
 export * from "./product-fact";
 export * from "./product-fact-history";
 export * from "./project";
+export * from "./quick-image-claim-source";
 export * from "./quick-image-settings";
 export * from "./render-job";
 export * from "./script-claim-refresh";

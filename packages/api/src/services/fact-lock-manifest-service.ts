@@ -6,6 +6,8 @@ import {
 	buildManifestZeroClaimOutcome,
 	buildOrganicManifestFactLockInputSnapshot,
 	buildOrganicManifestFactLockVerificationInput,
+	CONTENT_FORMAT_DEFAULTS,
+	classifyPersistedProjectIdentity,
 	computeFactLockZeroClaimPolicyHash,
 	computeManifestFactLockInputHash,
 	computeManifestRequestHash,
@@ -68,6 +70,7 @@ import {
 	loadFactLockPolicyInTransaction,
 	loadFactLockProductFactsInTransaction,
 } from "./fact-lock-service";
+import { getQuickImageClaimSourceInTransaction } from "./quick-image-claim-source-service";
 import { sha256Hex } from "./script-generation-hashing";
 import { resolveServerGenerationConfig } from "./script-generation-service";
 import type { WorkspaceActor } from "./workspace";
@@ -258,6 +261,55 @@ function organicScriptClaimsMetadata(snapshot: unknown) {
 	};
 }
 
+function isCanonicalQuickImageProject(record: {
+	productId: string | null;
+	contentType: string | null;
+	creationPath: string | null;
+	contentFormatKey: string | null;
+	contentFormatVersion: number | null;
+}) {
+	const classification = classifyPersistedProjectIdentity(record);
+	return (
+		classification.kind === "canonical" &&
+		classification.identity.creationPath === "QUICK_IMAGE" &&
+		classification.identity.contentFormat.key ===
+			CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.key &&
+		classification.identity.contentFormat.version ===
+			CONTENT_FORMAT_DEFAULTS.QUICK_IMAGE.version
+	);
+}
+
+function assertQuickImageManifestSourceCurrent(
+	manifest: ClaimManifestRecord,
+	currentSource: Awaited<
+		ReturnType<typeof getQuickImageClaimSourceInTransaction>
+	>,
+) {
+	if (
+		!currentSource ||
+		manifest.source.sourceType !== "NO_SCRIPT" ||
+		manifest.source.sourceSchemaVersion !== currentSource.sourceSchemaVersion ||
+		manifest.source.sourceRevision !== String(currentSource.revision) ||
+		manifest.source.sourceContentHash !== currentSource.sourceContentHashSha256
+	)
+		throw new FactLockError(
+			"FACT_LOCK_STALE",
+			"Quick Image claim source đã thay đổi hoặc không tồn tại.",
+		);
+}
+
+function manifestScriptProvenance(manifest: ClaimManifestRecord) {
+	return manifest.source.sourceType === "SCRIPT_VERSION"
+		? {
+				scriptVersionId: manifest.source.scriptVersionId,
+				sourceScriptRevision: manifest.source.scriptVersionRevision,
+			}
+		: {
+				scriptVersionId: null,
+				sourceScriptRevision: null,
+			};
+}
+
 async function findExistingManifestRun(
 	transaction: FactLockTransaction,
 	actor: WorkspaceActor,
@@ -347,19 +399,15 @@ async function persistZeroClaimRun(
 	input: ManifestFactLockPreparationInput,
 	prepared: ManifestFactLockPreparedBase,
 ): Promise<ExistingManifestFactLock> {
-	if (prepared.manifest.source.sourceType !== "SCRIPT_VERSION")
-		throw new FactLockError(
-			"CLAIM_MANIFEST_NOT_EXECUTABLE",
-			"ClaimManifest không thể dùng cho Fact Lock hiện tại.",
-		);
+	const scriptProvenance = manifestScriptProvenance(prepared.manifest);
 	const [created] = await transaction
 		.insert(factLockRun)
 		.values({
 			id: randomUUID(),
 			workspaceId: input.actor.workspaceId,
 			projectId: input.projectId,
-			scriptVersionId: prepared.manifest.source.scriptVersionId,
-			sourceScriptRevision: prepared.manifest.source.scriptVersionRevision,
+			scriptVersionId: scriptProvenance.scriptVersionId,
+			sourceScriptRevision: scriptProvenance.sourceScriptRevision,
 			inputMode: FACT_LOCK_MANIFEST_INPUT_MODE,
 			claimManifestId: prepared.manifest.id,
 			claimManifestFingerprint: prepared.manifest.fingerprint,
@@ -447,21 +495,32 @@ async function buildPreparation(
 		.for("update", { of: project });
 	if (!projectRecord || projectRecord.archivedAt !== null) notExecutable();
 
-	const [currentScript] = await transaction
-		.select()
-		.from(scriptVersion)
-		.where(
-			and(
-				eq(scriptVersion.workspaceId, input.actor.workspaceId),
-				eq(scriptVersion.projectId, projectRecord.id),
-				eq(scriptVersion.status, "draft"),
-			),
-		)
-		.limit(1)
-		.for("update", { of: scriptVersion });
+	const quickImage = isCanonicalQuickImageProject(projectRecord);
+	let currentScript: typeof scriptVersion.$inferSelect | undefined;
+	if (!quickImage) {
+		[currentScript] = await transaction
+			.select()
+			.from(scriptVersion)
+			.where(
+				and(
+					eq(scriptVersion.workspaceId, input.actor.workspaceId),
+					eq(scriptVersion.projectId, projectRecord.id),
+					eq(scriptVersion.status, "draft"),
+				),
+			)
+			.limit(1)
+			.for("update", { of: scriptVersion });
+	}
 	const currentScriptMetadata = organicScriptClaimsMetadata(
 		currentScript?.editableSnapshotJson,
 	);
+	const currentQuickImageSource = quickImage
+		? await getQuickImageClaimSourceInTransaction(transaction, {
+				workspaceId: input.actor.workspaceId,
+				projectId: projectRecord.id,
+			})
+		: null;
+	if (quickImage && !currentQuickImageSource) notExecutable();
 
 	if (!projectRecord.productId) notExecutable();
 	const [currentProduct] = await transaction
@@ -501,6 +560,11 @@ async function buildPreparation(
 			"CLAIM_MANIFEST_NOT_FOUND",
 			"ClaimManifest không tồn tại trong phạm vi yêu cầu.",
 		);
+	}
+	if (quickImage) {
+		assertQuickImageManifestSourceCurrent(manifest, currentQuickImageSource);
+	} else if (manifest.source.sourceType !== "SCRIPT_VERSION") {
+		notExecutable();
 	}
 
 	const eligibility = await evaluateManifestExecutionEligibility({
@@ -843,12 +907,7 @@ async function persistNonEmptyManifestFactLock(
 				"Manifest đã chuyển sang zero-claim; dùng execution path nội bộ.",
 			);
 		}
-		if (prepared.manifest.source.sourceType !== "SCRIPT_VERSION") {
-			throw new FactLockError(
-				"CLAIM_MANIFEST_NOT_EXECUTABLE",
-				"Manifest source không được hỗ trợ cho runtime hiện tại.",
-			);
-		}
+		const scriptProvenance = manifestScriptProvenance(prepared.manifest);
 		const { prompt } = buildManifestProviderPrompt(
 			prepared.manifest,
 			prepared.inputSnapshot,
@@ -867,8 +926,8 @@ async function persistNonEmptyManifestFactLock(
 				id: randomUUID(),
 				workspaceId: input.actor.workspaceId,
 				projectId: input.projectId,
-				scriptVersionId: prepared.manifest.source.scriptVersionId,
-				sourceScriptRevision: prepared.manifest.source.scriptVersionRevision,
+				scriptVersionId: scriptProvenance.scriptVersionId,
+				sourceScriptRevision: scriptProvenance.sourceScriptRevision,
 				inputMode: FACT_LOCK_MANIFEST_INPUT_MODE,
 				claimManifestId: prepared.manifest.id,
 				claimManifestFingerprint: prepared.manifest.fingerprint,
@@ -995,14 +1054,51 @@ async function loadManifestExecutionContext(
 	} catch (error) {
 		mapManifestLookupFailure(error);
 	}
-	if (
-		!manifest ||
-		manifest.fingerprint !== run.claimManifestFingerprint ||
-		manifest.source.sourceType !== "SCRIPT_VERSION" ||
-		run.scriptVersionId !== manifest.source.scriptVersionId ||
-		run.sourceScriptRevision !== manifest.source.scriptVersionRevision
-	) {
+	if (!manifest || manifest.fingerprint !== run.claimManifestFingerprint) {
 		persistedManifestInputFailure();
+	}
+	if (manifest.source.sourceType === "SCRIPT_VERSION") {
+		if (
+			run.scriptVersionId !== manifest.source.scriptVersionId ||
+			run.sourceScriptRevision !== manifest.source.scriptVersionRevision
+		)
+			persistedManifestInputFailure();
+	} else {
+		const [currentProject] = await transaction
+			.select({
+				id: project.id,
+				productId: project.productId,
+				contentType: project.contentType,
+				creationPath: project.creationPath,
+				contentFormatKey: project.contentFormatKey,
+				contentFormatVersion: project.contentFormatVersion,
+				archivedAt: project.archivedAt,
+			})
+			.from(project)
+			.where(
+				and(
+					eq(project.workspaceId, actor.workspaceId),
+					eq(project.id, run.projectId),
+				),
+			)
+			.limit(1);
+		if (!currentProject || !isCanonicalQuickImageProject(currentProject))
+			persistedManifestInputFailure();
+		if (run.scriptVersionId !== null || run.sourceScriptRevision !== null)
+			persistedManifestInputFailure();
+		const currentSource = await getQuickImageClaimSourceInTransaction(
+			transaction,
+			{ workspaceId: actor.workspaceId, projectId: run.projectId },
+		);
+		if (
+			!currentSource ||
+			manifest.source.sourceSchemaVersion !==
+				currentSource.sourceSchemaVersion ||
+			manifest.source.sourceRevision !== String(currentSource.revision) ||
+			manifest.source.sourceContentHash !==
+				currentSource.sourceContentHashSha256
+		)
+			persistedManifestInputFailure();
 	}
 	try {
 		if (snapshot.inputVersion === FACT_LOCK_MANIFEST_INPUT_VERSION_V2) {
@@ -1284,12 +1380,7 @@ function storedManifestClaims(
 		occurrence:
 			claim.locator.sourceType === "SCRIPT_VERSION"
 				? claim.locator.occurrence
-				: (() => {
-						throw new FactLockError(
-							"CLAIM_MANIFEST_NOT_EXECUTABLE",
-							"Manifest locator không được hỗ trợ cho runtime hiện tại.",
-						);
-					})(),
+				: claim.locator,
 		classificationStatus: claim.classificationStatus,
 		reason: claim.reason,
 		confidence: claim.confidence,

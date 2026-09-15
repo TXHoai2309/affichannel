@@ -105,7 +105,11 @@ describe("Deterministic Fact Lock extraction", () => {
 		if (validation.success) {
 			expect(validation.claims).toHaveLength(3);
 			expect(
-				validation.claims.some((claim) => claim.occurrence.section === "hook"),
+				validation.claims.some(
+					(claim) =>
+						"section" in claim.occurrence &&
+						claim.occurrence.section === "hook",
+				),
 			).toBe(false);
 			expect(validation.claims.map((claim) => claim.claimText)).toEqual(
 				expect.arrayContaining(["Pin có thời lượng 20 giờ", "20 giờ"]),
