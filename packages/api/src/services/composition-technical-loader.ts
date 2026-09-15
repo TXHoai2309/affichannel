@@ -11,6 +11,7 @@ import {
 	MediaAssetError,
 	renderedVoiceKeysForComposition,
 	sha256Hex,
+	splitT09TextIntoHardLines,
 	type TechnicalFontManifestFact,
 	type TechnicalMediaManifestFact,
 	type TechnicalPreflightReasonCode,
@@ -1029,16 +1030,18 @@ export class CompositionTechnicalLoader {
 			);
 		const glyphCodePoints = new Set<number>();
 		for (const text of requiredText) {
-			for (const character of text.normalize("NFC")) {
-				const codePoint = character.codePointAt(0);
-				if (codePoint === undefined) continue;
-				if (!parsedFont.characterSet.includes(codePoint))
-					return failure(
-						"UNSUPPORTED",
-						"FONT_UNSUPPORTED",
-						"A materialized text glyph is not available in the pinned font.",
-					);
-				glyphCodePoints.add(codePoint);
+			for (const line of splitT09TextIntoHardLines(text)) {
+				for (const character of line) {
+					const codePoint = character.codePointAt(0);
+					if (codePoint === undefined) continue;
+					if (!parsedFont.characterSet.includes(codePoint))
+						return failure(
+							"UNSUPPORTED",
+							"FONT_UNSUPPORTED",
+							"A materialized text glyph is not available in the pinned font.",
+						);
+					glyphCodePoints.add(codePoint);
+				}
 			}
 		}
 		return valid(

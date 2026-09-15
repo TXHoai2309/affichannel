@@ -7,6 +7,11 @@ import {
 	technicalPreflightCompositionInput,
 	validateDecodedMp3SampleDomain,
 } from "@affichannel/api/services/composition-technical-loader";
+import {
+	buildT09CanonicalCompositionFixture,
+	MEDIA_SHA256,
+	T09_MEDIA_PNG_BASE64,
+} from "@affichannel/api/services/render-prototype-fixture";
 import { sha256Bytes } from "@affichannel/api/services/voice-segment-hashing";
 import type { VoiceAudioStorage } from "@affichannel/api/storage/voice-audio-storage";
 import {
@@ -998,6 +1003,30 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 			reasonCode: "FONT_NOT_AVAILABLE",
 		});
 		const loader = new CompositionTechnicalLoader({ actor, projectId: "p1" });
+		expect(await loader.loadFont(pin, ["VIDEO"])).toMatchObject({
+			status: "VALID",
+		});
+		expect(await loader.loadFont(pin, ["VIDEO\nDEMO"])).toMatchObject({
+			status: "VALID",
+		});
+		expect(await loader.loadFont(pin, ["VIDEO\r\nDEMO\rPHASE"])).toMatchObject({
+			status: "VALID",
+		});
+		expect(await loader.loadFont(pin, ["\nVIDEO\n\nDEMO\n"])).toMatchObject({
+			status: "VALID",
+		});
+		const structuralLines = await loader.loadFont(pin, ["VIDEO\nDEMO"]);
+		if (structuralLines.status === "VALID") {
+			expect(structuralLines.facts.glyphCodePoints).not.toContain(0x0a);
+		}
+		expect(await loader.loadFont(pin, ["VIDEO\n😀"])).toMatchObject({
+			status: "UNSUPPORTED",
+			reasonCode: "FONT_UNSUPPORTED",
+		});
+		expect(await loader.loadFont(pin, ["VIDEO\tDEMO"])).toMatchObject({
+			status: "UNSUPPORTED",
+			reasonCode: "FONT_UNSUPPORTED",
+		});
 		const composed = await loader.loadFont(pin, ["ắ"]);
 		const decomposed = await loader.loadFont(pin, ["ắ".normalize("NFD")]);
 		expect(composed).toMatchObject({ status: "VALID" });
@@ -1049,6 +1078,44 @@ describe("AFF-US-021 EN001 deterministic technical preflight", () => {
 		});
 		const nonBmp = await loader.loadFont(pin, ["𐐷"]);
 		expect(nonBmp.status).toBe("UNSUPPORTED");
+	});
+
+	it("accepts the exact frozen T09 fixture at technical preflight", async () => {
+		const fixture = await buildT09CanonicalCompositionFixture();
+		const bytes = Buffer.from(T09_MEDIA_PNG_BASE64, "base64");
+		const t09Media: MediaAsset = {
+			...mediaAsset(bytes),
+			id: "t09-media-png",
+			workspaceId: "t09-workspace",
+			createdByUserId: "t09-user",
+			status: "ready",
+			storageKey: "media/v1/t09-workspace/t09-media-png/t09-background.png",
+			byteSize: bytes.byteLength,
+			checksumSha256: MEDIA_SHA256,
+			width: 1,
+			height: 1,
+			durationMs: null,
+			usageRights: "owned",
+			finalizedAt: new Date("2026-01-01T00:00:00.000Z"),
+			archivedAt: null,
+		};
+		const loader = new CompositionTechnicalLoader({
+			actor: { workspaceId: "t09-workspace", userId: "t09-user" },
+			projectId: "t09-project",
+			findMediaAsset: async () => t09Media,
+			mediaStorage: () => mediaStorage(bytes),
+		});
+		const result = await technicalPreflightCompositionInput(
+			loader,
+			fixture.compositionVersionId,
+			fixture.compositionInput,
+			fixture.compositionFingerprint,
+		);
+		expect(result).toMatchObject({
+			status: "VALID",
+			compositionFingerprint:
+				"4b8d10c5ee81d5978fa317f2c8e220e8ab1bf979ec85020e2063f1290714bfd9",
+		});
 	});
 
 	it("returns a valid ephemeral manifest without mutating the input", async () => {

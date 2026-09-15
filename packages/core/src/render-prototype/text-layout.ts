@@ -88,8 +88,21 @@ function roundHalfUp(numerator: number, denominator: number): number {
 	return Math.floor(numerator / denominator + 0.5);
 }
 
-function normalizeText(text: string): string {
+/**
+ * Canonical text normalization shared by technical font coverage and T09
+ * layout. Line endings are structural text delimiters, not glyph content.
+ */
+export function normalizeT09Text(text: string): string {
 	return text.replace(/\r\n?/g, "\n").normalize("NFC");
+}
+
+/**
+ * Returns canonical hard lines. Empty leading, trailing, and intermediate
+ * lines are preserved for deterministic layout, but LF delimiters are not
+ * part of any glyph-bearing line.
+ */
+export function splitT09TextIntoHardLines(text: string): readonly string[] {
+	return normalizeT09Text(text).split("\n");
 }
 
 function fits(
@@ -190,10 +203,10 @@ export function materializeT09TextLayout(
 			"TEXT_LAYOUT_INVALID",
 			"Text layout metrics do not match the pinned font identity.",
 		);
-	const normalizedText = normalizeText(input.text);
-	const lines = normalizedText
-		.split("\n")
-		.flatMap((line) => wrapLine(line, input, metrics));
+	const normalizedText = normalizeT09Text(input.text);
+	const lines = splitT09TextIntoHardLines(normalizedText).flatMap((line) =>
+		wrapLine(line, input, metrics),
+	);
 	if (lines.length > input.maxLines)
 		throw new T09TextLayoutError(
 			"TEXT_LAYOUT_OVERFLOW",
