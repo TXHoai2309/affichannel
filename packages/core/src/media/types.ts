@@ -41,7 +41,10 @@ export const mediaUsageRights = [
 ] as const;
 export type MediaUsageRights = (typeof mediaUsageRights)[number];
 
-export const mediaAssetUsageTypes = ["project_resource"] as const;
+export const mediaAssetUsageTypes = [
+	"project_resource",
+	"quick_image_current_source",
+] as const;
 export type MediaAssetUsageType = (typeof mediaAssetUsageTypes)[number];
 
 export type MediaAsset = Readonly<{

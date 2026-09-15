@@ -9,6 +9,7 @@ import {
 import { sql } from "drizzle-orm";
 import {
 	bigint,
+	boolean,
 	check,
 	index,
 	integer,
@@ -54,6 +55,10 @@ export const mediaAsset = pgTable(
 		width: integer("width"),
 		height: integer("height"),
 		durationMs: bigint("duration_ms", { mode: "number" }),
+		imageAnalysisVersion: text("image_analysis_version"),
+		imageFrameCount: integer("image_frame_count"),
+		imageExifOrientation: integer("image_exif_orientation"),
+		imageHasTransparency: boolean("image_has_transparency"),
 		usageRights: text("usage_rights").notNull().default("unknown"),
 		tags: text("tags").array().notNull().default(sql.raw("ARRAY[]::text[]")),
 		failureCode: text("failure_code"),
@@ -100,6 +105,30 @@ export const mediaAsset = pgTable(
 				and (${table.width} is null or ${table.width} > 0)
 				and (${table.height} is null or ${table.height} > 0)
 				and (${table.durationMs} is null or ${table.durationMs} > 0)`,
+		),
+		check(
+			"media_asset_image_analysis_frame_count_check",
+			sql`${table.imageFrameCount} is null or ${table.imageFrameCount} > 0`,
+		),
+		check(
+			"media_asset_image_analysis_orientation_check",
+			sql`${table.imageExifOrientation} is null or ${table.imageExifOrientation} between 1 and 8`,
+		),
+		check(
+			"media_asset_image_analysis_shape_check",
+			sql`(
+				(${table.imageAnalysisVersion} is null
+					and ${table.imageFrameCount} is null
+					and ${table.imageExifOrientation} is null
+					and ${table.imageHasTransparency} is null)
+				or
+				(${table.mediaType} = 'image'
+					and ${table.imageAnalysisVersion} is not null
+					and ${table.imageAnalysisVersion} = 'static-raster-v1'
+					and ${table.imageFrameCount} is not null
+					and ${table.imageExifOrientation} is not null
+					and ${table.imageHasTransparency} is not null)
+			)`,
 		),
 		check(
 			"media_asset_checksum_check",
@@ -210,5 +239,8 @@ export const mediaAssetLink = pgTable(
 			table.createdAt,
 			table.id,
 		),
+		uniqueIndex("media_asset_link_current_source_unique")
+			.on(table.workspaceId, table.projectId)
+			.where(sql`${table.usageType} = 'quick_image_current_source'`),
 	],
 );
