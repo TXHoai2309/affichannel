@@ -1,7 +1,7 @@
 # Các quyết định kiến trúc AffiChannel
 
 - Trạng thái: Đang áp dụng
-- Cập nhật lần cuối: 2026-09-10
+- Cập nhật lần cuối: 2026-09-15
 
 Đây là nhật ký ADR dạng gọn. Không đánh lại số quyết định đã chấp nhận. Khi có
 thay đổi quan trọng, hãy tạo quyết định mới thay thế thay vì âm thầm sửa lịch sử.
@@ -78,6 +78,51 @@ feasibility, renderer và output persistence vẫn deferred.
   route. Complete deterministic profile chỉ dành cho orchestration tests.
 - Migration `0024` chỉ bổ sung hai bảng RenderJob/RenderAttempt và các
   constraint/index phục vụ state machine.
+
+## DEC-039 — AFF-US-021 approved internal T09 execution and 21D proof boundary
+
+- Trạng thái: **Đã chấp nhận; AFF-US-021 CLOSED / OWNER ACCEPTED through 21E-B**
+- Ngày: 2026-09-15
+- Mở rộng: DEC-037 và DEC-038
+
+### Quyết định
+
+- Real execution is approved only for the internal Windows T09 path of
+  AFF-US-021 / 21E-B. The authority is one absolute approved executable with
+  an exact SHA-256 and manifest identity; there is no arbitrary PATH fallback,
+  shell execution or production-renderer activation.
+- The deterministic profile is
+  `mp4-h264-video-only-t09-v1`: video-only with `audioTracks=[]`, 1080x1920,
+  30/1 FPS, 60 frames, H.264/libx264, locked `yuv420p`/BT.709 command
+  properties, 2000k, GOP/keyint 30, min-keyint 30, scenecut disabled,
+  B-frames 0, closed GOP, single-thread, `-n`, no `-y`, `-f mp4`,
+  `-use_editlist 0`, and no `-avoid_negative_ts`. This is not a production
+  renderer profile.
+- `OUTPUT_READY` is an identity-only handoff. It never proves bytes and never
+  finalizes a Job or Attempt. 21D actual-byte validation remains authoritative;
+  only after proof may immutable local storage create the RenderArtifact and
+  finalize `RenderArtifact → RenderAttempt.COMPLETED → RenderJob.COMPLETED`.
+- The approved execution adapter is absolute-path-only, `shell=false`, argv-only,
+  bounded, timeout/heartbeat aware and protected by attempt-local staging,
+  reparse/canonical path hardening and an output-size ceiling. Artifact storage
+  is create-once/no-overwrite with protected full/range access.
+- Structural hard-line delimiters are layout structure, not font glyphs. Text
+  preflight canonicalizes CRLF/CR to LF, retains NFC, shares hard-line splitting
+  and excludes structural LF from font coverage while retaining unsupported
+  glyph/control detection.
+
+### Hệ quả
+
+- The accepted actual-byte validator proves MP4, `video/mp4`, H.264/AVC,
+  1080x1920, video-only, 60 frames, 30/1 timing and edit-list compatibility;
+  it does not independently expose `yuv420p` or BT.709, which remain locked
+  command/profile properties for T09.
+- Approval does not authorize public rendering, audio/AAC production completion,
+  live R2 rendering, MediaAsset promotion or Phase 21E-C. Phase 21E-C remains
+  **NOT STARTED**.
+- Known future hardening remains P2: persist exact monotonic OS process-duration
+  evidence, consider fingerprint normalization for CRLF/CR/LF equivalence, and
+  expose yuv420p/BT.709 independently if the validator later supports it.
 
 ## DEC-036 — Workspace-owned Shared MediaAsset boundary của AFF-US-020 Phase 20A
 

@@ -16,7 +16,89 @@
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
-- Cập nhật lần cuối: 2026-09-11
+- Cập nhật lần cuối: 2026-09-15
+
+## 2026-09-15 — AFF-US-021 final implementation and full internal E2E closeout
+
+AFF-US-021 / EN001 is **CLOSED / OWNER ACCEPTED** on `TXH`. The final
+implementation HEAD before this documentation-only closeout is
+`43a85f9453a3e39561a1c46f95c80d7b523b3dad`; no Phase 21E-C work is included or
+started. Phases 21A, 21B, 21C, 21D, 21E-A and 21E-B are closed.
+
+The accepted milestones are the 21C RenderJob/RenderAttempt orchestration
+boundary (claim/lease/heartbeat, fencing, CAS, idempotency, active dedup,
+`INDETERMINATE`, `executionStartedAt` and server-generated reservation
+authority), 21D immutable RenderArtifact/actual-byte proof/immutable local
+storage/atomic finalization/protected range access, and the 21E-A/B deterministic
+internal T09 contract plus approved Windows execution adapter. The adapter is
+absolute-executable-only, `shell=false`, argv-only, bounded, timeout/heartbeat
+aware, staging-safe and path-hardened, with output-size ceiling and
+`-use_editlist 0`.
+
+The accepted internal profile is `mp4-h264-video-only-t09-v1`: video-only,
+`audioTracks=[]`, 1080x1920, 30/1 FPS, 60 frames, H.264/libx264, locked
+`yuv420p`/BT.709 command properties, 2000k, GOP/keyint 30, min-keyint 30,
+scenecut disabled, B-frames 0, closed GOP, single-thread, `-n`, no `-y`,
+`-f mp4`, `-use_editlist 0`, and no `-avoid_negative_ts`. This remains an
+internal T09 profile and is not production renderer activation.
+
+Frozen identities are composition
+`4b8d10c5ee81d5978fa317f2c8e220e8ab1bf979ec85020e2063f1290714bfd9`, output
+profile `a81616db09ba0390b90ef19efd4b20fd06886a3a3b270d053a12c5b29f0ec9ec`, and
+approved tool manifest
+`2baed03633408e16f5b7e714b335117f01343fb1326380af87b11d9a287f195a`.
+
+The approved local binary authority is Gyan.dev / CODEX FFMPEG 9.0.1 Release
+Essentials Windows x64 static build at
+`C:\Program Files\Affichannel\ffmpeg\9.0.1-essentials_build\bin\ffmpeg.exe`,
+SHA-256 `72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3`.
+Approval is limited to AFF-US-021 / 21E-B and internal local Windows T09; it
+does not authorize production rendering, arbitrary PATH FFmpeg, public render,
+audio/AAC production completion, live R2, MediaAsset promotion or 21E-C.
+
+The accepted candidate was 18,334 bytes with SHA-256
+`a9b888596625d6feb671429d28503d6dbce92ce8be076ca213f95b01b7ac0b76`; the
+process exited 0 with `timeout=false`. `edts` and `elst` were absent and
+unsupported edit-list semantics were `NO`. `render-output-validation.v1`
+successfully proved MP4, `video/mp4`, H.264/AVC, 1080x1920, video-only, 60
+frames, 30/1 timing and edit-list compatibility. It did not independently
+expose `yuv420p` or BT.709; those remain locked command/profile properties.
+
+The full internal E2E passed through canonical request, current Composition,
+technical preflight, business authorization, RenderJob/Attempt,
+`authorizedAt`, `executionStartedAt`, safe staging, approved FFmpeg,
+identity-only `OUTPUT_READY`, 21D actual-byte proof, immutable storage,
+RenderArtifact, Attempt/Job completion, authorized full/range reads and
+idempotency repeat. The repeat reused the completed Job, spawned no second
+FFmpeg process and created no duplicate artifact.
+
+Fix-forward history is preserved: live run 1 was `INDETERMINATE` with 0
+artifacts because 21D rejected edit-list semantics; run 2 was `FAILED` with 0
+artifacts because the attempt-local staging parent was missing before spawn;
+run 3 was `COMPLETED` with 1 artifact. The first post-21E-B full E2E exposed
+`FONT_UNSUPPORTED`; the final fix canonicalized CRLF/CR to LF, retained NFC,
+shared hard-line splitting, excluded structural LF from font coverage and kept
+unsupported glyph/control detection. The fix commit is
+`43a85f9453a3e39561a1c46f95c80d7b523b3dad` (`fix: align font preflight with
+hard-line semantics`).
+
+Key implementation references are 21E-A
+`d8cf3e4332da83abd8606bd30857a5f7fe050677` (`fix: complete video-only render
+prototype contract`), 21E-B adapter
+`8304e15e01955fa6e40f7c2060f920f83bf94d6a` (`feat: add internal t09 execution
+adapter contract`), filesystem hardening
+`784e63f408e576030d5d14bcf4d4bbe9c1081997` (`fix: harden t09 filesystem
+execution authority`), and real-execution closeout
+`be223a903f9a42215b6ba38a59cd7e92de7aa257` (`fix: complete t09 live ffmpeg
+execution proof`). These are milestone references, not a complete list of
+AFF-US-021 commits.
+
+Known non-blocking P2 limitations remain: exact monotonic OS process-duration
+evidence is not persisted/reported; 21D does not independently expose
+`yuv420p`/BT.709; and future fingerprint semantics may normalize CRLF/CR/LF
+equivalence consistently with render text semantics. No P0/P1 blocker remains.
+This documentation closeout is intentionally uncommitted; no FFmpeg, database,
+render test or Phase 21E-C work is part of it.
 
 ## 2026-09-11 — AFF-US-021 Phase 21E-A prototype contracts/tooling foundation
 
@@ -26,11 +108,13 @@ absolute-path/hash resolver, fontkit-backed deterministic
 `affichannel-text-layout-v1`, two-scene T09 fixture, render-plan/argv types, and
 reservation-only output-ready handoff. Focused contract coverage is 9/9.
 
-The fixture uses `audioTracks: []`; no AAC, silence, actual FFmpeg execution,
+This dated entry records the pre-approval state at that time. The fixture used
+`audioTracks: []`; no AAC, silence, actual FFmpeg execution,
 MP4, storage write, 21D finalization, reconciliation, public startRender, Video
 UI, MediaAsset promotion, migration, Neon, or live R2 was added. The manifest
-remains `PENDING_BINARY_APPROVAL` until the owner pins the exact FFmpeg
-artifact/build/SHA/license metadata. Phase 21E-B/C/D/E must not start.
+was still awaiting owner-approved artifact/build/SHA/license metadata at that
+checkpoint; the approved values are recorded in the final closeout above. Phase
+21E-B/C/D/E had not started at that time.
 
 ## 2026-09-10 — AFF-US-021 Phase 21C fix-forward 2
 

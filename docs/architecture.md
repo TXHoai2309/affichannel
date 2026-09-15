@@ -1,9 +1,9 @@
 # Kiến trúc AffiChannel
 
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
-  AFF-US-019 19D, 19E.1 and 19E.2 accepted; AFF-US-019 DONE
+  AFF-US-019 DONE; AFF-US-021 / EN001 CLOSED / OWNER ACCEPTED through 21E-B
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-11
+- Cập nhật lần cuối: 2026-09-15
 
 ## 1. Mục tiêu kiến trúc
 
@@ -319,7 +319,8 @@ eligibility flags hoặc currentness booleans.
 
 Phase 21A không tạo worker, RenderJob, renderer, FFmpeg, Remotion, output storage,
 hoặc migration mới. Migration 0023 và relational CompositionVersion schema giữ
-nguyên; technical byte/font and sample/frame feasibility remain Phase 21B scope.
+nguyên; technical byte/font and sample/frame feasibility were subsequently
+accepted as the 21B baseline.
 
 ## 10. Kiến trúc job
 
@@ -366,7 +367,9 @@ Thuộc tính job bắt buộc:
 `RenderAttempt` giữ lease, minimal preflight evidence, authorization/execution
 markers và server-generated `outputReservationId`. Claim là transaction ngắn
 dùng `FOR UPDATE SKIP LOCKED`; heartbeat chỉ gia hạn đúng owner khi lease còn
-hiệu lực.
+hiệu lực. Fencing, CAS, idempotency, active deduplication, `INDETERMINATE`
+semantics, `executionStartedAt` boundary và server-generated reservation
+authority đều là phần của boundary này.
 
 Technical preflight chạy trước final business gate. Gate cuối re-read
 CompositionVersion scope, Project, Script, Voice, Media và Fact Lock truth trong
@@ -376,27 +379,71 @@ CAS ngay trước adapter. Adapter success không thể tự ghi `COMPLETED`; ch
 21D với immutable output proof và RenderArtifact mới được reconcile/finalize
 thành công.
 
-Do `mp4-h264-aac-v1` chưa hoàn chỉnh, không expose production `startRender`.
-Complete deterministic profile chỉ là test fixture cho orchestration. 21C không
-tạo output storage/key, FFmpeg, Remotion, renderer, publishing/export hay Video
-activation.
+### AFF-US-021 Phase 21D artifact and finalization boundary
 
-### AFF-US-021 Phase 21E-A prototype contract boundary
+21D là authority cho actual-byte proof và immutable artifact lifecycle. Output
+được materialize vào immutable local storage với create-once/no-overwrite
+semantics; protected full/range access và reconciliation giữ cùng authorization
+boundary. Atomic finalization có thứ tự:
 
-21E-A chỉ bổ sung internal/test-only contracts trong `packages/core` và
-`packages/api`: profile video-only T09, manifest/resolver cho một FFmpeg binary
-được pin bằng absolute path + SHA-256, fontkit text layout, deterministic fixture
-và command plan. Manifest mặc định fail-closed ở `PENDING_BINARY_APPROVAL`; không
-có fallback đến `PATH` và không có code execute process.
+```text
+RenderArtifact → RenderAttempt.COMPLETED → RenderJob.COMPLETED
+```
 
-T09 fixture giữ `audioTracks: []`. Render plan chỉ mang exact input asset/font/text
-paths, fingerprints, frame intervals, output metadata và server-owned reservation.
-Output-ready handoff không được tạo checksum, storage locator, proof hoặc
-`RenderArtifact`; 21D storage-backed validation/finalization vẫn là authority.
-Phase 21E-A không mở rộng production output profile/`RenderRequestSpecV1`, không
-thêm migration/schema, không gọi provider/Neon và không activate Video, Preview,
-public Render hay MediaAsset promotion. Actual render và Phase 21E-B/C/D/E còn
-blocked/deferred.
+`OUTPUT_READY` chỉ truyền identity/reservation handoff; nó không phải proof và
+không được tự đánh dấu artifact hoặc job completed. `render-output-validation.v1`
+phải chứng minh actual bytes trước khi artifact được tạo.
+
+### AFF-US-021 Phase 21E-A/B internal T09 execution boundary
+
+21E-A đã đóng deterministic internal T09 contract: canonical CompositionInputV1,
+deterministic text layout, output profile, command plan, server-owned staging
+identity, identity-only `OUTPUT_READY` và exact tool identity contract. 21E-B đã
+đóng approved Windows execution adapter: absolute executable only, no `PATH`
+fallback, `shell=false`, argv-only execution, bounded diagnostics, timeout and
+heartbeat lifecycle, safe attempt-local staging materialization,
+reparse/canonical-path hardening, output-size ceiling và `-use_editlist 0`.
+
+The accepted profile is `mp4-h264-video-only-t09-v1`: video-only,
+`audioTracks=[]`, 1080x1920, 30/1 FPS, 60 frames, H.264/libx264, locked
+`yuv420p` and BT.709 command/profile properties, 2000k, GOP/keyint 30,
+min-keyint 30, scenecut disabled, B-frames 0, closed GOP, single-thread,
+`-n`, no `-y`, `-f mp4`, `-use_editlist 0`, and no `-avoid_negative_ts`.
+This is an internal T09 profile, not a production renderer profile.
+
+The approved local authority is the Gyan.dev / CODEX FFMPEG 9.0.1 Release
+Essentials Windows x64 static build at
+`C:\Program Files\Affichannel\ffmpeg\9.0.1-essentials_build\bin\ffmpeg.exe`,
+SHA-256
+`72a489eccd008c2ec2c0a5856c5c75bc3d8bbfa90166c4566865c246445e6aa3`, with an
+APPROVED manifest. Approval is limited to AFF-US-021 / 21E-B and internal local
+Windows T09; it does not authorize production renderer activation, arbitrary
+PATH FFmpeg, public rendering, AAC/audio production, live R2 rendering,
+MediaAsset promotion or 21E-C.
+
+The full accepted path is:
+
+```text
+canonical request
+→ Composition CURRENT
+→ technical preflight VALID
+→ business authorization
+→ RenderJob / RenderAttempt
+→ authorizedAt / executionStartedAt
+→ safe staging
+→ approved local FFmpeg
+→ OUTPUT_READY identity
+→ 21D actual-byte proof
+→ immutable local storage
+→ RenderArtifact
+→ Attempt COMPLETED
+→ Job COMPLETED
+```
+
+The accepted actual-byte proof covers MP4, `video/mp4`, H.264/AVC,
+1080x1920, video-only, 60 frames, 30/1 timing and edit-list compatibility.
+The validator does not independently expose `yuv420p` or BT.709; those remain
+locked command/profile properties for T09. Phase 21E-C is **NOT STARTED**.
 
 ## 11. Provider adapter
 

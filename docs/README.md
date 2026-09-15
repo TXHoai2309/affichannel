@@ -1,5 +1,8 @@
 # Tài liệu AffiChannel
 
+- Trạng thái: Canonical repository documentation; AFF-US-021 CLOSED / OWNER ACCEPTED
+- Cập nhật lần cuối: 2026-09-15
+
 Thư mục này là nguồn tài liệu chuẩn về sản phẩm và kỹ thuật của AffiChannel.
 Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao diện phải nhất quán
 với các tài liệu tại đây.
@@ -20,10 +23,11 @@ CONTRACT LOCKED theo DEC-036 và 20B MediaAsset persistence/storage foundation �
 PASS; 20C–20E chưa triển khai. Quick Image/Media First vẫn chưa active. M5 không
 activate các identity đó.
 
-AFF-US-021 Phase 21E-A prototype contracts/tooling foundation đã hoàn tất ở mức
-implementation-ready; exact FFmpeg artifact/build/SHA/license approval vẫn là
-execution gate. Phase 21E-B/C/D/E chưa bắt đầu và production Video/Preview vẫn
-chưa active.
+AFF-US-021 / EN001 đã **CLOSED / OWNER ACCEPTED** trên branch `TXH` tại
+implementation HEAD `43a85f9453a3e39561a1c46f95c80d7b523b3dad`. Các phase 21A,
+21B, 21C, 21D, 21E-A và 21E-B đã closed; full internal E2E T09 đã PASS với
+approved local Windows FFmpeg và 21D actual-byte proof. Phase 21E-C **NOT
+STARTED** và production Video/Preview vẫn chưa active.
 
 ## Thứ tự đọc
 
@@ -32,7 +36,7 @@ chưa active.
 3. [Kiến trúc hệ thống](./architecture.md)
 4. [Lộ trình triển khai](./roadmap.md)
 5. [AFF-US-020 / Shared Media Library contract](./aff-us-020-shared-media-library.md)
-6. [AFF-US-021 / EN001 Phase 21E-A prototype contract](./aff-us-021-phase-21e-a.md)
+6. [AFF-US-021 / EN001 Phase 21E-A prototype contract — historical/superseded phase snapshot](./aff-us-021-phase-21e-a.md)
 7. [Kế hoạch Domain Evolution v0.8](./domain-evolution-plan.md)
 8. [Contract ClaimManifest và Fact Lock v0.8](./claim-manifest-fact-lock-contract.md)
 9. [AFF-US-017 / ClaimManifest Foundation Contract](./aff-us-017-claim-manifest-foundation.md)

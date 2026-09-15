@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-11
+- Cập nhật lần cuối: 2026-09-15
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -40,17 +40,25 @@ adapters; `/media` vẫn là skeleton và chưa có public media API. 20C–20E
 (protected API, UI và project reuse/E2E) chưa bắt đầu. Quick Image/AFF-US-021
 phụ thuộc vào READY image asset contract của 20B.
 
-AFF-US-021 Phase 21A canonical CompositionInput semantics đã hoàn tất trên branch
-`TXH`: server-owned assembly boundary, explicit audio end boundary, Voice
-lineage/source-fact contract, materialized-only fingerprint, canonical ordering,
-font ID uniqueness và Render-placeholder preflight exclusion đã được regression
-tested. Phase 21B technical byte/font/sample work đã được nhận làm baseline.
-Phase 21C đã triển khai persistence/orchestration nội bộ cho RenderJob/RenderAttempt
-theo DEC-038; output proof, renderer, storage và public startRender vẫn chưa active.
-Phase 21E-A prototype contracts/tooling foundation đã hoàn tất ở mức
-implementation-ready và chờ owner technical review; Phase 21E-B/C/D/E chưa bắt
-đầu. Exact FFmpeg artifact/build/SHA/license approval vẫn là gate trước actual
-execution.
+AFF-US-021 / EN001 đã **CLOSED / OWNER ACCEPTED** trên branch `TXH` tại
+implementation HEAD `43a85f9453a3e39561a1c46f95c80d7b523b3dad`. Phase 21A, 21B,
+21C, 21D, 21E-A và 21E-B đều đã closed. 21C bao gồm RenderJob/RenderAttempt
+orchestration; 21D bao gồm immutable RenderArtifact, actual-byte proof và
+finalization; 21E-A/B bao gồm deterministic internal T09 contract và approved
+Windows FFmpeg execution adapter. Full internal E2E đã PASS. Phase 21E-C
+**NOT STARTED**; production renderer, public render và live R2 vẫn không active.
+
+### AFF-US-021 final phase status — 2026-09-15
+
+| Phase | Trạng thái | Ghi chú |
+|---|---|---|
+| 21A | CLOSED | Canonical CompositionInput semantics |
+| 21B | CLOSED | Technical byte/font/sample baseline |
+| 21C | CLOSED | Fenced RenderJob/RenderAttempt orchestration |
+| 21D | CLOSED | Immutable artifact, actual-byte proof và finalization |
+| 21E-A | CLOSED | Deterministic internal T09 render contract |
+| 21E-B | CLOSED | Approved local Windows FFmpeg execution và E2E proof |
+| 21E-C | NOT STARTED | Future phase; excluded from AFF-US-021 closeout |
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.

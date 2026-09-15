@@ -1,24 +1,59 @@
 # Nhật ký thay đổi
 
+- Trạng thái: Canonical changelog
+- Cập nhật lần cuối: 2026-09-15
+
 Mọi thay đổi đáng chú ý về hành vi người dùng, vận hành và kiến trúc của
 AffiChannel được ghi tại đây.
 
 Định dạng dựa trên nguyên tắc Keep a Changelog. Khi bắt đầu phát hành, phiên bản
 sử dụng Semantic Versioning.
 
-Cập nhật lần cuối: 2026-09-11.
-
 ## Chưa phát hành
 
-### AFF-US-021 Phase 21E-A prototype contracts/tooling foundation
+### AFF-US-021 final closeout — CLOSED / OWNER ACCEPTED
+
+- Closed AFF-US-021 / EN001 through 21E-B on `TXH` at implementation HEAD
+  `43a85f9453a3e39561a1c46f95c80d7b523b3dad`; 21A, 21B, 21C, 21D, 21E-A and
+  21E-B are closed, while Phase 21E-C remains **NOT STARTED**.
+- Closed the approved internal Windows T09 execution boundary: absolute
+  executable only, no PATH fallback, `shell=false`, argv-only execution,
+  bounded diagnostics, timeout/heartbeat lifecycle, safe local staging,
+  path hardening, output-size ceiling and `-use_editlist 0`.
+- Verified real approved local FFmpeg execution, 21D actual-byte validation,
+  immutable artifact finalization, protected full/range reads and idempotency
+  replay with no second process or duplicate artifact. Production renderer,
+  public rendering, live R2, audio/AAC production, MediaAsset promotion and
+  21E-C remain outside this approval.
+
+### AFF-US-021 full internal E2E fix-forward — PASS
+
+- The first full E2E exposed `FONT_UNSUPPORTED` because structural hard-line LF
+  was treated as a font glyph. The final fix canonicalizes CRLF/CR to LF,
+  retains NFC, shares hard-line splitting, excludes structural LF from font
+  coverage and retains unsupported glyph/control detection.
+- The accepted path is canonical request → current Composition → technical
+  preflight → business authorization → RenderJob/RenderAttempt → authorized and
+  execution-start fences → safe staging → approved FFmpeg → identity-only
+  `OUTPUT_READY` → 21D actual-byte proof → immutable artifact → completed
+  Attempt/Job → authorized full/range reads → idempotency repeat.
+- Final fix commit: `43a85f9453a3e39561a1c46f95c80d7b523b3dad`.
+
+Historical entries below preserve their recorded chronology and are superseded
+by the final closeout entries above; earlier review-pending and pre-approval
+wording is not the current AFF-US-021 state.
+
+### Historical — AFF-US-021 Phase 21E-A prototype contracts/tooling foundation
 
 - Added the internal-only `mp4-h264-video-only-t09-v1` profile, deterministic
   fontkit text-layout contract, two-scene video-only fixture, FFmpeg manifest/
   absolute-path resolver, render command plan, and reservation-only output-ready
   handoff.
-- Kept the FFmpeg artifact approval gate pending and did not execute FFmpeg,
+- At the 2026-09-11 checkpoint, kept the FFmpeg artifact approval gate pending
+  and did not execute FFmpeg,
   create MP4/output storage, change migrations/schema, activate public render or
-  Video/Preview UI, or start Phase 21E-B/C/D/E.
+  Video/Preview UI, or start Phase 21E-B/C/D/E. The later approved execution and
+  final E2E closeout are recorded above.
 
 ### AFF-US-021 Phase 21C fix-forward 2 — IMPLEMENTED / REVIEW PENDING
 

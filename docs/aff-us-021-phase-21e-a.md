@@ -1,8 +1,22 @@
 # AFF-US-021 / EN001 Phase 21E-A — Prototype contracts and tooling foundation
 
-- Trạng thái: COMPLETE / READY FOR OWNER TECHNICAL REVIEW
+- Trạng thái tại thời điểm snapshot: COMPLETE / READY FOR OWNER TECHNICAL REVIEW
 - Cập nhật: 2026-09-11
 - Branch: `TXH`
+
+> **HISTORICAL PHASE SNAPSHOT / SUPERSEDED**
+>
+> Tài liệu này ghi lại trạng thái tại thời điểm đóng Phase 21E-A và được giữ để
+> truy vết lịch sử. Trạng thái authoritative hiện tại là AFF-US-021 **CLOSED /
+> OWNER ACCEPTED**; 21E-B **CLOSED** với approved local Windows T09 FFmpeg
+> execution **VERIFIED**, 21D actual-byte proof/finalization **VERIFIED**, full
+> internal E2E **PASS**, và Phase 21E-C **NOT STARTED**.
+>
+> Trạng thái hiện tại được duy trì trong `docs/README.md`, `docs/roadmap.md`,
+> `docs/architecture.md`, `docs/ai-progress.md`, `docs/changelog.md` và
+> `docs/decisions.md`. Các câu như `PENDING_BINARY_APPROVAL`, “21E-B chưa bắt
+> đầu” hoặc real execution/21D proof deferred bên dưới chỉ mô tả state **tại
+> thời điểm snapshot**, không phải current repository state.
 
 ## Phạm vi
 
