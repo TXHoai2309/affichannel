@@ -1,8 +1,10 @@
-import { preflightQuickImageCompositionVersion } from "@affichannel/api/services/quick-image-preview-preflight";
+import { createQuickImageCompositionPreviewDescriptor } from "@affichannel/api/services/composition-preview-descriptor";
 import {
 	CONTENT_FORMAT_DEFAULTS,
+	type CompositionPreviewDescriptorV2,
 	classifyPersistedProjectIdentity,
 } from "@affichannel/core";
+import QuickImagePreviewPlayer from "@/features/composition/quick-image-preview-player";
 import GatedProjectStepPage from "@/features/project-navigation/gated-project-step-page";
 import {
 	getCurrentWorkspaceActor,
@@ -51,10 +53,18 @@ export default async function PreviewStepPage({
 			? compositionVersionId.trim()
 			: undefined;
 	const actor = versionId ? await getCurrentWorkspaceActor() : undefined;
-	const preview =
-		versionId && actor
-			? await preflightQuickImageCompositionVersion(actor, projectId, versionId)
-			: null;
+	let descriptor: CompositionPreviewDescriptorV2 | null = null;
+	if (versionId && actor) {
+		try {
+			descriptor = await createQuickImageCompositionPreviewDescriptor(
+				actor,
+				projectId,
+				versionId,
+			);
+		} catch {
+			descriptor = null;
+		}
+	}
 	return (
 		<section
 			className="space-y-2"
@@ -64,11 +74,8 @@ export default async function PreviewStepPage({
 			<h1 className="font-semibold text-2xl tracking-tight">
 				Quick Image preview
 			</h1>
-			{versionId && preview?.ok ? (
-				<p className="max-w-2xl text-muted-foreground">
-					CompositionVersion {versionId} đã được chọn. Playback controls sẽ được
-					bổ sung ở C2.
-				</p>
+			{descriptor ? (
+				<QuickImagePreviewPlayer descriptor={descriptor} />
 			) : versionId ? (
 				<p className="max-w-2xl text-muted-foreground">
 					CompositionVersion không hợp lệ hoặc không thuộc project này.

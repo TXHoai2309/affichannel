@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const previewMocks = vi.hoisted(() => ({
+	createDescriptor: vi.fn(),
 	getCurrentWorkspaceActor: vi.fn(),
 	getProjectForCurrentUser: vi.fn(),
-	preflight: vi.fn(),
 }));
 
 vi.mock("@/features/project-navigation/gated-project-step-page", () => ({
 	default: "adaptive-route-gate",
+}));
+vi.mock("@/features/composition/quick-image-preview-player", () => ({
+	default: "quick-image-preview-player",
 }));
 vi.mock("@/features/script-generation/script-studio", () => ({
 	default: "script-studio",
@@ -20,8 +23,8 @@ vi.mock("@/lib/project-loader", () => ({
 	getCurrentWorkspaceActor: previewMocks.getCurrentWorkspaceActor,
 	getProjectForCurrentUser: previewMocks.getProjectForCurrentUser,
 }));
-vi.mock("@affichannel/api/services/quick-image-preview-preflight", () => ({
-	preflightQuickImageCompositionVersion: previewMocks.preflight,
+vi.mock("@affichannel/api/services/composition-preview-descriptor", () => ({
+	createQuickImageCompositionPreviewDescriptor: previewMocks.createDescriptor,
 }));
 
 import ContentPage from "../../app/(protected)/projects/[projectId]/content/page";
@@ -71,7 +74,7 @@ describe("AFF-US-015/15C internal route wiring", () => {
 			userId: "user-1",
 		});
 		previewMocks.getProjectForCurrentUser.mockResolvedValue(scriptedProject());
-		previewMocks.preflight.mockResolvedValue({ ok: true });
+		previewMocks.createDescriptor.mockResolvedValue({ schemaVersion: "v2" });
 	});
 
 	it.each([
@@ -109,8 +112,11 @@ describe("AFF-US-015/15C internal route wiring", () => {
 			"data-project-id": "project-route",
 			"data-composition-version-id": "version-1",
 		});
-		expect(result.props.children[0].props.children).toBe("Quick Image preview");
-		expect(previewMocks.preflight).toHaveBeenCalledWith(
+		expect(result.props.children[1].type).toBe("quick-image-preview-player");
+		expect(result.props.children[1].props.descriptor).toEqual({
+			schemaVersion: "v2",
+		});
+		expect(previewMocks.createDescriptor).toHaveBeenCalledWith(
 			{ workspaceId: "workspace-1", userId: "user-1" },
 			"project-route",
 			"version-1",
@@ -129,7 +135,23 @@ describe("AFF-US-015/15C internal route wiring", () => {
 		expect(result.props.children[1].props.children[1].props.children).toBe(
 			"compositionVersionId",
 		);
-		expect(previewMocks.preflight).not.toHaveBeenCalled();
+		expect(previewMocks.createDescriptor).not.toHaveBeenCalled();
+	});
+
+	it("keeps canonical Quick Image preview in a safe state for an empty query", async () => {
+		previewMocks.getProjectForCurrentUser.mockResolvedValue(
+			quickImageProject(),
+		);
+		const result = await PreviewPage({
+			params: Promise.resolve({ projectId: "project-route" }),
+			searchParams: Promise.resolve({ compositionVersionId: "   " }),
+		});
+
+		expect(result.props["data-composition-version-id"]).toBe("");
+		expect(result.props.children[1].props.children[1].props.children).toBe(
+			"compositionVersionId",
+		);
+		expect(previewMocks.createDescriptor).not.toHaveBeenCalled();
 	});
 
 	it("fails closed without preflight when compositionVersionId repeats", async () => {
@@ -147,18 +169,14 @@ describe("AFF-US-015/15C internal route wiring", () => {
 		expect(result.props.children[1].props.children[1].props.children).toBe(
 			"compositionVersionId",
 		);
-		expect(previewMocks.preflight).not.toHaveBeenCalled();
+		expect(previewMocks.createDescriptor).not.toHaveBeenCalled();
 	});
 
-	it("renders a safe state when the explicit version fails server preflight", async () => {
+	it("renders a safe state when the explicit version fails descriptor access", async () => {
 		previewMocks.getProjectForCurrentUser.mockResolvedValue(
 			quickImageProject(),
 		);
-		previewMocks.preflight.mockResolvedValue({
-			ok: false,
-			code: "PREVIEW_COMPOSITION_MISSING",
-			message: "missing",
-		});
+		previewMocks.createDescriptor.mockRejectedValue(new Error("missing"));
 		const result = await PreviewPage({
 			params: Promise.resolve({ projectId: "project-route" }),
 			searchParams: Promise.resolve({
@@ -179,7 +197,7 @@ describe("AFF-US-015/15C internal route wiring", () => {
 			projectId: "project-route",
 			stepKey: "preview",
 		});
-		expect(previewMocks.preflight).not.toHaveBeenCalled();
+		expect(previewMocks.createDescriptor).not.toHaveBeenCalled();
 	});
 
 	it("does not let a Scripted query switch into Quick Image preview", async () => {
@@ -190,7 +208,7 @@ describe("AFF-US-015/15C internal route wiring", () => {
 
 		expect(result.type).toBe("adaptive-route-gate");
 		expect(result.props.stepKey).toBe("preview");
-		expect(previewMocks.preflight).not.toHaveBeenCalled();
+		expect(previewMocks.createDescriptor).not.toHaveBeenCalled();
 	});
 
 	it.each([
@@ -219,6 +237,6 @@ describe("AFF-US-015/15C internal route wiring", () => {
 
 		expect(result.type).toBe("adaptive-route-gate");
 		expect(result.props.stepKey).toBe("preview");
-		expect(previewMocks.preflight).not.toHaveBeenCalled();
+		expect(previewMocks.createDescriptor).not.toHaveBeenCalled();
 	});
 });
