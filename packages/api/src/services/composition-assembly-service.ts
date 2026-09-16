@@ -577,22 +577,52 @@ function quickImageIncompleteResult(
 	};
 }
 
-function isCanonicalQuickImageProject(
-	project: Awaited<ReturnType<typeof getProjectWorkflowSubject>>,
+function classifyCompositionProjectIdentity(
+	project: NonNullable<Awaited<ReturnType<typeof getProjectWorkflowSubject>>>,
 ) {
-	if (!project) return false;
-	const classification = classifyPersistedProjectIdentity({
+	return classifyPersistedProjectIdentity({
 		productId: project.productId,
 		contentType: project.contentType,
 		creationPath: project.creationPath,
 		contentFormatKey: project.contentFormatKey,
 		contentFormatVersion: project.contentFormatVersion,
 	});
+}
+
+type CompositionProjectIdentityClassification = ReturnType<
+	typeof classifyCompositionProjectIdentity
+>;
+
+function isCanonicalQuickImageClassification(
+	classification: CompositionProjectIdentityClassification,
+) {
 	return (
 		classification.kind === "canonical" &&
 		classification.identity.creationPath === "QUICK_IMAGE" &&
 		classification.identity.contentFormat.key === "QUICK_IMAGE_STANDARD" &&
 		classification.identity.contentFormat.version === 1
+	);
+}
+
+function isCanonicalScriptedClassification(
+	classification: CompositionProjectIdentityClassification,
+) {
+	return (
+		classification.kind === "canonical" &&
+		classification.identity.creationPath === "SCRIPTED" &&
+		classification.identity.contentFormat.key === "SCRIPTED_STANDARD" &&
+		classification.identity.contentFormat.version === 1
+	);
+}
+
+function isCanonicalQuickImageProject(
+	project: Awaited<ReturnType<typeof getProjectWorkflowSubject>>,
+) {
+	return (
+		project !== undefined &&
+		isCanonicalQuickImageClassification(
+			classifyCompositionProjectIdentity(project),
+		)
 	);
 }
 
@@ -645,16 +675,46 @@ export async function assembleCompositionInputV2(
 	});
 }
 
-/** Dispatches only Quick Image projects to V2; existing Scripted callers stay V1. */
+export type CompositionInputDispatchDependencies = {
+	readProject?: typeof getProjectWorkflowSubject;
+	assembleV1?: typeof assembleCompositionInputV1;
+	assembleV2?: typeof assembleCompositionInputV2;
+};
+
+/** Dispatches from the complete persisted identity; unknown identities fail closed. */
 export async function assembleCompositionInput(
 	actor: WorkspaceActor,
 	projectId: string,
+	dependencies: CompositionInputDispatchDependencies = {},
 ): Promise<CompositionInputV1Result | CompositionInputV2Result> {
-	const projectSubject = await getProjectWorkflowSubject(
-		actor.workspaceId,
-		projectId,
-	);
-	if (projectSubject?.creationPath === "QUICK_IMAGE")
-		return assembleCompositionInputV2(actor, projectId);
-	return assembleCompositionInputV1(actor, projectId);
+	const projectSubject = await (
+		dependencies.readProject ?? getProjectWorkflowSubject
+	)(actor.workspaceId, projectId);
+	if (!projectSubject) return missingResult(["project"]);
+
+	const classification = classifyCompositionProjectIdentity(projectSubject);
+	if (classification.kind === "rejected")
+		return quickImageInvalidResult([
+			"project.identity",
+			classification.reasonCode,
+		]);
+	if (classification.kind === "legacy")
+		return (dependencies.assembleV1 ?? assembleCompositionInputV1)(
+			actor,
+			projectId,
+		);
+
+	if (isCanonicalQuickImageClassification(classification))
+		return (dependencies.assembleV2 ?? assembleCompositionInputV2)(
+			actor,
+			projectId,
+		);
+
+	if (isCanonicalScriptedClassification(classification))
+		return (dependencies.assembleV1 ?? assembleCompositionInputV1)(
+			actor,
+			projectId,
+		);
+
+	return quickImageInvalidResult(["project.identity"]);
 }

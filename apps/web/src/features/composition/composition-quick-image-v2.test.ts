@@ -1,4 +1,5 @@
 import {
+	assembleCompositionInput,
 	assembleCompositionInputV2,
 	type ServerOwnedQuickImageCompositionAssemblyReader,
 } from "@affichannel/api/services/composition-assembly-service";
@@ -7,17 +8,20 @@ import {
 	createCompositionVersion,
 } from "@affichannel/api/services/composition-service";
 import type { CompositionVersionReadModel } from "@affichannel/api/services/composition-version-repository";
+import type { ProjectWorkflowSubject } from "@affichannel/api/services/project-repository";
 import type { QuickImageSettingsSnapshot } from "@affichannel/api/services/quick-image-settings-service";
 import type { WorkspaceActor } from "@affichannel/api/services/workspace";
 import {
 	buildCompositionInputV2QuickImage,
 	CENTER_ZOOM_IN_V1,
+	type CompositionInputV1Result,
+	type CompositionInputV2Result,
 	compositionInputV2Schema,
 	QUICK_IMAGE_FPS,
 	type QuickImageCurrentSourceResolution,
 	type QuickImageSourceAuthority,
 } from "@affichannel/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 const actor: WorkspaceActor = {
 	workspaceId: "workspace-1",
@@ -271,6 +275,156 @@ describe("CompositionInputV2 Quick Image", () => {
 		expect(equivalent.fingerprint).toBe(first.fingerprint);
 		expect(changedChecksum.fingerprint).not.toBe(first.fingerprint);
 		expect(changedDuration.fingerprint).not.toBe(first.fingerprint);
+	});
+});
+
+describe("CompositionInput dispatch identity", () => {
+	const failureV1: CompositionInputV1Result = {
+		ok: false,
+		code: "COMPOSITION_INPUT_INVALID",
+	};
+	const failureV2: CompositionInputV2Result = {
+		ok: false,
+		code: "COMPOSITION_INPUT_INVALID",
+	};
+
+	function subject(
+		overrides: Partial<ProjectWorkflowSubject> = {},
+	): ProjectWorkflowSubject {
+		return {
+			id: project.id,
+			contentType: project.contentType,
+			creationPath: project.creationPath,
+			contentFormatKey: project.contentFormatKey,
+			contentFormatVersion: project.contentFormatVersion,
+			productId: project.productId,
+			productAccessible: project.productAccessible,
+			...overrides,
+		};
+	}
+
+	async function dispatch(projectSubject: ProjectWorkflowSubject | undefined) {
+		const assembleV1 = vi.fn(async () => failureV1);
+		const assembleV2 = vi.fn(async () => failureV2);
+		const result = await assembleCompositionInput(actor, project.id, {
+			readProject: async () => projectSubject,
+			assembleV1,
+			assembleV2,
+		});
+		return { result, assembleV1, assembleV2 };
+	}
+
+	it("routes only complete canonical identities and preserves legacy V1", async () => {
+		const scripted = await dispatch(
+			subject({
+				creationPath: "SCRIPTED",
+				contentFormatKey: "SCRIPTED_STANDARD",
+				contentFormatVersion: 1,
+			}),
+		);
+		expect(scripted.assembleV1).toHaveBeenCalledOnce();
+		expect(scripted.assembleV2).not.toHaveBeenCalled();
+
+		const quickImage = await dispatch(subject());
+		expect(quickImage.assembleV2).toHaveBeenCalledOnce();
+		expect(quickImage.assembleV1).not.toHaveBeenCalled();
+
+		const legacy = await dispatch(
+			subject({
+				contentType: null,
+				creationPath: null,
+				contentFormatKey: null,
+				contentFormatVersion: null,
+				productId: "legacy-product",
+			}),
+		);
+		expect(legacy.assembleV1).toHaveBeenCalledOnce();
+		expect(legacy.assembleV2).not.toHaveBeenCalled();
+	});
+
+	it.each([
+		{
+			name: "SCRIPTED + QUICK_IMAGE_STANDARD",
+			identity: {
+				creationPath: "SCRIPTED",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				contentFormatVersion: 1,
+			},
+		},
+		{
+			name: "QUICK_IMAGE + SCRIPTED_STANDARD",
+			identity: {
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "SCRIPTED_STANDARD",
+				contentFormatVersion: 1,
+			},
+		},
+		{
+			name: "QUICK_IMAGE + unsupported version",
+			identity: {
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				contentFormatVersion: 2,
+			},
+		},
+		{
+			name: "unhandled canonical MEDIA_FIRST",
+			identity: {
+				creationPath: "MEDIA_FIRST",
+				contentFormatKey: "MEDIA_FIRST_STANDARD",
+				contentFormatVersion: 1,
+			},
+		},
+		{
+			name: "SCRIPTED + unsupported version",
+			identity: {
+				creationPath: "SCRIPTED",
+				contentFormatKey: "SCRIPTED_STANDARD",
+				contentFormatVersion: 2,
+			},
+		},
+	] as const)("rejects $name before either assembler", async ({ identity }) => {
+		const rejected = await dispatch(subject(identity));
+		expect(rejected.result).toMatchObject({
+			ok: false,
+			code: "COMPOSITION_INPUT_INVALID",
+		});
+		if (!rejected.result.ok)
+			expect(rejected.result.issues).toContain("project.identity");
+		expect(rejected.assembleV1).not.toHaveBeenCalled();
+		expect(rejected.assembleV2).not.toHaveBeenCalled();
+	});
+
+	it("rejects a missing project without entering V1", async () => {
+		const missing = await dispatch(undefined);
+		expect(missing.result).toMatchObject({
+			ok: false,
+			code: "COMPOSITION_INPUT_INCOMPLETE",
+			issues: ["project"],
+		});
+		expect(missing.assembleV1).not.toHaveBeenCalled();
+		expect(missing.assembleV2).not.toHaveBeenCalled();
+	});
+
+	it("does not persist when the dispatcher rejects malformed identity", async () => {
+		const rejected = await dispatch(
+			subject({
+				creationPath: "SCRIPTED",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				contentFormatVersion: 1,
+			}),
+		);
+		let insertCalls = 0;
+		await expect(
+			createCompositionVersion(actor, project.id, {
+				assemble: async () => rejected.result,
+				insert: async () => {
+					insertCalls += 1;
+					return {} as CompositionVersionReadModel;
+				},
+			}),
+		).rejects.toMatchObject({ code: "COMPOSITION_INPUT_INVALID" });
+		expect(insertCalls).toBe(0);
 	});
 });
 
