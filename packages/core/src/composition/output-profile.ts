@@ -4,6 +4,8 @@ import { canonicalizeCompositionJson } from "./canonicalization";
 
 export const outputEncodingProfileId = "mp4-h264-aac-v1" as const;
 
+export const videoOnlyOutputProfileId = "mp4-h264-video-only-v1" as const;
+
 export const outputEncodingProfileSchema = z
 	.object({
 		id: z.literal(outputEncodingProfileId),
@@ -22,6 +24,65 @@ export const outputEncodingProfileSchema = z
 	.strict();
 
 export type OutputEncodingProfile = z.infer<typeof outputEncodingProfileSchema>;
+
+/**
+ * Production profile for frozen Quick Image renders. This is deliberately
+ * separate from the historical T09 prototype profile: the profile identity is
+ * part of the render contract and must not inherit T09 ownership.
+ */
+export const videoOnlyOutputProfileSchema = z
+	.object({
+		id: z.literal(videoOnlyOutputProfileId),
+		container: z.literal("MP4"),
+		videoCodec: z.literal("H.264/AVC"),
+		pixelFormat: z.literal("yuv420p"),
+		width: z.literal(1080),
+		height: z.literal(1920),
+		fps: z
+			.object({ numerator: z.literal(30), denominator: z.literal(1) })
+			.strict(),
+		videoBitrateKbps: z.literal(2000),
+		gop: z.literal(30),
+		keyint: z.literal(30),
+		minKeyint: z.literal(30),
+		scenecut: z.literal(false),
+		bFrames: z.literal(0),
+		closedGop: z.literal(true),
+		threads: z.literal(1),
+		colorPrimaries: z.literal("BT.709"),
+		colorTransfer: z.literal("BT.709"),
+		colorSpace: z.literal("BT.709"),
+		colorRange: z.literal("LIMITED_TV"),
+		audio: z.literal("NONE"),
+	})
+	.strict();
+
+export type VideoOnlyOutputProfile = z.infer<
+	typeof videoOnlyOutputProfileSchema
+>;
+
+export const MP4_H264_VIDEO_ONLY_V1: VideoOnlyOutputProfile = {
+	id: videoOnlyOutputProfileId,
+	container: "MP4",
+	videoCodec: "H.264/AVC",
+	pixelFormat: "yuv420p",
+	width: 1080,
+	height: 1920,
+	fps: { numerator: 30, denominator: 1 },
+	videoBitrateKbps: 2000,
+	gop: 30,
+	keyint: 30,
+	minKeyint: 30,
+	scenecut: false,
+	bFrames: 0,
+	closedGop: true,
+	threads: 1,
+	colorPrimaries: "BT.709",
+	colorTransfer: "BT.709",
+	colorSpace: "BT.709",
+	colorRange: "LIMITED_TV",
+	audio: "NONE",
+};
 
 /** Owner-frozen fields are present; unresolved encoder choices stay null. */
 export const MP4_H264_AAC_V1: OutputEncodingProfile = {
@@ -52,6 +113,13 @@ export function isOutputEncodingProfileComplete(
 		profile.audioBitrateKbps !== null &&
 		profile.keyframeIntervalFrames !== null
 	);
+}
+
+export async function fingerprintVideoOnlyOutputProfile(
+	profile: VideoOnlyOutputProfile = MP4_H264_VIDEO_ONLY_V1,
+): Promise<string> {
+	const parsed = videoOnlyOutputProfileSchema.parse(profile);
+	return sha256Hex(canonicalizeCompositionJson(parsed));
 }
 
 export async function fingerprintOutputEncodingProfile(

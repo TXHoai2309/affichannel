@@ -1,17 +1,53 @@
 import { createHash } from "node:crypto";
 import type {
 	CompositionInputV1,
+	CompositionInputV2,
 	OutputEncodingProfile,
 	RenderRequestSpecV1,
+	VideoOnlyOutputProfile,
+} from "@affichannel/core";
+import {
+	fingerprintVideoOnlyOutputProfile,
+	videoOnlyOutputProfileSchema,
 } from "@affichannel/core";
 
 export const RENDER_OUTPUT_VALIDATION_VERSION = "render-output-validation.v1";
 export const RENDER_OUTPUT_PROOF_VERSION = "render-output-proof.v1";
+export const QUICK_IMAGE_OUTPUT_PROOF_COLOR_RANGE_NOT_OBSERVABLE =
+	"OUTPUT_PROOF_COLOR_RANGE_NOT_CURRENTLY_OBSERVABLE" as const;
 
-export type RenderOutputValidationExpectation = Readonly<{
-	requestSpec: RenderRequestSpecV1;
-	compositionInput: CompositionInputV1;
+export type QuickImageRenderOutputExpectation = Readonly<{
+	kind: "QUICK_IMAGE";
+	compositionInput: CompositionInputV2;
+	outputProfile: VideoOnlyOutputProfile;
+	outputProfileFingerprint: string;
+	outputContractVersion: "quick-image-output.v1";
+	/** The current MP4 parser does not expose this metadata yet. */
+	expectedColorRange: "LIMITED_TV";
 }>;
+
+export type RenderOutputValidationExpectation =
+	| Readonly<{
+			requestSpec: RenderRequestSpecV1;
+			compositionInput: CompositionInputV1;
+	  }>
+	| QuickImageRenderOutputExpectation;
+
+async function validateOutputExpectation(
+	expectation: RenderOutputValidationExpectation,
+) {
+	if (!("kind" in expectation)) return;
+	const parsed = videoOnlyOutputProfileSchema.safeParse(
+		expectation.outputProfile,
+	);
+	if (!parsed.success || expectation.expectedColorRange !== "LIMITED_TV")
+		invalid("Quick Image output profile is invalid.");
+	if (
+		(await fingerprintVideoOnlyOutputProfile(parsed.data)) !==
+		expectation.outputProfileFingerprint
+	)
+		invalid("Quick Image output profile fingerprint does not match.");
+}
 
 export type ValidatedRenderOutputMetadataV1 = Readonly<{
 	schemaVersion: "render-output-metadata.v1";
@@ -501,10 +537,12 @@ function parseMp4a(bytes: Uint8Array, entry: Mp4Box) {
 }
 
 function expectedAudio(
-	profile: OutputEncodingProfile,
-	compositionInput: CompositionInputV1,
+	profile: OutputEncodingProfile | VideoOnlyOutputProfile,
+	compositionInput: CompositionInputV1 | CompositionInputV2,
 ) {
+	if (compositionInput.schemaVersion === "composition-input.v2") return null;
 	if (compositionInput.sceneComposition.audioTracks.length === 0) return null;
+	if ("audio" in profile) return null;
 	if (!profile.audioCodec) return null;
 	if (profile.audioCodec !== "AAC-LC")
 		invalid("The output profile requests an unsupported audio codec.");
@@ -549,7 +587,9 @@ function validateContainer(
 			"MP4 movie duration does not match the exact composition timeline.",
 		);
 	const expectedAudioMetadata = expectedAudio(
-		expectation.requestSpec.outputEncodingProfile,
+		"kind" in expectation
+			? expectation.outputProfile
+			: expectation.requestSpec.outputEncodingProfile,
 		expectation.compositionInput,
 	);
 	let videoMetadata:
@@ -713,6 +753,7 @@ export async function validateRenderOutputStream(
 	stream: ReadableStream<Uint8Array>,
 	expectation: RenderOutputValidationExpectation,
 ): Promise<StreamValidationResult> {
+	await validateOutputExpectation(expectation);
 	const reader = stream.getReader();
 	const hash = createHash("sha256");
 	let byteSize = 0;

@@ -309,6 +309,22 @@ export const deterministicVideoOnlyRenderOutputFixture = makeFixture({
 	videoFixedSampleSize: 4,
 });
 
+export function deterministicVideoOnlyRenderOutputFixtureForFrames(
+	totalFrames: number,
+) {
+	if (!Number.isSafeInteger(totalFrames) || totalFrames <= 0)
+		throw new Error("fixture frame count must be a positive safe integer");
+	return makeFixture(
+		{
+			includeAudio: false,
+			videoEntries: [{ count: totalFrames, delta: 1 }],
+			videoFixedSampleSize: 4,
+			videoSamplesPerChunk: totalFrames,
+		},
+		new Uint8Array(totalFrames * 4),
+	);
+}
+
 export const deterministicEditListRenderOutputFixture = makeFixture({
 	includeEditList: true,
 });
