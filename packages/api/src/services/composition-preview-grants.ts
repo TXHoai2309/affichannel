@@ -7,6 +7,7 @@ import {
 	type CompositionInputV1,
 	canonicalizeCompositionJson,
 	MediaAssetError,
+	QUICK_IMAGE_MEDIA_DEPENDENCY_KEY,
 	sha256Hex,
 	VoiceSegmentError,
 } from "@affichannel/core";
@@ -26,6 +27,11 @@ import type { CompositionVersionReadModel } from "./composition-version-reposito
 import { findCompositionVersionRecord } from "./composition-version-repository";
 import type { MediaAssetRecord } from "./media-asset-repository";
 import { findMediaAssetByIdForWorkspace } from "./media-asset-repository";
+import {
+	preflightQuickImageCompositionVersion,
+	type QuickImagePreviewPreflightDependencies,
+	type QuickImagePreviewValidated,
+} from "./quick-image-preview-preflight";
 import { sha256Bytes } from "./voice-segment-hashing";
 import { findVoiceSegmentArtifactById } from "./voice-segment-repository";
 import type { WorkspaceActor } from "./workspace";
@@ -89,18 +95,23 @@ export class CompositionPreviewAccessError extends Error {
 	}
 }
 
-type PreviewGrantDependencies = {
-	findVersion?: typeof findCompositionVersionRecord;
-	preflight?: (
-		actor: WorkspaceActor,
-		compositionVersionId: string,
-	) => Promise<TechnicalPreflightResult>;
-	findMediaAsset?: typeof findMediaAssetByIdForWorkspace;
-	findVoiceArtifact?: typeof findVoiceSegmentArtifactById;
-	mediaStorage?: (provider: MediaAsset["storageProvider"]) => MediaAssetStorage;
-	voiceStorage?: (provider: VoiceAudioStorageProvider) => VoiceAudioStorage;
-	now?: () => Date;
-};
+export type PreviewGrantDependencies =
+	QuickImagePreviewPreflightDependencies & {
+		findVersion?: typeof findCompositionVersionRecord;
+		preflight?: (
+			actor: WorkspaceActor,
+			compositionVersionId: string,
+		) => Promise<TechnicalPreflightResult>;
+		findMediaAsset?: typeof findMediaAssetByIdForWorkspace;
+		findVoiceArtifact?: typeof findVoiceSegmentArtifactById;
+		mediaStorage?: (
+			provider: MediaAsset["storageProvider"],
+		) => MediaAssetStorage;
+		voiceStorage?: (provider: VoiceAudioStorageProvider) => VoiceAudioStorage;
+		now?: () => Date;
+		projectId?: string;
+		ttlMs?: number;
+	};
 
 function dependencyPin(
 	input: CompositionInputV1,
@@ -265,6 +276,48 @@ function parsePreviewGrant(
 	return parsed as unknown as PreviewGrantPayload;
 }
 
+export async function createQuickImagePreviewDependencyGrantFromValidated(
+	actor: WorkspaceActor,
+	validated: QuickImagePreviewValidated,
+	options: { now?: Date; ttlMs?: number } = {},
+): Promise<CompositionPreviewDependencyGrant> {
+	const now = options.now ?? new Date();
+	const expiresAt = validExpiry(
+		now,
+		options.ttlMs ?? DEFAULT_PREVIEW_GRANT_TTL_MS,
+	);
+	const source = validated.input.source;
+	const token = createProtectedGrant({
+		purpose: "composition-preview",
+		workspaceId: actor.workspaceId,
+		projectId: validated.version.projectId,
+		compositionVersionId: validated.version.id,
+		compositionFingerprint: validated.version.compositionFingerprint,
+		// V2 has no V1 technical manifest. The persisted semantic fingerprint is
+		// the exact frozen authority used by the preview preflight.
+		technicalManifestFingerprint: validated.version.compositionFingerprint,
+		dependencyKind: "media",
+		dependencyKey: QUICK_IMAGE_MEDIA_DEPENDENCY_KEY,
+		dependencyId: validated.asset.id,
+		checksum: source.checksumSha256,
+		contentType: source.mimeType,
+		byteSize: source.byteSize,
+		storageProvider: source.storageProvider,
+		storageKey: source.storageKey,
+		expiresAt,
+	});
+	return {
+		schemaVersion: "composition-preview-grant.v1",
+		access: "protected",
+		dependencyKey: QUICK_IMAGE_MEDIA_DEPENDENCY_KEY,
+		token,
+		contentType: source.mimeType,
+		byteSize: source.byteSize,
+		checksum: source.checksumSha256,
+		expiresAt: new Date(expiresAt).toISOString(),
+	};
+}
+
 export async function createCompositionPreviewDependencyGrant(
 	actor: WorkspaceActor,
 	compositionVersionId: string,
@@ -276,10 +329,29 @@ export async function createCompositionPreviewDependencyGrant(
 	const version = await findVersion(actor, compositionVersionId);
 	if (!version)
 		return failDenied("CompositionVersion is not in the actor workspace.");
-	if (version.schemaVersion === "composition-input.v2")
-		return failDenied(
-			"Composition schema version is not supported by the existing preview boundary.",
+	if (version.schemaVersion === "composition-input.v2") {
+		if (
+			dependencyKind !== "media" ||
+			dependencyKey !== QUICK_IMAGE_MEDIA_DEPENDENCY_KEY ||
+			!options.projectId
+		)
+			return failDenied("Quick Image preview dependency binding is invalid.");
+		const preflight = await preflightQuickImageCompositionVersion(
+			actor,
+			options.projectId,
+			compositionVersionId,
+			{
+				findVersion,
+				findMediaAsset: options.findMediaAsset,
+			},
 		);
+		if (!preflight.ok) return failDenied(preflight.message);
+		return createQuickImagePreviewDependencyGrantFromValidated(
+			actor,
+			preflight.value,
+			{ now: options.now?.(), ttlMs: options.ttlMs },
+		);
+	}
 	const preflight = await (
 		options.preflight ?? technicalPreflightCompositionVersion
 	)(actor, compositionVersionId);
@@ -424,10 +496,64 @@ export async function readCompositionPreviewDependency(
 		payload.compositionVersionId,
 	);
 	if (!version) return failDenied();
-	if (version.schemaVersion === "composition-input.v2")
-		return failDenied(
-			"Composition schema version is not supported by the existing preview boundary.",
+	if (version.schemaVersion === "composition-input.v2") {
+		if (
+			payload.dependencyKind !== "media" ||
+			payload.dependencyKey !== QUICK_IMAGE_MEDIA_DEPENDENCY_KEY
+		)
+			return failDenied("Quick Image preview dependency binding is invalid.");
+		const preflight = await preflightQuickImageCompositionVersion(
+			actor,
+			payload.projectId,
+			payload.compositionVersionId,
+			{
+				findVersion: options.findVersion,
+				findMediaAsset: options.findMediaAsset,
+			},
 		);
+		if (!preflight.ok) return failDenied(preflight.message);
+		const { input, asset, version: validatedVersion } = preflight.value;
+		if (
+			validatedVersion.workspaceId !== payload.workspaceId ||
+			validatedVersion.projectId !== payload.projectId ||
+			validatedVersion.id !== payload.compositionVersionId ||
+			validatedVersion.compositionFingerprint !==
+				payload.compositionFingerprint ||
+			asset.id !== payload.dependencyId ||
+			asset.storageProvider !== payload.storageProvider ||
+			asset.storageKey !== payload.storageKey ||
+			input.source.checksumSha256 !== payload.checksum ||
+			input.source.mimeType !== payload.contentType ||
+			input.source.byteSize !== payload.byteSize
+		)
+			return failDenied(
+				"Preview grant does not match frozen Quick Image authority.",
+			);
+		let bytes: Uint8Array;
+		try {
+			bytes = await (options.mediaStorage ?? createMediaAssetStorage)(
+				asset.storageProvider,
+			).get(asset.storageKey);
+		} catch (error) {
+			if (
+				error instanceof MediaAssetError &&
+				error.code === "MEDIA_ASSET_STORAGE_NOT_FOUND"
+			)
+				throw new CompositionPreviewAccessError("PREVIEW_DEPENDENCY_MISSING");
+			throw new CompositionPreviewAccessError("PREVIEW_DEPENDENCY_UNAVAILABLE");
+		}
+		if (
+			bytes.byteLength !== payload.byteSize ||
+			sha256Bytes(bytes) !== payload.checksum
+		)
+			return failDenied("Preview dependency bytes no longer match the grant.");
+		return {
+			bytes,
+			contentType: payload.contentType,
+			byteSize: bytes.byteLength,
+			checksum: payload.checksum,
+		};
+	}
 	const pin = dependencyPin(
 		version.compositionInput,
 		payload.dependencyKind,

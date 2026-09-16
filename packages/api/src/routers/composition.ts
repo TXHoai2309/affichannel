@@ -4,6 +4,8 @@ import { z } from "zod";
 import { protectedProcedure } from "../index";
 import { preflightCompositionVersion } from "../services/composition-preflight-service";
 import {
+	CompositionPreviewDescriptorAccessError,
+	createQuickImageCompositionPreviewDescriptor,
 	findCompositionVersionRecord,
 	listCompositionVersionRecords,
 } from "../services/composition-service";
@@ -57,6 +59,39 @@ export const compositionRouter = {
 				);
 			} catch (error) {
 				return toCompositionOrpcError(error);
+			}
+		}),
+	previewDescriptor: protectedProcedure
+		.input(
+			z
+				.object({
+					projectId: idSchema,
+					compositionVersionId: idSchema,
+				})
+				.strict(),
+		)
+		.handler(async ({ context, input }) => {
+			const actor = await requireWorkspaceActor(context.session.user.id);
+			try {
+				return await createQuickImageCompositionPreviewDescriptor(
+					actor,
+					input.projectId,
+					input.compositionVersionId,
+				);
+			} catch (error) {
+				if (!(error instanceof CompositionPreviewDescriptorAccessError))
+					throw error;
+				const code = error.code;
+				const status =
+					code === "PREVIEW_COMPOSITION_MISSING"
+						? "NOT_FOUND"
+						: code === "PREVIEW_PROJECT_MISMATCH"
+							? "FORBIDDEN"
+							: "CONFLICT";
+				throw new ORPCError(status, {
+					message: code,
+					data: { code },
+				});
 			}
 		}),
 };

@@ -35,7 +35,11 @@ export {
 	assembleCompositionInputV1,
 	assembleCompositionInputV2,
 } from "./composition-assembly-service";
-export { createCompositionPreviewDescriptor } from "./composition-preview-descriptor";
+export {
+	CompositionPreviewDescriptorAccessError,
+	createCompositionPreviewDescriptor,
+	createQuickImageCompositionPreviewDescriptor,
+} from "./composition-preview-descriptor";
 export {
 	CompositionPreviewAccessError,
 	createCompositionPreviewDependencyGrant,
@@ -47,3 +51,4 @@ export {
 	findCompositionVersionTechnicalRecord,
 	listCompositionVersionRecords,
 } from "./composition-version-repository";
+export { preflightQuickImageCompositionVersion } from "./quick-image-preview-preflight";
