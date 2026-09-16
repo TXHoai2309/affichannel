@@ -6,9 +6,13 @@ import {
 import {
 	createProjectWorkflowRequestReader,
 	gatherProjectWorkflowSnapshot,
+	type ProjectWorkflowQuickImageClaimAuthority,
 	type ProjectWorkflowReadDependencies,
 } from "@affichannel/api/services/project-workflow-read-service";
-import type { ScriptVersionEditableSnapshot } from "@affichannel/core";
+import {
+	quickImageClaimSourceContentHash,
+	type ScriptVersionEditableSnapshot,
+} from "@affichannel/core";
 import { describe, expect, it, vi } from "vitest";
 
 const actor = { workspaceId: "workspace-15a", userId: "user-15a" };
@@ -58,6 +62,125 @@ function scriptSnapshot(claimsStatus: "current" | "stale") {
 	} satisfies ScriptVersionEditableSnapshot;
 }
 
+async function quickImageSource(projectId: string, text: string) {
+	const document = {
+		version: "quick-image-claim-source.v1" as const,
+		elements: [{ id: "element-1", kind: "DECLARED_CLAIM" as const, text }],
+	};
+	return {
+		id: "source-15a",
+		workspaceId: actor.workspaceId,
+		projectId,
+		revision: 1,
+		sourceSchemaVersion: document.version,
+		document,
+		sourceContentHashSha256: await quickImageClaimSourceContentHash(document),
+		createdAt: new Date("2026-01-01T00:00:00.000Z"),
+		updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+	};
+}
+
+function quickImageAuthority(
+	source: Awaited<ReturnType<typeof quickImageSource>>,
+	productClaimState: "NONE" | "PRESENT",
+): ProjectWorkflowQuickImageClaimAuthority {
+	const claimCount = productClaimState === "PRESENT" ? 1 : 0;
+	return {
+		projectId: source.projectId,
+		source,
+		invalid: false,
+		summary: {
+			status: "CURRENT",
+			subjectResolution: "CONFIRMED",
+			productClaimState,
+			productClaimCount: claimCount,
+			generalClaimCount: 0,
+		},
+	};
+}
+
+function zeroClaimManifest(
+	projectId: string,
+	sourceRevision: string,
+	sourceHash: string,
+) {
+	const fingerprint = "b".repeat(64);
+	return {
+		id: "manifest-15a",
+		workspaceId: actor.workspaceId,
+		projectId,
+		productId: "product-15a",
+		schemaVersion: "claim-manifest.v1",
+		builderVersion: "claim-manifest-builder.v1",
+		source: {
+			sourceType: "NO_SCRIPT" as const,
+			sourceSchemaVersion: "quick-image-claim-source.v1",
+			sourceRevision,
+			elements: [],
+			sourceContentHash: sourceHash,
+		},
+		claims: [],
+		claimCount: 0,
+		isEmpty: true,
+		fingerprint,
+		createdByUserId: actor.userId,
+		createdAt: new Date("2026-01-01T00:00:00.000Z"),
+	};
+}
+
+function zeroClaimFactLockRun(
+	projectId: string,
+	manifest: ReturnType<typeof zeroClaimManifest>,
+	status: "passed" | "failed",
+) {
+	const now = new Date("2026-01-01T00:00:00.000Z");
+	return {
+		id: `run-${status}`,
+		workspaceId: actor.workspaceId,
+		projectId,
+		scriptVersionId: null,
+		sourceScriptRevision: null,
+		inputMode: "MANIFEST_V1",
+		claimManifestId: manifest.id,
+		claimManifestFingerprint: manifest.fingerprint,
+		idempotencyKey: `idempotency-${status}`,
+		requestHash: "c".repeat(64),
+		inputSnapshotJson: {
+			inputMode: "MANIFEST_V1",
+			inputVersion: "fact-lock.manifest.v1",
+			claimManifest: { id: manifest.id, fingerprint: manifest.fingerprint },
+			source: manifest.source,
+			productFacts: [],
+			policy: null,
+			outputRules: null,
+			zeroClaim: {
+				status: "passed",
+				providerRequired: false,
+				dependenciesRequired: false,
+			},
+		},
+		inputHash: "d".repeat(64),
+		promptHash: "e".repeat(64),
+		provider: "internal",
+		model: "deterministic-zero-claim",
+		promptVersion: "fact-lock-zero-claim.v1",
+		outputSchemaVersion: "fact-lock-output.v1",
+		status,
+		providerRequestId: null,
+		inputTokens: null,
+		outputTokens: null,
+		estimatedCostMicros: null,
+		actualCostMicros: null,
+		currency: null,
+		errorCode: status === "failed" ? "FAILED" : null,
+		errorMessage: null,
+		executionClaimedAt: null,
+		createdByUserId: actor.userId,
+		createdAt: now,
+		finishedAt: now,
+	};
+}
+
 function readDependencies(
 	overrides: Partial<ProjectWorkflowReadDependencies> = {},
 ): ProjectWorkflowReadDependencies {
@@ -79,6 +202,7 @@ function readDependencies(
 		evaluateFactLock: vi.fn(
 			async () => ({ allowed: false, reason: "NO_SCRIPT_VERSION" }) as never,
 		),
+		readQuickImageClaimSource: vi.fn(async () => null),
 		readVoice: vi.fn(
 			async () =>
 				({
@@ -108,6 +232,305 @@ function deferred<T>() {
 }
 
 describe("AFF-US-015 request-owned workflow aggregation", () => {
+	it("reads Quick Image applicability without Script, Fact Lock, or Voice state", async () => {
+		const dependencies = readDependencies();
+		const result = await gatherProjectWorkflowSnapshot(
+			actor,
+			subject({
+				contentType: "ORGANIC",
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				productId: null,
+				productAccessible: false,
+			}),
+			dependencies,
+		);
+
+		expect(dependencies.readScript).not.toHaveBeenCalled();
+		expect(dependencies.readCurrentScriptVersion).not.toHaveBeenCalled();
+		expect(dependencies.evaluateFactLock).not.toHaveBeenCalled();
+		expect(dependencies.readQuickImageClaimSource).not.toHaveBeenCalled();
+		expect(dependencies.readVoice).not.toHaveBeenCalled();
+		expect(result.applicabilityResult.capabilities).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					capability: "SCRIPT",
+					state: "NOT_REQUIRED",
+				}),
+				expect.objectContaining({
+					capability: "VOICE",
+					state: "NOT_REQUIRED",
+				}),
+				expect.objectContaining({
+					capability: "RENDER",
+					state: "REQUIRED",
+				}),
+			]),
+		);
+	});
+
+	it("preserves Affiliate Product and Fact Lock policy at the read boundary", async () => {
+		const source = await quickImageSource("project-15a", "Product claim");
+		const dependencies = readDependencies({
+			readQuickImageClaimSource: vi.fn(async () => source),
+			evaluateFactLock: vi.fn(
+				async () => ({ allowed: false, reason: "FACT_LOCK_NOT_RUN" }) as never,
+			),
+		});
+		const result = await gatherProjectWorkflowSnapshot(
+			actor,
+			subject({
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				productId: "product-15a",
+				productAccessible: true,
+			}),
+			dependencies,
+		);
+		const capability = (name: "PRODUCT" | "FACT_LOCK" | "SCRIPT" | "VOICE") =>
+			result.applicabilityResult.capabilities.find(
+				(item) => item.capability === name,
+			);
+
+		expect(capability("PRODUCT")).toMatchObject({
+			state: "READY",
+			reasonCode: "PRODUCT_READY",
+		});
+		expect(capability("FACT_LOCK")).toMatchObject({
+			state: "REQUIRED",
+			reasonCode: "FACT_LOCK_RUN_REQUIRED",
+		});
+		expect(capability("SCRIPT")).toMatchObject({
+			state: "NOT_REQUIRED",
+		});
+		expect(capability("VOICE")).toMatchObject({
+			state: "NOT_REQUIRED",
+		});
+	});
+
+	it("reads Quick Image Fact Lock only for claim-bearing Organic Product", async () => {
+		const source = await quickImageSource("project-15a", "Product claim");
+		const dependencies = readDependencies({
+			readQuickImageClaimSource: vi.fn(async () => source),
+			evaluateFactLock: vi.fn(
+				async () => ({ allowed: true, reason: "FACT_LOCK_PASSED" }) as never,
+			),
+		});
+		const result = await gatherProjectWorkflowSnapshot(
+			actor,
+			subject({
+				contentType: "ORGANIC",
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				productId: "product-15a",
+				productAccessible: true,
+			}),
+			dependencies,
+		);
+
+		expect(dependencies.readScript).not.toHaveBeenCalled();
+		expect(dependencies.readCurrentScriptVersion).not.toHaveBeenCalled();
+		expect(dependencies.readVoice).not.toHaveBeenCalled();
+		expect(dependencies.evaluateFactLock).toHaveBeenCalledOnce();
+		expect(
+			result.applicabilityResult.capabilities.find(
+				(item) => item.capability === "FACT_LOCK",
+			),
+		).toMatchObject({ state: "READY", completion: "COMPLETE" });
+	});
+
+	it("keeps Organic claim-free Quick Image out of Fact Lock lifecycle reads", async () => {
+		const source = await quickImageSource("project-15a", "   ");
+		const dependencies = readDependencies({
+			readQuickImageClaimSource: vi.fn(async () => source),
+		});
+		const result = await gatherProjectWorkflowSnapshot(
+			actor,
+			subject({
+				contentType: "ORGANIC",
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				productId: "product-15a",
+				productAccessible: true,
+			}),
+			dependencies,
+		);
+
+		expect(dependencies.evaluateFactLock).not.toHaveBeenCalled();
+		expect(
+			result.applicabilityResult.capabilities.find(
+				(item) => item.capability === "FACT_LOCK",
+			),
+		).toMatchObject({ state: "NOT_REQUIRED" });
+	});
+
+	it("fails closed when a Product Quick Image claim source is missing", async () => {
+		const result = await gatherProjectWorkflowSnapshot(
+			actor,
+			subject({
+				contentType: "ORGANIC",
+				creationPath: "QUICK_IMAGE",
+				contentFormatKey: "QUICK_IMAGE_STANDARD",
+				productId: "product-15a",
+				productAccessible: true,
+			}),
+			readDependencies(),
+		);
+
+		expect(
+			result.applicabilityResult.capabilities.find(
+				(item) => item.capability === "PRODUCT",
+			),
+		).toMatchObject({ state: "BLOCKED", reasonCode: "CLAIM_SUBJECT_INVALID" });
+		expect(
+			result.applicabilityResult.capabilities.find(
+				(item) => item.capability === "FACT_LOCK",
+			),
+		).toMatchObject({ state: "BLOCKED" });
+	});
+
+	it("keeps singleton and batch Quick Image no-run applicability in parity", async () => {
+		const source = await quickImageSource("project-15a", "Product claim");
+		const authority = quickImageAuthority(source, "PRESENT");
+		const dependencies = readDependencies({
+			readQuickImageClaimSource: vi.fn(async () => source),
+			evaluateFactLock: vi.fn(
+				async () => ({ allowed: false, reason: "FACT_LOCK_NOT_RUN" }) as never,
+			),
+		});
+		const subjectValue = subject({
+			creationPath: "QUICK_IMAGE",
+			contentFormatKey: "QUICK_IMAGE_STANDARD",
+		});
+		const singleton = await gatherProjectWorkflowSnapshot(
+			actor,
+			subjectValue,
+			dependencies,
+		);
+		const [batch] = buildProjectWorkflowEntrySnapshots(actor, {
+			subjects: [subjectValue],
+			scriptGenerations: [],
+			scriptVersions: [],
+			factLockRuns: [],
+			claimManifests: [],
+			dependencies: [],
+			productFacts: [],
+			channelSettings: null,
+			voiceConfigs: [],
+			voiceArtifacts: [],
+			quickImageClaimAuthorities: [authority],
+		});
+
+		expect(batch?.applicabilityResult).toEqual(singleton.applicabilityResult);
+		expect(batch?.applicabilityInput.script.currentVersionPresent).toBe(false);
+		expect(batch?.applicabilityResult.capabilities).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					capability: "FACT_LOCK",
+					state: "REQUIRED",
+				}),
+			]),
+		);
+	});
+
+	it("maps batch Quick Image Fact Lock READY and STALE from NO_SCRIPT provenance", async () => {
+		const source = await quickImageSource("project-15a", "");
+		const authority = quickImageAuthority(source, "NONE");
+		const manifest = zeroClaimManifest(
+			"project-15a",
+			String(source.revision),
+			source.sourceContentHashSha256,
+		);
+		const readyRows: ProjectWorkflowEntryBatchRows = {
+			subjects: [
+				subject({
+					creationPath: "QUICK_IMAGE",
+					contentFormatKey: "QUICK_IMAGE_STANDARD",
+				}),
+			],
+			scriptGenerations: [],
+			scriptVersions: [],
+			factLockRuns: [
+				zeroClaimFactLockRun("project-15a", manifest, "passed") as never,
+			],
+			claimManifests: [manifest as never],
+			dependencies: [],
+			productFacts: [],
+			channelSettings: null,
+			voiceConfigs: [],
+			voiceArtifacts: [],
+			quickImageClaimAuthorities: [authority],
+		};
+		const [ready] = buildProjectWorkflowEntrySnapshots(actor, readyRows);
+		expect(ready?.applicabilityResult.capabilities).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					capability: "FACT_LOCK",
+					state: "READY",
+					completion: "COMPLETE",
+				}),
+			]),
+		);
+
+		const staleAuthority: ProjectWorkflowQuickImageClaimAuthority = {
+			...quickImageAuthority(source, "NONE"),
+			source: { ...source, revision: 2 },
+		};
+		const [stale] = buildProjectWorkflowEntrySnapshots(actor, {
+			...readyRows,
+			quickImageClaimAuthorities: [staleAuthority],
+		});
+		expect(stale?.applicabilityResult.capabilities).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					capability: "FACT_LOCK",
+					state: "STALE",
+				}),
+			]),
+		);
+	});
+
+	it("keeps Quick Image applicability consistent in the batch read model", () => {
+		const [result] = buildProjectWorkflowEntrySnapshots(
+			actor,
+			{
+				subjects: [
+					subject({
+						contentType: "ORGANIC",
+						creationPath: "QUICK_IMAGE",
+						contentFormatKey: "QUICK_IMAGE_STANDARD",
+						productId: null,
+						productAccessible: false,
+					}),
+				],
+				scriptGenerations: [],
+				scriptVersions: [],
+				factLockRuns: [],
+				claimManifests: [],
+				dependencies: [],
+				productFacts: [],
+				channelSettings: null,
+				voiceConfigs: [],
+				voiceArtifacts: [],
+			},
+			{ now: new Date("2026-01-01T00:00:00.000Z"), pendingLeaseMs: 60_000 },
+		);
+
+		expect(result?.applicabilityResult.capabilities).toEqual(
+			expect.arrayContaining([
+				expect.objectContaining({
+					capability: "SCRIPT",
+					state: "NOT_REQUIRED",
+				}),
+				expect.objectContaining({ capability: "VOICE", state: "NOT_REQUIRED" }),
+				expect.objectContaining({
+					capability: "RENDER",
+					state: "REQUIRED",
+				}),
+			]),
+		);
+	});
+
 	it("starts independent Script, ScriptVersion, and Fact Lock reads in parallel", async () => {
 		const script = deferred<never>();
 		const version = deferred<undefined>();

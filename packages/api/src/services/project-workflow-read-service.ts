@@ -1,9 +1,13 @@
 import {
 	type AdaptiveWorkflowReadModel,
+	buildClaimManifestFromQuickImageSource,
+	type ClaimInventorySummary,
 	classifyLegacyProject,
+	isQuickImageProjectIdentity,
 	mapAdaptiveWorkflowReadModel,
 	type ProjectApplicabilityInput,
 	type ProjectApplicabilityResult,
+	type QuickImageClaimSourceAuthority,
 	resolveProjectApplicability,
 	summarizeCurrentScriptVersionClaims,
 	validateScriptVersionForFactLock,
@@ -15,6 +19,7 @@ import {
 	type ProjectDetails,
 	type ProjectWorkflowSubject,
 } from "./project-repository";
+import { getQuickImageClaimSource } from "./quick-image-claim-source-service";
 import { getScriptGenerationReadModel } from "./script-generation-service";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { getVoiceStepWorkflowReadSnapshot } from "./voice-step-workflow-service";
@@ -38,6 +43,7 @@ export type ProjectWorkflowReadDependencies = {
 	readCurrentScriptVersion: typeof findCurrentScriptVersion;
 	evaluateFactLock: typeof FactLockGate.evaluate;
 	readVoice: typeof getVoiceStepWorkflowReadSnapshot;
+	readQuickImageClaimSource?: typeof getQuickImageClaimSource;
 };
 
 const defaultDependencies: ProjectWorkflowReadDependencies = {
@@ -46,7 +52,109 @@ const defaultDependencies: ProjectWorkflowReadDependencies = {
 	readCurrentScriptVersion: findCurrentScriptVersion,
 	evaluateFactLock: FactLockGate.evaluate,
 	readVoice: getVoiceStepWorkflowReadSnapshot,
+	readQuickImageClaimSource: getQuickImageClaimSource,
 };
+
+export type ProjectWorkflowQuickImageClaimAuthority = Readonly<{
+	projectId: string;
+	source: QuickImageClaimSourceAuthority | null;
+	summary: ClaimInventorySummary;
+	invalid: boolean;
+}>;
+
+function quickImageUnknownClaimSummary(): ClaimInventorySummary {
+	return {
+		status: "UNKNOWN",
+		subjectResolution: "UNKNOWN",
+		productClaimState: "UNKNOWN",
+		productClaimCount: null,
+		generalClaimCount: null,
+	};
+}
+
+function quickImageNoProductClaimSummary(): ClaimInventorySummary {
+	return {
+		status: "CURRENT",
+		subjectResolution: "CONFIRMED",
+		productClaimState: "NONE",
+		productClaimCount: 0,
+		generalClaimCount: 0,
+	};
+}
+
+export function buildQuickImageClaimAuthorityWithoutSource(input: {
+	projectId: string;
+	productId: string | null;
+}): ProjectWorkflowQuickImageClaimAuthority {
+	return {
+		projectId: input.projectId,
+		source: null,
+		summary:
+			input.productId === null
+				? quickImageNoProductClaimSummary()
+				: quickImageUnknownClaimSummary(),
+		invalid: false,
+	};
+}
+
+/**
+ * Reads the durable Quick Image source and derives the same claim-count
+ * semantics as the accepted ClaimManifest builder without persisting either
+ * the source or a manifest.
+ */
+export async function readQuickImageClaimAuthority(input: {
+	workspaceId: string;
+	projectId: string;
+	productId: string | null;
+	readSource?: typeof getQuickImageClaimSource;
+}): Promise<ProjectWorkflowQuickImageClaimAuthority> {
+	let source: QuickImageClaimSourceAuthority | null;
+	try {
+		source = await (input.readSource ?? getQuickImageClaimSource)({
+			workspaceId: input.workspaceId,
+			projectId: input.projectId,
+		});
+	} catch {
+		return {
+			projectId: input.projectId,
+			source: null,
+			summary: quickImageUnknownClaimSummary(),
+			invalid: true,
+		};
+	}
+	if (!source) {
+		return buildQuickImageClaimAuthorityWithoutSource(input);
+	}
+	try {
+		const manifest = await buildClaimManifestFromQuickImageSource({
+			workspaceId: input.workspaceId,
+			projectId: input.projectId,
+			productId: input.productId,
+			source: source.document,
+			sourceRevision: source.revision,
+			sourceContentHashSha256: source.sourceContentHashSha256,
+		});
+		return {
+			projectId: input.projectId,
+			source,
+			summary: {
+				status: "CURRENT",
+				subjectResolution: "CONFIRMED",
+				productClaimState: manifest.claimCount > 0 ? "PRESENT" : "NONE",
+				productClaimCount: manifest.claimCount,
+				generalClaimCount: 0,
+			},
+			invalid: false,
+		};
+	} catch {
+		return {
+			projectId: input.projectId,
+			source: null,
+			summary: quickImageUnknownClaimSummary(),
+			invalid: true,
+		};
+	}
+}
 
 function generationStatus(
 	readModel: ScriptReadModel,
@@ -83,6 +191,7 @@ function unevaluatedFactLockGate(
 
 function emptyInput(
 	subject: ProjectWorkflowSubject,
+	productAccessible = false,
 ): ProjectApplicabilityInput {
 	return {
 		projectIdentity: {
@@ -92,7 +201,7 @@ function emptyInput(
 			contentFormatVersion: subject.contentFormatVersion,
 			hasProduct: subject.productId !== null,
 		},
-		product: { accessible: false },
+		product: { accessible: productAccessible },
 		script: {
 			generationStatus: "NONE",
 			usableGenerationPresent: false,
@@ -125,6 +234,37 @@ function emptyInput(
 	};
 }
 
+function quickImageInitialFactLockReason(
+	subject: ProjectWorkflowSubject,
+	authority: ProjectWorkflowQuickImageClaimAuthority,
+): ProjectApplicabilityInput["factLock"]["gateReason"] {
+	if (
+		authority.source === null &&
+		!authority.invalid &&
+		subject.contentType === "ORGANIC" &&
+		subject.productId === null
+	)
+		return "FACT_LOCK_NOT_RUN";
+	return authority.source && !authority.invalid
+		? "FACT_LOCK_NOT_RUN"
+		: "FACT_LOCK_INDETERMINATE";
+}
+
+export function buildQuickImageWorkflowInput(
+	subject: ProjectWorkflowSubject,
+	authority: ProjectWorkflowQuickImageClaimAuthority,
+): ProjectApplicabilityInput {
+	const input = emptyInput(subject, subject.productAccessible);
+	return {
+		...input,
+		claimSummary: authority.summary,
+		script: { ...input.script, claimSummary: authority.summary },
+		factLock: {
+			gateReason: quickImageInitialFactLockReason(subject, authority),
+		},
+	};
+}
+
 export function projectDetailsToWorkflowSubject(
 	project: ProjectDetails,
 ): ProjectWorkflowSubject {
@@ -154,6 +294,49 @@ export async function gatherProjectApplicabilityInput(
 		hasProduct: subject.productId !== null,
 	});
 	if (identityClassification.kind === "exception") return emptyInput(subject);
+	const quickImage = isQuickImageProjectIdentity({
+		contentType: subject.contentType,
+		creationPath: subject.creationPath,
+		contentFormatKey: subject.contentFormatKey,
+		contentFormatVersion: subject.contentFormatVersion,
+		hasProduct: subject.productId !== null,
+	});
+	if (quickImage) {
+		const authority =
+			subject.productId === null
+				? buildQuickImageClaimAuthorityWithoutSource({
+						projectId: subject.id,
+						productId: null,
+					})
+				: await readQuickImageClaimAuthority({
+						workspaceId: actor.workspaceId,
+						projectId: subject.id,
+						productId: subject.productId,
+						readSource: dependencies.readQuickImageClaimSource,
+					});
+		const initialInput = buildQuickImageWorkflowInput(subject, authority);
+		const preliminaryResult = resolveProjectApplicability(initialInput);
+		const productApplicability = preliminaryResult.capabilities.find(
+			(capability) => capability.capability === "PRODUCT",
+		);
+		const factLockApplicability = preliminaryResult.capabilities.find(
+			(capability) => capability.capability === "FACT_LOCK",
+		);
+		let factLockReason = initialInput.factLock.gateReason;
+		if (
+			authority.source &&
+			!authority.invalid &&
+			productApplicability?.state !== "BLOCKED" &&
+			factLockApplicability?.state === "REQUIRED"
+		) {
+			factLockReason = (await dependencies.evaluateFactLock(actor, subject.id))
+				.reason;
+		}
+		return {
+			...initialInput,
+			factLock: { gateReason: factLockReason },
+		};
+	}
 	if (!subject.productAccessible && !organicScripted)
 		return emptyInput(subject);
 

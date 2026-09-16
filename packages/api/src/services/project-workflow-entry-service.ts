@@ -4,6 +4,7 @@ import {
 	classifyLegacyProject,
 	evaluateFactGenerationUsability,
 	evaluateFactLockGate,
+	isQuickImageProjectIdentity,
 	mapAdaptiveWorkflowReadModel,
 	mapProjectWorkflowEntrySummary,
 	type ProjectApplicabilityInput,
@@ -37,6 +38,12 @@ import { getClaimManifestByIdInTransaction } from "./claim-manifest-repository";
 import { buildFactLockGateEvaluationInput } from "./fact-lock-gate-service";
 import type { ProjectWorkflowSubject } from "./project-repository";
 import type { ProjectWorkflowSnapshot } from "./project-workflow-read-service";
+import {
+	buildQuickImageClaimAuthorityWithoutSource,
+	buildQuickImageWorkflowInput,
+	type ProjectWorkflowQuickImageClaimAuthority,
+	readQuickImageClaimAuthority,
+} from "./project-workflow-read-service";
 import { mapScriptVersionRecord } from "./script-version-repository";
 import { toVoiceSegmentArtifact } from "./voice-segment-repository";
 import { evaluateVoiceStepWorkflowReadInput } from "./voice-step-workflow-service";
@@ -61,6 +68,7 @@ export type ProjectWorkflowEntryBatchRows = {
 	channelSettings: typeof channelSettings.$inferSelect | null;
 	voiceConfigs: VoiceConfigRow[];
 	voiceArtifacts: VoiceArtifactRow[];
+	quickImageClaimAuthorities?: ProjectWorkflowQuickImageClaimAuthority[];
 };
 
 export type ProjectWorkflowEntryBatchRepository = {
@@ -94,6 +102,7 @@ function latestFirst<T extends { id: string }>(
 
 function emptyInput(
 	subject: ProjectWorkflowSubject,
+	productAccessible = false,
 ): ProjectApplicabilityInput {
 	return {
 		projectIdentity: {
@@ -103,7 +112,7 @@ function emptyInput(
 			contentFormatVersion: subject.contentFormatVersion,
 			hasProduct: subject.productId !== null,
 		},
-		product: { accessible: false },
+		product: { accessible: productAccessible },
 		script: {
 			generationStatus: "NONE",
 			usableGenerationPresent: false,
@@ -189,6 +198,20 @@ function isOrganicScriptedSubject(subject: ProjectWorkflowSubject) {
 	);
 }
 
+function quickImageFactLockSource(
+	authority: ProjectWorkflowQuickImageClaimAuthority,
+) {
+	const source = authority.source;
+	return source && !authority.invalid
+		? {
+				sourceType: "NO_SCRIPT" as const,
+				sourceSchemaVersion: source.sourceSchemaVersion,
+				sourceRevision: String(source.revision),
+				sourceContentHash: source.sourceContentHashSha256,
+			}
+		: null;
+}
+
 export function buildProjectWorkflowEntrySnapshots(
 	actor: WorkspaceActor,
 	rows: ProjectWorkflowEntryBatchRows,
@@ -221,14 +244,88 @@ export function buildProjectWorkflowEntrySnapshots(
 		rows.voiceArtifacts,
 		(row) => row.projectId,
 	);
+	const quickImageClaimAuthoritiesByProject = new Map(
+		(rows.quickImageClaimAuthorities ?? []).map((authority, index) => [
+			authority.projectId || `__quick_image_authority_${index}`,
+			authority,
+		]),
+	);
 	const today = resolveBusinessToday(temporalContext.now);
 	const settingsComplete = channelSettingsComplete(rows.channelSettings);
 
 	return rows.subjects.map((subject) => {
 		let input = emptyInput(subject);
 		const identityClassification = classifyLegacyProject(input.projectIdentity);
+		const quickImage = isQuickImageProjectIdentity(input.projectIdentity);
+		if (quickImage) {
+			const authority =
+				quickImageClaimAuthoritiesByProject.get(subject.id) ??
+				buildQuickImageClaimAuthorityWithoutSource({
+					projectId: subject.id,
+					productId: subject.productId,
+				});
+			const initialInput = buildQuickImageWorkflowInput(subject, authority);
+			const preliminaryResult = resolveProjectApplicability(initialInput);
+			const productApplicability = preliminaryResult.capabilities.find(
+				(capability) => capability.capability === "PRODUCT",
+			);
+			const factLockApplicability = preliminaryResult.capabilities.find(
+				(capability) => capability.capability === "FACT_LOCK",
+			);
+			let factLockReason = initialInput.factLock.gateReason;
+			if (
+				authority.source &&
+				!authority.invalid &&
+				productApplicability?.state !== "BLOCKED" &&
+				factLockApplicability?.state === "REQUIRED"
+			) {
+				const runs = (runsByProject.get(subject.id) ?? []).sort(latestFirst);
+				const productFacts = subject.productId
+					? (factsByProduct.get(subject.productId) ?? [])
+					: [];
+				try {
+					factLockReason = evaluateFactLockGate(
+						buildFactLockGateEvaluationInput({
+							productId: subject.productId,
+							project: {
+								id: subject.id,
+								workspaceId: actor.workspaceId,
+								productId: subject.productId,
+								contentType: subject.contentType,
+								creationPath: subject.creationPath,
+								contentFormatKey: subject.contentFormatKey,
+								contentFormatVersion: subject.contentFormatVersion,
+								archivedAt: null,
+							},
+							currentScriptVersion: null,
+							currentQuickImageClaimSource: quickImageFactLockSource(authority),
+							runs,
+							claimManifests: runs.flatMap((run) =>
+								run.claimManifestId
+									? [manifestsById.get(run.claimManifestId)].filter(
+											(manifest): manifest is ClaimManifest =>
+												manifest !== undefined,
+										)
+									: [],
+							),
+							dependencies: runs.flatMap(
+								(run) => dependenciesByTarget.get(`fact_lock:${run.id}`) ?? [],
+							),
+							facts: productFacts,
+						}),
+					).reason;
+				} catch {
+					factLockReason = "FACT_LOCK_INDETERMINATE";
+				}
+			}
+			input = {
+				...initialInput,
+				factLock: { gateReason: factLockReason },
+			};
+		}
 		if (
 			identityClassification.kind !== "exception" &&
+			!quickImage &&
 			(subject.productAccessible || isOrganicScriptedSubject(subject))
 		) {
 			const generations = (generationsByProject.get(subject.id) ?? []).sort(
@@ -392,6 +489,7 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 					scriptVersions: [],
 					factLockRuns: [],
 					claimManifests: [],
+					quickImageClaimAuthorities: [],
 					dependencies: [],
 					productFacts: [],
 					channelSettings: null,
@@ -441,6 +539,27 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 				),
 			];
 			const ids = mappedSubjects.map((row) => row.id);
+			const quickImageClaimAuthoritiesPromise = Promise.all(
+				mappedSubjects
+					.filter(
+						(row) =>
+							row.productId !== null &&
+							isQuickImageProjectIdentity({
+								contentType: row.contentType,
+								creationPath: row.creationPath,
+								contentFormatKey: row.contentFormatKey,
+								contentFormatVersion: row.contentFormatVersion,
+								hasProduct: row.productId !== null,
+							}),
+					)
+					.map((row) =>
+						readQuickImageClaimAuthority({
+							workspaceId: actor.workspaceId,
+							projectId: row.id,
+							productId: row.productId,
+						}),
+					),
+			);
 			const [
 				scriptGenerations,
 				scriptVersions,
@@ -449,6 +568,7 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 				settingsRows,
 				voiceConfigs,
 				voiceArtifacts,
+				quickImageClaimAuthorities,
 			] = await Promise.all([
 				db
 					.select()
@@ -519,6 +639,7 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 						desc(voiceSegmentArtifact.createdAt),
 						desc(voiceSegmentArtifact.id),
 					),
+				quickImageClaimAuthoritiesPromise,
 			]);
 			const manifestIds = [
 				...new Set(
@@ -572,6 +693,7 @@ export const databaseProjectWorkflowEntryBatchRepository: ProjectWorkflowEntryBa
 				scriptVersions,
 				factLockRuns,
 				claimManifests,
+				quickImageClaimAuthorities,
 				dependencies,
 				productFacts,
 				channelSettings: settingsRows[0] ?? null,

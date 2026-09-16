@@ -690,7 +690,7 @@ describe("AFF-US-014 resolver safety and precedence", () => {
 		});
 	});
 
-	it("does not activate valid future Organic identity", () => {
+	it("applies Quick Image Organic exemptions without changing Render policy", () => {
 		const input = baseInput();
 		Object.assign(input.projectIdentity, {
 			contentType: "ORGANIC",
@@ -699,14 +699,33 @@ describe("AFF-US-014 resolver safety and precedence", () => {
 			contentFormatVersion: 1,
 			hasProduct: false,
 		});
-		expect(resolveProjectApplicability(input).capabilities).toEqual(
-			expect.arrayContaining([
-				expect.objectContaining({
-					capability: "SCRIPT",
-					state: "BLOCKED",
-					reasonCode: "PROJECT_IDENTITY_UNSUPPORTED",
-				}),
-			]),
+		expectCapability(input, "PRODUCT", {
+			state: "NOT_REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "PRODUCT_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
+		});
+		expectCapability(input, "SCRIPT", {
+			state: "NOT_REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "SCRIPT_NOT_REQUIRED_FOR_CREATION_PATH",
+		});
+		expectCapability(input, "FACT_LOCK", {
+			state: "NOT_REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "FACT_LOCK_NOT_REQUIRED_NO_PRODUCT_CLAIMS",
+		});
+		expectCapability(input, "VOICE", {
+			state: "NOT_REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "VOICE_NOT_REQUIRED_FOR_PROJECT_IDENTITY",
+		});
+		expectCapability(input, "RENDER", {
+			state: "REQUIRED",
+			completion: "NOT_STARTED",
+			reasonCode: "RENDER_REQUIRES_UPSTREAM_CAPABILITIES",
+		});
+		expect(resolveProjectApplicability(input).nextApplicableStep).toBe(
+			"RENDER",
 		);
 	});
 
