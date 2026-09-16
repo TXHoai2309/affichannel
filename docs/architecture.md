@@ -1,9 +1,10 @@
 # Kiến trúc AffiChannel
 
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
-  AFF-US-019 DONE; AFF-US-021 / EN001 CLOSED / OWNER ACCEPTED through 21E-B
+  AFF-US-019 DONE; AFF-US-021 / EN001 CLOSED / OWNER ACCEPTED through 21E-B;
+  AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-15
+- Cập nhật lần cuối: 2026-09-16
 
 ## 1. Mục tiêu kiến trúc
 
@@ -24,8 +25,10 @@ DEC-030 phase cuối của Domain Evolution đã được enforce: bốn Channel
 columns là NOT NULL sau zero-blocker preflight, không DB default/enum/registry
 table; `product_id` vẫn nullable. Legacy request shape tiếp tục canonicalize trước
 persistence; defensive read projection, identity CAS, M2 tooling và M4 shadow được
-giữ qua rollback window. M5 không mở Organic/Quick Image/Media First, không thay
-execution guards và không biến `currentStepKey` thành applicability authority.
+giữ qua rollback window. M5 không mở Organic/Quick Image/Media First tại thời
+điểm migration 0018; không thay execution guards và không biến `currentStepKey`
+thành applicability authority. Quick Image implementation hiện tại được mô tả
+ở boundary US22-A bên dưới.
 Chi tiết tại `docs/domain-evolution-m5-enforcement-contract.md`.
 
 | Khu vực | Lựa chọn |
@@ -321,6 +324,76 @@ Phase 21A không tạo worker, RenderJob, renderer, FFmpeg, Remotion, output sto
 hoặc migration mới. Migration 0023 và relational CompositionVersion schema giữ
 nguyên; technical byte/font and sample/frame feasibility were subsequently
 accepted as the 21B baseline.
+
+### AFF-US-022 / US22-A Quick Image composition boundary
+
+US22-A is the accepted Quick Image composition foundation. Its persisted identity
+is exact and server-authoritative:
+
+```text
+creationPath:         QUICK_IMAGE
+contentFormatKey:     QUICK_IMAGE_STANDARD
+contentFormatVersion: 1
+```
+
+`classifyPersistedProjectIdentity` receives the complete persisted tuple,
+including `productId`, and the dispatcher routes canonical Scripted to
+CompositionInput V1, canonical `QUICK_IMAGE_STANDARD v1` to V2, and legacy rows
+to the existing V1 compatibility path. Rejected/unknown identities fail closed;
+this includes `SCRIPTED + QUICK_IMAGE_STANDARD`,
+`QUICK_IMAGE + SCRIPTED_STANDARD`, unsupported versions and future/unhandled
+canonical identities. Dispatch never relies on `creationPath` alone.
+
+The current source authority is the project link with
+`usageType=quick_image_current_source`. The resolver permits exactly one link
+and returns `MISSING`, `READY`, `INELIGIBLE` or `CORRUPT_MULTIPLE`; only `READY`
+can enter V2 assembly. Eligibility requires a ready, non-archived static raster
+JPEG, PNG or WebP with valid checksum/storage/size/dimensions proof, analysis
+version `static-raster-v1`, one frame, EXIF orientation 1 and no transparency.
+SVG, remote, animated and transcoding paths are outside this authority and fail
+closed. Legacy rows with null proof fields require revalidation.
+
+V2 is `composition-input.v2` with `source.kind=QUICK_IMAGE`, vertical standard
+profile, one media dependency, frozen media provenance, duration, 30/1 FPS and
+canonical frame count. Durations are 5/10/15 seconds = 150/300/450 frames.
+Motion is `CENTER_ZOOM_IN_V1`: centered, scale 1.00 → 1.08,
+`LINEAR_BY_FRAME`, `INTEGER_FRAME_INDEX`, randomness `NONE`, pan `NONE` and
+customization `NONE`.
+
+Quick Image Script and Voice are `NOT_REQUIRED`. Product and Fact Lock retain
+the existing Organic/Affiliate applicability policy; neither is globally
+exempt. Quick Image claims use the revisioned canonical whole-document
+`quick_image_claim_source` with `NO_SCRIPT`, `MANIFEST_V1` and
+`quick-image-claim-source.v1`. Fact Lock currentness pins the source schema,
+revision, hash and Product Fact dependencies, so a source/dependency change can
+make a prior result `STALE`.
+
+The source and current settings are read once during CompositionVersion creation
+and their accepted values are persisted into the immutable version. Historical
+reload reads that snapshot and does not re-resolve
+`quick_image_current_source` or current settings. Replacing source A with B
+leaves C1 frozen to A; a later C2 may freeze B. Settings changes likewise affect
+only new compositions. V1 Scripted lineage remains unchanged; Quick Image
+lineage has `source_kind=QUICK_IMAGE`, null ScriptVersion fields and populated
+media asset/checksum/storage/MIME/size/width/height fields.
+
+Migration `0026_quick_image_database_foundation` provides this database lineage
+schema and `0027_quick_image_claim_source_authority` provides the claim-source
+authority. No later migration was required for Slice 5.
+
+This boundary does not claim Quick Image preview execution, EN-001 render
+execution, immutable MP4 production or a Quick Image RenderArtifact. The next
+phase is preview using the already frozen V2; render integration requires
+separate US22 live-execution approval. US21 FFmpeg approval does not authorize
+US22 FFmpeg, and current US22 FFmpeg execution count is zero. The future T08
+target remains image → preview → render → reload, preserving the same persisted
+job/artifact without creating a new CompositionVersion on reload.
+
+Slice 5 added CompositionInputV2 compatibility at the existing preview-grant
+boundaries, but those boundaries intentionally deny Quick Image V2 preview for
+now with `PREVIEW_ACCESS_DENIED`. This is the current product capability
+boundary, not a defect in the frozen CompositionInputV2 lineage: no preview
+player, motion playback, image-preview rendering or preview artifact exists yet.
 
 ## 10. Kiến trúc job
 

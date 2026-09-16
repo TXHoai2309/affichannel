@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-15
+- Cập nhật lần cuối: 2026-09-16
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -15,11 +15,13 @@ pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã 
 2. Domain Evolution.
 3. ClaimManifest / Fact Lock evolution.
 4. Shared Media Library (AFF-US-020).
-5. Quick Image (AFF-US-021).
-6. Channel-first UI / Video Studio.
-7. Content Library / Calendar.
-8. Analytics.
-9. AI Visual.
+5. Quick Image (AFF-US-021) và customization/composition (AFF-US-022).
+6. Quick Image preview dùng CompositionInputV2 đã freeze.
+7. EN-001 render integration.
+8. Channel-first UI / Video Studio và image → preview → render → reload E2E.
+9. Content Library / Calendar.
+10. Analytics.
+11. AI Visual.
 
 Current pointer: US12 baseline frozen/completed. Domain Evolution M1–M5 đã DONE;
 migration `0018_natural_speed`, production postflight và AC-M5-01–20 đều PASS.
@@ -31,14 +33,14 @@ dùng Manifest-first, legacy `inputMode=NULL` chỉ còn read compatibility. Can
 AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS, Phase 19B Organic ScriptGeneration,
 19C claim applicability/Fact Lock, 19D Voice applicability/TOCTOU, 19E.1 Organic
  UX activation và 19E.2 E2E/manual final acceptance đều đã PASS; AFF-US-019 đã
- DONE/ACCEPTED. Quick Image/Media First vẫn chưa active.
+ DONE/ACCEPTED. M5 không activate Quick Image/Media First tại thời điểm
+ migration 0018; Quick Image hiện đã có implementation accepted trong US22-A.
 
-AFF-US-020 Phase 20B MediaAsset Persistence + Storage Foundation đã PASS trên
-branch `TXH`. Migration `0022` là additive, `MediaAsset` workspace-owned và
-`MediaAssetLink` Project reuse đã có repository lifecycle cùng local/private-R2
-adapters; `/media` vẫn là skeleton và chưa có public media API. 20C–20E
-(protected API, UI và project reuse/E2E) chưa bắt đầu. Quick Image/AFF-US-021
-phụ thuộc vào READY image asset contract của 20B.
+AFF-US-020 Phase 20B MediaAsset Persistence + Storage Foundation, 20C protected
+API, 20D Media Library UI, 20E Project Reuse/E2E và Owner Manual UAT đã
+PASS/ACCEPTED. Migration `0022` là additive, `MediaAsset` workspace-owned và
+`MediaAssetLink` Project reuse dùng repository lifecycle cùng local/private-R2
+adapters.
 
 AFF-US-021 / EN001 đã **CLOSED / OWNER ACCEPTED** trên branch `TXH` tại
 implementation HEAD `43a85f9453a3e39561a1c46f95c80d7b523b3dad`. Phase 21A, 21B,
@@ -59,6 +61,92 @@ Windows FFmpeg execution adapter. Full internal E2E đã PASS. Phase 21E-C
 | 21E-A | CLOSED | Deterministic internal T09 render contract |
 | 21E-B | CLOSED | Approved local Windows FFmpeg execution và E2E proof |
 | 21E-C | NOT STARTED | Future phase; excluded from AFF-US-021 closeout |
+
+### AFF-US-022 / US22-A final phase status — 2026-09-16
+
+AFF-US-022 / US22-A is **CLOSED / OWNER ACCEPTED** at `TXH`. The accepted
+implementation slices are:
+
+| Slice | Trạng thái | Phạm vi đã khóa |
+|---|---|---|
+| 1 | CLOSED | Quick Image core identity, duration and motion contract |
+| 2 | CLOSED | Database foundation, settings and CompositionVersion lineage schema |
+| 3 | CLOSED | Exactly-one current image source authority and eligibility |
+| 4A | CLOSED | Quick Image NO_SCRIPT Fact Lock authority |
+| 4 | CLOSED | Applicability and read-model integration |
+| 5 | CLOSED | CompositionInputV2, frozen lineage and complete persisted-identity dispatch |
+
+Slice 5 references are checkpoint `ac2e5d8fe56967999b8f3b217a2409516baf2e3a`
+and identity-fix commit `2875e02733adef1c5fbac004ad4d7fb3c342d751`.
+
+US22-A closes the composition foundation. The earlier high-level roadmap item
+that placed CompositionInputV2 and frozen lineage in a later US22-B is therefore
+complete within US22-A and must not be planned again. The remaining public scope
+keeps existing identifiers and is:
+
+| Remaining phase | Status | Boundary |
+|---|---|---|
+| Quick Image preview (no repository-native ID; preserve public `US22-C` if that is the existing external identifier) | NEXT | Execute/present the already frozen CompositionInputV2; no new lineage model |
+| EN-001 render integration | PENDING | Separate render execution approval; US21 FFmpeg approval does not authorize US22 FFmpeg |
+| UI and full E2E | PENDING | Image → preview → render → reload; preserve the same job/artifact and do not create a new CompositionVersion on reload |
+
+The current repository has no separate AFF-US-022 phase specification; this
+roadmap, together with `docs/product-spec.md` and `docs/architecture.md`, is the
+authoritative reconciliation. Historical phase notes that predate US22-A retain
+their original scope and are not completion evidence for the current status.
+
+#### US22-A accepted technical contract
+
+- Persisted identity is exactly `creationPath=QUICK_IMAGE`,
+  `contentFormatKey=QUICK_IMAGE_STANDARD`, `contentFormatVersion=1`; malformed
+  combinations, unsupported versions and future/unhandled canonical identities
+  fail closed. Only this exact identity receives Quick Image semantics.
+- `MediaAssetLink.usageType=quick_image_current_source` has exactly one eligible
+  source authority. Resolution is `MISSING`, `READY`, `INELIGIBLE` or
+  `CORRUPT_MULTIPLE`; only `READY` can create a Quick Image CompositionVersion.
+- V1 eligibility is JPEG, PNG or WebP static raster, one frame, EXIF orientation
+  1, no transparency, complete proof/metadata, and no SVG, remote, animated or
+  transcoded source path. Legacy null-proof rows require revalidation.
+- Canonical duration is 5/10/15 seconds at 30/1 FPS, or 150/300/450 frames.
+  Motion is `CENTER_ZOOM_IN_V1`, centered, scale 1.00 → 1.08,
+  `LINEAR_BY_FRAME`, `INTEGER_FRAME_INDEX`, with no randomness, pan or
+  customization.
+- Quick Image Script and Voice are `NOT_REQUIRED`; Product and Fact Lock retain
+  the existing Organic/Affiliate policy. Render remains applicable/required by
+  existing workflow policy; Product/Fact Lock are not globally exempt.
+- Quick Image claims use the revisioned canonical whole-document
+  `quick_image_claim_source`, `NO_SCRIPT` + `MANIFEST_V1` with
+  `quick-image-claim-source.v1`, its source hash/revision and Product Fact
+  dependencies. Changes can stale an older Fact Lock result.
+- CompositionInput V1 remains Scripted-compatible. Quick Image uses V2 with
+  `source.kind=QUICK_IMAGE`, one complete frozen media dependency, duration, FPS,
+  frame count, canonical vertical profile and `CENTER_ZOOM_IN_V1`; it has no
+  synthetic ScriptVersion or VoiceVersion.
+- The current source snapshot and current settings are read once while creating
+  a CompositionVersion. Historical reload reads the persisted snapshot and does
+  not re-resolve the current source or settings. Replacing A with B affects only
+  new compositions; historical C1 remains A. Changing settings likewise leaves
+  historical compositions unchanged.
+- Migration `0026_quick_image_database_foundation` provides the Quick Image
+  composition/source schema and `0027_quick_image_claim_source_authority`
+  provides claim-source authority. No later migration was required for Slice 5.
+- Dispatch uses the complete persisted identity classifier: canonical Scripted
+  → V1, canonical Quick Image Standard v1 → V2, legacy → compatibility V1, and
+  rejected/unknown identity → fail closed. `SCRIPTED + QUICK_IMAGE_STANDARD`,
+  `QUICK_IMAGE + SCRIPTED_STANDARD`, unsupported versions and unhandled future
+  canonical identities are rejected.
+
+#### US22-A acceptance and boundary
+
+Slice 4A live PostgreSQL gate PASS; Slice 5 core V2/frozen-lineage PostgreSQL
+gate PASS; one dispatcher P1 was found and fixed. Static review and the narrow
+PostgreSQL identity regression PASS. Final findings are P0=0, P1=0, P2=0.
+No persistent database or Neon database was mutated, and FFmpeg executions are
+zero. Quick Image preview execution/presentation, EN-001 render execution and
+immutable MP4 production remain pending; no Quick Image RenderArtifact is
+claimed as already produced. Future T08 acceptance remains image → preview →
+render → reload, with the same persisted job/artifact, no rerender on page reload
+and no new CompositionVersion created by reload alone.
 
 Có một post-US18 hardening checkpoint độc lập trước khi tiếp tục flow thủ công:
 Script Claim Refresh được triển khai theo DEC-034 và ba phase CR-A/CR-B/CR-C.

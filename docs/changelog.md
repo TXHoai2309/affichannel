@@ -1,7 +1,7 @@
 # Nhật ký thay đổi
 
 - Trạng thái: Canonical changelog
-- Cập nhật lần cuối: 2026-09-15
+- Cập nhật lần cuối: 2026-09-16
 
 Mọi thay đổi đáng chú ý về hành vi người dùng, vận hành và kiến trúc của
 AffiChannel được ghi tại đây.
@@ -10,6 +10,24 @@ AffiChannel được ghi tại đây.
 sử dụng Semantic Versioning.
 
 ## Chưa phát hành
+
+### AFF-US-022 / US22-A Slice 6 documentation closeout — CLOSED / OWNER ACCEPTED
+
+- Reconciled the canonical roadmap and product/architecture contracts after
+  closing US22-A. Slices 1, 2, 3, 4A, 4 and 5 are closed; Slice 5 completed
+  CompositionInputV2, Quick Image source identity, deterministic motion/duration,
+  frozen media lineage, persistence/reload and full-identity dispatch.
+- Recorded checkpoint `ac2e5d8fe56967999b8f3b217a2409516baf2e3a` and identity-fix
+  commit `2875e02733adef1c5fbac004ad4d7fb3c342d751`.
+- Clarified that the earlier roadmap placement of CompositionInputV2 and frozen
+  lineage in a later US22-B is superseded by the accepted US22-A implementation.
+- Documented exact Quick Image identity, one-source authority and eligibility,
+  duration/motion, NO_SCRIPT Fact Lock source, V1/V2 dispatch and historical
+  reload/source/settings immutability. Preview execution, Quick Image
+  RenderArtifact/MP4 production and full UI E2E are not claimed complete.
+- P0=0, P1=0, P2=0. No production code, migration or schema changed; no
+  persistent database or Neon database was mutated; FFmpeg executions = 0, and
+  the prior US21 FFmpeg authorization was not reused for US22.
 
 ### AFF-US-021 final closeout — CLOSED / OWNER ACCEPTED
 

@@ -15,8 +15,31 @@
   20B MediaAsset persistence/storage foundation PASS; 20C protected API
   acceptance PASS (27/27 disposable cases); 20D Media Library UI PASS; 20E
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
-  ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED.
-- Cập nhật lần cuối: 2026-09-15
+  ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED. AFF-US-022 /
+  US22-A Slices 1, 2, 3, 4A, 4 and 5 are CLOSED / OWNER ACCEPTED; CompositionInputV2,
+  frozen Quick Image lineage and full-identity dispatch are complete.
+- Cập nhật lần cuối: 2026-09-16
+
+## 2026-09-16 — AFF-US-022 / US22-A Slice 6 documentation closeout
+
+US22-A is **CLOSED / OWNER ACCEPTED** on `TXH` at implementation HEAD
+`2875e02733adef1c5fbac004ad4d7fb3c342d751`, with checkpoint
+`ac2e5d8fe56967999b8f3b217a2409516baf2e3a` and the identity-fix commit
+`2875e02733adef1c5fbac004ad4d7fb3c342d751`. Documentation now records the
+accepted exact Quick Image identity, one-source resolver, static-raster
+eligibility proof, deterministic duration/motion, NO_SCRIPT Fact Lock authority,
+CompositionInputV2, frozen media lineage, database lineage and complete identity
+dispatch.
+
+The roadmap is reconciled: CompositionInputV2 and frozen lineage were completed
+within US22-A and are not deferred to a later US22-B implementation. The next
+scope is Quick Image preview using the frozen input, then separately authorized
+EN-001 render integration, then image → preview → render → reload UI E2E. Preview
+execution, Quick Image RenderArtifact/MP4 production and full UI E2E are not
+implemented or claimed complete. US21 FFmpeg approval does not authorize US22;
+US22 FFmpeg execution count is zero. P0=0, P1=0 and P2=0. No production code,
+schema, migration, persistent database, Neon database or test file changed in
+this documentation closeout.
 
 ## 2026-09-15 — AFF-US-021 final implementation and full internal E2E closeout
 

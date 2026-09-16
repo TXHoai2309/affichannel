@@ -1,7 +1,7 @@
 # Tài liệu AffiChannel
 
-- Trạng thái: Canonical repository documentation; AFF-US-021 CLOSED / OWNER ACCEPTED
-- Cập nhật lần cuối: 2026-09-15
+- Trạng thái: Canonical repository documentation; AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED
+- Cập nhật lần cuối: 2026-09-16
 
 Thư mục này là nguồn tài liệu chuẩn về sản phẩm và kỹ thuật của AffiChannel.
 Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao diện phải nhất quán
@@ -19,15 +19,22 @@ AFF-US-019 Phase 19A.2/19A.3 đã LOCKED/PASS; 19B Organic ScriptGeneration,
 19C claim applicability/Fact Lock, 19D Voice applicability/TOCTOU, 19E.1
 Organic UX activation và 19E.2 E2E/manual final acceptance đã PASS;
 AFF-US-019 DONE/ACCEPTED. AFF-US-020 Phase 20A Shared Media Library đã
-CONTRACT LOCKED theo DEC-036 và 20B MediaAsset persistence/storage foundation đã
-PASS; 20C–20E chưa triển khai. Quick Image/Media First vẫn chưa active. M5 không
-activate các identity đó.
+CONTRACT LOCKED theo DEC-036 và 20B–20E cùng Owner Manual UAT đã PASS/ACCEPTED;
+AFF-US-020 DONE. M5 không activate Quick Image/Media First tại thời điểm của
+migration 0018; Quick Image implementation hiện được ghi nhận tại AFF-US-022 /
+US22-A bên dưới.
 
 AFF-US-021 / EN001 đã **CLOSED / OWNER ACCEPTED** trên branch `TXH` tại
 implementation HEAD `43a85f9453a3e39561a1c46f95c80d7b523b3dad`. Các phase 21A,
 21B, 21C, 21D, 21E-A và 21E-B đã closed; full internal E2E T09 đã PASS với
 approved local Windows FFmpeg và 21D actual-byte proof. Phase 21E-C **NOT
 STARTED** và production Video/Preview vẫn chưa active.
+
+AFF-US-022 / US22-A đã **CLOSED / OWNER ACCEPTED** trên `TXH` tại
+`2875e02733adef1c5fbac004ad4d7fb3c342d751`. Slice 1, 2, 3, 4A, 4 và 5 đã
+được ghi nhận là closed; Slice 5 gồm CompositionInputV2, frozen Quick Image
+lineage và full-identity dispatch fix. Preview execution, EN-001 render
+integration và image → preview → render → reload UI E2E vẫn là scope sau đó.
 
 ## Thứ tự đọc
 

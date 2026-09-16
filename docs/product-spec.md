@@ -2,9 +2,10 @@
 
 - Trạng thái: Canonical; Affiliate baseline, Adaptive UI, M5 identity enforcement,
   AFF-US-019 19B–19D, 19E.1 Organic UX activation và 19E.2 E2E/manual final
-  acceptance active; AFF-US-019 DONE/ACCEPTED
+  acceptance active; AFF-US-019 DONE/ACCEPTED; AFF-US-022 / US22-A CLOSED /
+  OWNER ACCEPTED
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-04
+- Cập nhật lần cuối: 2026-09-16
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -115,11 +116,62 @@ Foundation không bao gồm Video AI, tạo lịch nội dung, analytics nâng c
   `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`, tách khỏi operation mode `full | repair`.
 - Thêm server-built ClaimManifest và FactLockRun Manifest-first, tương thích run cũ.
 
-### Phase B: Quick Image
+### Phase B: Quick Image (AFF-US-021 + AFF-US-022)
 
 - `ORGANIC + QUICK_IMAGE` không cần Product, Script hoặc Fact Lock khi không có Product claim.
 - Một ảnh 9:16, duration 5/10/15 giây, zoom/pan/Ken Burns, text/music/voice tùy chọn.
-- Shared composition/render tạo immutable MP4 variation và không overwrite output cũ.
+- US22-A đã hoàn tất CompositionInputV2, Quick Image source authority, deterministic
+  duration/motion, frozen media lineage, persistence/read/reload và full-identity
+  dispatch. Preview execution/presentation, EN-001 render integration, immutable
+  MP4 production và UI E2E vẫn là scope sau US22-A.
+
+#### AFF-US-022 / US22-A accepted composition contract
+
+Quick Image chỉ nhận đúng persisted identity:
+
+```text
+creationPath:         QUICK_IMAGE
+contentFormatKey:     QUICK_IMAGE_STANDARD
+contentFormatVersion: 1
+```
+
+Mọi path/format/version mismatch, unsupported version và future/unhandled
+canonical identity đều fail closed. `SCRIPTED + QUICK_IMAGE_STANDARD` và
+`QUICK_IMAGE + SCRIPTED_STANDARD` không được nhận Quick Image semantics.
+
+Nguồn hiện tại dùng `MediaAssetLink.usageType=quick_image_current_source` và
+phải có đúng một eligible source. Resolver trả `MISSING`, `READY`, `INELIGIBLE`
+hoặc `CORRUPT_MULTIPLE`; chỉ `READY` được tạo CompositionVersion. Eligibility
+là static raster JPEG/PNG/WebP, một frame, EXIF orientation 1, không
+transparency, đủ proof fields/metadata hợp lệ, không SVG, remote source,
+animated source hoặc transcoding trong authority path. Legacy null-proof rows
+phải được revalidate trước khi eligible.
+
+Duration canonical là 5/10/15 giây = 150/300/450 frames tại FPS 30/1. Motion là
+`CENTER_ZOOM_IN_V1`: `CENTER`, scale 1.00 → 1.08,
+`LINEAR_BY_FRAME`, `INTEGER_FRAME_INDEX`, randomness/pan/customization đều
+`NONE`.
+
+Quick Image Script và Voice là `NOT_REQUIRED`. Render vẫn applicable/required
+theo workflow policy hiện hữu. Product và Fact Lock tiếp tục dùng policy
+Organic/Affiliate hiện hữu; Product/Fact Lock không được diễn giải là globally
+exempt. Quick Image claim source là whole-document revisioned
+`quick_image_claim_source`, `NO_SCRIPT` + `MANIFEST_V1` với
+`quick-image-claim-source.v1`, có revision/hash và Product Fact dependencies.
+Dependency/source changes có thể làm Fact Lock history thành `STALE`.
+
+CompositionInput V1 giữ nguyên cho Scripted. Quick Image dùng
+`composition-input.v2` với `source.kind=QUICK_IMAGE`, một frozen media
+dependency đầy đủ provenance, duration, FPS, frame count và canonical vertical
+profile; không tạo synthetic ScriptVersion hoặc VoiceVersion. Current source
+và settings được snapshot một lần khi tạo CompositionVersion. Reload lịch sử
+không re-resolve source/settings; thay source A→B hoặc đổi settings chỉ ảnh
+hưởng composition mới.
+
+CompositionVersion dispatch dùng complete persisted identity classifier:
+canonical Scripted → V1, canonical Quick Image Standard v1 → V2, legacy → V1
+compatibility, rejected/unknown → fail closed. Preview/render không được coi là
+đã hoàn tất chỉ vì CompositionInputV2 đã persist.
 
 ### Phase C: Channel-first UI và vận hành
 
@@ -453,7 +505,8 @@ Bốn tab không phải state machine mới và không thay thẳng persisted st
 ### Màn hình channel-first theo phase
 
 - Domain Evolution: adaptive Project create/read, resolver state và gated routes.
-- Quick Image: upload một ảnh, local motion, optional text/music/voice, preview/render.
+- Quick Image: upload một ảnh, local motion, optional text/music/voice; US22-A
+  đã freeze CompositionInputV2 và lineage, còn preview/render execution vẫn pending.
 - Channel Strategy và Content navigation.
 - Content Library và Content Calendar.
 - Analytics import/mô tả.
@@ -521,8 +574,9 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 - Organic claimless/general-only chỉ có thể opt-in Voice/TTS khi Fact Lock là
   `NOT_REQUIRED` và currentness đã được server recheck; khi
   Fact Lock là mandatory/applicable, Voice/TTS vẫn fail closed đến khi PASS.
-- Quick Image render tạo immutable MP4 variation; retry idempotent không làm mất
-  Project hoặc tạo duplicate charge/output ngoài contract.
+- Quick Image render phải tạo immutable MP4 variation; retry idempotent không làm
+  mất Project hoặc tạo duplicate charge/output ngoài contract. Đây là acceptance
+  target sau US22-A, không phải bằng chứng RenderArtifact đã tồn tại.
 - Golden affiliate scripted regression tiếp tục đạt sau migration.
 - Secret không xuất hiện trong source, client bundle, log, database hoặc file
   export.
@@ -539,7 +593,7 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **M5 DONE — DEC-030** | Persisted Channel-First identity enforcement, compatibility, migration ordering và rollback. | Migration 0018, production postflight và AC-M5-01–20 đã PASS; không activate Organic/Quick Image/Media First hoặc ClaimManifest. |
 | **NON-BLOCKER — naming clarified** | Script generation `PRODUCT_BACKED | ORGANIC_NO_PRODUCT`. | Đây là input source mode riêng; không thay/overload operation mode `full | repair` hiện hữu. Đóng trước ScriptGeneration evolution, không chặn Project M1. |
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
-| **DEFERRED** | Render worker engine, composition schema và local/private-R2 strategy cho render outputs. | Quick Image/render phase. VoiceSegment storage đã có contract riêng và không quyết định thay render storage. |
+| **DEFERRED** | Quick Image preview execution, EN-001 render integration, render worker execution và local/private-R2 output activation. | CompositionInputV2, frozen lineage và CompositionVersion schema đã hoàn tất trong US22-A; VoiceSegment storage vẫn là domain riêng. |
 | **20B PASS — DEC-036** | Shared Media Library dùng `MediaAsset` workspace-owned và `MediaAssetLink` N:N với Project; additive persistence, lifecycle repository, private local/R2 adapters, and READY validation are implemented. | AFF-US-020 20C–20E triển khai protected API, UI và reuse/E2E; `/media` vẫn placeholder và chưa có public cutover. |
 | **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
 
@@ -549,7 +603,10 @@ chấp nhận; Fact Lock new writes hiện Manifest-first và legacy rows vẫn 
 AFF-US-019 19A.2 đã lock claim subject contract; 19A.3 foundation, 19B Organic
 ScriptGeneration, 19C applicability/Fact Lock, 19D Voice applicability/TOCTOU
 và 19E.1 Organic UX activation, 19E.2 E2E/manual final acceptance đã PASS;
-AFF-US-019 DONE/ACCEPTED. Quick Image và Media First vẫn chưa active.
+AFF-US-019 DONE/ACCEPTED. AFF-US-022 / US22-A đã CLOSED / OWNER ACCEPTED cho
+CompositionInputV2, frozen Quick Image lineage và identity dispatch. Quick Image
+preview execution, EN-001 render integration, immutable MP4 production và full
+UI E2E vẫn chưa hoàn tất.
 
 Ownership của MVP 0 đã chốt: một internal workspace dùng chung, membership trong
 `workspace_member` là ranh giới authorization và `createdByUserId` chỉ phục vụ audit.

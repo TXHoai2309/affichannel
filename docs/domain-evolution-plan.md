@@ -3,9 +3,9 @@
 - Trạng thái: Domain Evolution M1–M5 DONE; AFF-US-013/AFF-US-016/AFF-US-017 DONE;
   M4 shadow retained; AFF-US-018 Phase 18A–18F PASS và DONE; AFF-US-019 Phase
   19A–19D và 19E.1 Organic UX activation đã PASS; 19E.2 E2E/manual final
-  acceptance là bước tiếp theo
+  acceptance PASS; AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-04
+- Cập nhật lần cuối: 2026-09-16
 - Quyết định liên quan: DEC-025, DEC-026, DEC-028, DEC-029, DEC-030, DEC-035
 
 ## 1. Mục tiêu
@@ -13,6 +13,20 @@
 Mở rộng golden affiliate flow thành domain channel-first có Organic/Affiliate và
 nhiều creation path, đồng thời giữ dữ liệu lịch sử, API compatibility và khả năng
 rollback. Kế hoạch này chỉ định thứ tự migration; không phải lệnh apply database.
+
+## AFF-US-022 / US22-A reconciliation (current)
+
+The Quick Image implementation foundation is complete within US22-A, not a
+future US22-B composition build. The accepted boundary includes the exact
+persisted identity `QUICK_IMAGE + QUICK_IMAGE_STANDARD v1`, source eligibility
+and `quick_image_current_source` resolution, the NO_SCRIPT claim source, the
+deterministic duration/motion contract, CompositionInputV2, frozen media lineage,
+CompositionVersion persistence/reload and complete identity-based V1/V2 dispatch.
+
+The remaining phases are preview over the already frozen CompositionInputV2,
+then EN-001 render integration under separate live-execution approval, then the
+full image → preview → render → reload UI flow. This plan does not authorize
+FFmpeg or imply that a Quick Image RenderArtifact already exists.
 
 ## 2. Contract đích
 
