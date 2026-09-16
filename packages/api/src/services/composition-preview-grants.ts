@@ -276,6 +276,10 @@ export async function createCompositionPreviewDependencyGrant(
 	const version = await findVersion(actor, compositionVersionId);
 	if (!version)
 		return failDenied("CompositionVersion is not in the actor workspace.");
+	if (version.schemaVersion === "composition-input.v2")
+		return failDenied(
+			"Composition schema version is not supported by the existing preview boundary.",
+		);
 	const preflight = await (
 		options.preflight ?? technicalPreflightCompositionVersion
 	)(actor, compositionVersionId);
@@ -420,6 +424,10 @@ export async function readCompositionPreviewDependency(
 		payload.compositionVersionId,
 	);
 	if (!version) return failDenied();
+	if (version.schemaVersion === "composition-input.v2")
+		return failDenied(
+			"Composition schema version is not supported by the existing preview boundary.",
+		);
 	const pin = dependencyPin(
 		version.compositionInput,
 		payload.dependencyKind,

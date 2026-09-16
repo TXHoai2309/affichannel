@@ -2,16 +2,20 @@ import type {
 	CompositionInputBuilderSource,
 	CompositionInputV1,
 	CompositionInputV1Result,
+	CompositionInputV2Result,
 	FontBundleManifest,
 	MediaAsset,
 	OutputRules,
+	QuickImageCurrentSourceResolution,
 	ScriptVersionReadModel,
 	VoiceConfig,
 	VoiceSegmentArtifact,
 } from "@affichannel/core";
 import {
 	buildCompositionInputV1,
+	buildCompositionInputV2QuickImage,
 	checkCompositionAudioTiming,
+	classifyPersistedProjectIdentity,
 	defaultOutputRules,
 	scriptVersionEditableSnapshotSchema,
 	VERTICAL_STANDARD_PROFILE,
@@ -21,6 +25,11 @@ import { and, eq } from "drizzle-orm";
 import { CompositionTechnicalLoader } from "./composition-technical-loader";
 import { getOutputRules } from "./output-rules-service";
 import { getProjectWorkflowSubject } from "./project-repository";
+import {
+	findQuickImageSettings,
+	type QuickImageSettingsSnapshot,
+} from "./quick-image-settings-service";
+import { resolveQuickImageCurrentSource } from "./quick-image-source-service";
 import { findCurrentScriptVersion } from "./script-version-repository";
 import { findVoiceConfig } from "./voice-config-service";
 import { listVoiceSegmentArtifacts } from "./voice-segment-repository";
@@ -65,6 +74,19 @@ export type ServerOwnedCompositionAssemblyReader = {
 		actor: WorkspaceActor,
 		projectId: string,
 	) => Promise<ServerOwnedCompositionAuthorities>;
+};
+
+export type ServerOwnedQuickImageCompositionAuthorities = {
+	project: Awaited<ReturnType<typeof getProjectWorkflowSubject>>;
+	source: QuickImageCurrentSourceResolution;
+	settings: QuickImageSettingsSnapshot | undefined;
+};
+
+export type ServerOwnedQuickImageCompositionAssemblyReader = {
+	read: (
+		actor: WorkspaceActor,
+		projectId: string,
+	) => Promise<ServerOwnedQuickImageCompositionAuthorities>;
 };
 
 async function readAuthoritativeCompositionAuthorities(
@@ -331,6 +353,26 @@ const defaultReader: ServerOwnedCompositionAssemblyReader = {
 	read: readAuthoritativeCompositionAuthorities,
 };
 
+async function readAuthoritativeQuickImageCompositionAuthorities(
+	actor: WorkspaceActor,
+	projectId: string,
+): Promise<ServerOwnedQuickImageCompositionAuthorities> {
+	const [projectSubject, source, settings] = await Promise.all([
+		getProjectWorkflowSubject(actor.workspaceId, projectId),
+		resolveQuickImageCurrentSource({
+			workspaceId: actor.workspaceId,
+			projectId,
+		}),
+		findQuickImageSettings(actor, projectId),
+	]);
+	return { project: projectSubject, source, settings };
+}
+
+const defaultQuickImageReader: ServerOwnedQuickImageCompositionAssemblyReader =
+	{
+		read: readAuthoritativeQuickImageCompositionAuthorities,
+	};
+
 function missingResult(issues: readonly string[]): CompositionInputV1Result {
 	return {
 		ok: false,
@@ -513,4 +555,106 @@ export async function assembleCompositionInputV1(
 	const source = toBuilderSource(actor, projectId, authorities);
 	if ("ok" in source) return source;
 	return buildCompositionInputV1(source);
+}
+
+function quickImageInvalidResult(
+	issues: readonly string[],
+): CompositionInputV2Result {
+	return {
+		ok: false,
+		code: "COMPOSITION_INPUT_INVALID",
+		issues: [...issues],
+	};
+}
+
+function quickImageIncompleteResult(
+	issues: readonly string[],
+): CompositionInputV2Result {
+	return {
+		ok: false,
+		code: "COMPOSITION_INPUT_INCOMPLETE",
+		issues: [...issues],
+	};
+}
+
+function isCanonicalQuickImageProject(
+	project: Awaited<ReturnType<typeof getProjectWorkflowSubject>>,
+) {
+	if (!project) return false;
+	const classification = classifyPersistedProjectIdentity({
+		productId: project.productId,
+		contentType: project.contentType,
+		creationPath: project.creationPath,
+		contentFormatKey: project.contentFormatKey,
+		contentFormatVersion: project.contentFormatVersion,
+	});
+	return (
+		classification.kind === "canonical" &&
+		classification.identity.creationPath === "QUICK_IMAGE" &&
+		classification.identity.contentFormat.key === "QUICK_IMAGE_STANDARD" &&
+		classification.identity.contentFormat.version === 1
+	);
+}
+
+/**
+ * Quick Image has a separate, script-free assembly path. The reader snapshot
+ * contains one resolver result and one settings row; the builder then freezes
+ * those values into the immutable input.
+ */
+export async function assembleCompositionInputV2(
+	actor: WorkspaceActor,
+	projectId: string,
+	reader: ServerOwnedQuickImageCompositionAssemblyReader = defaultQuickImageReader,
+): Promise<CompositionInputV2Result> {
+	let authorities: ServerOwnedQuickImageCompositionAuthorities;
+	try {
+		authorities = await reader.read(actor, projectId);
+	} catch {
+		return quickImageInvalidResult(["quickImage.authorities"]);
+	}
+
+	if (!isCanonicalQuickImageProject(authorities.project))
+		return quickImageInvalidResult(["project.identity"]);
+	if (!authorities.settings)
+		return quickImageIncompleteResult(["quickImage.settings"]);
+	if (
+		authorities.settings.workspaceId !== actor.workspaceId ||
+		authorities.settings.projectId !== projectId ||
+		authorities.project?.id !== projectId
+	)
+		return quickImageInvalidResult(["quickImage.settings.scope"]);
+
+	if (authorities.source.status === "MISSING")
+		return quickImageIncompleteResult(["quickImage.currentSource.MISSING"]);
+	if (authorities.source.status === "INELIGIBLE")
+		return quickImageInvalidResult([
+			`quickImage.currentSource.INELIGIBLE.${authorities.source.reasonCode}`,
+		]);
+	if (authorities.source.status === "CORRUPT_MULTIPLE")
+		return quickImageInvalidResult([
+			"quickImage.currentSource.CORRUPT_MULTIPLE",
+		]);
+	if (authorities.source.source.workspaceId !== actor.workspaceId)
+		return quickImageInvalidResult(["quickImage.currentSource.scope"]);
+
+	return buildCompositionInputV2QuickImage({
+		workspaceId: actor.workspaceId,
+		projectId,
+		source: authorities.source.source,
+		durationSeconds: authorities.settings.durationSeconds,
+	});
+}
+
+/** Dispatches only Quick Image projects to V2; existing Scripted callers stay V1. */
+export async function assembleCompositionInput(
+	actor: WorkspaceActor,
+	projectId: string,
+): Promise<CompositionInputV1Result | CompositionInputV2Result> {
+	const projectSubject = await getProjectWorkflowSubject(
+		actor.workspaceId,
+		projectId,
+	);
+	if (projectSubject?.creationPath === "QUICK_IMAGE")
+		return assembleCompositionInputV2(actor, projectId);
+	return assembleCompositionInputV1(actor, projectId);
 }

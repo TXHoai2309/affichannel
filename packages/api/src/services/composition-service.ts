@@ -1,11 +1,11 @@
 import { CompositionError } from "@affichannel/core";
 
-import { assembleCompositionInputV1 } from "./composition-assembly-service";
+import { assembleCompositionInput } from "./composition-assembly-service";
 import { insertCompositionVersionRecord } from "./composition-version-repository";
 import type { WorkspaceActor } from "./workspace";
 
 export type CompositionVersionCreationDependencies = {
-	assemble?: typeof assembleCompositionInputV1;
+	assemble?: typeof assembleCompositionInput;
 	insert?: typeof insertCompositionVersionRecord;
 };
 
@@ -14,7 +14,7 @@ export async function createCompositionVersion(
 	projectId: string,
 	dependencies: CompositionVersionCreationDependencies = {},
 ) {
-	const result = await (dependencies.assemble ?? assembleCompositionInputV1)(
+	const result = await (dependencies.assemble ?? assembleCompositionInput)(
 		actor,
 		projectId,
 	);
@@ -30,6 +30,11 @@ export async function createCompositionVersion(
 	});
 }
 
+export {
+	assembleCompositionInput,
+	assembleCompositionInputV1,
+	assembleCompositionInputV2,
+} from "./composition-assembly-service";
 export { createCompositionPreviewDescriptor } from "./composition-preview-descriptor";
 export {
 	CompositionPreviewAccessError,

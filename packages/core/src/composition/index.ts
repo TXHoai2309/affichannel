@@ -6,3 +6,4 @@ export * from "./output-profile";
 export * from "./profile";
 export * from "./technical-preflight";
 export * from "./types";
+export * from "./v2";

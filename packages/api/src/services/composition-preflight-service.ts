@@ -253,6 +253,11 @@ async function preflightCompositionVersionInQuery(
 		compositionVersionId,
 	);
 	if (!version) throw new CompositionError("COMPOSITION_VERSION_NOT_FOUND");
+	if (version.schemaVersion === "composition-input.v2")
+		throw new CompositionError(
+			"COMPOSITION_EXECUTION_BLOCKED",
+			"Composition schema version is not supported by the existing execution preflight.",
+		);
 	const subject = await getProjectWorkflowSubjectInQuery(
 		query,
 		actor.workspaceId,

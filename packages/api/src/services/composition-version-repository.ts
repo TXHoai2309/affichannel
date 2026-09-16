@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
-import type { CompositionInputV1 } from "@affichannel/core";
+import type { CompositionInputV1, CompositionInputV2 } from "@affichannel/core";
 import {
 	canonicalCompositionSemanticJson,
+	compositionInputSchema,
 	compositionInputV1Schema,
+	compositionInputV2Schema,
 	sha256Hex,
 } from "@affichannel/core";
 import { compositionVersion, db, project } from "@affichannel/db";
@@ -12,35 +14,106 @@ import type { WorkspaceActor } from "./workspace";
 
 type DbQuery = typeof db | DbTransaction;
 
-export type CompositionVersionReadModel = {
+type CompositionVersionReadModelBase = {
 	id: string;
 	workspaceId: string;
 	projectId: string;
-	schemaVersion: "composition-input.v1";
-	compositionInput: CompositionInputV1;
 	compositionFingerprint: string;
-	sourceScriptVersionId: string;
-	sourceScriptRevision: number;
 	createdByUserId: string;
 	createdAt: Date;
 };
 
+export type ScriptedCompositionVersionReadModel =
+	CompositionVersionReadModelBase & {
+		schemaVersion: "composition-input.v1";
+		compositionInput: CompositionInputV1;
+		sourceScriptVersionId: string;
+		sourceScriptRevision: number;
+	};
+
+export type QuickImageCompositionVersionReadModel =
+	CompositionVersionReadModelBase & {
+		schemaVersion: "composition-input.v2";
+		compositionInput: CompositionInputV2;
+		sourceScriptVersionId: null;
+		sourceScriptRevision: null;
+		sourceMediaAssetId: string;
+		sourceMediaChecksumSha256: string;
+		sourceMediaStorageProvider: "local" | "r2";
+		sourceMediaStorageKey: string;
+		sourceMediaMimeType: "image/jpeg" | "image/png" | "image/webp";
+		sourceMediaByteSize: number;
+		sourceMediaWidth: number;
+		sourceMediaHeight: number;
+	};
+
+export type CompositionVersionReadModel =
+	| ScriptedCompositionVersionReadModel
+	| QuickImageCompositionVersionReadModel;
+
 /** Shared Preview/Render read boundary; intentionally omits storage internals. */
 export type CompositionVersionDto = CompositionVersionReadModel;
 
-function mapRow(
+async function mapRow(
 	row: typeof compositionVersion.$inferSelect,
-): CompositionVersionReadModel {
-	const parsed = compositionInputV1Schema.parse(row.compositionInputJson);
+): Promise<CompositionVersionReadModel> {
+	if (row.schemaVersion === "composition-input.v1") {
+		const parsed = compositionInputV1Schema.parse(row.compositionInputJson);
+		return {
+			id: row.id,
+			workspaceId: row.workspaceId,
+			projectId: row.projectId,
+			schemaVersion: "composition-input.v1",
+			compositionInput: parsed,
+			compositionFingerprint: row.compositionFingerprint,
+			sourceScriptVersionId: row.sourceScriptVersionId,
+			sourceScriptRevision: row.sourceScriptRevision,
+			createdByUserId: row.createdByUserId,
+			createdAt: row.createdAt,
+		};
+	}
+	if (row.schemaVersion !== "composition-input.v2")
+		throw new Error("COMPOSITION_INPUT_INVALID");
+	const parsed = compositionInputV2Schema.safeParse(row.compositionInputJson);
+	if (!parsed.success) throw new Error("COMPOSITION_INPUT_INVALID");
+	const expectedFingerprint = await sha256Hex(
+		canonicalCompositionSemanticJson(parsed.data),
+	);
+	const source = parsed.data.source;
+	if (
+		row.sourceKind !== "QUICK_IMAGE" ||
+		row.workspaceId !== parsed.data.workspaceId ||
+		row.projectId !== parsed.data.projectId ||
+		row.sourceScriptVersionId !== null ||
+		row.sourceScriptRevision !== null ||
+		row.sourceMediaAssetId !== source.mediaAssetId ||
+		row.sourceMediaChecksumSha256 !== source.checksumSha256 ||
+		row.sourceMediaStorageProvider !== source.storageProvider ||
+		row.sourceMediaStorageKey !== source.storageKey ||
+		row.sourceMediaMimeType !== source.mimeType ||
+		row.sourceMediaByteSize !== source.byteSize ||
+		row.sourceMediaWidth !== source.width ||
+		row.sourceMediaHeight !== source.height ||
+		expectedFingerprint !== row.compositionFingerprint
+	)
+		throw new Error("COMPOSITION_INPUT_INVALID");
 	return {
 		id: row.id,
 		workspaceId: row.workspaceId,
 		projectId: row.projectId,
-		schemaVersion: "composition-input.v1",
-		compositionInput: parsed,
+		schemaVersion: "composition-input.v2",
+		compositionInput: parsed.data,
 		compositionFingerprint: row.compositionFingerprint,
-		sourceScriptVersionId: row.sourceScriptVersionId,
-		sourceScriptRevision: row.sourceScriptRevision,
+		sourceScriptVersionId: null,
+		sourceScriptRevision: null,
+		sourceMediaAssetId: source.mediaAssetId,
+		sourceMediaChecksumSha256: source.checksumSha256,
+		sourceMediaStorageProvider: source.storageProvider,
+		sourceMediaStorageKey: source.storageKey,
+		sourceMediaMimeType: source.mimeType,
+		sourceMediaByteSize: source.byteSize,
+		sourceMediaWidth: source.width,
+		sourceMediaHeight: source.height,
 		createdByUserId: row.createdByUserId,
 		createdAt: row.createdAt,
 	};
@@ -53,10 +126,10 @@ export const toCompositionVersionDto = (
 export async function insertCompositionVersionRecord(input: {
 	actor: WorkspaceActor;
 	projectId: string;
-	compositionInput: CompositionInputV1;
+	compositionInput: CompositionInputV1 | CompositionInputV2;
 	compositionFingerprint: string;
 }) {
-	const parsed = compositionInputV1Schema.safeParse(input.compositionInput);
+	const parsed = compositionInputSchema.safeParse(input.compositionInput);
 	if (!parsed.success) throw new Error("COMPOSITION_INPUT_INVALID");
 	const expectedFingerprint = await sha256Hex(
 		canonicalCompositionSemanticJson(parsed.data),
@@ -80,17 +153,36 @@ export async function insertCompositionVersionRecord(input: {
 		)
 		.limit(1);
 	if (!accessibleProject) throw new Error("COMPOSITION_SCOPE_MISMATCH");
+	const lineage =
+		parsed.data.schemaVersion === "composition-input.v1"
+			? {
+					sourceKind: "SCRIPTED" as const,
+					sourceScriptVersionId: parsed.data.script.provenance.scriptVersionId,
+					sourceScriptRevision: parsed.data.script.provenance.revision,
+				}
+			: {
+					sourceKind: "QUICK_IMAGE" as const,
+					sourceScriptVersionId: null as unknown as string,
+					sourceScriptRevision: null as unknown as number,
+					sourceMediaAssetId: parsed.data.source.mediaAssetId,
+					sourceMediaChecksumSha256: parsed.data.source.checksumSha256,
+					sourceMediaStorageProvider: parsed.data.source.storageProvider,
+					sourceMediaStorageKey: parsed.data.source.storageKey,
+					sourceMediaMimeType: parsed.data.source.mimeType,
+					sourceMediaByteSize: parsed.data.source.byteSize,
+					sourceMediaWidth: parsed.data.source.width,
+					sourceMediaHeight: parsed.data.source.height,
+				};
 	const [row] = await db
 		.insert(compositionVersion)
 		.values({
 			id: randomUUID(),
 			workspaceId: input.actor.workspaceId,
 			projectId: input.projectId,
-			schemaVersion: "composition-input.v1",
+			schemaVersion: parsed.data.schemaVersion,
 			compositionInputJson: parsed.data,
 			compositionFingerprint: input.compositionFingerprint,
-			sourceScriptVersionId: parsed.data.script.provenance.scriptVersionId,
-			sourceScriptRevision: parsed.data.script.provenance.revision,
+			...lineage,
 			createdByUserId: input.actor.userId,
 		})
 		.returning();
@@ -162,5 +254,5 @@ export async function listCompositionVersionRecords(
 			),
 		)
 		.orderBy(desc(compositionVersion.createdAt), desc(compositionVersion.id));
-	return rows.map(mapRow);
+	return Promise.all(rows.map(mapRow));
 }

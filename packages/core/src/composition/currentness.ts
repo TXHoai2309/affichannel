@@ -7,6 +7,7 @@ import {
 	type CompositionInputV1,
 	renderedVoiceKeysForComposition,
 } from "./types";
+import { type CompositionInputV2, compositionSemanticProjectionV2 } from "./v2";
 
 export type CompositionCurrentSource = {
 	scriptVersionId: string;
@@ -128,12 +129,33 @@ export function evaluateCompositionCurrentness(
 
 export function compositionSemanticFingerprintProjection(
 	input: CompositionInputV1,
+): ReturnType<typeof compositionSemanticProjection>;
+export function compositionSemanticFingerprintProjection(
+	input: CompositionInputV2,
+): ReturnType<typeof compositionSemanticProjectionV2>;
+export function compositionSemanticFingerprintProjection(
+	input: CompositionInputV1 | CompositionInputV2,
 ) {
-	return compositionSemanticProjection(input);
+	return input.schemaVersion === "composition-input.v2"
+		? compositionSemanticProjectionV2(input)
+		: compositionSemanticProjection(input);
 }
 
-export function canonicalCompositionSemanticJson(input: CompositionInputV1) {
+export function canonicalCompositionSemanticJson(
+	input: CompositionInputV1,
+): string;
+export function canonicalCompositionSemanticJson(
+	input: CompositionInputV2,
+): string;
+export function canonicalCompositionSemanticJson(
+	input: CompositionInputV1 | CompositionInputV2,
+): string;
+export function canonicalCompositionSemanticJson(
+	input: CompositionInputV1 | CompositionInputV2,
+) {
 	return canonicalizeCompositionJson(
-		compositionSemanticFingerprintProjection(input),
+		input.schemaVersion === "composition-input.v2"
+			? compositionSemanticProjectionV2(input)
+			: compositionSemanticFingerprintProjection(input),
 	);
 }
