@@ -10,6 +10,7 @@ export * from "./fact-lock";
 export * from "./media-asset";
 export * from "./media-metadata";
 export * from "./output-rules";
+export * from "./planned-content-item";
 export * from "./product";
 export * from "./product-fact";
 export * from "./product-fact-history";

@@ -3,6 +3,7 @@ import type { RouterClient } from "@orpc/server";
 import { protectedProcedure, publicProcedure } from "../index";
 import { channelStrategyRouter } from "./channel-strategy";
 import { compositionRouter } from "./composition";
+import { contentCalendarRouter } from "./content-calendar";
 import { dashboardRouter } from "./dashboard";
 import { factLockRouter } from "./fact-lock";
 import { mediaRouter } from "./media";
@@ -28,6 +29,7 @@ export const appRouter = {
 	}),
 	dashboard: dashboardRouter,
 	composition: compositionRouter,
+	contentCalendar: contentCalendarRouter,
 	channelStrategy: channelStrategyRouter,
 	factLock: factLockRouter,
 	media: mediaRouter,

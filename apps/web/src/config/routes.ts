@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
 	BarChart3,
+	CalendarDays,
 	FolderKanban,
 	Images,
 	LayoutDashboard,
@@ -12,6 +13,7 @@ import {
 export type AppRouteKey =
 	| "dashboard"
 	| "projects"
+	| "calendar"
 	| "products"
 	| "media"
 	| "analytics"
@@ -50,6 +52,15 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 		href: "/projects",
 		icon: FolderKanban,
 		featureStatus: "skeleton",
+	},
+	calendar: {
+		key: "calendar",
+		label: "Calendar",
+		title: "Content Calendar",
+		description: "Lập kế hoạch nội dung 7 ngày theo Channel Strategy.",
+		href: "/calendar",
+		icon: CalendarDays,
+		featureStatus: "available",
 	},
 	products: {
 		key: "products",

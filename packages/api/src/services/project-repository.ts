@@ -156,6 +156,7 @@ function projectIdentityReadModel(input: PersistedProjectIdentityState) {
 
 async function findProjectDetails(
 	options: FindProjectOptions,
+	query: DbQuery = db,
 ): Promise<ProjectDetails | undefined> {
 	const conditions = [
 		eq(project.workspaceId, options.workspaceId),
@@ -166,7 +167,7 @@ async function findProjectDetails(
 		conditions.push(isNull(project.archivedAt));
 	}
 
-	const [record] = await db
+	const [record] = await query
 		.select({
 			id: project.id,
 			name: project.name,
@@ -197,7 +198,7 @@ async function findProjectDetails(
 		return undefined;
 	}
 
-	const stepStatuses = await db
+	const stepStatuses = await query
 		.select({
 			stepKey: projectStepStatus.stepKey,
 			status: projectStepStatus.status,
@@ -281,11 +282,16 @@ export async function listProjectItems(
 		);
 }
 
-export function createProjectRepository(): ProjectRepository<ProjectDetails> {
+export function createProjectRepository(
+	query: DbQuery = db,
+	options: {
+		channelStrategySnapshot?: { id: string; version: number } | null;
+	} = {},
+): ProjectRepository<ProjectDetails> {
 	return {
 		async findAccessibleProduct({ workspaceId, productId, projectId }) {
 			if (projectId) {
-				const [existingProjectProduct] = await db
+				const [existingProjectProduct] = await query
 					.select({ id: product.id })
 					.from(product)
 					.leftJoin(project, eq(project.productId, product.id))
@@ -307,7 +313,7 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 				return existingProjectProduct;
 			}
 
-			const [existingProduct] = await db
+			const [existingProduct] = await query
 				.select({ id: product.id })
 				.from(product)
 				.where(
@@ -322,18 +328,33 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 
 			return existingProduct;
 		},
-		async createProjectBundle({ actor, input, identity, workflow }) {
+		async createProjectBundle({
+			actor,
+			input,
+			identity,
+			workflow,
+			channelStrategySnapshot,
+		}) {
 			const projectId = randomUUID();
 
-			await db.transaction(async (transaction) => {
-				const [strategySnapshot] = await transaction
-					.select({
-						id: channelStrategy.id,
-						version: channelStrategy.version,
-					})
-					.from(channelStrategy)
-					.where(eq(channelStrategy.workspaceId, actor.workspaceId))
-					.limit(1);
+			const persist = async (transaction: DbQuery) => {
+				const requestedStrategySnapshot =
+					channelStrategySnapshot !== undefined
+						? channelStrategySnapshot
+						: options.channelStrategySnapshot;
+				const strategySnapshot =
+					requestedStrategySnapshot === undefined
+						? ((
+								await transaction
+									.select({
+										id: channelStrategy.id,
+										version: channelStrategy.version,
+									})
+									.from(channelStrategy)
+									.where(eq(channelStrategy.workspaceId, actor.workspaceId))
+									.limit(1)
+							)[0] ?? null)
+						: requestedStrategySnapshot;
 
 				if (input.productId !== null) {
 					const [availableProduct] = await transaction
@@ -387,12 +408,21 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 						status: step.status,
 					})),
 				);
-			});
+			};
 
-			const createdProject = await findProjectDetails({
-				workspaceId: actor.workspaceId,
-				projectId,
-			});
+			if (query === db) {
+				await db.transaction(persist);
+			} else {
+				await persist(query);
+			}
+
+			const createdProject = await findProjectDetails(
+				{
+					workspaceId: actor.workspaceId,
+					projectId,
+				},
+				query,
+			);
 
 			if (!createdProject) {
 				throw new Error("Could not load the created project.");
@@ -400,9 +430,9 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 
 			return createdProject;
 		},
-		findProject: findProjectDetails,
+		findProject: (options) => findProjectDetails(options, query),
 		async findProjectIdentity({ workspaceId, projectId }) {
-			const [record] = await db
+			const [record] = await query
 				.select({
 					productId: project.productId,
 					contentType: project.contentType,

@@ -73,6 +73,7 @@ export type ProjectRepository<TProject> = {
 		input: CreateProjectInput;
 		identity: ProjectWriteIdentity;
 		workflow: ProjectWorkflowState;
+		channelStrategySnapshot?: { id: string; version: number } | null;
 	}): Promise<TProject>;
 	findProject(input: {
 		workspaceId: string;

@@ -1,4 +1,6 @@
+import { sql } from "drizzle-orm";
 import {
+	check,
 	index,
 	pgTable,
 	text,
@@ -8,17 +10,22 @@ import {
 
 import { user } from "./auth";
 
-export const workspace = pgTable("workspace", {
-	id: text("id").primaryKey(),
-	name: text("name").notNull(),
-	createdAt: timestamp("created_at", { withTimezone: true })
-		.defaultNow()
-		.notNull(),
-	updatedAt: timestamp("updated_at", { withTimezone: true })
-		.defaultNow()
-		.$onUpdate(() => /* @__PURE__ */ new Date())
-		.notNull(),
-});
+export const workspace = pgTable(
+	"workspace",
+	{
+		id: text("id").primaryKey(),
+		name: text("name").notNull(),
+		timezone: text("timezone").notNull().default("Asia/Ho_Chi_Minh"),
+		createdAt: timestamp("created_at", { withTimezone: true })
+			.defaultNow()
+			.notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true })
+			.defaultNow()
+			.$onUpdate(() => /* @__PURE__ */ new Date())
+			.notNull(),
+	},
+	(table) => [check("workspace_timezone_check", sql`${table.timezone} <> ''`)],
+);
 
 export const workspaceMember = pgTable(
 	"workspace_member",

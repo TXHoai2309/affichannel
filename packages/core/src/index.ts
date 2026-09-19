@@ -7,6 +7,7 @@ export * from "./composition";
 export * from "./content-format";
 export * from "./fact-lock";
 export * from "./media";
+export * from "./planned-content";
 export * from "./product/product-errors";
 export * from "./product/product-types";
 export * from "./product/validation";
