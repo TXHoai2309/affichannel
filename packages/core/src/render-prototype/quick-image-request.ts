@@ -31,6 +31,20 @@ export type QuickImageRenderRequest = z.infer<
 	typeof quickImageRenderRequestSchema
 >;
 
+/** Identity-only handoff from a Quick Image execution adapter. */
+export const quickImageOutputReadySchema = z
+	.object({
+		schemaVersion: z.literal("quick-image-output-ready.v1"),
+		kind: z.literal("OUTPUT_READY"),
+		jobId: z.string().trim().min(1),
+		attemptId: z.string().trim().min(1),
+		attemptNumber: z.number().int().positive(),
+		outputReservationId: z.string().trim().min(1),
+	})
+	.strict();
+
+export type QuickImageOutputReady = z.infer<typeof quickImageOutputReadySchema>;
+
 export async function fingerprintQuickImageRenderRequest(
 	request: QuickImageRenderRequest,
 ) {

@@ -1,9 +1,14 @@
 import { randomUUID } from "node:crypto";
 import {
+	type CompositionInput,
 	canonicalRequestHash,
-	compositionInputV1Schema,
+	compositionInputSchema,
+	createQuickImageRenderPlan,
 	fingerprintOutputEncodingProfile,
-	type RenderRequestSpecV1,
+	fingerprintVideoOnlyOutputProfile,
+	MP4_H264_VIDEO_ONLY_V1,
+	quickImageRenderRequestSchema,
+	type RenderRequestSpec,
 	renderRequestSpecV1Schema,
 } from "@affichannel/core";
 import {
@@ -21,6 +26,7 @@ import {
 	type RenderOutputStorage,
 } from "../storage/render-output-storage";
 import type { DbTransaction } from "./fact-dependency-repository";
+import { canonicalQuickImageRenderJobRequestHash } from "./render-job-repository";
 import {
 	persistAndValidateRenderOutput,
 	validateStoredRenderOutput,
@@ -117,9 +123,27 @@ function mapArtifact(
 
 function proofMetadataMatchesRequest(
 	metadata: ValidatedRenderOutputMetadataV1,
-	requestSpec: RenderRequestSpecV1,
-	compositionInput: ReturnType<typeof compositionInputV1Schema.parse>,
+	requestSpec: RenderRequestSpec,
+	compositionInput: CompositionInput,
 ) {
+	if (requestSpec.schemaVersion === "render-request.quick-image.v1") {
+		if (compositionInput.schemaVersion !== "composition-input.v2") return false;
+		return (
+			metadata.schemaVersion === "render-output-metadata.v1" &&
+			metadata.container === "MP4" &&
+			metadata.mimeType === "video/mp4" &&
+			metadata.videoCodec === "H.264/AVC" &&
+			metadata.width === requestSpec.outputProfile.width &&
+			metadata.height === requestSpec.outputProfile.height &&
+			metadata.frameRate.numerator ===
+				requestSpec.outputProfile.fps.numerator &&
+			metadata.frameRate.denominator ===
+				requestSpec.outputProfile.fps.denominator &&
+			metadata.totalFrames === compositionInput.timeline.totalFrames &&
+			metadata.audio === null
+		);
+	}
+	if (compositionInput.schemaVersion !== "composition-input.v1") return false;
 	const profile = requestSpec.outputEncodingProfile;
 	const audioRequired =
 		compositionInput.sceneComposition.audioTracks.length > 0;
@@ -238,37 +262,98 @@ async function loadExpectedComposition(
 		.where(eq(compositionVersion.id, job.compositionVersionId))
 		.limit(1);
 	if (!version) throw new RenderArtifactError("COMPOSITION_VERSION_NOT_FOUND");
-	const requestSpec = renderRequestSpecV1Schema.safeParse(job.requestSpecJson);
-	const compositionInput = compositionInputV1Schema.safeParse(
+	const requestV1 = renderRequestSpecV1Schema.safeParse(job.requestSpecJson);
+	const requestQuick = quickImageRenderRequestSchema.safeParse(
+		job.requestSpecJson,
+	);
+	const requestSpec = requestV1.success
+		? requestV1.data
+		: requestQuick.success
+			? requestQuick.data
+			: undefined;
+	const compositionInput = compositionInputSchema.safeParse(
 		version.compositionInputJson,
 	);
-	if (!requestSpec.success || !compositionInput.success)
+	if (!requestSpec || !compositionInput.success)
 		throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
-	let recomputedRequestHash: string;
-	let recomputedProfileFingerprint: string;
-	try {
-		[recomputedRequestHash, recomputedProfileFingerprint] = await Promise.all([
-			canonicalRequestHash(requestSpec.data),
-			fingerprintOutputEncodingProfile(requestSpec.data.outputEncodingProfile),
-		]);
-	} catch {
-		throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
-	}
 	if (
 		version.workspaceId !== job.workspaceId ||
 		version.projectId !== job.projectId ||
 		version.compositionFingerprint !== job.compositionFingerprint ||
-		requestSpec.data.compositionVersionId !== job.compositionVersionId ||
-		requestSpec.data.compositionFingerprint !== job.compositionFingerprint ||
-		requestSpec.data.outputEncodingProfileFingerprint !==
-			job.outputEncodingProfileFingerprint ||
-		requestSpec.data.outputContractVersion !== job.outputContractVersion ||
-		recomputedRequestHash !== job.canonicalRequestHash ||
-		recomputedProfileFingerprint !== job.outputEncodingProfileFingerprint
+		requestSpec.compositionVersionId !== job.compositionVersionId ||
+		requestSpec.compositionFingerprint !== job.compositionFingerprint
 	)
 		throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+	if (requestSpec.schemaVersion === "render-request.quick-image.v1") {
+		if (
+			version.schemaVersion !== "composition-input.v2" ||
+			version.sourceKind !== "QUICK_IMAGE" ||
+			compositionInput.data.schemaVersion !== "composition-input.v2"
+		)
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+		const source = compositionInput.data.source;
+		if (
+			version.sourceScriptVersionId !== null ||
+			version.sourceScriptRevision !== null ||
+			version.sourceMediaAssetId !== source.mediaAssetId ||
+			version.sourceMediaChecksumSha256 !== source.checksumSha256 ||
+			version.sourceMediaStorageProvider !== source.storageProvider ||
+			version.sourceMediaStorageKey !== source.storageKey ||
+			version.sourceMediaMimeType !== source.mimeType ||
+			version.sourceMediaByteSize !== source.byteSize ||
+			version.sourceMediaWidth !== source.width ||
+			version.sourceMediaHeight !== source.height
+		)
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+		let plan: Awaited<ReturnType<typeof createQuickImageRenderPlan>>;
+		try {
+			plan = await createQuickImageRenderPlan({
+				compositionVersionId: job.compositionVersionId,
+				compositionFingerprint: job.compositionFingerprint,
+				compositionInput: compositionInput.data,
+				outputProfile: requestSpec.outputProfile,
+				outputProfileFingerprint: requestSpec.outputProfileFingerprint,
+			});
+		} catch {
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+		}
+		if (
+			plan.planFingerprint !== requestSpec.renderPlanFingerprint ||
+			requestSpec.outputProfileFingerprint !==
+				(await fingerprintVideoOnlyOutputProfile(MP4_H264_VIDEO_ONLY_V1)) ||
+			job.outputEncodingProfileFingerprint !==
+				requestSpec.outputProfileFingerprint ||
+			job.outputContractVersion !== requestSpec.outputContractVersion ||
+			(await canonicalQuickImageRenderJobRequestHash(requestSpec)) !==
+				job.canonicalRequestHash
+		)
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+	} else {
+		if (compositionInput.data.schemaVersion !== "composition-input.v1")
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+		let recomputedRequestHash: string;
+		let recomputedProfileFingerprint: string;
+		try {
+			[recomputedRequestHash, recomputedProfileFingerprint] = await Promise.all(
+				[
+					canonicalRequestHash(requestSpec),
+					fingerprintOutputEncodingProfile(requestSpec.outputEncodingProfile),
+				],
+			);
+		} catch {
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+		}
+		if (
+			requestSpec.outputEncodingProfileFingerprint !==
+				job.outputEncodingProfileFingerprint ||
+			requestSpec.outputContractVersion !== job.outputContractVersion ||
+			recomputedRequestHash !== job.canonicalRequestHash ||
+			recomputedProfileFingerprint !== job.outputEncodingProfileFingerprint
+		)
+			throw new RenderArtifactError("RENDER_ARTIFACT_PROVENANCE_INVALID");
+	}
 	return {
-		requestSpec: requestSpec.data,
+		requestSpec,
 		compositionInput: compositionInput.data,
 	};
 }
@@ -569,6 +654,45 @@ export async function findRenderArtifactById(
 			and(
 				eq(renderArtifact.id, artifactId),
 				eq(renderArtifact.workspaceId, actor.workspaceId),
+			),
+		)
+		.limit(1);
+	return row ? mapArtifact(row.artifact) : undefined;
+}
+
+/** Scoped read used by the internal Quick Image status boundary. */
+export async function findRenderArtifactForJob(
+	actor: WorkspaceActor,
+	input: { projectId: string; renderJobId: string },
+) {
+	const [row] = await db
+		.select({ artifact: renderArtifact })
+		.from(renderArtifact)
+		.innerJoin(
+			renderJob,
+			and(
+				eq(renderJob.id, renderArtifact.renderJobId),
+				eq(renderJob.workspaceId, actor.workspaceId),
+				eq(renderJob.projectId, input.projectId),
+				eq(renderJob.compositionVersionId, renderArtifact.compositionVersionId),
+				eq(
+					renderJob.compositionFingerprint,
+					renderArtifact.compositionFingerprint,
+				),
+			),
+		)
+		.innerJoin(
+			project,
+			and(
+				eq(project.id, renderArtifact.projectId),
+				eq(project.workspaceId, actor.workspaceId),
+			),
+		)
+		.where(
+			and(
+				eq(renderArtifact.renderJobId, input.renderJobId),
+				eq(renderArtifact.workspaceId, actor.workspaceId),
+				eq(renderArtifact.projectId, input.projectId),
 			),
 		)
 		.limit(1);

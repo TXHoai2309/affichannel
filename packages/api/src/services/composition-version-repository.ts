@@ -226,6 +226,7 @@ export async function findCompositionVersionTechnicalRecord(
 			workspaceId: compositionVersion.workspaceId,
 			projectId: compositionVersion.projectId,
 			schemaVersion: compositionVersion.schemaVersion,
+			sourceKind: compositionVersion.sourceKind,
 			compositionInputJson: compositionVersion.compositionInputJson,
 			compositionFingerprint: compositionVersion.compositionFingerprint,
 		})

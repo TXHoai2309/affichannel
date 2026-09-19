@@ -1,12 +1,20 @@
 import type {
 	CompositionInputV1,
+	CompositionInputV2,
 	CompositionTechnicalManifestV1,
 	RenderRequestSpecV1,
 } from "./composition";
 import type { T09OutputReady } from "./render-prototype/output-ready";
+import type { QuickImageRenderPlan } from "./render-prototype/quick-image-plan";
+import type {
+	QuickImageOutputReady,
+	QuickImageRenderRequest,
+} from "./render-prototype/quick-image-request";
 
 export const renderJobOperations = ["START_RENDER", "RENDER_AGAIN"] as const;
 export type RenderJobOperation = (typeof renderJobOperations)[number];
+
+export type RenderRequestSpec = RenderRequestSpecV1 | QuickImageRenderRequest;
 
 export const renderJobStatuses = [
 	"QUEUED",
@@ -33,9 +41,13 @@ export type RenderJobExecutionSnapshot = Readonly<{
 	projectId: string;
 	compositionVersionId: string;
 	compositionFingerprint: string;
-	requestSpec: RenderRequestSpecV1;
-	compositionInput: CompositionInputV1;
+	requestSpec: RenderRequestSpec;
+	compositionInput: CompositionInputV1 | CompositionInputV2;
 	outputReservationId: string;
+	/** Persisted discriminator selected from the frozen request and input. */
+	renderKind?: "T09" | "QUICK_IMAGE";
+	/** Present only for a validated Quick Image V2 execution snapshot. */
+	quickImagePlan?: QuickImageRenderPlan;
 }>;
 
 export type RenderAttemptExecutionSnapshot = Readonly<{
@@ -56,7 +68,7 @@ export type RenderExecutionAdapterResult =
 			 * legacy 21C test adapters; a successful adapter result without it is
 			 * still never trusted as completion.
 			 */
-			outputReady?: T09OutputReady;
+			outputReady?: T09OutputReady | QuickImageOutputReady;
 	  }
 	| {
 			outcome: "FAILURE";

@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type {
 	RenderAttemptExecutionSnapshot,
 	RenderJobOperation,
+	RenderRequestSpec,
 	RenderRequestSpecV1,
 } from "@affichannel/core";
 import {
@@ -9,8 +10,13 @@ import {
 	canonicalizeCompositionJson,
 	canonicalRequestHash,
 	compositionInputV1Schema,
+	compositionInputV2Schema,
+	createQuickImageRenderPlan,
 	fingerprintOutputEncodingProfile,
+	fingerprintVideoOnlyOutputProfile,
 	isOutputEncodingProfileComplete,
+	MP4_H264_VIDEO_ONLY_V1,
+	quickImageRenderRequestSchema,
 	renderRequestSpecV1Schema,
 	sha256Hex,
 	validateRenderLeaseConfiguration,
@@ -61,7 +67,7 @@ export type RenderJobReadModel = {
 	compositionVersionId: string;
 	compositionFingerprint: string;
 	canonicalRequestHash: string;
-	requestSpec: RenderRequestSpecV1;
+	requestSpec: RenderRequestSpec;
 	outputEncodingProfileFingerprint: string;
 	outputContractVersion: string;
 	operation: RenderJobOperation;
@@ -106,8 +112,8 @@ export type ClaimedRenderAttempt = {
 };
 
 function mapJob(row: typeof renderJob.$inferSelect): RenderJobReadModel {
-	const requestSpec = renderRequestSpecV1Schema.safeParse(row.requestSpecJson);
-	if (!requestSpec.success) throw new RenderJobError("RENDER_JOB_DATA_INVALID");
+	const requestSpec = parseRenderRequest(row.requestSpecJson);
+	if (!requestSpec) throw new RenderJobError("RENDER_JOB_DATA_INVALID");
 	return {
 		id: row.id,
 		workspaceId: row.workspaceId,
@@ -129,6 +135,42 @@ function mapJob(row: typeof renderJob.$inferSelect): RenderJobReadModel {
 		createdAt: row.createdAt,
 		finishedAt: row.finishedAt,
 	};
+}
+
+function parseRenderRequest(value: unknown):
+	| { data: RenderRequestSpecV1 }
+	| {
+			data: Extract<
+				RenderRequestSpec,
+				{ schemaVersion: "render-request.quick-image.v1" }
+			>;
+	  }
+	| undefined {
+	const v1 = renderRequestSpecV1Schema.safeParse(value);
+	if (v1.success) return { data: v1.data };
+	const quickImage = quickImageRenderRequestSchema.safeParse(value);
+	return quickImage.success ? { data: quickImage.data } : undefined;
+}
+
+/** D2 job identity adds the version ID without changing the accepted D1 request fingerprint. */
+export async function canonicalQuickImageRenderJobRequestHash(
+	request: Extract<
+		RenderRequestSpec,
+		{ schemaVersion: "render-request.quick-image.v1" }
+	>,
+) {
+	const parsed = quickImageRenderRequestSchema.parse(request);
+	return sha256Hex(
+		canonicalizeCompositionJson({
+			inputVersion: "render-job.render-request.quick-image.v1",
+			compositionVersionId: parsed.compositionVersionId,
+			compositionFingerprint: parsed.compositionFingerprint,
+			requestVersion: parsed.schemaVersion,
+			renderPlanFingerprint: parsed.renderPlanFingerprint,
+			outputProfileFingerprint: parsed.outputProfileFingerprint,
+			outputContractVersion: parsed.outputContractVersion,
+		}),
+	);
 }
 
 function mapAttempt(
@@ -254,6 +296,28 @@ export async function findRenderJob(
 	return row ? mapJob(row) : undefined;
 }
 
+/** Returns only the latest persisted attempt in the caller's project scope. */
+export async function findLatestRenderAttempt(
+	actor: WorkspaceActor,
+	input: { projectId: string; jobId: string },
+): Promise<RenderAttemptReadModel | undefined> {
+	const [row] = await db
+		.select({ attempt: renderAttempt })
+		.from(renderAttempt)
+		.innerJoin(renderJob, eq(renderJob.id, renderAttempt.renderJobId))
+		.where(
+			and(
+				eq(renderJob.id, input.jobId),
+				eq(renderJob.workspaceId, actor.workspaceId),
+				eq(renderJob.projectId, input.projectId),
+				eq(renderAttempt.workspaceId, actor.workspaceId),
+			),
+		)
+		.orderBy(desc(renderAttempt.attemptNumber), desc(renderAttempt.id))
+		.limit(1);
+	return row ? mapAttempt(row.attempt) : undefined;
+}
+
 export async function createRenderJob(input: {
 	actor: WorkspaceActor;
 	projectId: string;
@@ -262,25 +326,38 @@ export async function createRenderJob(input: {
 	operation?: RenderJobOperation;
 	sourceRenderJobId?: string | null;
 }): Promise<RenderJobReadModel> {
-	const requestSpecResult = renderRequestSpecV1Schema.safeParse(
-		input.requestSpec,
-	);
-	if (!requestSpecResult.success) {
+	const parsedRequest = parseRenderRequest(input.requestSpec);
+	if (!parsedRequest) {
 		throw new RenderJobError("RENDER_REQUEST_PROFILE_INVALID");
 	}
-	const requestSpec = requestSpecResult.data;
-	if (!isOutputEncodingProfileComplete(requestSpec.outputEncodingProfile)) {
-		throw new RenderJobError("OUTPUT_ENCODING_PROFILE_INCOMPLETE");
+	const requestSpec = parsedRequest.data;
+	const isQuickImage =
+		requestSpec.schemaVersion === "render-request.quick-image.v1";
+	if (isQuickImage) {
+		if (input.operation === "RENDER_AGAIN")
+			throw new RenderJobError("QUICK_IMAGE_RENDER_AGAIN_UNSUPPORTED");
+		if (
+			(await fingerprintVideoOnlyOutputProfile(requestSpec.outputProfile)) !==
+			requestSpec.outputProfileFingerprint
+		)
+			throw new RenderJobError("RENDER_REQUEST_PROFILE_INVALID");
+	} else {
+		if (!isOutputEncodingProfileComplete(requestSpec.outputEncodingProfile)) {
+			throw new RenderJobError("OUTPUT_ENCODING_PROFILE_INCOMPLETE");
+		}
+		const expectedProfileFingerprint = await fingerprintOutputEncodingProfile(
+			requestSpec.outputEncodingProfile,
+		);
+		if (
+			expectedProfileFingerprint !==
+			requestSpec.outputEncodingProfileFingerprint
+		) {
+			throw new RenderJobError("RENDER_REQUEST_PROFILE_INVALID");
+		}
 	}
-	const expectedProfileFingerprint = await fingerprintOutputEncodingProfile(
-		requestSpec.outputEncodingProfile,
-	);
-	if (
-		expectedProfileFingerprint !== requestSpec.outputEncodingProfileFingerprint
-	) {
-		throw new RenderJobError("RENDER_REQUEST_PROFILE_INVALID");
-	}
-	const canonicalHash = await canonicalRequestHash(requestSpec);
+	const canonicalHash = isQuickImage
+		? await canonicalQuickImageRenderJobRequestHash(requestSpec)
+		: await canonicalRequestHash(requestSpec);
 	const operation = input.operation ?? "START_RENDER";
 	const sourceRenderJobId = input.sourceRenderJobId ?? null;
 	if (
@@ -296,6 +373,8 @@ export async function createRenderJob(input: {
 		throw new RenderJobError("RENDER_SOURCE_JOB_REQUIRED");
 	}
 	if (operation === "RENDER_AGAIN") {
+		if (requestSpec.schemaVersion !== "render-request.v1")
+			throw new RenderJobError("QUICK_IMAGE_RENDER_AGAIN_UNSUPPORTED");
 		// Source validation is deliberately completed before any idempotency or
 		// active-dedup lookup. A bad source must never be accepted by an
 		// unrelated active semantic Job.
@@ -399,7 +478,27 @@ export async function createRenderJob(input: {
 			) {
 				throw new RenderJobError("COMPOSITION_VERSION_IDENTITY_MISMATCH");
 			}
+			if (isQuickImage) {
+				if (version.schemaVersion !== "composition-input.v2")
+					throw new RenderJobError("QUICK_IMAGE_COMPOSITION_INVALID");
+				let plan: Awaited<ReturnType<typeof createQuickImageRenderPlan>>;
+				try {
+					plan = await createQuickImageRenderPlan({
+						compositionVersionId: version.id,
+						compositionFingerprint: version.compositionFingerprint,
+						compositionInput: version.compositionInput,
+						outputProfile: requestSpec.outputProfile,
+						outputProfileFingerprint: requestSpec.outputProfileFingerprint,
+					});
+				} catch {
+					throw new RenderJobError("QUICK_IMAGE_COMPOSITION_INVALID");
+				}
+				if (plan.planFingerprint !== requestSpec.renderPlanFingerprint)
+					throw new RenderJobError("QUICK_IMAGE_PLAN_IDENTITY_MISMATCH");
+			}
 			if (operation === "RENDER_AGAIN") {
+				if (requestSpec.schemaVersion !== "render-request.v1")
+					throw new RenderJobError("QUICK_IMAGE_RENDER_AGAIN_UNSUPPORTED");
 				await assertRenderAgainSourceInTransaction(transaction, {
 					actor: input.actor,
 					projectId: input.projectId,
@@ -417,9 +516,12 @@ export async function createRenderJob(input: {
 				compositionFingerprint: requestSpec.compositionFingerprint,
 				canonicalRequestHash: canonicalHash,
 				requestSpecJson: requestSpec,
-				outputEncodingProfileJson: requestSpec.outputEncodingProfile,
-				outputEncodingProfileFingerprint:
-					requestSpec.outputEncodingProfileFingerprint,
+				outputEncodingProfileJson: isQuickImage
+					? requestSpec.outputProfile
+					: requestSpec.outputEncodingProfile,
+				outputEncodingProfileFingerprint: isQuickImage
+					? requestSpec.outputProfileFingerprint
+					: requestSpec.outputEncodingProfileFingerprint,
 				outputContractVersion: requestSpec.outputContractVersion,
 				operation,
 				sourceRenderJobId,
@@ -1160,6 +1262,32 @@ export async function markExecutionStarted(input: {
 	});
 }
 
+/**
+ * Records a pre-execution capability block using the existing fenced-attempt
+ * state. This is the fail-closed boundary for unapproved Quick Image live
+ * execution; it never marks execution as started.
+ */
+export async function blockRenderAttemptBeforeExecution(
+	input: AttemptMutationInput,
+) {
+	return updateAttemptAndJob({
+		...input,
+		attemptStatus: "FENCED",
+		jobStatus: "BLOCKED",
+		beforeExecutionOnly: true,
+	});
+}
+
+/** Handles an explicit adapter capability block without introducing a status. */
+export async function blockRenderAttempt(input: AttemptMutationInput) {
+	return updateAttemptAndJob({
+		...input,
+		attemptStatus: "FENCED",
+		jobStatus: "BLOCKED",
+		allowPostExecutionRetry: true,
+	});
+}
+
 export async function heartbeatRenderAttempt(input: {
 	attemptId: string;
 	jobId: string;
@@ -1233,20 +1361,87 @@ export async function loadExecutionSnapshot(
 		row.attempt.executionStartedAt === null
 	)
 		return undefined;
-	const requestSpec = renderRequestSpecV1Schema.parse(row.job.requestSpecJson);
-	const compositionInput = compositionInputV1Schema.parse(
-		row.version.compositionInputJson,
-	);
+	const requestSpec = parseRenderRequest(row.job.requestSpecJson)?.data;
+	if (!requestSpec)
+		throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
 	if (
 		row.version.id !== row.job.compositionVersionId ||
+		row.version.workspaceId !== row.job.workspaceId ||
+		row.version.projectId !== row.job.projectId ||
 		row.version.compositionFingerprint !== row.job.compositionFingerprint ||
 		requestSpec.compositionVersionId !== row.job.compositionVersionId ||
-		requestSpec.compositionFingerprint !== row.job.compositionFingerprint ||
-		row.job.outputEncodingProfileFingerprint !==
-			requestSpec.outputEncodingProfileFingerprint ||
-		(await canonicalRequestHash(requestSpec)) !== row.job.canonicalRequestHash
+		requestSpec.compositionFingerprint !== row.job.compositionFingerprint
 	)
 		throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
+
+	let compositionInput:
+		| ReturnType<typeof compositionInputV1Schema.parse>
+		| ReturnType<typeof compositionInputV2Schema.parse>;
+	let renderKind: "T09" | "QUICK_IMAGE" = "T09";
+	let quickImagePlan:
+		| Awaited<ReturnType<typeof createQuickImageRenderPlan>>
+		| undefined;
+	if (requestSpec.schemaVersion === "render-request.quick-image.v1") {
+		renderKind = "QUICK_IMAGE";
+		if (row.version.schemaVersion !== "composition-input.v2")
+			throw new RenderJobError("RENDER_EXECUTION_SCHEMA_UNSUPPORTED");
+		compositionInput = compositionInputV2Schema.parse(
+			row.version.compositionInputJson,
+		);
+		const source = compositionInput.source;
+		if (
+			row.version.sourceKind !== "QUICK_IMAGE" ||
+			row.version.sourceScriptVersionId !== null ||
+			row.version.sourceScriptRevision !== null ||
+			row.version.sourceMediaAssetId !== source.mediaAssetId ||
+			row.version.sourceMediaChecksumSha256 !== source.checksumSha256 ||
+			row.version.sourceMediaStorageProvider !== source.storageProvider ||
+			row.version.sourceMediaStorageKey !== source.storageKey ||
+			row.version.sourceMediaMimeType !== source.mimeType ||
+			row.version.sourceMediaByteSize !== source.byteSize ||
+			row.version.sourceMediaWidth !== source.width ||
+			row.version.sourceMediaHeight !== source.height
+		)
+			throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
+		if (
+			(await fingerprintVideoOnlyOutputProfile(requestSpec.outputProfile)) !==
+				requestSpec.outputProfileFingerprint ||
+			requestSpec.outputProfileFingerprint !==
+				(await fingerprintVideoOnlyOutputProfile(MP4_H264_VIDEO_ONLY_V1)) ||
+			row.job.outputEncodingProfileFingerprint !==
+				requestSpec.outputProfileFingerprint ||
+			row.job.outputContractVersion !== requestSpec.outputContractVersion
+		)
+			throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
+		try {
+			quickImagePlan = await createQuickImageRenderPlan({
+				compositionVersionId: row.job.compositionVersionId,
+				compositionFingerprint: row.job.compositionFingerprint,
+				compositionInput,
+				outputProfile: requestSpec.outputProfile,
+				outputProfileFingerprint: requestSpec.outputProfileFingerprint,
+			});
+		} catch {
+			throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
+		}
+		if (
+			quickImagePlan.planFingerprint !== requestSpec.renderPlanFingerprint ||
+			(await canonicalQuickImageRenderJobRequestHash(requestSpec)) !==
+				row.job.canonicalRequestHash
+		)
+			throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
+	} else {
+		compositionInput = compositionInputV1Schema.parse(
+			row.version.compositionInputJson,
+		);
+		if (
+			row.job.outputEncodingProfileFingerprint !==
+				requestSpec.outputEncodingProfileFingerprint ||
+			row.job.outputContractVersion !== requestSpec.outputContractVersion ||
+			(await canonicalRequestHash(requestSpec)) !== row.job.canonicalRequestHash
+		)
+			throw new RenderJobError("RENDER_EXECUTION_IDENTITY_MISMATCH");
+	}
 	return {
 		jobId: row.job.id,
 		attemptId: row.attempt.id,
@@ -1261,6 +1456,8 @@ export async function loadExecutionSnapshot(
 			requestSpec,
 			compositionInput,
 			outputReservationId: row.attempt.outputReservationId,
+			renderKind,
+			quickImagePlan,
 		},
 		technicalManifest: input.technicalManifest,
 		technicalEvidenceFingerprint: input.technicalEvidenceFingerprint,

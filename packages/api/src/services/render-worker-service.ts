@@ -6,6 +6,7 @@ import type {
 import {
 	canonicalizeCompositionJson,
 	classifyRenderExecutionOutcome,
+	quickImageOutputReadySchema,
 	sha256Hex,
 	t09OutputReadySchema,
 } from "@affichannel/core";
@@ -13,7 +14,19 @@ import type { CompositionBusinessPreflight } from "./composition-preflight-servi
 import { preflightCompositionVersionInTransaction } from "./composition-preflight-service";
 import { technicalPreflightCompositionVersion } from "./composition-technical-preflight-service";
 import {
+	buildQuickImageExecutionContext,
+	QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED,
+	type QuickImageExecutionAdapter,
+	type QuickImageExecutionAdapterResult,
+} from "./quick-image-render-execution-adapter";
+import {
+	finalizeRenderArtifact,
+	RenderArtifactError,
+} from "./render-artifact-repository";
+import {
 	authorizeAttempt,
+	blockRenderAttempt,
+	blockRenderAttemptBeforeExecution,
 	claimNextRenderAttempt,
 	failJobAfterExecution,
 	failTechnical,
@@ -27,6 +40,10 @@ import {
 	recordTechnicalEvidence,
 	requeueAfterSideEffectFreeFailure,
 } from "./render-job-repository";
+import {
+	RenderOutputUnsupportedError,
+	RenderOutputValidationError,
+} from "./render-output-validator";
 import type { WorkspaceActor } from "./workspace";
 
 export type RenderWorkerDependencies = {
@@ -37,6 +54,10 @@ export type RenderWorkerDependencies = {
 		compositionVersionId: string,
 	) => Promise<CompositionBusinessPreflight>;
 	execute?: RenderExecutionAdapter;
+	/** Test-only Quick Image seam; production leaves this unset. */
+	executeQuickImage?: QuickImageExecutionAdapter;
+	quickImageStagingRoot?: string;
+	finalizeRenderArtifact?: typeof finalizeRenderArtifact;
 	leaseHeartbeat?: typeof heartbeatRenderAttempt;
 	markIndeterminate?: typeof markIndeterminate;
 	failJobAfterExecution?: typeof failJobAfterExecution;
@@ -46,7 +67,13 @@ export type RenderWorkerDependencies = {
 export type RenderWorkerResult =
 	| { kind: "IDLE"; persisted: false }
 	| {
-			kind: "FENCED" | "BLOCKED" | "FAILED" | "QUEUED" | "INDETERMINATE";
+			kind:
+				| "FENCED"
+				| "BLOCKED"
+				| "FAILED"
+				| "QUEUED"
+				| "COMPLETED"
+				| "INDETERMINATE";
 			persisted: true;
 			reason: string;
 	  }
@@ -129,6 +156,349 @@ async function resolveStateTransitionLoss(
 async function technicalEvidenceFingerprint(result: TechnicalPreflightResult) {
 	if (!result.technicalManifest) return null;
 	return sha256Hex(canonicalizeCompositionJson(result.technicalManifest));
+}
+
+function isQuickImageJob(job: { requestSpec: { schemaVersion: string } }) {
+	return job.requestSpec.schemaVersion === "render-request.quick-image.v1";
+}
+
+/** The V2 start gate already evaluated creation-time authorities. */
+function quickImageFrozenBusinessPreflight(
+	compositionVersionId: string,
+): CompositionBusinessPreflight {
+	return {
+		compositionVersionId,
+		currentness: { state: "CURRENT" },
+		authorization: {
+			allowed: true,
+			reasonCode: "QUICK_IMAGE_FROZEN_COMPOSITION_AUTHORIZED",
+			factLockRequirement: "NOT_REQUIRED",
+			factLockOutcome: "NOT_EVALUATED",
+		},
+		applicability: null,
+		factLock: {
+			requirement: "NOT_REQUIRED",
+			outcome: "NOT_EVALUATED",
+			evidence: null,
+		},
+	};
+}
+
+function normalizeQuickImageResult(
+	result: QuickImageExecutionAdapterResult,
+): RenderExecutionAdapterResult {
+	if (result.outcome === "SUCCESS_OUTPUT_READY")
+		return { outcome: "SUCCESS", outputReady: result.outputReady };
+	if (result.outcome === "INDETERMINATE")
+		return {
+			outcome: "FAILURE",
+			classification: "RETRYABLE",
+			sideEffectFree: false,
+			errorCode: result.errorCode,
+			errorMessage: result.errorMessage,
+		};
+	if (result.outcome === "BLOCKED")
+		return {
+			outcome: "FAILURE",
+			classification: "DETERMINISTIC",
+			sideEffectFree: true,
+			terminal: true,
+			errorCode: result.errorCode ?? QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED,
+			errorMessage: result.errorMessage,
+		};
+	return {
+		outcome: "FAILURE",
+		classification: result.classification,
+		sideEffectFree: result.sideEffectFree,
+		errorCode: result.errorCode,
+		errorMessage: result.errorMessage,
+	};
+}
+
+function quickImageFailureIsTerminal(error: unknown) {
+	return (
+		error instanceof RenderOutputValidationError ||
+		error instanceof RenderOutputUnsupportedError ||
+		(error instanceof RenderArtifactError &&
+			[
+				"RENDER_ARTIFACT_PROOF_INVALID",
+				"RENDER_ARTIFACT_PROVENANCE_INVALID",
+				"RENDER_ARTIFACT_OUTPUT_CONTRACT_MISMATCH",
+				"RENDER_ARTIFACT_OUTPUT_IDENTITY_MISMATCH",
+			].includes(error.code))
+	);
+}
+
+async function runQuickImageExecution(input: {
+	snapshot: NonNullable<Awaited<ReturnType<typeof loadExecutionSnapshot>>>;
+	claimedAttempt: { id: string; attemptNumber: number };
+	leaseOwner: string;
+	dependencies: RenderWorkerDependencies;
+	attemptIdentity: WorkerAttemptIdentity;
+}): Promise<RenderWorkerResult> {
+	const {
+		snapshot,
+		claimedAttempt,
+		leaseOwner,
+		dependencies,
+		attemptIdentity,
+	} = input;
+	const persistIndeterminate =
+		dependencies.markIndeterminate ?? markIndeterminate;
+	const persistPostExecutionFailure =
+		dependencies.failJobAfterExecution ?? failJobAfterExecution;
+	let context: Awaited<ReturnType<typeof buildQuickImageExecutionContext>>;
+	try {
+		context = await buildQuickImageExecutionContext(
+			snapshot,
+			dependencies.quickImageStagingRoot,
+		);
+	} catch (error) {
+		const persisted = await persistPostExecutionFailure({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode:
+				error instanceof Error && "code" in error
+					? String((error as { code: unknown }).code)
+					: "QUICK_IMAGE_EXECUTION_CONTEXT_INVALID",
+			errorMessage:
+				error instanceof Error
+					? error.message
+					: "Quick Image context is invalid.",
+		});
+		return persisted
+			? persistedResult("FAILED", "QUICK_IMAGE_EXECUTION_CONTEXT_INVALID")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"QUICK_IMAGE_EXECUTION_CONTEXT_INVALID",
+				);
+	}
+
+	let quickResult: QuickImageExecutionAdapterResult | undefined;
+	let wrappedResult: RenderExecutionAdapterResult | undefined;
+	try {
+		wrappedResult = await executeRenderAdapterWithHeartbeat({
+			adapter: async ({ signal }) => {
+				quickResult = await dependencies.executeQuickImage?.({
+					...context,
+					signal,
+				});
+				if (!quickResult)
+					return {
+						outcome: "FAILURE",
+						classification: "DETERMINISTIC",
+						sideEffectFree: true,
+						errorCode: "QUICK_IMAGE_ADAPTER_NOT_CONFIGURED",
+					};
+				return normalizeQuickImageResult(quickResult);
+			},
+			snapshot,
+			heartbeat: dependencies.leaseHeartbeat,
+		});
+	} catch (error) {
+		const persisted = await persistIndeterminate({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode: "RENDER_ADAPTER_EXCEPTION",
+			errorMessage:
+				error instanceof Error
+					? error.message
+					: "Adapter threw an unknown error.",
+		});
+		return persisted
+			? persistedResult("INDETERMINATE", "RENDER_ADAPTER_EXCEPTION")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"RENDER_ADAPTER_EXCEPTION",
+				);
+	}
+	if (
+		wrappedResult?.outcome === "FAILURE" &&
+		wrappedResult.errorCode === "RENDER_LEASE_LOST_DURING_EXECUTION"
+	) {
+		const persisted = await persistIndeterminate({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode: wrappedResult.errorCode,
+			errorMessage: wrappedResult.errorMessage,
+		});
+		return persisted
+			? persistedResult("INDETERMINATE", wrappedResult.errorCode)
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					wrappedResult.errorCode,
+				);
+	}
+
+	if (!quickResult) {
+		const persisted = await persistIndeterminate({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode: "QUICK_IMAGE_ADAPTER_NOT_CONFIGURED",
+		});
+		return persisted
+			? persistedResult("INDETERMINATE", "QUICK_IMAGE_ADAPTER_NOT_CONFIGURED")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"QUICK_IMAGE_ADAPTER_NOT_CONFIGURED",
+				);
+	}
+
+	if (quickResult.outcome === "BLOCKED") {
+		const blocked = await blockRenderAttempt({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode:
+				quickResult.errorCode ?? QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED,
+			errorMessage: quickResult.errorMessage,
+		});
+		const reason =
+			quickResult.errorCode ?? QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED;
+		return blocked
+			? persistedResult("BLOCKED", reason)
+			: await resolveStateTransitionLoss(attemptIdentity, reason);
+	}
+
+	if (quickResult.outcome === "SUCCESS_OUTPUT_READY") {
+		const outputReady = quickImageOutputReadySchema.safeParse(
+			quickResult.outputReady,
+		);
+		if (
+			!outputReady.success ||
+			outputReady.data.jobId !== snapshot.jobId ||
+			outputReady.data.attemptId !== snapshot.attemptId ||
+			outputReady.data.attemptNumber !== snapshot.attemptNumber ||
+			outputReady.data.outputReservationId !==
+				snapshot.execution.outputReservationId
+		) {
+			const persisted = await persistIndeterminate({
+				attemptId: claimedAttempt.id,
+				jobId: snapshot.jobId,
+				attemptNumber: claimedAttempt.attemptNumber,
+				leaseOwner,
+				errorCode: "OUTPUT_READY_IDENTITY_MISMATCH",
+				errorMessage:
+					"Quick Image OUTPUT_READY did not match the claimed attempt reservation.",
+			});
+			return persisted
+				? persistedResult("INDETERMINATE", "OUTPUT_READY_IDENTITY_MISMATCH")
+				: await resolveStateTransitionLoss(
+						attemptIdentity,
+						"OUTPUT_READY_IDENTITY_MISMATCH",
+					);
+		}
+		if (!quickResult.storage) {
+			const persisted = await persistIndeterminate({
+				attemptId: claimedAttempt.id,
+				jobId: snapshot.jobId,
+				attemptNumber: claimedAttempt.attemptNumber,
+				leaseOwner,
+				errorCode: "AWAITING_RENDER_ARTIFACT_PROOF",
+				errorMessage:
+					"Quick Image execution succeeded without storage-backed output proof.",
+			});
+			return persisted
+				? persistedResult("INDETERMINATE", "AWAITING_RENDER_ARTIFACT_PROOF")
+				: await resolveStateTransitionLoss(
+						attemptIdentity,
+						"AWAITING_RENDER_ARTIFACT_PROOF",
+					);
+		}
+		try {
+			const finalize =
+				dependencies.finalizeRenderArtifact ?? finalizeRenderArtifact;
+			await finalize({
+				jobId: snapshot.jobId,
+				attemptId: snapshot.attemptId,
+				attemptNumber: snapshot.attemptNumber,
+				leaseOwner,
+				storage: quickResult.storage,
+				...(quickResult.body === undefined ? {} : { body: quickResult.body }),
+			});
+			return persistedResult("COMPLETED", "RENDER_ARTIFACT_FINALIZED");
+		} catch (error) {
+			const errorCode =
+				error instanceof Error && "code" in error
+					? String((error as { code: unknown }).code)
+					: "RENDER_ARTIFACT_FINALIZE_UNKNOWN";
+			if (quickImageFailureIsTerminal(error)) {
+				const persisted = await persistPostExecutionFailure({
+					attemptId: claimedAttempt.id,
+					jobId: snapshot.jobId,
+					attemptNumber: claimedAttempt.attemptNumber,
+					leaseOwner,
+					errorCode,
+					errorMessage: error instanceof Error ? error.message : errorCode,
+				});
+				return persisted
+					? persistedResult("FAILED", errorCode)
+					: await resolveStateTransitionLoss(attemptIdentity, errorCode);
+			}
+			const persisted = await persistIndeterminate({
+				attemptId: claimedAttempt.id,
+				jobId: snapshot.jobId,
+				attemptNumber: claimedAttempt.attemptNumber,
+				leaseOwner,
+				errorCode,
+				errorMessage: error instanceof Error ? error.message : errorCode,
+			});
+			return persisted
+				? persistedResult("INDETERMINATE", errorCode)
+				: await resolveStateTransitionLoss(attemptIdentity, errorCode);
+		}
+	}
+
+	const generic = normalizeQuickImageResult(quickResult);
+	if (generic.outcome !== "FAILURE") {
+		const persisted = await persistIndeterminate({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode: "QUICK_IMAGE_EXECUTION_RESULT_INVALID",
+		});
+		return persisted
+			? persistedResult("INDETERMINATE", "QUICK_IMAGE_EXECUTION_RESULT_INVALID")
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					"QUICK_IMAGE_EXECUTION_RESULT_INVALID",
+				);
+	}
+	const disposition = classifyRenderExecutionOutcome(generic);
+	if (disposition === "FAILED") {
+		const persisted = await persistPostExecutionFailure({
+			attemptId: claimedAttempt.id,
+			jobId: snapshot.jobId,
+			attemptNumber: claimedAttempt.attemptNumber,
+			leaseOwner,
+			errorCode: generic.errorCode,
+			errorMessage: generic.errorMessage,
+		});
+		return persisted
+			? persistedResult("FAILED", generic.errorCode)
+			: await resolveStateTransitionLoss(attemptIdentity, generic.errorCode);
+	}
+	const persisted = await persistIndeterminate({
+		attemptId: claimedAttempt.id,
+		jobId: snapshot.jobId,
+		attemptNumber: claimedAttempt.attemptNumber,
+		leaseOwner,
+		errorCode: generic.errorCode,
+		errorMessage: generic.errorMessage,
+	});
+	return persisted
+		? persistedResult("INDETERMINATE", generic.errorCode)
+		: await resolveStateTransitionLoss(attemptIdentity, generic.errorCode);
 }
 
 const RENDER_HEARTBEAT_CHECK_TIMEOUT_MS = 5_000;
@@ -360,6 +730,7 @@ export async function runNextRenderAttempt(
 				);
 	}
 
+	const quickImage = isQuickImageJob(job);
 	const authorization = await authorizeAttempt({
 		actor,
 		jobId: job.id,
@@ -367,11 +738,13 @@ export async function runNextRenderAttempt(
 		attemptNumber: attempt.attemptNumber,
 		leaseOwner,
 		technicalEvidenceFingerprint: evidenceFingerprint,
-		businessGate: (transaction) =>
-			(
-				dependencies.businessPreflight ??
-				preflightCompositionVersionInTransaction
-			)(transaction, actor, job.compositionVersionId),
+		businessGate: quickImage
+			? async () => quickImageFrozenBusinessPreflight(job.compositionVersionId)
+			: (transaction) =>
+					(
+						dependencies.businessPreflight ??
+						preflightCompositionVersionInTransaction
+					)(transaction, actor, job.compositionVersionId),
 	});
 	if (authorization.kind === "BLOCKED")
 		return persistedResult("BLOCKED", "BUSINESS_AUTHORIZATION_BLOCKED");
@@ -384,6 +757,24 @@ export async function runNextRenderAttempt(
 			attemptIdentity,
 			"AUTHORIZATION_STATE_TRANSITION_LOST",
 		);
+
+	if (quickImage && !dependencies.executeQuickImage) {
+		const blocked = await blockRenderAttemptBeforeExecution({
+			attemptId: attempt.id,
+			jobId: job.id,
+			attemptNumber: attempt.attemptNumber,
+			leaseOwner,
+			errorCode: QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED,
+			errorMessage:
+				"Quick Image live execution remains disabled pending the D3 tool gate.",
+		});
+		return blocked
+			? persistedResult("BLOCKED", QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED)
+			: await resolveStateTransitionLoss(
+					attemptIdentity,
+					QUICK_IMAGE_LIVE_EXECUTION_NOT_APPROVED,
+				);
+	}
 
 	const executionMarked = await markExecutionStarted({
 		jobId: job.id,
@@ -454,6 +845,15 @@ export async function runNextRenderAttempt(
 					"LEASE_LOST_AFTER_EXECUTION_MARKER",
 				);
 	}
+
+	if (quickImage)
+		return runQuickImageExecution({
+			snapshot,
+			claimedAttempt: attempt,
+			leaseOwner,
+			dependencies,
+			attemptIdentity,
+		});
 
 	if (!dependencies.execute) {
 		const persisted = await persistIndeterminate({
