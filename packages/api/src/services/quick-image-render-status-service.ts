@@ -4,6 +4,7 @@ import {
 	type RenderArtifactReadModel,
 } from "./render-artifact-repository";
 import {
+	findLatestQuickImageRenderForComposition,
 	findLatestRenderAttempt,
 	findRenderJob,
 	type RenderAttemptReadModel,
@@ -35,4 +36,17 @@ export async function getQuickImageRenderStatus(
 		findRenderArtifactForJob(actor, input),
 	]);
 	return { job, attempt, artifact };
+}
+
+/** Read-only reload discovery for the exact persisted CompositionVersion. */
+export async function getQuickImageRenderStatusForComposition(
+	actor: WorkspaceActor,
+	input: { projectId: string; compositionVersionId: string },
+): Promise<QuickImageRenderStatus | undefined> {
+	const job = await findLatestQuickImageRenderForComposition(actor, input);
+	if (!job) return undefined;
+	return getQuickImageRenderStatus(actor, {
+		projectId: input.projectId,
+		renderJobId: job.id,
+	});
 }

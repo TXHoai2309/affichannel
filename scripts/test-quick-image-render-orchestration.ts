@@ -18,14 +18,19 @@ const temporaryFolders: string[] = [];
 const authority = requireE2ETestDatabaseAuthority();
 
 process.env.NODE_ENV = "test";
-process.env.SKIP_ENV_VALIDATION = "1";
 process.env.AFFICHANNEL_E2E_TEST_DATABASE_URL = authority.url;
 process.env.AFFICHANNEL_E2E_TEST_DATABASE_CONFIRM =
 	"DISPOSABLE_E2E_TEST_DB_CONFIRMED";
+process.env.AFFICHANNEL_ISOLATED_TEST_ENV = "1";
+process.env.DATABASE_URL = authority.url;
 process.env.AFFICHANNEL_M1_TEST_DATABASE_URL = authority.url;
 process.env.AFFICHANNEL_M1_TEST_DATABASE_CONFIRM = "DISPOSABLE_DB_CONFIRMED";
+process.env.BETTER_AUTH_SECRET =
+	"us22-e-disposable-better-auth-secret-012345678901234567890";
+process.env.BETTER_AUTH_URL = "http://127.0.0.1";
+process.env.CORS_ORIGIN = "http://127.0.0.1";
+process.env.RENDER_ARTIFACT_DOWNLOAD_TTL_MS = "300000";
 for (const key of [
-	"DATABASE_URL",
 	"DATABASE_URL_DIRECT",
 	"R2_ENDPOINT",
 	"R2_BUCKET",
@@ -38,9 +43,13 @@ for (const key of [
 const { createNodePostgresPool } = await import(
 	"../packages/db/src/node-postgres-test-adapter"
 );
+const { call } = await import(
+	"../packages/api/node_modules/@orpc/server/dist/index.mjs"
+);
 const { drizzle } = await import("drizzle-orm/node-postgres");
 const { migrate } = await import("drizzle-orm/node-postgres/migrator");
 const core = await import("@affichannel/core");
+const { INTERNAL_WORKSPACE_ID } = await import("@affichannel/core/workspace");
 const schema = await import("@affichannel/db");
 const compositionVersions = await import(
 	"../packages/api/src/services/composition-version-repository"
@@ -57,6 +66,7 @@ const renderJobs = await import(
 const renderWorker = await import(
 	"../packages/api/src/services/render-worker-service"
 );
+const { appRouter } = await import("../packages/api/src/routers/index");
 const executionAdapter = await import(
 	"../packages/api/src/services/quick-image-render-execution-adapter"
 );
@@ -65,6 +75,9 @@ const { LocalRenderOutputStorage } = await import(
 );
 const { deterministicVideoOnlyRenderOutputFixtureForFrames } = await import(
 	"../apps/web/src/features/render/render-output-fixture"
+);
+const { createRenderWorkerLoop } = await import(
+	"../apps/worker/src/worker-loop"
 );
 
 const pool = createNodePostgresPool(authority.url);
@@ -282,7 +295,7 @@ try {
 	schemaInitialized = true;
 	console.log("DISPOSABLE_MIGRATIONS=PASS");
 
-	const workspaceA = id("workspace-a");
+	const workspaceA = INTERNAL_WORKSPACE_ID;
 	const workspaceB = id("workspace-b");
 	const userA = id("user-a");
 	const userB = id("user-b");
@@ -290,10 +303,13 @@ try {
 	const projectB = id("project-b");
 	const actorA = { workspaceId: workspaceA, userId: userA };
 	const actorB = { workspaceId: workspaceB, userId: userB };
-	await disposableDb.insert(schema.workspace).values([
-		{ id: workspaceA, name: "US22 D2 workspace A" },
-		{ id: workspaceB, name: "US22 D2 workspace B" },
-	]);
+	await disposableDb
+		.insert(schema.workspace)
+		.values([
+			{ id: workspaceA, name: "US22 D2 workspace A" },
+			{ id: workspaceB, name: "US22 D2 workspace B" },
+		])
+		.onConflictDoNothing();
 	await disposableDb.insert(schema.user).values([
 		{
 			id: userA,
@@ -307,6 +323,10 @@ try {
 			email: `${userB}@example.test`,
 			emailVerified: true,
 		},
+	]);
+	await disposableDb.insert(schema.workspaceMember).values([
+		{ id: id("member-a"), workspaceId: workspaceA, userId: userA },
+		{ id: id("member-b"), workspaceId: workspaceB, userId: userB },
 	]);
 	await insertProject({
 		id: projectA,
@@ -345,6 +365,12 @@ try {
 		userId: userA,
 		checksum: "d".repeat(64),
 	});
+	const assetE = await insertReadyImage({
+		id: id("asset-e"),
+		workspaceId: workspaceA,
+		userId: userA,
+		checksum: "e".repeat(64),
+	});
 	const versionA = await makeVersion({
 		actor: actorA,
 		projectId: projectA,
@@ -364,6 +390,11 @@ try {
 		actor: actorA,
 		projectId: projectA,
 		asset: assetD,
+	});
+	const versionE = await makeVersion({
+		actor: actorA,
+		projectId: projectA,
+		asset: assetE,
 	});
 
 	const retryJobA = await quickImageRender.startQuickImageRender(actorA, {
@@ -554,7 +585,7 @@ try {
 	);
 	assert(
 		blockedWorkerResult.kind === "BLOCKED",
-		"default Quick Image worker must block",
+		`explicitly denied Quick Image worker must block: ${JSON.stringify(blockedWorkerResult)}`,
 	);
 	assert(
 		blockedWorkerResult.reason ===
@@ -608,8 +639,8 @@ try {
 		"blocked job must have no artifact",
 	);
 	console.log("BLOCKED_ACTIVE_DEDUP=PASS");
-	console.log("DEFAULT_PRODUCTION_EXECUTION=BLOCKED_PENDING_D3");
-	console.log("FAKE_ADAPTER_PRODUCTION_REACHABILITY=DENIED");
+	console.log("EXPLICIT_DENIED_EXECUTION=BLOCKED");
+	console.log("APPROVED_PRODUCTION_ADAPTER_REACHABILITY=SEPARATE");
 
 	let missingStorageAdapterCalls = 0;
 	const missingStorageJob = await quickImageRender.startQuickImageRender(
@@ -772,6 +803,183 @@ try {
 	console.log("RENDER_ARTIFACT_PERSISTED=PASS");
 	console.log("ATOMIC_FINALIZE=PASS");
 	console.log("T09_SHARED_FINALIZE_PATH=PASS");
+	const routerStatus = await call(
+		appRouter.quickImageRender.status,
+		{ projectId: projectA, renderJobId: validStorageJob.id },
+		{
+			context: {
+				auth: null,
+				session: { user: { id: userA } },
+			},
+		} as never,
+	);
+	const routerStatusValue = routerStatus as {
+		status: string;
+		artifact?: { artifactId: string } | null;
+	};
+	assert(
+		routerStatusValue.status === "COMPLETED" &&
+			routerStatusValue.artifact?.artifactId === completedStatus.artifact.id,
+		"protected status router must return the persisted artifact DTO",
+	);
+	assert(
+		!(routerStatusValue as Record<string, unknown>).storageKey,
+		"protected status DTO must not expose storageKey",
+	);
+	console.log("PROTECTED_STATUS_ROUTER_SAFE_DTO=PASS");
+
+	const completedReloadCountsBefore = await counts();
+	const completedReload =
+		await quickImageStatus.getQuickImageRenderStatusForComposition(actorA, {
+			projectId: projectA,
+			compositionVersionId: versionA.id,
+		});
+	assert(
+		completedReload?.job.id === validStorageJob.id,
+		"exact-composition reload must recover the completed RenderJob",
+	);
+	assert(
+		completedReload.artifact?.id === completedStatus.artifact.id,
+		"exact-composition reload must recover the same RenderArtifact",
+	);
+	const completedReloadCountsAfter = await counts();
+	assert(
+		JSON.stringify(completedReloadCountsBefore) ===
+			JSON.stringify(completedReloadCountsAfter),
+		"completed reload discovery created lifecycle rows",
+	);
+	console.log("T08_COMPLETED_RELOAD_SAME_JOB=PASS");
+	console.log("T08_COMPLETED_RELOAD_SAME_ARTIFACT=PASS");
+
+	const routerStart = await call(
+		appRouter.quickImageRender.start,
+		{
+			projectId: projectA,
+			compositionVersionId: versionE.id,
+			idempotencyKey: id("active-reload"),
+		},
+		{
+			context: {
+				auth: null,
+				session: { user: { id: userA } },
+			},
+		} as never,
+	);
+	const routerStartValue = routerStart as {
+		renderJobId: string;
+		compositionVersionId: string;
+		status: string;
+	};
+	assert(
+		routerStartValue.status === "QUEUED" &&
+			routerStartValue.compositionVersionId === versionE.id,
+		"protected start router must return a queued exact-version DTO",
+	);
+	const activeReloadJob = { id: routerStartValue.renderJobId };
+	const activeReload =
+		await quickImageStatus.getQuickImageRenderStatusForComposition(actorA, {
+			projectId: projectA,
+			compositionVersionId: versionE.id,
+		});
+	assert(
+		activeReload?.job.id === activeReloadJob.id &&
+			activeReload.job.status === "QUEUED",
+		"active reload must recover the same queued job",
+	);
+	assert(
+		activeReload.attempt === undefined,
+		"active reload must not create an attempt",
+	);
+	const activeReloadClaim = await renderJobs.claimNextRenderAttempt(
+		workspaceA,
+		id("failed-reload-worker"),
+	);
+	assert(
+		activeReloadClaim?.job.id === activeReloadJob.id,
+		"failed reload fixture must claim its exact job",
+	);
+	assert(
+		await renderJobs.failTechnical({
+			attemptId: activeReloadClaim.attempt.id,
+			jobId: activeReloadClaim.job.id,
+			attemptNumber: activeReloadClaim.attempt.attemptNumber,
+			leaseOwner: activeReloadClaim.attempt.leaseOwner,
+			errorCode: "E_RELOAD_FIXTURE_FAILURE",
+		}),
+		"failed reload fixture must become FAILED",
+	);
+	const failedReload =
+		await quickImageStatus.getQuickImageRenderStatusForComposition(actorA, {
+			projectId: projectA,
+			compositionVersionId: versionE.id,
+		});
+	assert(
+		failedReload?.job.id === activeReloadJob.id &&
+			failedReload.job.status === "FAILED",
+		"failed reload must remain failed without automatic retry",
+	);
+	console.log("T08_RUNNING_OR_ACTIVE_RELOAD_SAME_JOB=PASS");
+	console.log("T08_FAILED_RELOAD_NO_AUTO_RETRY=PASS");
+
+	const workerDispatchJob = await quickImageRender.startQuickImageRender(
+		actorA,
+		{
+			projectId: projectA,
+			compositionVersionId: versionA.id,
+			idempotencyKey: id("worker-dispatch"),
+		},
+	);
+	const workerResults: string[] = [];
+	const workerLoop = createRenderWorkerLoop({
+		workerId: id("worker-loop"),
+		maxIterations: 1,
+		runIteration: async () => {
+			const result = await renderWorker.runNextRenderAttempt(
+				actorA,
+				id("worker-loop-lease"),
+				{
+					executeQuickImage:
+						executionAdapter.createFakeQuickImageExecutionAdapter({
+							result: {
+								outcome: "PROCESS_FAILED",
+								classification: "DETERMINISTIC",
+								sideEffectFree: true,
+								errorCode: "E_WORKER_FIXTURE_FAILURE",
+							},
+						}),
+				},
+			);
+			workerResults.push(result.kind);
+			return result;
+		},
+		sleep: async () => undefined,
+	});
+	await workerLoop.run();
+	assert(
+		workerResults.length === 1 && workerResults[0] === "FAILED",
+		"worker loop must dispatch one queued job through EN-001",
+	);
+	const workerDispatchStatus = await quickImageStatus.getQuickImageRenderStatus(
+		actorA,
+		{ projectId: projectA, renderJobId: workerDispatchJob.id },
+	);
+	assert(
+		workerDispatchStatus?.job.status === "FAILED" &&
+			workerDispatchStatus.attempt?.status === "FAILED",
+		"worker dispatch lifecycle result was not persisted",
+	);
+	const canonicalAfterNewerFailure =
+		await quickImageStatus.getQuickImageRenderStatusForComposition(actorA, {
+			projectId: projectA,
+			compositionVersionId: versionA.id,
+		});
+	assert(
+		canonicalAfterNewerFailure?.job.id === validStorageJob.id &&
+			canonicalAfterNewerFailure.artifact?.id === completedStatus.artifact.id,
+		"completed artifact must outrank a newer failed job on reload",
+	);
+	console.log("WORKER_LOOP_TO_EN001=PASS");
+	console.log("T08_COMPLETED_ARTIFACT_OUTRANKS_NEWER_FAILURE=PASS");
 
 	const statusCountsBefore = await counts();
 	const statusAdapterCallsBefore =
@@ -932,6 +1140,7 @@ try {
 	console.log("MIGRATIONS_CHANGED=NO");
 	console.log("PERSISTENT_SHARED_DATABASE_MUTATED=NO");
 	console.log("QUICK_IMAGE_D2_REPOSITORY_INTEGRATION=PASS");
+	console.log("QUICK_IMAGE_E_WORKER_RELOAD_INTEGRATION=PASS");
 } finally {
 	if (schemaInitialized) {
 		await pool

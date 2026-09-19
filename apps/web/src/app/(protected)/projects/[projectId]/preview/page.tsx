@@ -75,7 +75,10 @@ export default async function PreviewStepPage({
 				Quick Image preview
 			</h1>
 			{descriptor ? (
-				<QuickImagePreviewPlayer descriptor={descriptor} />
+				<QuickImagePreviewPlayer
+					descriptor={descriptor}
+					projectId={projectId}
+				/>
 			) : versionId ? (
 				<p className="max-w-2xl text-muted-foreground">
 					CompositionVersion không hợp lệ hoặc không thuộc project này.

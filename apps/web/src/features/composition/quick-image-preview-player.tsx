@@ -17,7 +17,7 @@ import {
 import { Pause, Play, RotateCcw } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
-
+import QuickImageRenderController from "../render/quick-image-render-controller";
 import {
 	createQuickImagePlaybackState,
 	type QuickImagePlaybackAction,
@@ -51,8 +51,10 @@ function imageStyleForGeometry(
 
 export default function QuickImagePreviewPlayer({
 	descriptor,
+	projectId,
 }: {
 	descriptor: CompositionPreviewDescriptorV2;
+	projectId?: string;
 }) {
 	const totalFrames = descriptor.timeline.totalFrames;
 	const imageIdentity = `${descriptor.compositionVersionId}:${descriptor.dependency.token}`;
@@ -330,6 +332,12 @@ export default function QuickImagePreviewPlayer({
 							? "Đã kết thúc"
 							: "Đang tạm dừng"}
 				</p>
+				{projectId ? (
+					<QuickImageRenderController
+						compositionVersionId={descriptor.compositionVersionId}
+						projectId={projectId}
+					/>
+				) : null}
 			</CardContent>
 		</Card>
 	);

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type {
 	QuickImageFfmpegToolApproval,
@@ -17,6 +18,7 @@ import type {
 	RenderOutputBody,
 	RenderOutputStorage,
 } from "../storage/render-output-storage";
+import { createRenderOutputStorage } from "../storage/render-output-storage-factory";
 import {
 	buildQuickImageCommandPlan,
 	type QuickImageCommandPlan,
@@ -67,6 +69,8 @@ export type QuickImageExecutionAdapterResult =
 			/** Tests may provide an already stored object or a body for finalization. */
 			storage?: RenderOutputStorage;
 			body?: RenderOutputBody;
+			/** Worker-owned cleanup for the attempt staging directory. */
+			cleanup?: () => Promise<void>;
 	  }>
 	| Readonly<{
 			outcome: "PROCESS_FAILED";
@@ -288,6 +292,11 @@ function quickImageOutputReady(
 	};
 }
 
+async function cleanupAttemptStaging(context: QuickImageExecutionContext) {
+	const attemptDirectory = dirname(context.inputPath.absolutePath);
+	await rm(attemptDirectory, { recursive: true, force: true });
+}
+
 function approvedQuickImageCommandPlan(
 	input: QuickImageExecutionContext,
 	tool: Awaited<ReturnType<typeof resolveT09FfmpegTool>>,
@@ -377,7 +386,8 @@ export function createApprovedQuickImageExecutionAdapter(
 				approvedTool,
 				signal: context.signal,
 			});
-			if (result.outcome !== "SUCCESS")
+			if (result.outcome !== "SUCCESS") {
+				await cleanupAttemptStaging(context);
 				return {
 					outcome: "PROCESS_FAILED",
 					classification:
@@ -388,6 +398,7 @@ export function createApprovedQuickImageExecutionAdapter(
 					errorCode: result.errorCode,
 					errorMessage: result.errorMessage,
 				};
+			}
 			const bytes = new Uint8Array(await readFile(outputPath.absolutePath));
 			if (bytes.byteLength > T09_MAX_OUTPUT_BYTES)
 				throw new Error("OUTPUT_SIZE_LIMIT_EXCEEDED");
@@ -408,8 +419,12 @@ export function createApprovedQuickImageExecutionAdapter(
 					validatedMetadata: proof.validatedMetadata,
 				},
 				outputPath: outputPath.absolutePath,
+				storage: createRenderOutputStorage(),
+				body: createReadStream(outputPath.absolutePath),
+				cleanup: () => cleanupAttemptStaging(context),
 			};
 		} catch (error) {
+			await cleanupAttemptStaging(context).catch(() => undefined);
 			return {
 				outcome: "PROCESS_FAILED",
 				classification: "DETERMINISTIC",

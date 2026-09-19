@@ -8,6 +8,7 @@ import { mediaRouter } from "./media";
 import { productRouter } from "./product";
 import { productFactRouter } from "./product-fact";
 import { projectRouter } from "./project";
+import { quickImageRenderRouter } from "./quick-image-render";
 import { scriptGenerationRouter } from "./script-generation";
 import { scriptVersionRouter } from "./script-version";
 import { settingsRouter } from "./settings";
@@ -31,6 +32,7 @@ export const appRouter = {
 	product: productRouter,
 	productFact: productFactRouter,
 	project: projectRouter,
+	quickImageRender: quickImageRenderRouter,
 	scriptGeneration: scriptGenerationRouter,
 	scriptVersion: scriptVersionRouter,
 	settings: settingsRouter,

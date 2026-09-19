@@ -455,6 +455,8 @@ async function runQuickImageExecution(input: {
 			return persisted
 				? persistedResult("INDETERMINATE", errorCode)
 				: await resolveStateTransitionLoss(attemptIdentity, errorCode);
+		} finally {
+			await quickResult.cleanup?.().catch(() => undefined);
 		}
 	}
 

@@ -1,0 +1,24 @@
+{
+	"name": "@affichannel/worker",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "tsc -p tsconfig.json",
+		"check-types": "tsc --noEmit",
+		"dev": "tsx watch src/index.ts",
+		"start": "node dist/index.js",
+		"test": "tsx --test src/*.test.ts"
+	},
+	"dependencies": {
+		"@affichannel/api": "workspace:*",
+		"@affichannel/core": "workspace:*",
+		"@affichannel/env": "workspace:*"
+	},
+	"devDependencies": {
+		"@affichannel/config": "workspace:*",
+		"@types/node": "^22.20.1",
+		"tsx": "^4.23.1",
+		"typescript": "catalog:"
+	}
+}

@@ -25,6 +25,7 @@ import {
 	compositionVersion,
 	db,
 	project,
+	renderArtifact,
 	renderAttempt,
 	renderJob,
 } from "@affichannel/db";
@@ -294,6 +295,50 @@ export async function findRenderJob(
 		)
 		.limit(1);
 	return row ? mapJob(row) : undefined;
+}
+
+/**
+ * Discovers only persisted Quick Image jobs for one exact frozen composition.
+ * Active work wins; otherwise a completed job with an artifact wins over an
+ * older failed/terminal job. This is deliberately not a latest-version query.
+ */
+export async function findLatestQuickImageRenderForComposition(
+	actor: WorkspaceActor,
+	input: { projectId: string; compositionVersionId: string },
+): Promise<RenderJobReadModel | undefined> {
+	const rows = await db
+		.select({ job: renderJob })
+		.from(renderJob)
+		.leftJoin(
+			renderArtifact,
+			and(
+				eq(renderArtifact.renderJobId, renderJob.id),
+				eq(renderArtifact.workspaceId, actor.workspaceId),
+			),
+		)
+		.where(
+			and(
+				eq(renderJob.workspaceId, actor.workspaceId),
+				eq(renderJob.projectId, input.projectId),
+				eq(renderJob.compositionVersionId, input.compositionVersionId),
+			),
+		)
+		.orderBy(
+			sql`case
+				when ${renderJob.status} in ('QUEUED', 'RUNNING', 'BLOCKED', 'INDETERMINATE') then 0
+				when ${renderJob.status} = 'COMPLETED' and ${renderArtifact.id} is not null then 1
+				else 2
+			end`,
+			desc(renderJob.createdAt),
+			desc(renderJob.id),
+		);
+	for (const row of rows) {
+		if (
+			quickImageRenderRequestSchema.safeParse(row.job.requestSpecJson).success
+		)
+			return mapJob(row.job);
+	}
+	return undefined;
 }
 
 /** Returns only the latest persisted attempt in the caller's project scope. */
