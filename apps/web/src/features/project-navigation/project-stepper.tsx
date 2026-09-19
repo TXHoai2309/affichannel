@@ -2,6 +2,7 @@
 
 import type { AdaptiveWorkflowReadModel } from "@affichannel/core";
 import { Badge } from "@affichannel/ui/components/badge";
+import { Button } from "@affichannel/ui/components/button";
 import { cn } from "@affichannel/ui/lib/utils";
 import {
 	Check,
@@ -53,7 +54,17 @@ export default function ProjectStepper({
 						bước bạn đang xem.
 					</p>
 				</div>
-				<Badge variant="outline">{items.length} bước</Badge>
+				<div className="flex items-center gap-2">
+					<Button
+						nativeButton={false}
+						render={<Link href={`/projects/${projectId}/studio` as Route} />}
+						size="sm"
+						variant="outline"
+					>
+						Video Studio
+					</Button>
+					<Badge variant="outline">{items.length} bước</Badge>
+				</div>
 			</div>
 
 			{workflow.unsupportedState.isUnsupported ? (
