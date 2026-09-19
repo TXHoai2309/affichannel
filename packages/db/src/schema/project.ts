@@ -10,6 +10,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "./auth";
+import { channelStrategy } from "./channel-strategy";
 import { product } from "./product";
 import { workspace } from "./workspace";
 
@@ -28,6 +29,11 @@ export const project = pgTable(
 		creationPath: text("creation_path").notNull(),
 		contentFormatKey: text("content_format_key").notNull(),
 		contentFormatVersion: integer("content_format_version").notNull(),
+		channelStrategyId: text("channel_strategy_id").references(
+			() => channelStrategy.id,
+			{ onDelete: "set null" },
+		),
+		channelStrategyVersion: integer("channel_strategy_version"),
 		currentStepKey: text("current_step_key").notNull(),
 		createdByUserId: text("created_by_user_id")
 			.notNull()
@@ -65,6 +71,10 @@ export const project = pgTable(
 		check(
 			"project_current_step_key_check",
 			sql`${table.currentStepKey} in ('product', 'content', 'fact-lock', 'voice', 'video', 'preview', 'completed')`,
+		),
+		check(
+			"project_channel_strategy_snapshot_check",
+			sql`(${table.channelStrategyId} is null and ${table.channelStrategyVersion} is null) or (${table.channelStrategyId} is not null and ${table.channelStrategyVersion} is not null and ${table.channelStrategyVersion} > 0)`,
 		),
 		index("project_workspace_active_updated_idx").on(
 			table.workspaceId,

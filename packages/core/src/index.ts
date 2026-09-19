@@ -1,5 +1,6 @@
 export * from "./adaptive-workflow";
 export * from "./applicability";
+export * from "./channel-strategy";
 export * from "./claim-manifest";
 export * from "./claim-subject";
 export * from "./composition";

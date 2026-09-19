@@ -1,6 +1,7 @@
 export * from "./ai-settings";
 export * from "./auth";
 export * from "./channel-settings";
+export * from "./channel-strategy";
 export * from "./claim-manifest";
 export * from "./composition-version";
 export * from "./fact-dependency";

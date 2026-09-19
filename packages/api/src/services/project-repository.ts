@@ -19,6 +19,7 @@ import type {
 } from "@affichannel/core/project/project-types";
 import type { PersistedProjectIdentityState } from "@affichannel/core/project/project-write-contract";
 import {
+	channelStrategy,
 	contentBrief,
 	db,
 	product,
@@ -36,6 +37,10 @@ export type ProjectDetails = {
 	contentType: ContentType | null;
 	creationPath: CreationPath | null;
 	contentFormat: ContentFormatReadModel | null;
+	channelStrategySnapshot?: {
+		id: string;
+		version: number;
+	} | null;
 	isLegacyProjection: boolean;
 	product: {
 		id: string;
@@ -169,6 +174,8 @@ async function findProjectDetails(
 			creationPath: project.creationPath,
 			contentFormatKey: project.contentFormatKey,
 			contentFormatVersion: project.contentFormatVersion,
+			channelStrategyId: project.channelStrategyId,
+			channelStrategyVersion: project.channelStrategyVersion,
 			currentStepKey: project.currentStepKey,
 			archivedAt: project.archivedAt,
 			updatedAt: project.updatedAt,
@@ -209,6 +216,13 @@ async function findProjectDetails(
 		id: record.id,
 		name: record.name,
 		...identity,
+		channelStrategySnapshot:
+			record.channelStrategyId && record.channelStrategyVersion
+				? {
+						id: record.channelStrategyId,
+						version: record.channelStrategyVersion,
+					}
+				: null,
 		product: {
 			id: record.productId ?? "",
 			name: record.productName ?? "Chưa liên kết sản phẩm",
@@ -241,6 +255,8 @@ export async function listProjectItems(
 			creationPath: project.creationPath,
 			contentFormatKey: project.contentFormatKey,
 			contentFormatVersion: project.contentFormatVersion,
+			channelStrategyId: project.channelStrategyId,
+			channelStrategyVersion: project.channelStrategyVersion,
 			updatedAt: project.updatedAt,
 			productId: product.id,
 			productName: product.name,
@@ -310,6 +326,15 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 			const projectId = randomUUID();
 
 			await db.transaction(async (transaction) => {
+				const [strategySnapshot] = await transaction
+					.select({
+						id: channelStrategy.id,
+						version: channelStrategy.version,
+					})
+					.from(channelStrategy)
+					.where(eq(channelStrategy.workspaceId, actor.workspaceId))
+					.limit(1);
+
 				if (input.productId !== null) {
 					const [availableProduct] = await transaction
 						.select({ id: product.id })
@@ -338,6 +363,8 @@ export function createProjectRepository(): ProjectRepository<ProjectDetails> {
 					creationPath: identity.creationPath,
 					contentFormatKey: identity.contentFormat.key,
 					contentFormatVersion: identity.contentFormat.version,
+					channelStrategyId: strategySnapshot?.id ?? null,
+					channelStrategyVersion: strategySnapshot?.version ?? null,
 					currentStepKey: workflow.currentStepKey,
 					createdByUserId: actor.userId,
 				});

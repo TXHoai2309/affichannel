@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
+import { channelStrategyRouter } from "./channel-strategy";
 import { compositionRouter } from "./composition";
 import { dashboardRouter } from "./dashboard";
 import { factLockRouter } from "./fact-lock";
@@ -27,6 +28,7 @@ export const appRouter = {
 	}),
 	dashboard: dashboardRouter,
 	composition: compositionRouter,
+	channelStrategy: channelStrategyRouter,
 	factLock: factLockRouter,
 	media: mediaRouter,
 	product: productRouter,

@@ -1,16 +1,21 @@
 "use client";
 
 import {
+	CONTENT_FORMAT_DEFAULTS,
+	type ContentFormatRef,
+	CREATION_PATHS,
 	type CreateProjectInput,
+	type CreationPath,
 	createProjectInputSchema,
-} from "@affichannel/core/project/project-validation";
+	INITIAL_CONTENT_FORMAT_REGISTRY,
+} from "@affichannel/core";
 import { Button } from "@affichannel/ui/components/button";
 import { Input } from "@affichannel/ui/components/input";
 import { Label } from "@affichannel/ui/components/label";
 import { Textarea } from "@affichannel/ui/components/textarea";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 
 import { orpc } from "@/utils/orpc";
 
@@ -20,6 +25,8 @@ import { getProjectErrorMessage } from "./project-errors";
 
 type ProjectFormValues = {
 	contentType: "AFFILIATE" | "ORGANIC";
+	creationPath: CreationPath;
+	contentFormat: ContentFormatRef;
 	name: string;
 	productId: string;
 	goal: string;
@@ -30,6 +37,8 @@ type ProjectFormValues = {
 
 const INITIAL_VALUES: ProjectFormValues = {
 	contentType: "AFFILIATE",
+	creationPath: "SCRIPTED",
+	contentFormat: CONTENT_FORMAT_DEFAULTS.SCRIPTED,
 	name: "",
 	productId: "",
 	goal: "",
@@ -56,8 +65,8 @@ function parseProjectForm(values: ProjectFormValues) {
 	}
 	const result = createProjectInputSchema.safeParse({
 		contentType: values.contentType,
-		creationPath: "SCRIPTED",
-		contentFormat: { key: "SCRIPTED_STANDARD", version: 1 },
+		creationPath: values.creationPath,
+		contentFormat: values.contentFormat,
 		name: values.name,
 		productId,
 		platform: "tiktok",
@@ -94,6 +103,12 @@ export function ProjectForm() {
 	const router = useRouter();
 	const [values, setValues] = useState<ProjectFormValues>(INITIAL_VALUES);
 	const [errors, setErrors] = useState<FieldErrors>({});
+	const appliedStrategyDefaults = useRef(false);
+	const channelStrategy = useQuery(
+		orpc.channelStrategy.getCurrent.queryOptions({
+			meta: { suppressGlobalErrorToast: true },
+		}),
+	);
 	const products = useQuery(
 		orpc.product.listMinimal.queryOptions({
 			input: { selectableOnly: true },
@@ -104,6 +119,25 @@ export function ProjectForm() {
 		orpc.product.createMinimal.mutationOptions(),
 	);
 	const createProject = useMutation(orpc.project.create.mutationOptions());
+
+	useEffect(() => {
+		const strategy = channelStrategy.data;
+		if (!strategy || appliedStrategyDefaults.current) return;
+		const creationPath = strategy.preferredCreationPaths[0];
+		const contentFormat =
+			strategy.preferredContentFormats.find((format) =>
+				INITIAL_CONTENT_FORMAT_REGISTRY.some(
+					(definition) =>
+						definition.ref.key === format.key &&
+						definition.ref.version === format.version &&
+						definition.supportedCreationPaths.some(
+							(candidate) => candidate === creationPath,
+						),
+				),
+			) ?? CONTENT_FORMAT_DEFAULTS[creationPath];
+		setValues((current) => ({ ...current, creationPath, contentFormat }));
+		appliedStrategyDefaults.current = true;
+	}, [channelStrategy.data]);
 
 	function updateField(field: FieldName, value: string) {
 		setValues((current) => ({ ...current, [field]: value }));
@@ -125,6 +159,26 @@ export function ProjectForm() {
 			productId: undefined,
 			form: undefined,
 		}));
+	}
+
+	function updateCreationPath(creationPath: CreationPath) {
+		const strategyFormat = channelStrategy.data?.preferredContentFormats.find(
+			(format) =>
+				INITIAL_CONTENT_FORMAT_REGISTRY.some(
+					(definition) =>
+						definition.ref.key === format.key &&
+						definition.ref.version === format.version &&
+						definition.supportedCreationPaths.some(
+							(candidate) => candidate === creationPath,
+						),
+				),
+		);
+		setValues((current) => ({
+			...current,
+			creationPath,
+			contentFormat: strategyFormat ?? CONTENT_FORMAT_DEFAULTS[creationPath],
+		}));
+		appliedStrategyDefaults.current = true;
 	}
 
 	async function createProductFromSelector(name: string) {
@@ -213,6 +267,47 @@ export function ProjectForm() {
 						Kiểu nội dung hiện dùng kịch bản video ngắn trên TikTok.
 					</p>
 				</fieldset>
+				<div className="space-y-2">
+					<Label htmlFor="creationPath">Creation Path</Label>
+					<select
+						className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+						disabled={isSubmitting}
+						id="creationPath"
+						value={values.creationPath}
+						onChange={(event) =>
+							updateCreationPath(event.target.value as CreationPath)
+						}
+					>
+						{CREATION_PATHS.map((path) => (
+							<option key={path} value={path}>
+								{path}
+							</option>
+						))}
+					</select>
+					<p className="text-muted-foreground text-xs">
+						{channelStrategy.data
+							? `Mặc định từ Channel Strategy v${channelStrategy.data.version}.`
+							: "Không có strategy: dùng default hiện hữu."}
+					</p>
+				</div>
+				<div className="space-y-2">
+					<Label htmlFor="contentFormat">Content Format</Label>
+					<select
+						className="h-9 w-full rounded-lg border border-input bg-background px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring/50"
+						disabled
+						id="contentFormat"
+						value={`${values.contentFormat.key}@${values.contentFormat.version}`}
+					>
+						<option
+							value={`${values.contentFormat.key}@${values.contentFormat.version}`}
+						>
+							{values.contentFormat.key} v{values.contentFormat.version}
+						</option>
+					</select>
+					<p className="text-muted-foreground text-xs">
+						Format được suy ra từ Creation Path và canonical registry.
+					</p>
+				</div>
 				<div className="space-y-2 md:col-span-2">
 					<Label htmlFor="name">Tên dự án</Label>
 					<Input

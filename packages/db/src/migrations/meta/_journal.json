@@ -197,6 +197,13 @@
       "when": 1789478023304,
       "tag": "0027_quick_image_claim_source_authority",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1789821132642,
+      "tag": "0028_breezy_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }
