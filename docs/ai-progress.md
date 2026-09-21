@@ -17,8 +17,27 @@
   Project Reuse / Final Technical Acceptance PASS; Owner Manual UAT PASS /
   ACCEPTED; AFF-US-020 DONE. AFF-US-019 remains DONE/ACCEPTED. AFF-US-022 /
   US22-A Slices 1, 2, 3, 4A, 4 and 5 are CLOSED / OWNER ACCEPTED; CompositionInputV2,
-  frozen Quick Image lineage and full-identity dispatch are complete.
-- Cập nhật lần cuối: 2026-09-16
+  frozen Quick Image lineage and full-identity dispatch are complete. AFF-US-027
+  Canonical Analytics Ingestion và Read Model implementation is complete with
+  additive import/snapshot schema, bounded CSV/XLSX parser, protected API/UI and
+  trusted disposable PostgreSQL acceptance.
+- Cập nhật lần cuối: 2026-09-20
+
+## 2026-09-20 — AFF-US-027 Canonical Analytics Ingestion và Read Model
+
+Implemented the canonical manual analytics vertical slice on `TXH` from baseline
+`91c3dd2b089b6b2c155399ea0e3b230d479e4062`. The server owns workspace timezone,
+mapping fingerprint, canonical metric registry and identity attribution. Finalize
+is atomic and immutable; replay is protected by semantic dedupe and idempotency.
+Channel Growth, Affiliate Monetization and AI/render cost remain separate, and
+missing valid usage is represented as unavailable rather than zero.
+
+Evidence: focused analytics tests `4/4 PASS`, full web Vitest `950 PASS / 7
+skipped`, workspace typecheck PASS, production build compile/route generation
+PASS, and disposable PostgreSQL T01–T11 integration PASS. The full legacy
+Playwright suite was attempted but stopped after existing fixture validation
+failures (`id: "demo"`) outside US-027. No Neon/shared database, paid provider,
+worker, FFmpeg or encoded MP4 was used.
 
 ## 2026-09-16 — AFF-US-022 / US22-A Slice 6 documentation closeout
 

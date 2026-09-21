@@ -1,7 +1,7 @@
 # Nhật ký thay đổi
 
 - Trạng thái: Canonical changelog
-- Cập nhật lần cuối: 2026-09-16
+- Cập nhật lần cuối: 2026-09-20
 
 Mọi thay đổi đáng chú ý về hành vi người dùng, vận hành và kiến trúc của
 AffiChannel được ghi tại đây.
@@ -10,6 +10,22 @@ AffiChannel được ghi tại đây.
 sử dụng Semantic Versioning.
 
 ## Chưa phát hành
+
+### AFF-US-027 — Canonical Analytics Ingestion và Read Model
+
+- Added protected CSV/XLSX preview-confirm flow with bounded parsing, explicit
+  mapping, file/mapping fingerprints and server-owned workspace timezone.
+- Added additive immutable import batches and metric snapshots with semantic
+  dedupe, idempotent replay, all-or-nothing finalize and canonical workspace
+  attribution.
+- Added separate Channel Growth, Affiliate Monetization and AI/render cost read
+  models plus sample safety, unattributed state, cost-unavailable state and
+  `/analytics` filters/history UI.
+- Added disposable PostgreSQL acceptance evidence. No Neon/shared database,
+  paid provider, worker/render execution, FFmpeg or encoded MP4 was used.
+- Full legacy Playwright suite remains outside this story's acceptance because
+  its existing `id: "demo"` fixture fails input validation; focused analytics
+  tests and trusted DB acceptance pass.
 
 ### AFF-US-022 / US22-A Slice 6 documentation closeout — CLOSED / OWNER ACCEPTED
 

@@ -1,7 +1,7 @@
 # Tài liệu AffiChannel
 
 - Trạng thái: Canonical repository documentation; AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED
-- Cập nhật lần cuối: 2026-09-16
+- Cập nhật lần cuối: 2026-09-20
 
 Thư mục này là nguồn tài liệu chuẩn về sản phẩm và kỹ thuật của AffiChannel.
 Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao diện phải nhất quán
@@ -36,6 +36,11 @@ AFF-US-022 / US22-A đã **CLOSED / OWNER ACCEPTED** trên `TXH` tại
 lineage và full-identity dispatch fix. Preview execution, EN-001 render
 integration và image → preview → render → reload UI E2E vẫn là scope sau đó.
 
+AFF-US-027 / Canonical Analytics Ingestion và Read Model đã có implementation
+additive: manual CSV/XLSX preview-confirm, canonical identity validation,
+immutable snapshots, server-side aggregates và protected `/analytics` UI. Chi
+tiết contract và T01–T11 evidence nằm tại [AFF-US-027](./aff-us-027-canonical-analytics.md).
+
 ## Thứ tự đọc
 
 1. [Các quyết định kiến trúc](./decisions.md)
@@ -54,6 +59,7 @@ integration và image → preview → render → reload UI E2E vẫn là scope s
 14. [Hệ thống thiết kế](./design-system.md)
 15. [Tiến trình AI agent](./ai-progress.md)
 16. [Nhật ký thay đổi](./changelog.md)
+17. [AFF-US-027 / Canonical Analytics Ingestion và Read Model](./aff-us-027-canonical-analytics.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 

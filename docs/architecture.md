@@ -2,9 +2,9 @@
 
 - Trạng thái: Channel-First identity rollout M1–M5 accepted; M4 shadow retained;
   AFF-US-019 DONE; AFF-US-021 / EN001 CLOSED / OWNER ACCEPTED through 21E-B;
-  AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED
+  AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED; AFF-US-027 implementation complete
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-16
+- Cập nhật lần cuối: 2026-09-20
 
 ## 1. Mục tiêu kiến trúc
 
@@ -182,6 +182,27 @@ Quy tắc chung:
 
 Không tạo tất cả bảng tương lai trong migration đầu tiên. Thêm schema cùng
 vertical slice thực sự sử dụng nó.
+
+### 7.2. AFF-US-027 canonical analytics boundary
+
+Analytics dùng hai bảng additive: `analytics_import_batch` ghi source, file hash,
+mapping fingerprint, workspace timezone, range, counts và idempotency; immutable
+`analytics_metric_snapshot` ghi từng canonical metric observation cùng attribution
+snapshot. Foreign keys và unique semantic dedupe bảo vệ workspace ownership,
+retry và replay; không sửa `Project`, `ChannelStrategy`, `PlannedContentItem` hay
+`Product` để phục vụ analytics.
+
+Protected API phân tách preview khỏi finalize. Preview chỉ parse/normalize trong
+memory. Finalize parse lại và chạy một transaction all-or-nothing sau khi bind
+file hash và mapping fingerprint. Workspace timezone đọc từ server-owned
+`workspace`; client không truyền timezone authority. Canonical ID lookup được
+thực hiện trong cùng workspace và không fuzzy-match label.
+
+CSV parser strict UTF-8 và XLSX parser một-sheet dùng bounded input. Formula cell,
+macro, external link và evaluation không được chạy. Aggregate chạy server-side,
+trả sample/correlation metadata và giữ `unavailable` khác với zero cho cost.
+`AI_RENDER_COST` chỉ nối vào usage record persisted hợp lệ; không có worker,
+provider hoặc FFmpeg trong boundary này.
 
 ### 7.1. Contract Domain Evolution v0.8
 

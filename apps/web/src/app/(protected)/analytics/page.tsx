@@ -1,5 +1,5 @@
-import FeaturePlaceholder from "@/components/feature-placeholder";
+import AnalyticsDashboard from "@/features/analytics/analytics-dashboard";
 
 export default function AnalyticsPage() {
-	return <FeaturePlaceholder />;
+	return <AnalyticsDashboard />;
 }

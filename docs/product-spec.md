@@ -3,9 +3,9 @@
 - Trạng thái: Canonical; Affiliate baseline, Adaptive UI, M5 identity enforcement,
   AFF-US-019 19B–19D, 19E.1 Organic UX activation và 19E.2 E2E/manual final
   acceptance active; AFF-US-019 DONE/ACCEPTED; AFF-US-022 / US22-A CLOSED /
-  OWNER ACCEPTED
+  OWNER ACCEPTED; AFF-US-027 implementation complete
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-16
+- Cập nhật lần cuối: 2026-09-20
 - Đối tượng đọc: chủ dự án và các agent triển khai
 
 ## 1. Tóm tắt sản phẩm
@@ -180,7 +180,9 @@ compatibility, rejected/unknown → fail closed. Preview/render không được 
 - Video Studio trình bày theo bốn tab Content → Resources → Compose → Export,
   nhưng không thay thế bảy persisted project step keys.
 - Content Library và Calendar chỉ bắt đầu sau Domain Evolution + Quick Image.
-- Manual metrics import và analytics mô tả bắt đầu sau Library/Calendar.
+- AFF-US-027 bổ sung manual metrics import CSV/XLSX và analytics read model mô tả
+  sau dependency gate; server giữ authority cho timezone, canonical identity,
+  mapping, dedupe và aggregate. Không có recommendation engine trong scope.
 
 ### Post-MVP: media sinh bởi AI có kiểm soát
 
@@ -509,7 +511,9 @@ Bốn tab không phải state machine mới và không thay thẳng persisted st
   đã freeze CompositionInputV2 và lineage, còn preview/render execution vẫn pending.
 - Channel Strategy và Content navigation.
 - Content Library và Content Calendar.
-- Analytics import/mô tả.
+- Analytics import/mô tả: CSV/XLSX preview-confirm, Channel Growth và Affiliate
+  Monetization tách biệt, cost unavailable phân biệt với zero, filter theo
+  ContentType/Pillar/Series/ContentFormat/Product.
 - Cài đặt provider, storage, voice và render.
 
 ## 10. Vòng đời nội dung
@@ -595,7 +599,7 @@ trạng thái phải được kiểm tra ở server; UI không phải lớp ki�
 | **NON-BLOCKER for Domain Evolution** | Nhóm Product Fact cần deterministic matching rule đầu tiên; pricing của APIKEY.FUN TTS relay. | Trước policy/provider rollout tương ứng, không chặn additive Project migration. |
 | **DEFERRED** | Quick Image preview execution, EN-001 render integration, render worker execution và local/private-R2 output activation. | CompositionInputV2, frozen lineage và CompositionVersion schema đã hoàn tất trong US22-A; VoiceSegment storage vẫn là domain riêng. |
 | **20B PASS — DEC-036** | Shared Media Library dùng `MediaAsset` workspace-owned và `MediaAssetLink` N:N với Project; additive persistence, lifecycle repository, private local/R2 adapters, and READY validation are implemented. | AFF-US-020 20C–20E triển khai protected API, UI và reuse/E2E; `/media` vẫn placeholder và chưa có public cutover. |
-| **DEFERRED** | Analytics dedupe key. | Analytics phase sau Library/Calendar. |
+| **AFF-US-027 IMPLEMENTED** | Canonical Analytics import/read model; semantic dedupe, immutable snapshots, server aggregates và protected UI. | Platform connectors, scheduled ingestion, recommendations, AI visual và render execution vẫn ngoài scope. |
 
 Kết luận hiện tại: M1–M5 và AFF-US-015 đã accepted cho canonical Affiliate
 baseline. AFF-US-013/AFF-US-016/AFF-US-017/AFF-US-018 đã DONE qua các phase đã

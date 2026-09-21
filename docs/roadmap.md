@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-16
+- Cập nhật lần cuối: 2026-09-20
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -20,7 +20,7 @@ pre-v0.8 của `AFF-US-013–030` chỉ là backlog chưa triển khai và đã 
 7. EN-001 render integration.
 8. Channel-first UI / Video Studio và image → preview → render → reload E2E.
 9. Content Library / Calendar.
-10. Analytics.
+10. Analytics (AFF-US-027 implementation complete).
 11. AI Visual.
 
 Current pointer: US12 baseline frozen/completed. Domain Evolution M1–M5 đã DONE;
@@ -41,6 +41,11 @@ API, 20D Media Library UI, 20E Project Reuse/E2E và Owner Manual UAT đã
 PASS/ACCEPTED. Migration `0022` là additive, `MediaAsset` workspace-owned và
 `MediaAssetLink` Project reuse dùng repository lifecycle cùng local/private-R2
 adapters.
+
+AFF-US-027 đã hoàn tất implementation additive trên `TXH`; migration analytics,
+protected preview/finalize/read-model API và `/analytics` UI được ghi nhận trong
+DEC-040. Không mở platform connectors, recommendation engine hoặc render worker
+từ story này.
 
 AFF-US-021 / EN001 đã **CLOSED / OWNER ACCEPTED** trên branch `TXH` tại
 implementation HEAD `43a85f9453a3e39561a1c46f95c80d7b523b3dad`. Phase 21A, 21B,
@@ -78,6 +83,16 @@ implementation slices are:
 
 Slice 5 references are checkpoint `ac2e5d8fe56967999b8f3b217a2409516baf2e3a`
 and identity-fix commit `2875e02733adef1c5fbac004ad4d7fb3c342d751`.
+
+### AFF-US-027 — Canonical Analytics Ingestion và Read Model — 2026-09-20
+
+AFF-US-027 implementation is complete with an additive migration and protected
+manual import/read model. CSV/XLSX preview-confirm uses server-owned timezone,
+mapping fingerprint, canonical workspace attribution and bounded parsing. The
+read model keeps Channel Growth, Affiliate Monetization and AI/render cost
+separate; semantic dedupe, atomic finalize, unavailable-vs-zero cost and sample
+safety are part of the contract. Trusted disposable PostgreSQL evidence is
+recorded in [the story contract](./aff-us-027-canonical-analytics.md).
 
 US22-A closes the composition foundation. The earlier high-level roadmap item
 that placed CompositionInputV2 and frozen lineage in a later US22-B is therefore
@@ -619,7 +634,10 @@ implementation history. Công việc mới đi theo thứ tự phụ thuộc:
 
 ### 7. Analytics
 
-- Import metrics CSV/XLSX, analytics mô tả và hiệu quả chi phí.
+- **IMPLEMENTED — AFF-US-027:** protected CSV/XLSX import with preview/confirm,
+  immutable canonical snapshots, server-side descriptive aggregates, filters and
+  import history. Platform connectors, scheduled ingestion and recommendations
+  remain deferred.
 
 ### 8. Post-MVP AI Visual
 

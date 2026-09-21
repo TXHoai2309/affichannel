@@ -1606,3 +1606,37 @@ hoặc Product Fact thay đổi.
   `docs/aff-us-010-phase-0-contract-hardening.md`.
 - Phase 1 đã triển khai Fact Lock provider/runtime nền tảng và protected read/run API;
   Fact Lock Review UI, Voice, Render provider/runtime và TTS vẫn ngoài phạm vi.
+
+## DEC-040 — AFF-US-027 canonical analytics ingestion và read model
+
+- Trạng thái: Đã chấp nhận cho implementation gate
+- Ngày: 2026-09-20
+
+### Bối cảnh
+
+Analytics cần nhận snapshot thủ công từ CSV/XLSX và cho phép so sánh Channel
+Growth với Affiliate Monetization mà không làm biến Project, Channel Strategy,
+Planned Content hoặc Product thành bảng analytics phụ thuộc. Import cũng phải
+chịu được retry, khác thứ tự row và dữ liệu không đủ authority.
+
+### Quyết định
+
+- Dùng `MANUAL_CSV` và `MANUAL_XLSX` với mapping version/fingerprint cố định;
+  preview không persist, finalize bind lại file hash và mapping để chống TOCTOU.
+- Lưu immutable import batch và metric snapshots trong migration additive. Semantic
+  dedupe + idempotency + unique constraints là authority cho replay/concurrency.
+- Workspace timezone và canonical identity do server đọc; chỉ nhận canonical IDs
+  cùng workspace, không fuzzy-match theo title/name.
+- Tách `CHANNEL_GROWTH`, `AFFILIATE_MONETIZATION` và `AI_RENDER_COST`; cost chỉ
+  nhận persisted usage record hợp lệ, còn thiếu là `unavailable`, không phải zero.
+- Finalize phải all-or-nothing; aggregate chạy server-side và phải trả sample size,
+  small-sample flag, unattributed count và correlation note an toàn.
+- Không thêm recommendation engine, provider connector, scheduled ingestion,
+  worker/render/FFmpeg execution hoặc thay đổi các entity production hiện hữu.
+
+### Hệ quả
+
+Analytics UI có thể cung cấp mô tả và bộ lọc đáng tin cậy ngay khi source manual
+được xác nhận; platform connector và predictive/recommendation work phải có
+decision riêng. Formula/macro/external-link XLSX không được thực thi; parser có
+bounded limits và fail closed.

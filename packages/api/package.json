@@ -28,6 +28,7 @@
 		"minimp3-wasm": "0.1.0",
 		"music-metadata": "^11.15.0",
 		"next": "catalog:",
+		"xlsx": "^0.18.5",
 		"zod": "catalog:"
 	},
 	"devDependencies": {

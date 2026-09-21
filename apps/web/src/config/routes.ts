@@ -89,7 +89,7 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 			"Theo dõi hiệu quả nội dung và chi phí khi dữ liệu workflow hoàn thiện.",
 		href: "/analytics",
 		icon: BarChart3,
-		featureStatus: "skeleton",
+		featureStatus: "available",
 	},
 	usage: {
 		key: "usage",
