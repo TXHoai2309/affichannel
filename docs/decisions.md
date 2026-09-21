@@ -1640,3 +1640,32 @@ Analytics UI có thể cung cấp mô tả và bộ lọc đáng tin cậy ngay 
 được xác nhận; platform connector và predictive/recommendation work phải có
 decision riêng. Formula/macro/external-link XLSX không được thực thi; parser có
 bounded limits và fail closed.
+
+## DEC-041 — AI provider governance và paid operation safety
+
+- Trạng thái: Đã chấp nhận cho AFF-US-029 + AFF-US-030 foundation/release gate
+- Ngày: 2026-09-21
+
+### Quyết định
+
+- Provider/model registry và capability mapping là server-owned; client không được
+  override provider, model, pricing hoặc secret.
+- Pricing version có currency/unit rõ ràng; budget dùng MONTHLY và phải reserve
+  atomically trước adapter call. Thiếu registry, capability, pricing, config hoặc
+  budget thì fail closed.
+- Mọi operation có correlation/audit, canonical operation-specific hash/version,
+  workspace-scoped idempotency và provider request ID nếu provider trả về.
+- `FAILED` chỉ dùng cho definitive no-send/definitive failure; delivery không chắc
+  dùng `INDETERMINATE` và giữ reservation `UNCERTAIN`. Không automatic blind retry.
+- Pending lease, stale-pending policy, orphan evidence và explicit recovery actions
+  là bắt buộc; recovery không tự gọi provider.
+- Secret chỉ ở approved server environment/store, không ở DB/client/log/audit.
+- Deterministic provider chỉ là test adapter. Paid production execution phải có
+  explicit release gate riêng; US29/US30 không mở provider trả phí hoặc US28.
+
+### Hệ quả
+
+Migration `0031_breezy_gressill.sql` chỉ additive. Settings/operations UI là
+protected và hiển thị uncertainty như review/reconcile, không hiển thị retry/generate
+cho operation không chắc. Future US28 không được claim release nếu gate còn
+`paidExecutionReleased=false`.

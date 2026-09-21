@@ -21,7 +21,21 @@
   Canonical Analytics Ingestion và Read Model implementation is complete with
   additive import/snapshot schema, bounded CSV/XLSX parser, protected API/UI and
   trusted disposable PostgreSQL acceptance.
-- Cập nhật lần cuối: 2026-09-20
+- Cập nhật lần cuối: 2026-09-21
+
+## 2026-09-21 — AFF-US-029 + AFF-US-030 foundation closeout
+
+Implemented and verified the AI governance / paid operation safety foundation from
+the clean `TXH` baseline. The server owns provider/model resolution and pricing;
+operations reserve a monthly workspace budget atomically before any adapter call,
+then persist correlation, audit, request hash, provider request ID, usage and
+terminal uncertainty. The deterministic adapter is test-only, while the paid
+release gate remains closed. Settings and operations surfaces are protected and do
+not expose secrets.
+
+The additive migration is `0031_breezy_gressill.sql`. Acceptance uses only a
+trusted disposable PostgreSQL instance; no Neon/shared database, real paid
+provider, worker, FFmpeg or MP4 is used.
 
 ## 2026-09-20 — AFF-US-027 Canonical Analytics Ingestion và Read Model
 

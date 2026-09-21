@@ -1,7 +1,7 @@
 # Nhật ký thay đổi
 
 - Trạng thái: Canonical changelog
-- Cập nhật lần cuối: 2026-09-20
+- Cập nhật lần cuối: 2026-09-21
 
 Mọi thay đổi đáng chú ý về hành vi người dùng, vận hành và kiến trúc của
 AffiChannel được ghi tại đây.
@@ -10,6 +10,17 @@ AffiChannel được ghi tại đây.
 sử dụng Semantic Versioning.
 
 ## Chưa phát hành
+
+### AFF-US-029 + AFF-US-030 — AI Provider Governance và Paid Operation Safety
+
+- Added server-owned provider/model/capability registry, versioned pricing and
+  monthly budget reservation with concurrency-safe preflight.
+- Added correlation/audit, canonical operation hash/idempotency, leases, explicit
+  `FAILED`/`INDETERMINATE`, safe redaction and explicit reconciliation actions.
+- Added protected governance settings and usage/operations UI. Paid execution and
+  future US28 remain blocked by an explicit release gate.
+- Added additive migration and disposable PostgreSQL acceptance boundary. No real
+  provider, paid request, secret persistence, worker, FFmpeg or MP4 was used.
 
 ### AFF-US-027 — Canonical Analytics Ingestion và Read Model
 

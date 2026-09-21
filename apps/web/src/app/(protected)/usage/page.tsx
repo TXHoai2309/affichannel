@@ -1,5 +1,5 @@
-import FeaturePlaceholder from "@/components/feature-placeholder";
+import { AiOperationsDashboard } from "@/features/ai-governance/ai-operations-dashboard";
 
 export default function UsagePage() {
-	return <FeaturePlaceholder />;
+	return <AiOperationsDashboard />;
 }

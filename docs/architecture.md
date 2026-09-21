@@ -890,6 +890,22 @@ Runtime query dùng `DATABASE_URL` pooled; Drizzle schema tooling dùng
 - Worker deploy riêng hoặc local worker được vận hành rõ ràng.
 
 Agent không tự deploy production nếu chủ dự án chưa cho phép rõ ràng.
+## AFF-US-029 + AFF-US-030 — AI governance boundary
+
+AI governance is a server-side boundary between authenticated workspace actions
+and any future paid provider adapter. `ai_governance_settings` is the workspace
+control plane; `ai_pricing_version`, `ai_operation`, `ai_budget_reservation`,
+`ai_operation_audit` and `ai_reconciliation` are the evidence plane. Reservation
+and settings updates use a locked transaction. A provider adapter is never called
+while the reservation is absent, a kill switch is active, capability/pricing is
+missing, or the release gate is closed.
+
+The deterministic test adapter is deliberately not a production fallback. No
+worker, queue, broker, FFmpeg process or shared/Neon disposable test database is
+introduced by this foundation. Secrets remain server-environment-only and are
+redacted before persistence. Future US28 must provide a separate production
+release decision and real-provider acceptance before execution can be activated.
+
 ## Historical implementation notes — AFF-US-007 transaction/read model
 
 > Historical baseline before v0.8 Domain Evolution; giữ nguyên contract tại thời

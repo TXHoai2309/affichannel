@@ -1,6 +1,7 @@
 import type { RouterClient } from "@orpc/server";
 
 import { protectedProcedure, publicProcedure } from "../index";
+import { aiGovernanceRouter } from "./ai-governance";
 import { analyticsRouter } from "./analytics";
 import { channelStrategyRouter } from "./channel-strategy";
 import { compositionRouter } from "./composition";
@@ -30,6 +31,7 @@ export const appRouter = {
 	}),
 	dashboard: dashboardRouter,
 	analytics: analyticsRouter,
+	aiGovernance: aiGovernanceRouter,
 	composition: compositionRouter,
 	contentCalendar: contentCalendarRouter,
 	channelStrategy: channelStrategyRouter,

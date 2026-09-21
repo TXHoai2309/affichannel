@@ -1,3 +1,4 @@
+import { AiGovernanceSettings } from "@/features/ai-governance/ai-governance-settings";
 import { ChannelStrategyEditor } from "@/features/channel-strategy/channel-strategy-editor";
 
 export default function SettingsPage() {
@@ -12,6 +13,7 @@ export default function SettingsPage() {
 				</h1>
 			</div>
 			<ChannelStrategyEditor />
+			<AiGovernanceSettings />
 		</section>
 	);
 }

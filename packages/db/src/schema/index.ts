@@ -1,3 +1,4 @@
+export * from "./ai-governance";
 export * from "./ai-settings";
 export * from "./analytics";
 export * from "./auth";

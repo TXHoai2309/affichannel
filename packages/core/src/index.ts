@@ -1,4 +1,5 @@
 export * from "./adaptive-workflow";
+export * from "./ai-governance";
 export * from "./analytics";
 export * from "./applicability";
 export * from "./channel-strategy";

@@ -99,7 +99,7 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 			"Theo dõi usage, ước tính và chi phí provider trong các workflow có tính phí.",
 		href: "/usage",
 		icon: WalletCards,
-		featureStatus: "skeleton",
+		featureStatus: "available",
 	},
 	settings: {
 		key: "settings",
@@ -109,7 +109,7 @@ export const APP_ROUTES: Record<AppRouteKey, AppRoute> = {
 			"Thiết lập workspace và các mặc định tái sử dụng cho AffiChannel.",
 		href: "/settings",
 		icon: Settings2,
-		featureStatus: "skeleton",
+		featureStatus: "available",
 	},
 };
 

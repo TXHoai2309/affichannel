@@ -1,7 +1,7 @@
 # Tài liệu AffiChannel
 
 - Trạng thái: Canonical repository documentation; AFF-US-022 / US22-A CLOSED / OWNER ACCEPTED
-- Cập nhật lần cuối: 2026-09-20
+- Cập nhật lần cuối: 2026-09-21
 
 Thư mục này là nguồn tài liệu chuẩn về sản phẩm và kỹ thuật của AffiChannel.
 Mã nguồn, schema cơ sở dữ liệu, hợp đồng API và hành vi giao diện phải nhất quán
@@ -41,6 +41,12 @@ additive: manual CSV/XLSX preview-confirm, canonical identity validation,
 immutable snapshots, server-side aggregates và protected `/analytics` UI. Chi
 tiết contract và T01–T11 evidence nằm tại [AFF-US-027](./aff-us-027-canonical-analytics.md).
 
+AFF-US-029 + AFF-US-030 đã **CLOSED / OWNER ACCEPTED** ở foundation level:
+server-owned provider/model registry, pricing/budget reservation, audit,
+idempotency, uncertainty/lease/reconciliation và protected settings/usage UI.
+Paid provider execution vẫn bị release gate chặn. Chi tiết tại
+[AFF-US-029 + AFF-US-030](./aff-us-029-030-ai-governance-paid-safety.md).
+
 ## Thứ tự đọc
 
 1. [Các quyết định kiến trúc](./decisions.md)
@@ -60,6 +66,7 @@ tiết contract và T01–T11 evidence nằm tại [AFF-US-027](./aff-us-027-can
 15. [Tiến trình AI agent](./ai-progress.md)
 16. [Nhật ký thay đổi](./changelog.md)
 17. [AFF-US-027 / Canonical Analytics Ingestion và Read Model](./aff-us-027-canonical-analytics.md)
+18. [AFF-US-029 + AFF-US-030 / AI Governance và Paid Operation Safety](./aff-us-029-030-ai-governance-paid-safety.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 

@@ -2,7 +2,7 @@
 
 - Trạng thái: Đã chấp nhận ở cấp tài liệu; execution theo acceptance gate
 - Phiên bản: 0.8.0
-- Cập nhật lần cuối: 2026-09-20
+- Cập nhật lần cuối: 2026-09-21
 
 ## CURRENT EXECUTION ORDER — CANONICAL v0.8
 
@@ -46,6 +46,13 @@ AFF-US-027 đã hoàn tất implementation additive trên `TXH`; migration analy
 protected preview/finalize/read-model API và `/analytics` UI được ghi nhận trong
 DEC-040. Không mở platform connectors, recommendation engine hoặc render worker
 từ story này.
+
+AFF-US-029 + AFF-US-030 đã hoàn tất foundation additive trên `TXH`: provider/model
+registry server-owned, capability/pricing resolution, pre-call estimate, atomic
+monthly budget reservation, correlation/audit, canonical idempotency, pending
+lease, `FAILED` versus `INDETERMINATE`, redaction, orphan reconciliation và
+protected settings/operations UI. Đây là release gate bắt buộc cho future US28;
+paid execution hiện vẫn bị khóa (`paidExecutionReleased=false`).
 
 AFF-US-021 / EN001 đã **CLOSED / OWNER ACCEPTED** trên branch `TXH` tại
 implementation HEAD `43a85f9453a3e39561a1c46f95c80d7b523b3dad`. Phase 21A, 21B,

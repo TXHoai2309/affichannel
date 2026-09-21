@@ -653,6 +653,16 @@ Brief, Channel Settings, Media Metadata và Output Rules. Draft có 3–5 hook v
 chọn ở phase editor sau; AI không tự chọn hook và không tự phê duyệt claim. Mọi request tốn phí phải
 có cost estimate trước khi gửi provider; thiếu cấu hình hoặc estimate phải dừng an toàn.
 
+### AFF-US-029 + AFF-US-030 — AI governance and paid-operation safety
+
+The product exposes workspace-scoped governance settings and an operations ledger,
+but it does not expose provider credentials or an unreviewed “generate” action.
+Provider/model identity, capability, pricing version, budget period and estimate
+are server-owned. The usage surface distinguishes reserved, settled and uncertain
+cost. An indeterminate operation offers review/reconcile evidence only; it does
+not offer blind retry. Paid execution remains unavailable until the future-US28
+release gate is explicitly opened.
+
 ### AFF-US-008 Phase 2B — live TextProvider
 
 Text AI mặc định ở lớp cấu hình là APIKEY.FUN + Claude Sonnet 4.6; video AI vẫn
