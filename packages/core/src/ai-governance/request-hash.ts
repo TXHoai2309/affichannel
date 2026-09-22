@@ -50,6 +50,9 @@ export function canonicalizePaidRequest(input: {
 				sourceFingerprint: textOrNull(semanticInput.sourceFingerprint),
 				motionPlanFingerprint: textOrNull(semanticInput.motionPlanFingerprint),
 				durationSeconds: finiteIntegerOrNull(semanticInput.durationSeconds),
+				prompt: textOrNull(semanticInput.prompt),
+				aspectRatio: textOrNull(semanticInput.aspectRatio),
+				outputMimeType: textOrNull(semanticInput.outputMimeType),
 			},
 		};
 	}

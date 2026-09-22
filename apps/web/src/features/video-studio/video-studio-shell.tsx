@@ -16,6 +16,7 @@ import type { ReactNode } from "react";
 import { ProjectMediaPanel } from "@/features/media/project-media-panel";
 import ScriptStudio from "@/features/script-generation/script-studio";
 import VoiceStudio from "@/features/voice/voice-studio";
+import { AiVisualGenerator } from "./ai-visual-generator";
 import {
 	deriveVideoStudioTabPresentation,
 	type VideoStudioPresentationState,
@@ -200,21 +201,24 @@ function ResourcesPanel({
 				state={resources?.state ?? "PLACEHOLDER"}
 			/>
 			{mediaContentType ? (
-				<Card>
-					<CardHeader>
-						<CardTitle>Media Library</CardTitle>
-						<CardDescription>
-							Media được liên kết qua MediaAsset/Media Library hiện hữu; không
-							có repository riêng cho Video Studio.
-						</CardDescription>
-					</CardHeader>
-					<CardContent>
-						<ProjectMediaPanel
-							contentType={mediaContentType}
-							projectId={project.id}
-						/>
-					</CardContent>
-				</Card>
+				<>
+					<Card>
+						<CardHeader>
+							<CardTitle>Media Library</CardTitle>
+							<CardDescription>
+								Media được liên kết qua MediaAsset/Media Library hiện hữu; không
+								có repository riêng cho Video Studio.
+							</CardDescription>
+						</CardHeader>
+						<CardContent>
+							<ProjectMediaPanel
+								contentType={mediaContentType}
+								projectId={project.id}
+							/>
+						</CardContent>
+					</Card>
+					<AiVisualGenerator projectId={project.id} />
+				</>
 			) : (
 				<UnavailableCard
 					title="Media Library chưa xác định được content policy"

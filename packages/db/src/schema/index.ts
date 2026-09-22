@@ -1,5 +1,6 @@
 export * from "./ai-governance";
 export * from "./ai-settings";
+export * from "./ai-visual";
 export * from "./analytics";
 export * from "./auth";
 export * from "./channel-settings";

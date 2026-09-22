@@ -663,6 +663,20 @@ cost. An indeterminate operation offers review/reconcile evidence only; it does
 not offer blind retry. Paid execution remains unavailable until the future-US28
 release gate is explicitly opened.
 
+### AFF-US-028 — AI Visual image-to-video
+
+AI Visual uses the existing governance ledger and Shared Media Library. A user
+selects a READY image already linked to the exact Project, requests a bounded
+server-owned image-to-video contract, reviews an estimate, and explicitly confirms
+before a governed operation is reserved. Provider/model/capability/pricing and
+canonical request identity are resolved on the server. Deterministic test output
+is validated as bounded MP4 with duration/integrity proof and finalized as a
+normal `MediaAsset` project resource. Failed and indeterminate states are visible;
+indeterminate output only exposes reconcile/recovery actions and never blind retry.
+
+Real paid-provider execution is not activated by US28. The feature is available
+for deterministic acceptance and remains behind the existing paid release gate.
+
 ### AFF-US-008 Phase 2B — live TextProvider
 
 Text AI mặc định ở lớp cấu hình là APIKEY.FUN + Claude Sonnet 4.6; video AI vẫn

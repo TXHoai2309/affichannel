@@ -16,6 +16,7 @@
 		"db:generate": "turbo run db:generate -F @affichannel/db",
 		"test:integration:analytics": "tsx scripts/test-analytics-import.ts",
 		"test:integration:ai-governance": "tsx scripts/test-ai-governance.ts",
+		"test:integration:ai-visual": "tsx scripts/test-ai-visual.ts",
 		"db:migrate": "turbo run db:migrate -F @affichannel/db",
 		"validate:integration:project-channel-first-m1": "tsx scripts/validate-project-channel-first-m1.ts",
 		"validate:integration:project-channel-first-m1:golden-only": "tsx scripts/validate-project-channel-first-m1.ts --golden-only",

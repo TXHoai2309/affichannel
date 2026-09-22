@@ -1669,3 +1669,24 @@ Migration `0031_breezy_gressill.sql` chỉ additive. Settings/operations UI là
 protected và hiển thị uncertainty như review/reconcile, không hiển thị retry/generate
 cho operation không chắc. Future US28 không được claim release nếu gate còn
 `paidExecutionReleased=false`.
+
+## DEC-042 — AFF-US-028 AI Visual dùng governed operation và Shared MediaAsset
+
+- Trạng thái: Đã chấp nhận cho deterministic implementation; paid release vẫn mở riêng
+- Ngày: 2026-09-22
+
+### Quyết định
+
+- Image-to-video là operation `IMAGE_TO_VIDEO` trong registry US29/US30, không tạo
+  provider/model/pricing/budget/audit system thứ hai.
+- Source bắt buộc là READY raster `MediaAsset` đã link đúng workspace/project;
+  request hash giữ source proof, prompt/motion, duration, aspect và output MIME.
+- Estimate không reserve; explicit confirm mới gọi governed prepare/reservation.
+  Governance/pricing/source drift làm estimate stale và phải estimate lại.
+- Deterministic adapter chỉ dùng test mode. Paid provider chưa được gọi; release
+  gate và secret/config policy của DEC-041 vẫn fail-closed.
+- Clip hợp lệ phải đi qua `MediaAssetStorage` và trở thành `MediaAsset` thường,
+  có provenance đến generation/operation/source/provider/model; không tạo AI-only
+  media silo hoặc AI-specific renderer.
+- Timeout/uncertain/storage/DB finalize giữ `INDETERMINATE`; orphan recovery
+  validate và finalize exactly once, không tự retry provider.

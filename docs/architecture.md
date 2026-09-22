@@ -906,6 +906,19 @@ introduced by this foundation. Secrets remain server-environment-only and are
 redacted before persistence. Future US28 must provide a separate production
 release decision and real-provider acceptance before execution can be activated.
 
+## AFF-US-028 — AI Visual boundary
+
+AI Visual reuses `aiOperation`, `aiBudgetReservation`, `aiOperationAudit`,
+pricing, lease and reconciliation from US29/US30. The additive
+`ai_visual_generation` row stores immutable semantic/source proof and the
+`ai_visual_artifact` row stores bounded output/storage/finalization proof. The
+server-only deterministic adapter is the test implementation of the same
+image-to-video contract; no client provider/model or raw provider payload is
+accepted. A valid clip is promoted to the existing workspace-owned `MediaAsset`
+and linked to Project with `project_resource`. Video Studio Resources renders
+the entry point; composition/export authority remains the shared Composition and
+EN-001 pipeline. Orphan recovery attaches one validated object/MediaAsset once.
+
 ## Historical implementation notes — AFF-US-007 transaction/read model
 
 > Historical baseline before v0.8 Domain Evolution; giữ nguyên contract tại thời

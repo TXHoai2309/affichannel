@@ -648,8 +648,13 @@ implementation history. Công việc mới đi theo thứ tự phụ thuộc:
 
 ### 8. Post-MVP AI Visual
 
-- Bật một Video AI provider qua adapter/feature flag sau khi Quick Image ổn định.
-- Giữ cost confirmation, retry hữu hạn, immutable outputs và manual publishing.
+- AFF-US-028 implementation đã hoàn tất vertical slice deterministic: governed
+  image-to-video request, output validation, MediaAsset promotion, shared Video
+  Studio Resources UI và orphan reconciliation. Paid provider release vẫn deferred
+  cho owner approval riêng; không có real paid call.
+- Bật một paid Video AI provider chỉ sau release gate/secret/config/live proof
+  được owner chấp thuận rõ ràng. Giữ cost confirmation, immutable outputs và
+  manual recovery/publishing.
 
 Mỗi phase phải đạt `docs/domain-evolution-acceptance.md` và giữ regression của
 golden affiliate flow trước khi bắt đầu phase kế tiếp.

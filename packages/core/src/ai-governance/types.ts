@@ -25,6 +25,8 @@ export const aiOperationStatuses = [
 	"FAILED",
 	"INDETERMINATE",
 ] as const;
+
+export const aiVisualGenerationStatuses = aiOperationStatuses;
 export type AiOperationStatus = (typeof aiOperationStatuses)[number];
 
 export const aiProviderCallStages = [
@@ -66,6 +68,10 @@ export const aiGovernanceErrorCodes = [
 	"AI_RECOVERY_NOT_ALLOWED",
 	"AI_VERSION_CONFLICT",
 	"AI_TEST_PROVIDER_FORBIDDEN",
+	"AI_ESTIMATE_STALE",
+	"AI_VISUAL_SOURCE_NOT_ELIGIBLE",
+	"AI_VISUAL_OUTPUT_INVALID",
+	"AI_VISUAL_RECOVERY_REQUIRED",
 ] as const;
 
 export type AiGovernanceErrorCode = (typeof aiGovernanceErrorCodes)[number];

@@ -16,6 +16,16 @@ const deterministicModel = {
 	pricingVersions: ["deterministic-text.v1", "deterministic-text.v2"],
 } as const;
 
+const deterministicVisualModel = {
+	providerId: "deterministic",
+	modelId: "deterministic-image-to-video-v1",
+	capabilities: ["IMAGE_TO_VIDEO"] as const satisfies readonly AiCapability[],
+	paid: false,
+	productionRelease: false,
+	configurationSecretEnv: null,
+	pricingVersions: ["deterministic-image-to-video.v1"],
+} as const;
+
 const apikeyfunModel = {
 	providerId: "apikeyfun",
 	modelId: "claude-sonnet-4-6",
@@ -32,7 +42,7 @@ export const aiProviderRegistry = [
 		displayName: "Deterministic test provider",
 		paid: false,
 		productionRelease: false,
-		models: [deterministicModel],
+		models: [deterministicModel, deterministicVisualModel],
 	},
 	{
 		providerId: "apikeyfun",
@@ -44,6 +54,17 @@ export const aiProviderRegistry = [
 ] as const satisfies readonly AiProviderDefinition[];
 
 export const aiPricingRegistry = [
+	{
+		providerId: "deterministic",
+		modelId: "deterministic-image-to-video-v1",
+		operationKind: "IMAGE_TO_VIDEO",
+		pricingVersion: "deterministic-image-to-video.v1",
+		currency: "VND",
+		unit: "REQUEST",
+		inputMicrosPerMillionTokens: BigInt(0),
+		outputMicrosPerMillionTokens: BigInt(0),
+		fixedMicros: BigInt(1),
+	},
 	{
 		providerId: "deterministic",
 		modelId: "deterministic-text-v1",

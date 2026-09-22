@@ -5,6 +5,7 @@ import {
 	type AiRecoveryAction,
 	aiGovernanceSettingsInputSchema,
 	aiOperationFilterSchema,
+	aiPricingRegistry,
 	aiRecoveryActionSchema,
 	canonicalizePaidRequest,
 	findModel,
@@ -30,6 +31,19 @@ import type { WorkspaceActor } from "./workspace";
 
 const DEFAULT_BUDGET_CURRENCY = "VND";
 const LEASE_TTL_MS = 5 * 60 * 1000;
+
+function findPricingForProviderModel(
+	providerId: string,
+	modelId: string,
+	pricingVersion: string,
+) {
+	return aiPricingRegistry.find(
+		(pricing) =>
+			pricing.providerId === providerId &&
+			pricing.modelId === modelId &&
+			pricing.pricingVersion === pricingVersion,
+	);
+}
 
 export const deterministicTestScenarios = [
 	"success",
@@ -152,6 +166,18 @@ function semanticInputFor(input: GovernedOperationInput) {
 			(input.semanticInput.durationSeconds as number) >= 0
 				? input.semanticInput.durationSeconds
 				: null,
+		prompt:
+			typeof input.semanticInput.prompt === "string"
+				? input.semanticInput.prompt.trim().slice(0, 2_000)
+				: null,
+		aspectRatio:
+			typeof input.semanticInput.aspectRatio === "string"
+				? input.semanticInput.aspectRatio.trim().slice(0, 32)
+				: null,
+		outputMimeType:
+			typeof input.semanticInput.outputMimeType === "string"
+				? input.semanticInput.outputMimeType.trim().slice(0, 64)
+				: null,
 	};
 }
 
@@ -260,6 +286,37 @@ async function findSettings(actor: WorkspaceActor, tx?: Tx) {
 		.where(eq(aiGovernanceSettings.workspaceId, actor.workspaceId))
 		.limit(1);
 	return (await query)[0];
+}
+
+export async function resolveAiOperationGovernance(
+	actor: WorkspaceActor,
+	operationKind: GovernedOperationInput["operationKind"],
+	capability: GovernedOperationInput["capability"],
+) {
+	const settings = await findSettings(actor);
+	if (!settings)
+		throw new AiGovernanceError(
+			"AI_GOVERNANCE_NOT_CONFIGURED",
+			"AI governance settings are not configured.",
+		);
+	const { provider, model } = assertProviderModel(
+		settings.providerId,
+		settings.modelId,
+		operationKind,
+		capability,
+	);
+	const pricing = findPricing(
+		settings.providerId,
+		settings.modelId,
+		operationKind,
+		settings.pricingVersion ?? "",
+	);
+	if (!pricing)
+		throw new AiGovernanceError(
+			"AI_PRICING_UNAVAILABLE",
+			"No server-owned pricing is available for this operation.",
+		);
+	return { settings, provider, model, pricing };
 }
 
 function assertProviderModel(
@@ -378,10 +435,9 @@ export async function updateAiGovernanceSettings(
 		parsed.providerId,
 		parsed.modelId,
 	);
-	const pricing = findPricing(
+	const pricing = findPricingForProviderModel(
 		parsed.providerId,
 		parsed.modelId,
-		"TEXT_GENERATION",
 		parsed.pricingVersion,
 	);
 	if (
@@ -560,7 +616,15 @@ export async function prepareAiOperation(
 				),
 			)
 			.limit(1);
-		if (existingByKey[0]) return operationRead(existingByKey[0]);
+		if (existingByKey[0]) {
+			if (existingByKey[0].requestHash !== requestHash) {
+				throw new AiGovernanceError(
+					"AI_REQUEST_DUPLICATE",
+					"Idempotency key is already bound to different immutable request semantics.",
+				);
+			}
+			return operationRead(existingByKey[0]);
+		}
 		const existingByHash = await tx
 			.select()
 			.from(aiOperation)
@@ -664,7 +728,7 @@ export async function prepareAiOperation(
 	});
 }
 
-type FinishInput = {
+export type AiOperationFinishInput = {
 	status: "COMPLETED" | "FAILED" | "INDETERMINATE";
 	callStage:
 		| "NOT_STARTED"
@@ -682,11 +746,11 @@ type FinishInput = {
 	errorCategory?: string | null;
 };
 
-async function finishInTransaction(
+export async function finishAiOperationInTransaction(
 	tx: Tx,
 	actor: WorkspaceActor,
 	current: typeof aiOperation.$inferSelect,
-	input: FinishInput,
+	input: AiOperationFinishInput,
 	allowRecovery = false,
 ) {
 	if (current.status !== "PENDING" && !allowRecovery) return current;
@@ -784,6 +848,90 @@ async function finishInTransaction(
 	return saved;
 }
 
+export async function claimDeterministicAiOperation(
+	actor: WorkspaceActor,
+	operationId: string,
+	input?: { operationKind?: GovernedOperationInput["operationKind"] },
+) {
+	return db.transaction(async (tx) => {
+		const [current] = await tx
+			.select()
+			.from(aiOperation)
+			.where(
+				and(
+					eq(aiOperation.id, operationId),
+					eq(aiOperation.workspaceId, actor.workspaceId),
+				),
+			)
+			.limit(1)
+			.for("update", { of: aiOperation });
+		if (!current)
+			throw new AiGovernanceError(
+				"AI_OPERATION_NOT_FOUND",
+				"Operation was not found in this workspace.",
+			);
+		if (input?.operationKind && current.operationKind !== input.operationKind)
+			throw new AiGovernanceError(
+				"AI_OPERATION_NOT_FOUND",
+				"Operation kind does not match the requested adapter.",
+			);
+		if (current.status !== "PENDING") return current;
+		if (current.leaseExpiresAt && current.leaseExpiresAt > new Date())
+			throw new AiGovernanceError(
+				"AI_LEASE_CONFLICT",
+				"Operation is leased by another worker.",
+			);
+		if (current.callStage !== "NOT_STARTED") {
+			return finishAiOperationInTransaction(tx, actor, current, {
+				status: "INDETERMINATE",
+				callStage: "POSSIBLY_SENT",
+				safeError: {
+					code: "STALE_PENDING_POSSIBLE_SEND",
+					message: "Stale pending operation requires explicit reconciliation.",
+				},
+				errorCategory: "STALE_PENDING",
+			});
+		}
+		const [settings] = await tx
+			.select()
+			.from(aiGovernanceSettings)
+			.where(eq(aiGovernanceSettings.workspaceId, actor.workspaceId))
+			.limit(1);
+		if (
+			!settings ||
+			settings.killSwitch ||
+			!settings.providerEnabled ||
+			!settings.modelEnabled ||
+			current.providerId !== "deterministic"
+		)
+			throw new AiGovernanceError(
+				"AI_PRODUCTION_RELEASE_BLOCKED",
+				"Deterministic execution is not authorized by current governance settings.",
+			);
+		const leaseOwner = randomUUID();
+		const [updated] = await tx
+			.update(aiOperation)
+			.set({
+				leaseOwner,
+				leaseExpiresAt: new Date(Date.now() + LEASE_TTL_MS),
+				attemptCount: current.attemptCount + 1,
+				startedAt: current.startedAt ?? new Date(),
+				updatedAt: new Date(),
+			})
+			.where(eq(aiOperation.id, current.id))
+			.returning();
+		if (!updated) throw new Error("AI operation lease claim returned no row.");
+		await audit(tx, actor, {
+			operationId: current.id,
+			eventType: "LEASE_CLAIMED",
+			status: "PENDING",
+			correlationId: current.correlationId,
+			metadata: { attemptCount: updated.attemptCount },
+		});
+		return updated;
+	});
+}
+
 const deterministicCallCounts = new Map<string, number>();
 
 export function getDeterministicAdapterCallCount(operationId: string) {
@@ -833,7 +981,7 @@ export async function executeDeterministicTestOperation(
 				"Operation is leased by another worker.",
 			);
 		if (current.callStage !== "NOT_STARTED") {
-			return finishInTransaction(tx, actor, current, {
+			return finishAiOperationInTransaction(tx, actor, current, {
 				status: "INDETERMINATE",
 				callStage: "POSSIBLY_SENT",
 				safeError: {
@@ -913,7 +1061,7 @@ export async function executeDeterministicTestOperation(
 			"AI_OPERATION_NOT_FOUND",
 			"Operation was not found in this workspace.",
 		);
-	let finish: FinishInput;
+	let finish: AiOperationFinishInput;
 	if (scenario === "success")
 		finish = {
 			status: "COMPLETED",
@@ -997,7 +1145,7 @@ export async function executeDeterministicTestOperation(
 					"AI_OPERATION_NOT_FOUND",
 					"Operation was not found in this workspace.",
 				);
-			return finishInTransaction(tx, actor, locked, finish);
+			return finishAiOperationInTransaction(tx, actor, locked, finish);
 		}),
 	);
 }
@@ -1120,7 +1268,7 @@ export async function reconcileAiOperation(
 				parsedAction === "ATTACH_ORPHAN_ARTIFACT" ||
 				(parsedAction === "RECONCILE" && hasArtifact)
 			)
-				return finishInTransaction(
+				return finishAiOperationInTransaction(
 					tx,
 					actor,
 					row,
@@ -1139,7 +1287,7 @@ export async function reconcileAiOperation(
 				parsedAction === "RELEASE_RESERVATION" ||
 				(parsedAction === "RECONCILE" && row.callStage === "NOT_STARTED")
 			)
-				return finishInTransaction(tx, actor, row, {
+				return finishAiOperationInTransaction(tx, actor, row, {
 					status: "FAILED",
 					callStage: "FINALIZED",
 					safeError: row.safeErrorJson ?? {

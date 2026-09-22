@@ -1,0 +1,1 @@
+ALTER TABLE "ai_visual_artifact" ADD CONSTRAINT "ai_visual_artifact_storage_provider_check" CHECK ("ai_visual_artifact"."storage_provider" in ('local', 'r2'));

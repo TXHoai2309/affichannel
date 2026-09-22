@@ -501,8 +501,8 @@ try {
 		"select count(*)::int as count from information_schema.tables where table_schema = 'public' and table_name like 'ai_%' and table_name <> 'ai_settings'",
 	);
 	assert(
-		Number(migrationCount.rows[0]?.count) === 6,
-		"Zero-to-current migration must create six AI governance tables.",
+		Number(migrationCount.rows[0]?.count) === 8,
+		"Zero-to-current migration must create eight AI governance/visual tables.",
 	);
 	const reservations = await db
 		.select()

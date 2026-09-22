@@ -23,6 +23,19 @@
   trusted disposable PostgreSQL acceptance.
 - Cập nhật lần cuối: 2026-09-21
 
+## 2026-09-22 — AFF-US-028 AI Visual deterministic implementation
+
+Implemented the additive AI Visual image-to-video vertical slice on top of the
+US29/US30 governance foundation. The server now owns the IMAGE_TO_VIDEO registry
+mapping, canonical request identity, estimate/confirmation freshness checks,
+deterministic test adapter, bounded MP4 proof, local/test storage finalization,
+shared MediaAsset promotion, protected API and Video Studio Resources UI.
+
+Acceptance used trusted disposable loopback PostgreSQL and local temporary media
+storage. US28 deterministic cases and the US29/US30 regression passed. No paid
+provider, production cloud storage, FFmpeg, worker or encoded MP4 was executed.
+Paid production remains behind DEC-041 release approval.
+
 ## 2026-09-21 — AFF-US-029 + AFF-US-030 foundation closeout
 
 Implemented and verified the AI governance / paid operation safety foundation from

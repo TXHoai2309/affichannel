@@ -11,6 +11,15 @@ sử dụng Semantic Versioning.
 
 ## Chưa phát hành
 
+### AFF-US-028 — AI Visual image-to-video
+
+- Added governed estimate/explicit-confirm flow in Video Studio Resources with
+  server-owned provider/model resolution and immutable request identity.
+- Added deterministic test adapter, bounded MP4/integrity validation, Shared
+  MediaAsset finalization, idempotent replay and safe orphan recovery.
+- Paid provider execution remains disabled; no real provider, FFmpeg or encoded
+  MP4 was used.
+
 ### AFF-US-029 + AFF-US-030 — AI Provider Governance và Paid Operation Safety
 
 - Added server-owned provider/model/capability registry, versioned pricing and

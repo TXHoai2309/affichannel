@@ -225,6 +225,20 @@
       "when": 1789993096772,
       "tag": "0031_lively_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1790061922520,
+      "tag": "0032_slippery_the_fallen",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1790063020635,
+      "tag": "0033_great_terrax",
+      "breakpoints": true
     }
   ]
 }

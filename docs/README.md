@@ -47,6 +47,12 @@ idempotency, uncertainty/lease/reconciliation và protected settings/usage UI.
 Paid provider execution vẫn bị release gate chặn. Chi tiết tại
 [AFF-US-029 + AFF-US-030](./aff-us-029-030-ai-governance-paid-safety.md).
 
+AFF-US-028 đã có implementation additive cho AI Visual image-to-video: estimate,
+explicit confirmation, server-owned deterministic adapter, output proof,
+MediaAsset finalization, orphan recovery và protected Video Studio Resources UI.
+Deterministic acceptance PASS; paid production vẫn không được kích hoạt. Chi tiết
+tại [AFF-US-028](./aff-us-028-ai-visual-generation.md).
+
 ## Thứ tự đọc
 
 1. [Các quyết định kiến trúc](./decisions.md)
@@ -67,6 +73,7 @@ Paid provider execution vẫn bị release gate chặn. Chi tiết tại
 16. [Nhật ký thay đổi](./changelog.md)
 17. [AFF-US-027 / Canonical Analytics Ingestion và Read Model](./aff-us-027-canonical-analytics.md)
 18. [AFF-US-029 + AFF-US-030 / AI Governance và Paid Operation Safety](./aff-us-029-030-ai-governance-paid-safety.md)
+19. [AFF-US-028 / AI Visual Generation](./aff-us-028-ai-visual-generation.md)
 
 ## Historical baseline trước Domain Evolution v0.8
 
